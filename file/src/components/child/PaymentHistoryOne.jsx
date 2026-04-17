@@ -1,12 +1,47 @@
 import React from "react";
 import { Link } from "react-router-dom";
 
-const PaymentHistoryOne = () => {
+const PaymentHistoryOne = ({ leads = [] }) => {
   return (
-    <div className='card radius-16 mt-24'>
+    <div className="table-section">
+      <p>Lead Data</p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Lead</th>
+            <th>origin</th>
+            <th>Dialler</th>
+            <th>Lead Owner</th>
+            <th>Stage</th>
+            <th>Product</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {leads.length === 0 ? (
+            <tr>
+              <td colSpan="6" style={{ textAlign: "center" }}>
+                No Data Available
+              </td>
+            </tr>
+          ) : (
+            leads.map((lead, i) => (
+              <tr key={i}>
+                <td>{lead.name || "-"}</td>
+                <td>{lead.mobile || "-"}</td>
+                <td>{lead.email || "-"}</td>
+                <td>{lead.project || "-"}</td>
+                <td>{lead.status || "-"}</td>
+                <td>{lead.city || "-"}</td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+         <div className='card radius-16 mt-24'>
       <div className='card-header'>
         <div className='d-flex align-items-center flex-wrap gap-2 justify-content-between'>
-          <h6 className='mb-2 fw-bold text-lg mb-0'>Payment History</h6>
           <Link
             to='#'
             className='text-primary-600 hover-text-primary d-flex align-items-center gap-1'
@@ -24,15 +59,15 @@ const PaymentHistoryOne = () => {
           <table className='table bordered-table sm-table mb-0'>
             <thead>
               <tr>
-                <th scope='col'>Users </th>
+                <th scope='col'>Lead </th>
                 <th scope='col' className='text-center'>
-                  Email
+                  Origin
                 </th>
                 <th scope='col' className='text-center'>
-                  Transaction ID
+                  Dialler
                 </th>
                 <th scope='col' className='text-center'>
-                  Amount
+                  Lead Owner
                 </th>
                 <th scope='col' className='text-center'>
                   Payment Method
@@ -171,6 +206,8 @@ const PaymentHistoryOne = () => {
         </div>
       </div>
     </div>
+    </div>
+    
   );
 };
 

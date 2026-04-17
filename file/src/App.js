@@ -1,11 +1,12 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
-import HomePageOne from "./pages/HomePageOne";
-import HomePageTwo from "./pages/HomePageTwo";
-import HomePageThree from "./pages/HomePageThree";
-import HomePageFour from "./pages/HomePageFour";
-import HomePageFive from "./pages/HomePageFive";
-import HomePageSix from "./pages/HomePageSix";
-import HomePageSeven from "./pages/HomePageSeven";
+import ADDLEAD from"./pages/Addlead"
+// import HomePageOne from "./pages/HomePageOne";
+// import HomePageTwo from "./pages/HomePageTwo";
+// import HomePageThree from "./pages/HomePageThree";
+// import HomePageFour from "./pages/HomePageFour";
+// import HomePageFive from "./pages/HomePageFive";
+// import HomePageSix from "./pages/HomePageSix";
+// import HomePageSeven from "./pages/HomePageSeven";
 import EmailPage from "./pages/EmailPage";
 import AddUserPage from "./pages/AddUserPage";
 import AlertPage from "./pages/AlertPage";
@@ -116,7 +117,9 @@ function App() {
         */}
         <Route exact path='/index-11' element={<HomePageEleven />} />
 
+
        {/* SL */}
+       <Route exact path='/add-lead' element={<ADDLEAD />} />
         <Route exact path='/add-user' element={<AddUserPage />} />
         <Route exact path='/alert' element={<AlertPage />} />
         <Route exact path='/assign-role' element={<AssignRolePage />} />

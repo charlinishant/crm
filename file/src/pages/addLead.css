@@ -1,0 +1,101 @@
+.container {
+  background: #f4f8ff;
+  padding: 20px;
+  color: #1e293b;
+}
+
+.form {
+  background: #ffffff;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 15px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+label {
+  font-size: 13px;
+  margin-bottom: 5px;
+  color: #334155;
+  font-weight: 500;
+}
+
+input, select, textarea {
+  padding: 10px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #1e293b;
+  border-radius: 6px;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: #2563eb;
+  outline: none;
+}
+
+.comment {
+  margin-top: 15px;
+  height: 100px;
+  width: 100%;
+}
+
+.buttons {
+  margin-top: 20px;
+}
+
+.save {
+  background: #2563eb;
+  border: none;
+  color: white;
+  padding: 10px 20px;
+  margin-right: 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.save:hover {
+  background: #1d4ed8;
+}
+
+.cancel {
+  background: #e2e8f0;
+  border: none;
+  padding: 10px 20px;
+  color: #1e293b;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.cancel:hover {
+  background: #cbd5e1;
+}
+
+.table-section {
+  margin-top: 30px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+}
+
+th {
+  background: #2563eb;
+  color: white;
+  padding: 10px;
+}
+
+td {
+  padding: 10px;
+  border-top: 1px solid #e2e8f0;
+}
