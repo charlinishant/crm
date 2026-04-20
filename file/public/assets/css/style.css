@@ -478,12 +478,21 @@ a {
 }
 
 .dashboard-card {
-  height: 85px;
+  height: 80px;
   border-radius: 10px;
-  padding: 10px;
+  padding: 0; /* remove extra padding */
 }
 
-/* Left text alignment */
+/* Card body controls alignment */
+.card-body {
+  height: 100%;
+  padding: 15px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center; /* ✅ vertical center */
+}
+
+/* Left text */
 .text-content {
   display: flex;
   flex-direction: column;
@@ -492,24 +501,29 @@ a {
 
 /* Title */
 .custom-title {
-  font-size: 14px;
-  font-weight: 500;
-  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0; /* ✅ remove all margins */
+  color: #1e293b;
 }
 
 /* Subtitle */
 .text-secondary {
   font-size: 12px;
-}
-.lead-container {
-  background: #f8fbff;
-  padding: 20px;
-  border-radius: 10px;
+  color: #64748b;
 }
 
-.title {
-  margin-bottom: 20px;
-  color: #0d3b66;
+/* Count box (your existing is fine, slight improvement) */
+.count-box {
+  height: 45px;
+  width: 45px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #007bff, #00c6ff);
+  color: #fff;
+  border-radius: 10px;
+  font-weight: 600;
 }
 
 .lead-form {
@@ -577,22 +591,6 @@ textarea:focus {
   background: #cbd5e1;
 }
 
-/* Count box (perfect center) */
-.count-box {
-  height: 45px;
-  width: 45px;
-  min-width: 45px;
-
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  background: linear-gradient(135deg, #007bff, #00c6ff);
-  color: #fff;
-
-  border-radius: 10px;
-  font-weight: 600;
-}
 
 a,
 button {

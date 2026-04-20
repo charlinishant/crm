@@ -2,6 +2,7 @@ import React from "react";
 import MasterLayout from "../masterLayout/MasterLayout";
 import Breadcrumb from "../components/Breadcrumb";
 import DashBoardLayerFour from "../components/DashBoardLayerFour";
+import MyReports from "./MyReports";
 
 
 const HomePageFour = () => {
@@ -11,11 +12,11 @@ const HomePageFour = () => {
       <MasterLayout>
 
         {/* Breadcrumb */}
-        <Breadcrumb title="Cryptocracy" />
+        <Breadcrumb title="yReports" />
 
 
-        {/* DashBoardLayerFour */}
-        <DashBoardLayerFour />
+      
+        <MyReports />
 
 
       </MasterLayout>

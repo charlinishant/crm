@@ -8,37 +8,14 @@ import CountryStatusOne from './child/CountryStatusOne'
 import TopPerformanceOne from './child/TopperformanceOne'
 import LatestPerformanceOne from './child/LatestPerformanceOne'
 import LastTransactionOne from './child/LastTransactionOne'
+import SmartImport from '../pages/SmartImport'
 
 const DashBoardLayerTwo = () => {
   return (
     <section className="row gy-4">
-
-      {/* UnitCountTwo */}
-      <UnitCountTwo />
-
-      {/* RevenueGrowthOne */}
-      <RevenueGrowthOne />
-
-      {/* EarningStaticOne */}
-      <EarningStaticOne />
-
-      {/* CampaignStaticOne */}
-      <CampaignStaticOne />
-
-      {/* ClientPaymentOne  */}
-      <ClientPaymentOne />
-
-      {/* CountryStatusOne */}
-      <CountryStatusOne />
-
-      {/* TopPerformanceOne */}
-      <TopPerformanceOne />
-
-      {/* LatestPerformanceOne */}
-      <LatestPerformanceOne />
-
-      {/* LastTransactionOne */}
-      <LastTransactionOne />
+       <SmartImport />
+    
+      
     </section>
 
   )

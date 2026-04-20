@@ -17,33 +17,11 @@ const DashBoardLayerFive = () => {
                 {/* UnitCountFour */}
                 <UnitCountFour />
 
-                {/* RevenueStatisticsOne */}
-                <RevenueStatisticsOne />
+                
 
+               
 
-                {/* SalesStatisticTwo */}
-                <SalesStatisticTwo />
-
-
-                {/* TopCountriesTwo */}
-                <TopCountriesTwo />
-
-
-                {/* UserActivatesTwo */}
-                <UserActivatesTwo />
-
-
-                {/* LatestInvestmentsOne */}
-                <LatestInvestmentsOne />
-
-                {/* NoticeBoardOne */}
-                <NoticeBoardOne />
-
-                {/* TotalTransactionsOne */}
-                <TotalTransactionsOne />
-
-                {/* ProjectStatusOne */}
-                <ProjectStatusOne />
+                
             </div>
 
         </>

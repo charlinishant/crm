@@ -1,0 +1,42 @@
+/* Container */
+.export-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px 20px;
+  background: #f8fbff;
+  border-radius: 10px;
+}
+
+/* Common Button Style */
+.smart-btn,
+.export-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  background: #ffffff;
+  border: 1px solid #dbeafe;
+  color: #1d4ed8;
+
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+/* Hover Effect */
+.smart-btn:hover,
+.export-btn:hover {
+  background: #3b82f6;
+  color: #ffffff;
+  border-color: #3b82f6;
+}
+
+/* Slight shadow for depth */
+.smart-btn,
+.export-btn {
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.1);
+}

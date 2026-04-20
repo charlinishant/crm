@@ -131,7 +131,7 @@ const MasterLayout = ({ children }) => {
                   icon='solar:home-smile-angle-outline'
                   className='menu-icon'
                 />
-                <span>Dashboard</span>
+                <span> Deal Track</span>
               </Link>
               <ul className='sidebar-submenu'>
                 {/* <li>
@@ -144,8 +144,22 @@ const MasterLayout = ({ children }) => {
                     <i className='ri-circle-fill circle-icon text-primary-600 w-auto' />
                     AIerr
                   </NavLink>
-                </li> */}
-                {/* <li>
+                 </li> */}
+
+                 <li>
+                  <NavLink
+                    to='/index-11'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
+                    Funnel
+                  </NavLink>
+                </li>
+
+
+                <li>
                   <NavLink
                     to='/index-2'
                     className={(navData) =>
@@ -153,10 +167,10 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-warning-main w-auto' />{" "}
-                    CRM
+                    Smart Import
                   </NavLink>
-                </li> */}
-                {/* <li>
+                </li>
+                <li>
                   <NavLink
                     to='/index-3'
                     className={(navData) =>
@@ -164,7 +178,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
-                    eCommerce
+                    SVP Dashboard
                   </NavLink>
                 </li>
                 <li>
@@ -175,9 +189,10 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-danger-main w-auto' />
-                    Cryptocurrency
+                    My Reports
                   </NavLink>
                 </li>
+
                 <li>
                   <NavLink
                     to='/index-5'
@@ -186,7 +201,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-success-main w-auto' />{" "}
-                    Investment
+                    Conversation Tracker
                   </NavLink>
                 </li>
                 <li>
@@ -197,7 +212,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-purple w-auto' />{" "}
-                    LMS
+                    Outbound Tracker
                   </NavLink>
                 </li>
                 <li>
@@ -208,10 +223,10 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
-                    NFT &amp; Gaming
+                    VoiceOps Panel
                   </NavLink>
                 </li>
-                <li>
+                {/* <li>
                   <NavLink
                     to='/index-8'
                     className={(navData) =>
@@ -221,8 +236,8 @@ const MasterLayout = ({ children }) => {
                     <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
                     Medical
                   </NavLink>
-                </li>
-                <li>
+                </li> */}
+                {/* <li>
                   <NavLink
                     to='/index-9'
                     className={(navData) =>
@@ -244,17 +259,7 @@ const MasterLayout = ({ children }) => {
                     POS & Inventory
                   </NavLink>
                 </li> */}
-                <li>
-                  <NavLink
-                    to='/index-11'
-                    className={(navData) =>
-                      navData.isActive ? "active-page" : ""
-                    }
-                  >
-                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
-                    Deal Track
-                  </NavLink>
-                </li>
+                
               </ul>
             </li>
 {/* 
@@ -356,11 +361,13 @@ const MasterLayout = ({ children }) => {
             {/* Ai Application Dropdown */}
             
 
-            {/* Crypto Currency Dropdown */}
-            {/* <li className='dropdown'>
+            {/* Request */}
+            <li className='dropdown'>
               <Link to='#'>
-                <i className='ri-btc-line mr-10' />
-                <span>Crypto Currency</span>
+                
+                <i class="ri-database-2-line" />
+                
+                <span>Requests</span>
               </Link>
               <ul className='sidebar-submenu'>
                 <li>
@@ -371,10 +378,10 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-primary-600 w-auto' />{" "}
-                    Wallet
+                    Downloads
                   </NavLink>
                 </li>
-                <li>
+                {/* <li>
                   <NavLink
                     to='/marketplace'
                     className={(navData) =>
@@ -406,20 +413,20 @@ const MasterLayout = ({ children }) => {
                     <i className='ri-circle-fill circle-icon text-warning-main w-auto' />
                     Portfolios
                   </NavLink>
-                </li>
+                </li> */}
               </ul>
-            </li> */}
+            </li>
 
             {/* <li className='sidebar-menu-group-title'>UI Elements</li> */}
 
-            {/* Components Dropdown */}
-            {/* <li className='dropdown'>
+            {/* Impact Panel */}
+            <li className='dropdown'>
               <Link to='#'>
                 <Icon
                   icon='solar:document-text-outline'
                   className='menu-icon'
                 />
-                <span>Components</span>
+                <span>Impact Panel</span>
               </Link>
               <ul className='sidebar-submenu'>
                 <li>
@@ -430,7 +437,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-primary-600 w-auto' />
-                    Typography
+                    Lead Traffic
                   </NavLink>
                 </li>
                 <li>
@@ -441,7 +448,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-warning-main w-auto' />{" "}
-                    Colors
+                    User Engagement
                   </NavLink>
                 </li>
                 <li>
@@ -452,7 +459,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-success-main w-auto' />{" "}
-                    Button
+                    Product Engagement
                   </NavLink>
                 </li>
                 <li>
@@ -463,7 +470,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-lilac-600 w-auto' />{" "}
-                    Dropdown
+                    Lead Origin Analysis
                   </NavLink>
                 </li>
                 <li>
@@ -474,7 +481,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-warning-main w-auto' />{" "}
-                    Alerts
+                    Marketing Analysis
                   </NavLink>
                 </li>
                 <li>
@@ -485,7 +492,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-danger-main w-auto' />{" "}
-                    Card
+                    Broker Engagement
                   </NavLink>
                 </li>
                 <li>
@@ -496,7 +503,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
-                    Carousel
+                    Booking Ratio
                   </NavLink>
                 </li>
                 <li>
@@ -507,7 +514,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-success-main w-auto' />{" "}
-                    Avatars
+                    Dialer Summary
                   </NavLink>
                 </li>
                 <li>
@@ -518,7 +525,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-primary-600 w-auto' />{" "}
-                    Progress bar
+                    MFA (Missed Future Activity)
                   </NavLink>
                 </li>
                 <li>
@@ -529,7 +536,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-warning-main w-auto' />{" "}
-                    Tab &amp; Accordion
+                    Sales Manager MFA
                   </NavLink>
                 </li>
                 <li>
@@ -540,7 +547,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-danger-main w-auto' />
-                    Pagination
+                    Effort Report
                   </NavLink>
                 </li>
                 <li>
@@ -551,7 +558,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
-                    Badges
+                    Drop Off Leads
                   </NavLink>
                 </li>
                 <li>
@@ -562,7 +569,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-lilac-600 w-auto' />{" "}
-                    Tooltip &amp; Popover
+                    Lead Origin Drop Off
                   </NavLink>
                 </li>
                 <li>
@@ -573,7 +580,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-cyan w-auto' />{" "}
-                    Videos
+                    Visit Tracker
                   </NavLink>
                 </li>
                 <li>
@@ -584,7 +591,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-indigo w-auto' />{" "}
-                    Star Ratings
+                    Sales Dashboard Report
                   </NavLink>
                 </li>
                 <li>
@@ -595,7 +602,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-purple w-auto' />{" "}
-                    Tags
+                    Origin Visit Tracker
                   </NavLink>
                 </li>
                 <li>
@@ -606,10 +613,10 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-red w-auto' />{" "}
-                    List
+                    Sales Manager Report
                   </NavLink>
                 </li>
-                <li>
+                {/* <li>
                   <NavLink
                     to='/calendar'
                     className={(navData) =>
@@ -652,15 +659,15 @@ const MasterLayout = ({ children }) => {
                     <i className='ri-circle-fill circle-icon text-primary-600 w-auto' />{" "}
                     Upload
                   </NavLink>
-                </li>
+                </li> */}
               </ul>
-            </li> */}
+            </li>
 
-            {/* Forms Dropdown */}
-            {/* <li className='dropdown'>
+            {/* Control Center */}
+            <li className='dropdown'>
               <Link to='#'>
                 <Icon icon='heroicons:document' className='menu-icon' />
-                <span>Forms</span>
+                <span>Control Center</span>
               </Link>
               <ul className='sidebar-submenu'>
                 <li>
@@ -671,7 +678,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-primary-600 w-auto' />{" "}
-                    Input Forms
+                    Call Intake Manager
                   </NavLink>
                 </li>
                 <li>
@@ -682,7 +689,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-warning-main w-auto' />{" "}
-                    Input Layout
+                    Campaign Manager
                   </NavLink>
                 </li>
                 <li>
@@ -693,7 +700,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-success-main w-auto' />{" "}
-                    Form Validation
+                    User Management
                   </NavLink>
                 </li>
                 <li>
@@ -704,17 +711,106 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-danger-main w-auto' />{" "}
-                    Form Wizard
+                    Setup
                   </NavLink>
                 </li>
-              </ul>
-            </li> */}
+                <li>
+                  <NavLink
+                    to='/wizard'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-danger-main w-auto' />{" "}
+                    Setup
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to='/wizard'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-danger-main w-auto' />{" "}
+                    Setup
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to='/wizard'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-danger-main w-auto' />{" "}
+                    Meta Sync
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to='/wizard'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-danger-main w-auto' />{" "}
+                    Broker Setup
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to='/wizard'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-danger-main w-auto' />{" "}
+                    Manage Setup
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to='/wizard'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-danger-main w-auto' />{" "}
+                    Sub-Source Setup
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to='/wizard'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-danger-main w-auto' />{" "}
+                    Template Manager
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to='/wizard'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-danger-main w-auto' />{" "}
+                    Connection Keys
+                  </NavLink>
+                </li>
 
-            {/* Table Dropdown */}
-            {/* <li className='dropdown'>
+              </ul>
+            </li>
+
+            {/* Call Integration Dropdown */}
+            <li className='dropdown'>
               <Link to='#'>
                 <Icon icon='mingcute:storage-line' className='menu-icon' />
-                <span>Table</span>
+                <span>Call Integration</span>
               </Link>
               <ul className='sidebar-submenu'>
                 <li>
@@ -725,7 +821,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-primary-600 w-auto' />{" "}
-                    Basic Table
+                    Exotel
                   </NavLink>
                 </li>
                 <li>
@@ -736,17 +832,28 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-warning-main w-auto' />{" "}
-                    Data Table
+                    Mcube
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to='/table-data'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-warning-main w-auto' />{" "}
+                    Auxiliary
                   </NavLink>
                 </li>
               </ul>
-            </li> */}
+            </li>
 
-            {/* Chart Dropdown */}
-            {/* <li className='dropdown'>
+            {/* Finance Dropdown */}
+            <li className='dropdown'>
               <Link to='#'>
                 <Icon icon='solar:pie-chart-outline' className='menu-icon' />
-                <span>Chart</span>
+                <span>Finance</span>
               </Link>
               <ul className='sidebar-submenu'>
                 <li>
@@ -757,10 +864,10 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-danger-main w-auto' />{" "}
-                    Line Chart
+                    Cost Sheets
                   </NavLink>
                 </li>
-                <li>
+                {/* <li>
                   <NavLink
                     to='/column-chart'
                     className={(navData) =>
@@ -781,9 +888,9 @@ const MasterLayout = ({ children }) => {
                     <i className='ri-circle-fill circle-icon text-success-main w-auto' />{" "}
                     Pie Chart
                   </NavLink>
-                </li>
+                </li> */}
               </ul>
-            </li> */}
+            </li>
 
             {/* <li>
               <NavLink

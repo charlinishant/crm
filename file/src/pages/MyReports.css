@@ -1,0 +1,35 @@
+/* Execute Button */
+.execute-btn {
+  background: #3b82f6;
+  border: none;
+  color: white;
+  padding: 6px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+th{
+  color: #FFFFFF;
+}
+.reports-title {
+  font-size: 24px;
+  color: black;
+  font-weight: 600;
+}
+.execute-btn:hover {
+  background: #2563eb;
+}
+
+/* Action Button */
+.action-btn {
+  background: white;
+  border: 1px solid #3b82f6;
+  color: #2563eb;
+  padding: 6px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.action-btn:hover {
+  background: #3b82f6;
+  color: white;
+}

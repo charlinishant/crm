@@ -11,7 +11,7 @@ const HomePageThree = () => {
       <MasterLayout>
 
         {/* Breadcrumb */}
-        <Breadcrumb title="eCommerce" />
+        <Breadcrumb title="SVP Dashboard" />
 
         {/* DashBoardLayerThree */}
         <DashBoardLayerThree />

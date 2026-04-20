@@ -11,7 +11,7 @@ const HomePageTwo = () => {
       <MasterLayout>
 
         {/* Breadcrumb */}
-        <Breadcrumb title="CRM" />
+        <Breadcrumb title="Smart Import" />
 
         {/* DashBoardLayerTwo */}
         <DashBoardLayerTwo />
