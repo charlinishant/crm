@@ -126,7 +126,7 @@ const MasterLayout = ({ children }) => {
         <div className='sidebar-menu-area'>
           <ul className='sidebar-menu' id='sidebar-menu'>
             <li className='dropdown'>
-              <Link to='#'>
+              <Link to='/index-11'>
                 <Icon
                   icon='solar:home-smile-angle-outline'
                   className='menu-icon'
