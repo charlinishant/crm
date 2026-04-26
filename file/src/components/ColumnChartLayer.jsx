@@ -1,54 +1,246 @@
-import React from 'react'
-import useReactApexChart from '../hook/useReactApexChart'
-import ReactApexChart from 'react-apexcharts'
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { FaPlus } from "react-icons/fa";
 
 const ColumnChartLayer = () => {
-    let { columnChartSeriesOne, columnChartOptionsOne, columnChartSeriesTwo, columnChartOptionsTwo, columnChartSeriesThree, columnChartOptionsThree, columnChartSeriesFour, columnChartOptionsFour } = useReactApexChart()
-    return (
-        <div className="row gy-4">
-            <div className="col-md-6">
-                <div className="card h-100 p-0">
-                    <div className="card-header border-bottom bg-base py-16 px-24">
-                        <h6 className="text-lg fw-semibold mb-0">Column Charts</h6>
-                    </div>
-                    <div className="card-body p-24">
-                        <ReactApexChart id="columnChart" options={columnChartOptionsOne} series={columnChartSeriesOne} type="bar" height={264} />
-                    </div>
-                </div>
-            </div>
-            <div className="col-md-6">
-                <div className="card h-100 p-0">
-                    <div className="card-header border-bottom bg-base py-16 px-24">
-                        <h6 className="text-lg fw-semibold mb-0">Column Charts</h6>
-                    </div>
-                    <div className="card-body p-24">
-                        <ReactApexChart id="columnGroupBarChart" options={columnChartOptionsTwo} series={columnChartSeriesTwo} type="bar" height={264} />
-                    </div>
-                </div>
-            </div>
-            <div className="col-md-6">
-                <div className="card h-100 p-0">
-                    <div className="card-header border-bottom bg-base py-16 px-24">
-                        <h6 className="text-lg fw-semibold mb-0">Group Column</h6>
-                    </div>
-                    <div className="card-body p-24">
-                        <ReactApexChart id="groupColumnBarChart" options={columnChartOptionsThree} series={columnChartSeriesThree} type="bar" height={264} />
-                    </div>
-                </div>
-            </div>
-            <div className="col-md-6">
-                <div className="card h-100 p-0">
-                    <div className="card-header border-bottom bg-base py-16 px-24">
-                        <h6 className="text-lg fw-semibold mb-0">Simple Column</h6>
-                    </div>
-                    <div className="card-body p-24">
-                        <ReactApexChart id="upDownBarchart" options={columnChartOptionsFour} series={columnChartSeriesFour} type="bar" height={264} />
-                    </div>
-                </div>
-            </div>
+  const navigate = useNavigate();
+
+  const [projects] = useState([
+    {
+      id: 1,
+      project: "Binghatti Hills",
+      numberOfTowers: 22,
+      active: "Yes",
+      inventory: "Yes",
+      postSales: "Yes",
+      createdOn: "05/06/2024",
+      integratedPortals: "",
+    },
+  ]);
+
+  return (
+    <>
+      <style>{`
+        .project-wrapper {
+          background: #ffffff;
+          border-radius: 10px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+          overflow: hidden;
+          font-family: sans-serif;
+        }
+
+        .project-topbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 14px 20px;
+          border-bottom: 1px solid #e2e8f0;
+        }
+
+        .project-count {
+          font-size: 14px;
+          color: #64748b;
+        }
+
+        .project-topbar-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .btn-new-project {
+          background: #7c3aed;
+          color: #ffffff;
+          border: none;
+          padding: 9px 18px;
+          border-radius: 6px;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .btn-new-project:hover {
+          background: #6d28d9;
+        }
+
+        .icon-btn {
+          width: 36px;
+          height: 36px;
+          border: 1px solid #e2e8f0;
+          border-radius: 6px;
+          background: #ffffff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+        }
+
+        .icon-btn:hover {
+          background: #f1f5f9;
+        }
+
+        .project-table-container {
+          overflow-x: auto;
+        }
+
+        .project-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 13px;
+        }
+
+        .project-table thead tr {
+          background: #f1f5f9;
+        }
+
+        .project-table thead th {
+          padding: 11px 16px;
+          text-align: left;
+          font-weight: 600;
+          font-size: 12px;
+          color: #64748b;
+          text-transform: uppercase;
+        }
+
+        .project-table tbody tr {
+          border-bottom: 1px solid #f1f5f9;
+        }
+
+        .project-table tbody tr:hover {
+          background: #f8fafc;
+        }
+
+        .project-table tbody td {
+          padding: 14px 16px;
+          color: #1e293b;
+        }
+
+        .actions-cell {
+          position: relative;
+          text-align: right;
+        }
+
+        .actions-menu-btn {
+          background: none;
+          border: none;
+          cursor: pointer;
+          font-size: 20px;
+        }
+
+        .actions-dropdown {
+          position: absolute;
+          right: 10px;
+          top: 36px;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+          z-index: 100;
+        }
+
+        .actions-dropdown button {
+          display: block;
+          width: 100%;
+          padding: 10px;
+          background: none;
+          border: none;
+          cursor: pointer;
+        }
+
+        .actions-dropdown button:hover {
+          background: #f1f5f9;
+        }
+
+        .danger {
+          color: red;
+        }
+      `}</style>
+      
+
+      <div className="project-wrapper">
+
+        {/* TOP BAR */}
+        <div className="project-topbar">
+          <span className="project-count">{projects.length} items</span>
+
+          <div className="project-topbar-actions">
+
+            {/* ✅ FIXED BUTTON */}
+            <button
+              className="btn-new-project"
+              onClick={() => navigate("/new-project")}
+            >
+              <FaPlus /> New Project
+            </button>
+
+            <button className="icon-btn">⬆</button>
+            <button className="icon-btn">◑</button>
+            <button className="icon-btn">▼</button>
+          </div>
         </div>
 
-    )
-}
+        {/* TABLE */}
+        <div className="project-table-container">
+          <table className="project-table">
+            <thead>
+              <tr>
+                <th>Project</th>
+                <th>Number of Towers</th>
+                <th>Active</th>
+                <th>Inventory</th>
+                <th>Post Sales</th>
+                <th>Created On</th>
+                <th>Integrated Portals</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
 
-export default ColumnChartLayer
+            <tbody>
+              {projects.length === 0 ? (
+                <tr>
+                  <td colSpan="8">No Data</td>
+                </tr>
+              ) : (
+                projects.map((proj) => (
+                  <ProjectRow key={proj.id} proj={proj} />
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+};
+
+const ProjectRow = ({ proj }) => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <tr>
+      <td>{proj.project}</td>
+      <td>{proj.numberOfTowers}</td>
+      <td>{proj.active}</td>
+      <td>{proj.inventory}</td>
+      <td>{proj.postSales}</td>
+      <td>{proj.createdOn}</td>
+      <td>{proj.integratedPortals}</td>
+      <td className="actions-cell">
+        <button onClick={() => setOpen(!open)}>⋮</button>
+
+        {open && (
+          <div className="actions-dropdown">
+            <button>Edit</button>
+            <button>View</button>
+            <button className="danger">Delete</button>
+          </div>
+        )}
+      </td>
+    </tr>
+  );
+};
+
+export default ColumnChartLayer;

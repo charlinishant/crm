@@ -14119,7 +14119,6 @@ select option {
 .fc-border-separate tr.fc-last th a {
   transition: 0s;
 }
-
 .fc-day.fc-tue.fc-widget-content.fc-today.fc-state-highlight {
   position: relative;
   background: linear-gradient(

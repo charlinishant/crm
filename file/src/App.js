@@ -97,12 +97,14 @@ import ComingSoonPage from "./pages/ComingSoonPage";
 import AccessDeniedPage from "./pages/AccessDeniedPage";
 import MaintenancePage from "./pages/MaintenancePage";
 import BlankPagePage from "./pages/BlankPagePage";
+import NEWPROJECT from "./pages/Newproject";
 
 function App() {
   return (
     <BrowserRouter>
       <RouteScrollToTop />
       <Routes>
+         <Route exact path='/' element={<HomePageEleven />} />
         <Route exact path='/add-lead' element={<ADDLEAD />} />
         <Route exact path='/index-11' element={<HomePageEleven />} />
         <Route exact path='/index-2' element={<HomePageTwo />} />
@@ -111,8 +113,10 @@ function App() {
         <Route exact path='/index-5' element={<HomePageFive />} />
         <Route exact path='/index-6' element={<HomePageSix />} />
         <Route exact path='/index-7' element={<HomePageSeven />} />
+        <Route exact path='/column-chart' element={<ColumnChartPage />} />
+        <Route exact path='/new-project' element={<NEWPROJECT />} />
         {/*
-        <Route exact path='/' element={<HomePageOne />} />
+       
         
        
         
@@ -146,7 +150,7 @@ function App() {
           element={<CodeGeneratorNewPage />}
         />
         <Route exact path='/colors' element={<ColorsPage />} />
-        <Route exact path='/column-chart' element={<ColumnChartPage />} />
+        
         <Route exact path='/company' element={<CompanyPage />} />
         <Route exact path='/currencies' element={<CurrenciesPage />} />
         <Route exact path='/dropdown' element={<DropdownPage />} />
