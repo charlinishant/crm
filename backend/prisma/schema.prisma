@@ -1,0 +1,33 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  
+}
+
+model Project{
+  id Int @id @default(autoincrement())
+  name String
+  description String @db.Text
+  reraProjecrId Int
+  sales String
+  preSales String
+  projectType String
+  possession Boolean @default(false)
+  address String @db.Text
+  street String 
+  locality String
+  city String
+  state String
+  country String
+  zip String
+  longitude String
+  latitude String
+}
