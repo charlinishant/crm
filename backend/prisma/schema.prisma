@@ -30,4 +30,9 @@ model Project{
   zip String
   longitude String
   latitude String
+  inventory Boolean @default(false)
+  noOfTowers Int @default(0)
+  createdAt DateTime @default(now())
+  integratedPortals String @default("")
+  active Boolean @default(true)
 }
