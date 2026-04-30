@@ -1,22 +1,18 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaPlus } from "react-icons/fa";
 
 const ColumnChartLayer = () => {
   const navigate = useNavigate();
 
-  const [projects] = useState([
-    {
-      id: 1,
-      project: "Binghatti Hills",
-      numberOfTowers: 22,
-      active: "Yes",
-      inventory: "Yes",
-      postSales: "Yes",
-      createdOn: "05/06/2024",
-      integratedPortals: "",
-    },
-  ]);
+  const [projects, setProjects] = useState([])
+  
+  useEffect(()=>{
+      fetch(`${process.env.REACT_APP_API_URL}/projects`)
+      .then(res=>res.json())
+      .then(data=>setProjects(data))
+      .catch(err=>console.log(err))
+  }, []);
 
   return (
     <>
@@ -218,16 +214,19 @@ const ColumnChartLayer = () => {
 
 const ProjectRow = ({ proj }) => {
   const [open, setOpen] = useState(false);
+  const date = new Date(proj.createdAt);
 
+  const formatted = date.toLocaleDateString('en-GB');
   return (
     <tr>
-      <td>{proj.project}</td>
-      <td>{proj.numberOfTowers}</td>
-      <td>{proj.active}</td>
-      <td>{proj.inventory}</td>
-      <td>{proj.postSales}</td>
-      <td>{proj.createdOn}</td>
+      <td>{proj.name}</td>
+      <td>{proj.noOfTowers}</td>
+      <td>{proj.active? "Yes" : "No"}</td>
+      <td>{proj.inventory? "Yes" : "No"}</td>
+      <td>{proj.sales}</td>
+      <td>{formatted}</td>
       <td>{proj.integratedPortals}</td>
+      <td></td>
       <td className="actions-cell">
         <button onClick={() => setOpen(!open)}>⋮</button>
 
