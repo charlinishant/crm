@@ -16,7 +16,7 @@ model Project{
   id Int @id @default(autoincrement())
   name String
   description String? @db.Text
-  reraProjecrId Int?
+  reraProjectId Int?
   sales String?
   preSales String?
   projectType String
@@ -50,4 +50,64 @@ model User{
   lastName  String?
   role Role
   
+}
+
+enum ContactType{
+  OFFICE
+  PERSONAL
+}
+
+enum Type{
+  MEETINGROOMS
+  DESKS
+  PRIVATEOFFICES
+  CABINS
+}
+
+enum Gender{
+  MALE
+  FEMALE
+}
+
+enum AddressType{
+  HOME
+  OFFICE
+}
+model Lead{
+  id Int @id @default(autoincrement())
+  salutation String?
+  firstName String?
+  lastName  String?
+  emailType ContactType?
+  email String?
+  phoneType ContactType
+  phone String?
+  timeZone String?
+  tags String?
+  interestedProjects String?
+  team String?
+  channelPartner String?
+  conductSiteVisit String?
+  conductSiteDate DateTime?
+  leadAddress String?
+  street String?
+  city String?
+  state String?
+  country String?
+  zip String?
+  companyName String?
+  type Type?
+  carpetArea String?
+  seats Int
+  tenure Float
+  gender Gender?
+  occupations String?
+  age Int?
+  birthday DateTime?
+  maritalStatus Boolean?
+  aniversary DateTime
+  industry String
+  addressType AddressType?
+  address String?
+
 }
