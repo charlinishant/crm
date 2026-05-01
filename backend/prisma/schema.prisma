@@ -36,3 +36,18 @@ model Project{
   integratedPortals String @default("")
   active Boolean @default(true)
 }
+
+enum Role{
+  ADMIN
+  MANAGER
+  SALESPERSON
+}
+model User{
+  id Int @id @default(autoincrement())
+  email String @unique
+  password String
+  firstName String?
+  lastName  String?
+  role Role
+  
+}
