@@ -3,14 +3,13 @@ import MasterLayout from "../masterLayout/MasterLayout";
 
 const NEWPROJECT = () => {
   const [formData, setFormData] = useState({
-    projectName: "",
+    name: "",
     description: "",
     reraProjectId: "",
     sales: "",
     preSales: "",
-    possession: "",
     projectType: "residential",
-    searchAddress: "",
+    possession: false,
     address: "",
     street: "",
     country: "",
@@ -144,11 +143,7 @@ const NEWPROJECT = () => {
               {/* PROJECT NAME */}
               <div className="np-field">
                 <label>PROJECT NAME *</label>
-                <select name="projectName" onChange={handleChange}>
-                  <option value="">Select</option>
-                  <option>Project Alpha</option>
-                  <option>Project Beta</option>
-                </select>
+                <input name="name" onChange={handleChange} />
               </div>
 
               {/* DESCRIPTION */}
