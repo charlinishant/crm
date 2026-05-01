@@ -6,7 +6,7 @@ exports.createProject = async (req, res)=>{
         const project = await prisma.project.create({
             data:data
         })
-        res.status(201).json({"id":project.id, ...data})
+        res.status(201).json(project)
     }
     catch(err)
     {
@@ -32,7 +32,7 @@ exports.getProjectById = async (req, res)=>{
         const id = req.params.id
         const project = await prisma.project.findUnique({where:{id:Number(id)}});
         if(!project)
-            res.status(404).json("Project not found")
+            return res.status(404).json("Project not found")
         res.status(200).json(project)
     }
     catch(err)
@@ -48,7 +48,7 @@ exports.updateProject = async (req, res)=>{
         const data = req.body
         const project = await prisma.project.findUnique({where:{id:Number(id)}});
         if(!project)
-            res.status(404).json("Project not found")
+            return res.status(404).json("Project not found")
         
         const result = await prisma.project.update({
             where:{id:project.id},
@@ -68,7 +68,7 @@ exports.deleteProject = async (req, res)=>{
         const id = req.params.id
         const project = await prisma.project.findUnique({where:{id:Number(id)}});
         if(!project)
-            res.status(404).json("Project not found")
+            return res.status(404).json("Project not found")
         
         const result = await prisma.project.delete({
             where:{id:project.id}

@@ -1,7 +1,10 @@
 import React, { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
 
 const NEWPROJECT = () => {
+  const navigate = useNavigate();
+
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -19,7 +22,13 @@ const NEWPROJECT = () => {
     locality: "",
     latitude: "",
     longitude: "",
+    noOfTowers: "",
+    active: false,
+    inventory: false,
+    integratedPortals: "",
   });
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const editorRef = useRef(null);
 
@@ -33,10 +42,77 @@ const NEWPROJECT = () => {
     editorRef.current.focus();
   };
 
-  const handleSubmit = (e) => {
+  const parseBoolean = (value) => {
+    if (typeof value === "boolean") return value;
+    if (!value) return false;
+    const normalized = value.toString().trim().toLowerCase();
+    return normalized === "true" || normalized === "yes" || normalized === "1";
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const description = editorRef.current.innerHTML;
-    console.log({ ...formData, description });
+    setIsSaving(true);
+    setSaveError("");
+    const description = editorRef.current?.innerHTML || "";
+
+    const newProject = {
+      name: formData.name,
+      description,
+      reraProjectId: formData.reraProjectId ? Number(formData.reraProjectId) : null,
+      sales: formData.sales || "",
+      preSales: formData.preSales || "",
+      projectType: formData.projectType,
+      possession: parseBoolean(formData.possession),
+      address: formData.address,
+      street: formData.street,
+      country: formData.country,
+      state: formData.state,
+      city: formData.city,
+      zip: formData.zip,
+      locality: formData.locality,
+      latitude: formData.latitude,
+      longitude: formData.longitude,
+      noOfTowers: Number(formData.noOfTowers) || 0,
+      active: parseBoolean(formData.active),
+      inventory: parseBoolean(formData.inventory),
+      integratedPortals: formData.integratedPortals || "",
+    };
+
+    try {
+      const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+      const response = await fetch(`${API_URL}/projects`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(newProject),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API save failed: ${response.status}`);
+      }
+
+      const savedProject = await response.json();
+      const savedProjects = JSON.parse(
+        window.localStorage.getItem("savedProjects") || "[]"
+      );
+      const projectToStore = {
+        id: savedProject.id || Date.now(),
+        ...savedProject,
+        createdAt: savedProject.createdAt || new Date().toISOString(),
+      };
+
+      window.localStorage.setItem(
+        "savedProjects",
+        JSON.stringify([...savedProjects, projectToStore])
+      );
+      navigate("/column-chart");
+    } catch (error) {
+      console.error("Unable to save project to database:", error);
+      setSaveError("Project could not be saved to the database. Please make sure the backend and MySQL are running.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -278,8 +354,13 @@ const NEWPROJECT = () => {
               </div>
 
               {/* BUTTONS */}
+              {saveError && (
+                <p style={{ color: "#dc2626", marginBottom: 12 }}>{saveError}</p>
+              )}
               <div className="np-buttons">
-                <button type="submit" className="np-btn-save">Save</button>
+                <button type="submit" className="np-btn-save" disabled={isSaving}>
+                  {isSaving ? "Saving..." : "Save"}
+                </button>
                 <button type="button" className="np-btn-cancel">Cancel</button>
               </div>
 

@@ -99,6 +99,7 @@ import MaintenancePage from "./pages/MaintenancePage";
 import BlankPagePage from "./pages/BlankPagePage";
 import NEWPROJECT from "./pages/Newproject";
 
+
 function App() {
   return (
     <BrowserRouter>
@@ -129,7 +130,7 @@ function App() {
 
 
        {/* SL */}
-       
+        {/* <Route exact path='login' element={<Login />} /> */}
         <Route exact path='/add-user' element={<AddUserPage />} />
         <Route exact path='/alert' element={<AlertPage />} />
         <Route exact path='/assign-role' element={<AssignRolePage />} />
