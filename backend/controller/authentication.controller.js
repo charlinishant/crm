@@ -45,7 +45,8 @@ exports.login = async (req, res)=>{
             res.status(404).json({"message":"User not found"})
         }
 
-        const isMatch = bcrypt.compare(password,  user.password)
+        const isMatch = await bcrypt.compare(password,  user.password)
+        
         if(!isMatch){
             res.status(404).json({"message":"Invalid password"})
         }
@@ -62,6 +63,7 @@ exports.login = async (req, res)=>{
         res.status(200).json({"message":"Success", "token":token, "data":data})
     }
     catch(err){
+        console.log(err);
         res.status(500).json("Something went wrong");
     }
 }
