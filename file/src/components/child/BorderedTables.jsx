@@ -1,107 +1,316 @@
-import React from 'react'
-import { Link } from 'react-router-dom'
+import React, { useRef, useState } from 'react'
 
 const BorderedTables = () => {
+    const fileInputRef = useRef(null)
+    const [attachments, setAttachments] = useState([])
+
+    const handleUploadClick = () => {
+        fileInputRef.current?.click()
+    }
+
+    const handleAttachmentChange = (event) => {
+        setAttachments(Array.from(event.target.files || []))
+    }
+
+    const handleRemoveAttachment = (fileName) => {
+        setAttachments((currentAttachments) =>
+            currentAttachments.filter((file) => file.name !== fileName)
+        )
+
+        if (fileInputRef.current) {
+            fileInputRef.current.value = ''
+        }
+    }
+
     return (
-        <div className="col-lg-6">
-            <div className="card">
-                <div className="card-header">
-                    <h5 className="card-title mb-0">Bordered Tables</h5>
+        <div className="col-12">
+            <div className="new-task-panel">
+                <div className="new-task-header">
+                    <h5 className="new-task-title">New Task</h5>
                 </div>
-                <div className="card-body">
-                    <div className="table-responsive">
-                        <table className="table basic-border-table mb-0">
-                            <thead>
-                                <tr>
-                                    <th>Invoice </th>
-                                    <th>Name</th>
-                                    <th>Issued Date</th>
-                                    <th>Amount</th>
-                                    <th>Action</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr>
-                                    <td>
-                                        <Link to="#" className="text-primary-600">
-                                            #526534
-                                        </Link>
-                                    </td>
-                                    <td>Kathryn Murphy</td>
-                                    <td>25 Jan 2024</td>
-                                    <td>$200.00</td>
-                                    <td>
-                                        <Link to="#" className="text-primary-600">
-                                            View More &gt;
-                                        </Link>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td>
-                                        <Link to="#" className="text-primary-600">
-                                            #696589
-                                        </Link>
-                                    </td>
-                                    <td>Annette Black</td>
-                                    <td>25 Jan 2024</td>
-                                    <td>$200.00</td>
-                                    <td>
-                                        <Link to="#" className="text-primary-600">
-                                            View More &gt;
-                                        </Link>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td>
-                                        <Link to="#" className="text-primary-600">
-                                            #256584
-                                        </Link>
-                                    </td>
-                                    <td>256584</td>
-                                    <td>10 Feb 2024</td>
-                                    <td>$200.00</td>
-                                    <td>
-                                        <Link to="#" className="text-primary-600">
-                                            View More &gt;
-                                        </Link>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td>
-                                        <Link to="#" className="text-primary-600">
-                                            #526587
-                                        </Link>
-                                    </td>
-                                    <td>Eleanor Pena</td>
-                                    <td>10 Feb 2024</td>
-                                    <td>$150.00</td>
-                                    <td>
-                                        <Link to="#" className="text-primary-600">
-                                            View More &gt;
-                                        </Link>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td>
-                                        <Link to="#" className="text-primary-600">
-                                            #105986
-                                        </Link>
-                                    </td>
-                                    <td>Leslie Alexander</td>
-                                    <td>15 Mar 2024</td>
-                                    <td>$150.00</td>
-                                    <td>
-                                        <Link to="#" className="text-primary-600">
-                                            View More &gt;
-                                        </Link>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+
+                <form className="new-task-form">
+                    <div className="new-task-field">
+                        <label htmlFor="taskTitle">
+                            TITLE <span>*</span>
+                        </label>
+                        <input id="taskTitle" type="text" />
                     </div>
+
+                    <div className="new-task-field">
+                        <label htmlFor="taskDescription">DESCRIPTION</label>
+                        <textarea id="taskDescription" rows="5" />
+                    </div>
+
+                    <div className="new-task-field">
+                        <label>DUE ON</label>
+                        <div className="new-task-date-row">
+                            <input type="text" placeholder="Due Date" />
+                            <input type="text" defaultValue="2:00 PM" />
+                        </div>
+                    </div>
+
+                    <div className="new-task-field">
+                        <label htmlFor="taskAssignee">
+                            ASSIGNEE <span>*</span>
+                        </label>
+                        <select id="taskAssignee" defaultValue="tejas-sales">
+                            <option value="tejas-sales">
+                                Tejas Sales (Manager) (Selldo Sales Team)
+                            </option>
+                            <option value="sales-team">Sales Team</option>
+                            <option value="support-team">Support Team</option>
+                        </select>
+                    </div>
+
+                    <div className="new-task-field">
+                        <label htmlFor="taskRemark">REMARK</label>
+                        <textarea id="taskRemark" rows="5" />
+                    </div>
+
+                    <div className="new-task-field">
+                        <label htmlFor="taskPriority">
+                            PRIORITY <span>*</span>
+                        </label>
+                        <select id="taskPriority" defaultValue="medium">
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                            <option value="low">Low</option>
+                        </select>
+                    </div>
+
+                    <input
+                        ref={fileInputRef}
+                        type="file"
+                        className="new-task-file-input"
+                        multiple
+                        onChange={handleAttachmentChange}
+                    />
+
+                    <button
+                        type="button"
+                        className="new-task-upload"
+                        onClick={handleUploadClick}
+                    >
+                        Upload attachments
+                    </button>
+
+                    {attachments.length > 0 && (
+                        <div className="new-task-attachments">
+                            {attachments.map((file) => (
+                                <div className="new-task-attachment" key={file.name}>
+                                    <span>{file.name}</span>
+                                    <button
+                                        type="button"
+                                        aria-label={`Remove ${file.name}`}
+                                        onClick={() => handleRemoveAttachment(file.name)}
+                                    >
+                                        &times;
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </form>
+
+                <div className="new-task-footer">
+                    <button type="button" className="new-task-save">
+                        Save
+                    </button>
                 </div>
             </div>
-            {/* card end */}
+
+            <style>{`
+                .new-task-panel {
+                    background: #fff;
+                    border: 1px solid #d7dde4;
+                    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+                    max-width: 925px;
+                    overflow: hidden;
+                }
+
+                .new-task-header {
+                    align-items: center;
+                    background: #487fff;
+                    display: flex;
+                    height: 61px;
+                    justify-content: flex-start;
+                    padding: 0 10px;
+                }
+
+                .new-task-title {
+                    color: #fff;
+                    font-size: 25px;
+                    font-weight: 400;
+                    line-height: 1;
+                    margin: 0;
+                }
+
+                .new-task-form {
+                    padding: 18px 34px 46px 9px;
+                }
+
+                .new-task-field {
+                    margin-bottom: 36px;
+                }
+
+                .new-task-field label {
+                    color: #7d8792;
+                    display: block;
+                    font-size: 14px;
+                    font-weight: 400;
+                    line-height: 1;
+                    margin-bottom: 8px;
+                    text-transform: uppercase;
+                }
+
+                .new-task-field label span {
+                    color: #ff3b30;
+                }
+
+                .new-task-field input,
+                .new-task-field select,
+                .new-task-field textarea {
+                    background-color: #fff;
+                    border: 1px solid #cbd3dc;
+                    border-radius: 4px;
+                    color: #3d4651;
+                    font-size: 18px;
+                    outline: none;
+                    padding: 0 15px;
+                    width: 100%;
+                }
+
+                .new-task-field input,
+                .new-task-field select {
+                    height: 54px;
+                }
+
+                .new-task-field textarea {
+                    min-height: 148px;
+                    padding-bottom: 12px;
+                    padding-top: 12px;
+                    resize: vertical;
+                }
+
+                .new-task-field input:focus,
+                .new-task-field select:focus,
+                .new-task-field textarea:focus {
+                    border-color: #9aa8b8;
+                    box-shadow: 0 0 0 3px rgba(102, 102, 102, 0.1);
+                }
+
+                .new-task-date-row {
+                    display: grid;
+                    gap: 38px;
+                    grid-template-columns: 1fr 1fr;
+                }
+
+                .new-task-date-row input {
+                    background-color: #e9edf2;
+                }
+
+                .new-task-date-row input::placeholder {
+                    color: #8a939e;
+                    opacity: 1;
+                }
+
+                .new-task-field select {
+                    appearance: auto;
+                    background-color: #fff;
+                }
+
+                .new-task-upload {
+                    background: #fff;
+                    border: 1px solid #6b2ee6;
+                    border-radius: 4px;
+                    color: #4f22bd;
+                    font-size: 14px;
+                    height: 30px;
+                    line-height: 1;
+                    padding: 0 20px;
+                }
+
+                .new-task-file-input {
+                    display: none;
+                }
+
+                .new-task-attachments {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 8px;
+                    margin-top: 12px;
+                }
+
+                .new-task-attachment {
+                    align-items: center;
+                    background: #f2f5ff;
+                    border: 1px solid #d7e0ff;
+                    border-radius: 4px;
+                    color: #3d4651;
+                    display: inline-flex;
+                    font-size: 13px;
+                    gap: 8px;
+                    max-width: 100%;
+                    min-height: 30px;
+                    padding: 4px 8px 4px 10px;
+                }
+
+                .new-task-attachment span {
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+
+                .new-task-attachment button {
+                    align-items: center;
+                    background: transparent;
+                    border: 0;
+                    color: #6b2ee6;
+                    display: inline-flex;
+                    font-size: 18px;
+                    height: 20px;
+                    justify-content: center;
+                    line-height: 1;
+                    padding: 0;
+                    width: 20px;
+                }
+
+                .new-task-footer {
+                    align-items: center;
+                    background: #666;
+                    display: flex;
+                    height: 61px;
+                    justify-content: flex-end;
+                    padding: 0 18px;
+                }
+
+                .new-task-save {
+                    background: #6b2ee6;
+                    border: 0;
+                    border-radius: 4px;
+                    color: #fff;
+                    font-size: 14px;
+                    height: 30px;
+                    line-height: 1;
+                    padding: 0 20px;
+                }
+
+                @media (max-width: 767px) {
+                    .new-task-panel {
+                        max-width: none;
+                    }
+
+                    .new-task-form {
+                        padding: 16px;
+                    }
+
+                    .new-task-date-row {
+                        gap: 16px;
+                        grid-template-columns: 1fr;
+                    }
+                }
+            `}</style>
         </div>
     )
 }

@@ -12,26 +12,26 @@ const TableBasicLayer = () => {
         <div className="row gy-4">
 
             {/* DefaultTable */}
-            <DefaultTable />
+            {/* <DefaultTable /> */}
 
             {/* BorderedTables */}
             <BorderedTables />
 
             {/* StripedRows */}
-            <StripedRows />
+            {/* <StripedRows /> */}
 
             {/* StripedRowsTwo */}
-            <StripedRowsTwo />
+            {/* <StripedRowsTwo /> */}
 
             {/* TablesBorderColors */}
-            <TablesBorderColors />
+            {/* <TablesBorderColors /> */}
 
             {/* TablesBorderColorsTwo */}
-            <TablesBorderColorsTwo />
+            {/* <TablesBorderColorsTwo /> */}
 
 
             {/* TablesBorderColorsThree */}
-            <TablesBorderColorsThree />
+            {/* <TablesBorderColorsThree /> */}
 
         </div>
 

@@ -3,14 +3,16 @@ const prisma = require("../lib/prisma")
 exports.createProject = async (req, res)=>{
     try{
         let data = req.body
+        console.log("Creating project:", data)
         const project = await prisma.project.create({
             data:data
         })
+        console.log("Project created:", project)
         res.status(201).json(project)
     }
     catch(err)
     {
-        console.log(err);
+        console.error("Create project error:", err)
         res.status(500).json("something went wrong")
     }
 }

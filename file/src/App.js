@@ -98,6 +98,12 @@ import AccessDeniedPage from "./pages/AccessDeniedPage";
 import MaintenancePage from "./pages/MaintenancePage";
 import BlankPagePage from "./pages/BlankPagePage";
 import NEWPROJECT from "./pages/Newproject";
+import Preview from "./pages/preview";
+import Details from "./pages/Details";
+import Alltask from "./pages/Alltask";
+import OpenTask from "./pages/opentask";
+import CompletedTask from "./pages/completedtask";
+import Archivedtask from "./pages/Archivedtask";
 
 
 function App() {
@@ -105,8 +111,10 @@ function App() {
     <BrowserRouter>
       <RouteScrollToTop />
       <Routes>
-         <Route exact path='/' element={<HomePageEleven />} />
+         <Route exact path='/' element={<SignInPage />} />
         <Route exact path='/add-lead' element={<ADDLEAD />} />
+        <Route exact path='/preview' element={<Preview />} />
+        <Route exact path='/details' element={<Details />} />
         <Route exact path='/index-11' element={<HomePageEleven />} />
         <Route exact path='/index-2' element={<HomePageTwo />} />
          <Route exact path='/index-3' element={<HomePageThree />} />
@@ -215,6 +223,12 @@ function App() {
         <Route exact path='/switch' element={<SwitchPage />} />
         <Route exact path='/table-basic' element={<TableBasicPage />} />
         <Route exact path='/table-data' element={<TableDataPage />} />
+        <Route exact path='/open-tasks' element={<OpenTask />} />
+        <Route exact path='/completed-tasks' element={<CompletedTask />} />
+        <Route exact path='/details' element={<Details />} />
+        <Route exact path='/preview' element={<Preview />} />
+        <Route exact path='/archived-tasks' element={<Archivedtask />} />
+        <Route exact path='/all-tasks' element={<Alltask />} />
         <Route exact path='/tabs' element={<TabsPage />} />
         <Route exact path='/tags' element={<TagsPage />} />
         <Route exact path='/terms-condition' element={<TermsConditionPage />} />

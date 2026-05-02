@@ -1,7 +1,11 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { FaEllipsisV } from "react-icons/fa";
 
 const PaymentHistoryOne = () => {
   const [leadData, setLeadData] = useState([]);
+  const [openMenu, setOpenMenu] = useState(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
     const fetchLeadData = async () => {
@@ -17,6 +21,18 @@ const PaymentHistoryOne = () => {
 
     fetchLeadData();
   }, []);
+
+  const handlePreview = (lead) => {
+    window.sessionStorage.setItem("selectedLeadPreview", JSON.stringify(lead));
+    const leadId = lead.id || lead._id || lead.lead_id || "";
+    navigate(leadId ? `/preview?leadId=${leadId}` : "/preview", { state: { lead } });
+  };
+
+  const handleDetails = (lead) => {
+    window.sessionStorage.setItem("selectedLeadDetails", JSON.stringify(lead));
+    const leadId = lead.id || lead._id || lead.lead_id || "";
+    navigate(leadId ? `/details?leadId=${leadId}` : "/details", { state: { lead } });
+  };
 
   return (
     <>
@@ -80,6 +96,48 @@ const PaymentHistoryOne = () => {
           padding: 12px 15px;
           color: #334155;
           font-size: 14px;
+          position: relative;
+        }
+
+        .lead-action-btn {
+          width: 32px;
+          height: 32px;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          background: #ffffff;
+          color: #475569;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+        }
+
+        .lead-action-menu {
+          position: absolute;
+          right: 14px;
+          top: 42px;
+          min-width: 128px;
+          background: #ffffff;
+          border: 1px solid #e2e8f0;
+          border-radius: 6px;
+          box-shadow: 0 10px 22px rgba(15, 23, 42, 0.14);
+          z-index: 10;
+          overflow: hidden;
+        }
+
+        .lead-action-menu button {
+          width: 100%;
+          border: 0;
+          background: #ffffff;
+          padding: 10px 12px;
+          text-align: left;
+          color: #334155;
+          cursor: pointer;
+          font-size: 14px;
+        }
+
+        .lead-action-menu button:hover {
+          background: #f8fafc;
         }
 
         /* ============================================
@@ -128,13 +186,14 @@ const PaymentHistoryOne = () => {
               <th>Source</th>
               <th>City</th>
               <th>Budget</th>
+              <th>Action</th>
             </tr>
           </thead>
 
           <tbody>
             {leadData.length === 0 ? (
               <tr>
-                <td colSpan="5" className="empty-state">
+                <td colSpan="6" className="empty-state">
                   No Data Available
                 </td>
               </tr>
@@ -146,6 +205,33 @@ const PaymentHistoryOne = () => {
                   <td>{lead.source || "-"}</td>
                   <td>{lead.city || "-"}</td>
                   <td>{lead.budget || "-"}</td>
+                  <td>
+                    <button
+                      type="button"
+                      className="lead-action-btn"
+                      onClick={() => setOpenMenu(openMenu === i ? null : i)}
+                      aria-label="Open lead actions"
+                    >
+                      <FaEllipsisV />
+                    </button>
+
+                    {openMenu === i && (
+                      <div className="lead-action-menu">
+                        <button
+                          type="button"
+                          onClick={() => handlePreview(lead)}
+                        >
+                          Preview
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDetails(lead)}
+                        >
+                          Details
+                        </button>
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))
             )}

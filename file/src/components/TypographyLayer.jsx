@@ -13,29 +13,29 @@ const TypographyLayer = () => {
         <div className="row gy-4">
 
             {/* HeadingFont */}
-            <HeadingFont />
+            {/* <HeadingFont /> */}
 
             {/* DisplayHeadingFont */}
-            <DisplayHeadingFont />
+            {/* <DisplayHeadingFont /> */}
 
             {/* HeadingColorsFont */}
-            <HeadingColorsFont />
+            {/* <HeadingColorsFont /> */}
 
             {/* InlineTextElementsFont */}
-            <InlineTextElementsFont />
+            {/* <InlineTextElementsFont /> */}
 
             {/* TextFont */}
-            <TextFont />
+            {/* <TextFont /> */}
 
             {/* TextDecorationFont */}
-            <TextDecorationFont />
+            {/* <TextDecorationFont /> */}
 
             {/* BlockquoteBackgroundColorTextFont */}
-            <BlockquoteBackgroundColorTextFont />
+            {/* <BlockquoteBackgroundColorTextFont /> */}
 
 
             {/* BlockquoteBorderColorFont */}
-            <BlockquoteBorderColorFont />
+            {/* <BlockquoteBorderColorFont /> */}
 
         </div>
 
