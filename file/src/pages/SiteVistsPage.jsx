@@ -1,10 +1,11 @@
 import React from "react";
 import MasterLayout from "../masterLayout/MasterLayout";
 import Breadcrumb from "../components/Breadcrumb";
-import WizardLayer from "../components/WizardLayer";
+import WizardLayer from "../components/SiteVists";
+import SiteVists from "../components/SiteVists";
 
 
-const WizardPage = () => {
+const SiteVistsPage = () => {
   return (
     <>
 
@@ -12,10 +13,9 @@ const WizardPage = () => {
       <MasterLayout>
 
         {/* Breadcrumb */}
-        <Breadcrumb title="Wizard" />
+        <Breadcrumb title="Site Vists" />
 
-        {/* WizardLayer */}
-        <WizardLayer />
+       <SiteVists/>
 
       </MasterLayout>
 
@@ -23,4 +23,4 @@ const WizardPage = () => {
   );
 };
 
-export default WizardPage; 
+export default SiteVistsPage ; 

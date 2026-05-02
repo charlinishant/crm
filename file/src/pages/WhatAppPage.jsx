@@ -1,10 +1,12 @@
 import React from "react";
-import FormLayoutLayer from "../components/FormLayoutLayer";
 import MasterLayout from "../masterLayout/MasterLayout";
 import Breadcrumb from "../components/Breadcrumb";
+import WizardLayer from "../components/SiteVists";
+import SiteVists from "../components/SiteVists";
+import  WhatsApp from "../components/WhatsApp"
 
 
-const FormLayoutPage = () => {
+const WhatAppPage = () => {
   return (
     <>
 
@@ -12,15 +14,14 @@ const FormLayoutPage = () => {
       <MasterLayout>
 
         {/* Breadcrumb */}
-        <Breadcrumb title="Emails" />
+        <Breadcrumb title="WhatsApp" />
 
-        {/* FormLayoutLayer */}
-        <FormLayoutLayer />
-
+        
+    <WhatsApp/>
       </MasterLayout>
 
     </>
   );
 };
 
-export default FormLayoutPage;
+export default WhatAppPage ; 

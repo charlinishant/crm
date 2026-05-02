@@ -12,7 +12,7 @@ const SmsPage = () => {
       <MasterLayout>
 
         {/* Breadcrumb */}
-        <Breadcrumb title="Form Validation" />
+        <Breadcrumb title="SMS" />
         
         <Sms/>
 

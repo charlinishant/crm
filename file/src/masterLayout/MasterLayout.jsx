@@ -705,7 +705,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/wizard'
+                    to='/SiteVists'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -716,7 +716,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/wizard'
+                    to='/Followups'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -727,7 +727,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/wizard'
+                    to='/WhatApp'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -738,7 +738,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/wizard'
+                    to='/BlukClickToCalls'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }

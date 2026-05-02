@@ -14,7 +14,7 @@ const CallsPage = () => {
       <MasterLayout>
 
         {/* Breadcrumb */}
-        <Breadcrumb title="Input Form" />
+        <Breadcrumb title="Calls" />
 
       <Calls/>
       </MasterLayout>
