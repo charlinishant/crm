@@ -33,7 +33,7 @@ const SignUpLayer = () => {
       }
     ).then(res=>{
         if(res.status === 201){
-          navigate("sign-in")
+          navigate("/sign-in")
         }
         else{
           console.log(res);
