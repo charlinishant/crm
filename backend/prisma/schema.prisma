@@ -44,6 +44,7 @@ enum Role{
 }
 model User{
   id Int @id @default(autoincrement())
+  username String @unique
   email String @unique
   password String
   firstName String?
@@ -73,6 +74,8 @@ enum AddressType{
   HOME
   OFFICE
 }
+
+
 model Lead{
   id Int @id @default(autoincrement())
   salutation String?
@@ -89,12 +92,7 @@ model Lead{
   channelPartner String?
   conductSiteVisit String?
   conductSiteDate DateTime?
-  leadAddress String?
-  street String?
-  city String?
-  state String?
-  country String?
-  zip String?
+  leadAddress LeadAddress[]
   companyName String?
   type Type?
   carpetArea String?
@@ -105,12 +103,58 @@ model Lead{
   age Int?
   birthday DateTime?
   maritalStatus Boolean?
-  aniversary DateTime
+  aniversary DateTime?
   industry String
-  addressType AddressType?
-  address String?
+  personalAddress PersonalAddress[]
+  url Json?
+  education Json?
+  companyTitle Json?
+  income Json?
+  basiComment String @db.Text
+  purpose Json?
+  nri Boolean @default(false)  
+  budejetMin Int? @default(0)
+  budejetMax Int? @default(0)
+  professionMin String?
+  professionMax String?
+  area String?
+  fundingSouurce String?
+  propertyType String?
+  configration String?
+  budget String?
+  bathroomPreferences String?
+  furnishing String?
+  facing String?
+  locationPreferences String?
+  requirementComment String @db.Text
 
 }
+
+model LeadAddress{
+  id Int @id @default(autoincrement())
+  address String?
+  street String?
+  city String?
+  state String?
+  country String?
+  zip String?
+  leadId Int 
+  lead Lead @relation(fields: [leadId],references: [id])
+}
+
+model PersonalAddress{
+  id Int @id @default(autoincrement())
+  type AddressType?
+  address String?
+  street String?
+  city String?
+  state String?
+  country String?
+  zip String?
+  leadId Int 
+  lead Lead @relation(fields: [leadId],references: [id])
+}
+
 
 model LeadNote {
   id Int @id @default(autoincrement())
