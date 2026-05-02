@@ -1,5 +1,5 @@
 import React from 'react';
-import { MoreVertical, Filter } from 'lucide-react';
+import { Icon } from '@iconify/react';
 
 const AllBlukClick = ()=>{
 const tableData = [
@@ -37,7 +37,7 @@ const tableData = [
         
         <div className="filter-badge">
           <span className="badge-count">1</span>
-          <Filter size={16} />
+          <Icon icon="mdi:filter" width={16} height={16} />
         </div>
       </div>
 
@@ -90,7 +90,7 @@ const tableData = [
                 <td>{row.totalTalktime}</td>
                 <td>
                   <button className="action-btn">
-                    <MoreVertical size={16} />
+                    <Icon icon="mdi:dots-vertical" width={16} height={16} />
                   </button>
                 </td>
               </tr>
