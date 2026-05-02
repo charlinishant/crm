@@ -52,8 +52,10 @@ const ADDLEAD = () => {
       lastName:"",
       emailType:"",
       email:"",
+      emails:[{ type: "Office", value: "" }],
       phoneType:"",
       phone:"",
+      phones:[{ type: "Work", value: "" }],
       timeZone:"",
       tags:"",
       interestedProjects:"",
@@ -214,11 +216,18 @@ const ADDLEAD = () => {
                 {/* EMAIL */}
                 <div className="lead-group lead-full">
                   <label>PRIMARY EMAIL *</label>
-                    <div className="lead-row lead-row-action" >
-                     
+                  {formData.emails.map((email, index) => (
+                    <div className="lead-row lead-row-action" key={index}>
+                      <select
+                        value={email.type}
+                        onChange={(e) => handleEmailChange(index, "type", e.target.value)}
+                      >
+                        <option>Office</option>
+                        <option>Personal</option>
+                      </select>
                       <input
                         type="email"
-                        placeholder="email"
+                        placeholder={index === 0 ? "Primary Email" : "Secondary Email"}
                         value={email.value}
                         onChange={(e) => handleEmailChange(index, "value", e.target.value)}
                       />

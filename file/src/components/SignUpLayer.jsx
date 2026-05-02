@@ -59,7 +59,7 @@ const SignUpLayer = () => {
         </div>
 
         <form onSubmit={handleSignUp}>
-          {/* Username */}
+          {/* Name */}
           <div className="icon-field mb-16">
             <span className="icon top-50 translate-middle-y">
               <Icon icon="f7:person" />
@@ -67,8 +67,10 @@ const SignUpLayer = () => {
             <input
               type="text"
               className="form-control h-56-px bg-neutral-50 radius-12"
-              placeholder="Username"
+              placeholder="Name"
               name="username"
+              required
+              value={formData.username}
               onChange={handleChange}
             />
           </div>
@@ -83,6 +85,8 @@ const SignUpLayer = () => {
               className="form-control h-56-px bg-neutral-50 radius-12"
               placeholder="Email"
               name="email"
+              required
+              value={formData.email}
               onChange={handleChange}
             />
           </div>
@@ -99,6 +103,8 @@ const SignUpLayer = () => {
                   className="form-control h-56-px bg-neutral-50 radius-12"
                   placeholder="Password"
                   name="password"
+                  required
+                  value={formData.password}
                   onChange={handleChange}
                 />
               </div>

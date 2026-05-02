@@ -8,35 +8,63 @@ const SignInLayer = () => {
     email:"",
     password:""
   })
+  const [errorModal, setErrorModal] = useState({
+    show: false,
+    message: ""
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleChange = e =>{
     const {name, value} = e.target
     setFormData({...formData, [name]:value})
   }
 
+  const showErrorModal = (message) => {
+    setErrorModal({
+      show: true,
+      message
+    });
+  };
+
+  const closeErrorModal = () => {
+    setErrorModal({
+      show: false,
+      message: ""
+    });
+  };
+
   const handleLogin = async(e) => {
     e.preventDefault();
+    setIsSubmitting(true);
 
-    await fetch(`${process.env.REACT_APP_API_URL}/auth/login`, {
-      method:"POST",
-      headers:{
-        "Content-Type": "application/json"
-      },
-      body:JSON.stringify(formData)
-    })
-    .then(res=>{
-      if(res.status === 200){
-        console.log(res);
-        
+    try {
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/auth/login`, {
+        method:"POST",
+        headers:{
+          "Content-Type": "application/json"
+        },
+        body:JSON.stringify(formData)
+      });
+
+      const result = await res.json();
+
+      if(res.ok){
+        localStorage.setItem("authToken", result.token);
+        localStorage.setItem("authUser", JSON.stringify(result.data));
         navigate("/index-11")
+        return;
       }
-      else{
-        console.log(res);
-        
-        alert(res.json().message)
+
+      if (result?.message === "Invalid password") {
+        showErrorModal("Password is wrong. Please check your credentials.");
+      } else {
+        showErrorModal(result?.message || "Please check your credentials and try again.");
       }
-    })
-    .catch(err=>alert("Something went wrong"))
+    } catch (err) {
+      showErrorModal("Something went wrong. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -92,6 +120,7 @@ const SignInLayer = () => {
                 border: "1px solid #ddd",
               }}
               name="email"
+              value={formData.email}
               onChange={handleChange}
             />
           </div>
@@ -118,6 +147,7 @@ const SignInLayer = () => {
                 border: "1px solid #ddd",
               }}
               name="password"
+              value={formData.password}
               onChange={handleChange}
             />
           </div>
@@ -143,19 +173,20 @@ const SignInLayer = () => {
           {/* Button */}
           <button
             type="submit"
+            disabled={isSubmitting}
             style={{
               width: "100%",
               padding: "12px",
-              background: "#007bff",
+              background: isSubmitting ? "#6ea8fe" : "#007bff",
               color: "#fff",
               border: "none",
               borderRadius: "8px",
-              cursor: "pointer",
+              cursor: isSubmitting ? "not-allowed" : "pointer",
               fontWeight: "bold",
               textAlign: "center",
             }}
           >
-            Sign In
+            {isSubmitting ? "Signing In..." : "Sign In"}
           </button>
         </form>
 
@@ -167,6 +198,91 @@ const SignInLayer = () => {
           </Link>
         </div>
       </div>
+
+      {errorModal.show && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="signin-error-title"
+          style={{
+            alignItems: "center",
+            background: "rgba(15, 23, 42, 0.45)",
+            bottom: 0,
+            display: "flex",
+            justifyContent: "center",
+            left: 0,
+            padding: "16px",
+            position: "fixed",
+            right: 0,
+            top: 0,
+            zIndex: 1050,
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: "10px",
+              boxShadow: "0 20px 50px rgba(15, 23, 42, 0.2)",
+              maxWidth: "380px",
+              padding: "24px",
+              textAlign: "center",
+              width: "100%",
+            }}
+          >
+            <div
+              style={{
+                alignItems: "center",
+                background: "#fee2e2",
+                borderRadius: "50%",
+                color: "#dc2626",
+                display: "inline-flex",
+                fontSize: "32px",
+                height: "58px",
+                justifyContent: "center",
+                marginBottom: "14px",
+                width: "58px",
+              }}
+            >
+              <Icon icon="mdi:alert-circle-outline" />
+            </div>
+            <h3
+              id="signin-error-title"
+              style={{
+                color: "#111827",
+                fontSize: "20px",
+                margin: "0 0 8px",
+              }}
+            >
+              Login Failed
+            </h3>
+            <p
+              style={{
+                color: "#4b5563",
+                fontSize: "15px",
+                lineHeight: 1.5,
+                margin: "0 0 20px",
+              }}
+            >
+              {errorModal.message}
+            </p>
+            <button
+              type="button"
+              onClick={closeErrorModal}
+              style={{
+                background: "#007bff",
+                border: "none",
+                borderRadius: "8px",
+                color: "#fff",
+                cursor: "pointer",
+                fontWeight: "bold",
+                padding: "10px 24px",
+              }}
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 };
