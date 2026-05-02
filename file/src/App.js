@@ -22,7 +22,7 @@ import ChatMessagePage from "./pages/ChatMessagePage";
 import ChatProfilePage from "./pages/ChatProfilePage";
 import CodeGeneratorNewPage from "./pages/CodeGeneratorNewPage";
 import CodeGeneratorPage from "./pages/CodeGeneratorPage";
-import ColorsPage from "./pages/ColorsPage";
+import ColorsPage from "./pages/BrokerageinvoicesPage";
 import ColumnChartPage from "./pages/ColumnChartPage";
 import CompanyPage from "./pages/CompanyPage";
 import CurrenciesPage from "./pages/CurrenciesPage";
@@ -31,8 +31,8 @@ import ErrorPage from "./pages/ErrorPage";
 import FaqPage from "./pages/FaqPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import FormLayoutPage from "./pages/FormLayoutPage";
-import FormValidationPage from "./pages/FormValidationPage";
-import FormPage from "./pages/FormPage";
+import SmsPage from "./pages/SmsPage";
+import FormPage from "./pages/CallsPage";
 import GalleryPage from "./pages/GalleryPage";
 import ImageGeneratorPage from "./pages/ImageGeneratorPage";
 import ImageUploadPage from "./pages/ImageUploadPage";
@@ -69,7 +69,7 @@ import TermsConditionPage from "./pages/TermsConditionPage";
 import TextGeneratorPage from "./pages/TextGeneratorPage";
 import ThemePage from "./pages/ThemePage";
 import TooltipPage from "./pages/TooltipPage";
-import TypographyPage from "./pages/TypographyPage";
+import TypographyPage from "./pages/BookingPage";
 import UsersGridPage from "./pages/UsersGridPage";
 import UsersListPage from "./pages/UsersListPage";
 import ViewDetailsPage from "./pages/ViewDetailsPage";
@@ -159,7 +159,7 @@ function App() {
         <Route exact path='/faq' element={<FaqPage />} />
         <Route exact path='/forgot-password' element={<ForgotPasswordPage />} />
         <Route exact path='/form-layout' element={<FormLayoutPage />} />
-        <Route exact path='/form-validation' element={<FormValidationPage />} />
+        <Route exact path='/SmsPage' element={<SmsPage />} />
         <Route exact path='/form' element={<FormPage />} />
 
         <Route exact path='/gallery' element={<GalleryPage />} />
