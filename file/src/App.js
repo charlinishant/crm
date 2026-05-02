@@ -79,7 +79,10 @@ import ViewProfilePage from "./pages/ViewProfilePage";
 import VoiceGeneratorPage from "./pages/VoiceGeneratorPage";
 import WalletPage from "./pages/WalletPage";
 import WidgetsPage from "./pages/WidgetsPage";
-import WizardPage from "./pages/WizardPage";
+import SiteVistsPage from "./pages/SiteVistsPage";
+import FollowupsPage from "./pages/FollowupsPage";
+import WhatAppPage from "./pages/WhatAppPage";
+import BlukClickPage from "./pages/BlukClickPage";
 import RouteScrollToTop from "./helper/RouteScrollToTop";
 import TextGeneratorNewPage from "./pages/TextGeneratorNewPage";
 import HomePageEight from "./pages/HomePageEight";
@@ -104,6 +107,7 @@ import Alltask from "./pages/Alltask";
 import OpenTask from "./pages/opentask";
 import CompletedTask from "./pages/completedtask";
 import Archivedtask from "./pages/Archivedtask";
+
 
 
 function App() {
@@ -250,7 +254,11 @@ function App() {
         <Route exact path='/voice-generator' element={<VoiceGeneratorPage />} />
         <Route exact path='/wallet' element={<WalletPage />} />
         <Route exact path='/widgets' element={<WidgetsPage />} />
-        <Route exact path='/wizard' element={<WizardPage />} />
+        <Route exact path='/SiteVists' element={< SiteVistsPage />} />
+
+        <Route exact path='/Followups' element={< FollowupsPage />} />
+         <Route exact path='/WhatApp' element={< WhatAppPage />} />
+         <Route exact path='/BlukClickToCalls' element={< BlukClickPage />} />
 
         <Route exact path='*' element={<ErrorPage />} />
       </Routes>

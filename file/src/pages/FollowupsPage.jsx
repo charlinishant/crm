@@ -1,10 +1,11 @@
 import React from "react";
-import FormLayoutLayer from "../components/FormLayoutLayer";
 import MasterLayout from "../masterLayout/MasterLayout";
 import Breadcrumb from "../components/Breadcrumb";
+import WizardLayer from "../components/SiteVists";
+import SiteVists from "../components/SiteVists";
 
 
-const FormLayoutPage = () => {
+const FollowupsPage = () => {
   return (
     <>
 
@@ -12,10 +13,9 @@ const FormLayoutPage = () => {
       <MasterLayout>
 
         {/* Breadcrumb */}
-        <Breadcrumb title="Emails" />
+        <Breadcrumb title="Site Vists" />
 
-        {/* FormLayoutLayer */}
-        <FormLayoutLayer />
+       <SiteVists/>
 
       </MasterLayout>
 
@@ -23,4 +23,4 @@ const FormLayoutPage = () => {
   );
 };
 
-export default FormLayoutPage;
+export default FollowupsPage ; 
