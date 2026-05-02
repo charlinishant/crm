@@ -47,54 +47,69 @@ const ADDLEAD = () => {
   const [activeTab, setActiveTab] = useState("basic");
 
   const [formData, setFormData] = useState({
-    salutation: "",
-    firstName: "",
-    lastName: "",
-    timezone: "Asia/Kolkata",
-    tags: "",
-    interestedProjects: "",
-    emails: [{ type: "Office", value: "" }],
-    phones: [{ type: "Work", value: "" }],
-
-    // Basic Profile
-    city: "",
-    zip: "",
-    companyName: "",
-    type: "",
-    carpetArea: "",
-    seats: "",
-    tenure: "",
-    leadReassigned: "",
-    gender: "",
-    occupations: "",
-
-    // Personal Details
-    age: "",
-    birthday: "",
-    married: false,
-    anniversary: "",
-    industry: "",
-    addresses: [],
-    url: [],
-    education: [],
-    titleCompany: [],
-    income: [],
-    bankLoans: [],
-
-    // Requirement
-    budget: "",
-    configuration: "",
-    enduse: false,
-investor: false,
-nri: false,
-minBudget: "",
-maxBudget: "",
-minPossession: "",
-maxPossession: "",
-area: "",
-fundingSource: "",
-transactionType: "",
-propertyTypes: "",
+      salutation:"",
+      firstName:"",
+      lastName:"",
+      emailType:"",
+      email:"",
+      phoneType:"",
+      phone:"",
+      timeZone:"",
+      tags:"",
+      interestedProjects:"",
+      team:"",
+      channelPartner:"",
+      conductSiteVisit:"",
+      conductSiteDate:null,
+      leadAddress:[{
+        address:"",
+        street:"",
+        city:"",
+        state:"",
+        country:"",
+        zip:""
+      }],
+      companyName:"",
+      type:"",
+      carpetArea:"",
+      seats:0,
+      tenure:0.0,
+      gender:"",
+      occupations:"",
+      age:"",
+      birthday:null,
+      maritalStatus:false,
+      anniversary:null,
+      industry:"",
+      personalAddress:[{
+        address:"",
+        street:"",
+        city:"",
+        state:"",
+        country:"",
+        zip:""
+      }],
+      url:"",
+      education:"",
+      companyTitle:"",
+      income:"",
+      basiComment:"",
+      purpose:"",
+      nri:false,
+      budejetMin:0,
+      budejetMax:0,
+      professionMin:"",
+      professionMax:"",
+      area:"",
+      fundingSouurce:"",
+      propertyType:"",
+      configration:"",
+      budget:"",
+      bathroomPreferences:"",
+      furnishing:"",
+      facing:"",
+      locationPreferences:"",
+      requirementComment:"",
   });
 
   const handleChange = (e) => {
@@ -199,18 +214,11 @@ propertyTypes: "",
                 {/* EMAIL */}
                 <div className="lead-group lead-full">
                   <label>PRIMARY EMAIL *</label>
-                  {formData.emails.map((email, index) => (
-                    <div className="lead-row lead-row-action" key={index}>
-                      <select
-                        value={email.type}
-                        onChange={(e) => handleEmailChange(index, "type", e.target.value)}
-                      >
-                        <option>Office</option>
-                        <option>Personal</option>
-                      </select>
+                    <div className="lead-row lead-row-action" >
+                     
                       <input
                         type="email"
-                        placeholder={index === 0 ? "Primary Email" : "Secondary Email"}
+                        placeholder="email"
                         value={email.value}
                         onChange={(e) => handleEmailChange(index, "value", e.target.value)}
                       />
@@ -439,7 +447,7 @@ propertyTypes: "",
                     <div className="married-row">
                       <input
                         type="checkbox"
-                        name="married"
+                        name="maritalStatus"
                         id="married"
                         onChange={(e) =>
                           setFormData({ ...formData, married: e.target.checked })
