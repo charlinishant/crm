@@ -392,6 +392,17 @@ const MasterLayout = ({ children }) => {
                     All Leads
                   </NavLink>
                 </li>
+                <li>
+                  <NavLink
+                    to='/preview'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
+                    Lead Preview
+                  </NavLink>
+                </li>
                 {/* <li>
                   <NavLink
                     to='/marketplace-details'
@@ -826,7 +837,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/table-data'
+                    to='/all-tasks'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -837,7 +848,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/table-data'
+                    to='/open-tasks'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -848,7 +859,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/table-data'
+                    to='/completed-tasks'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -859,7 +870,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/table-data'
+                    to='/archived-tasks'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }

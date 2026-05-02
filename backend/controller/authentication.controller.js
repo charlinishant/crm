@@ -5,8 +5,8 @@ const prisma = require("../lib/prisma");
 
 exports.register = async (req, res)=>{
     try{
-        const {email, password, firstName, lastName, role} = req.body;
-
+        const {email, username, password, role} = req.body;
+        
         const existUser = await prisma.user.findUnique({where:{email}})
 
         if(existUser){
@@ -21,9 +21,8 @@ exports.register = async (req, res)=>{
 
         const user = await prisma.user.create({data:{
             email:email,
+            username:username,
             password:hashPassword,
-            firstName:firstName,
-            lastName:lastName,
             role:role
         }})
 
@@ -43,19 +42,28 @@ exports.login = async (req, res)=>{
 
         const user = await prisma.user.findUnique({where:{email}})
         if(!user){
-            res.status(404).json({"message":"User not found"})
+            return res.status(404).json({"message":"User not found"})
         }
 
-        const isMatch = bcrypt.compare(password,  user.password)
+        const isMatch = await bcrypt.compare(password,  user.password)
+        
         if(!isMatch){
-            res.status(404).json({"message":"Invalid password"})
+            return res.status(404).json({"message":"Invalid password"})
         }
         const token = jwt.sign({email:user.email}, 
                                 process.env.JWT_SECRET,
                             {expiresIn:"1h"})
-        res.status(200).json({"message":"Success",  "token":token})
+        const data = {
+            "id":user.id,
+            "username":user.username,
+            "firstName":user.firstName,
+            "lastName":user.lastName,
+            "role":user.role
+        }
+        res.status(200).json({"message":"Success", "token":token, "data":data})
     }
     catch(err){
+        console.log(err);
         res.status(500).json("Something went wrong");
     }
 }

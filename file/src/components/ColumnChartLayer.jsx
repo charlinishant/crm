@@ -4,15 +4,16 @@ import { FaPlus } from "react-icons/fa";
 
 const ColumnChartLayer = () => {
   const navigate = useNavigate();
+  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
   const [projects, setProjects] = useState([])
   
   useEffect(()=>{
-      fetch(`${process.env.REACT_APP_API_URL}/projects`)
+      fetch(`${API_URL}/projects`)
       .then(res=>res.json())
       .then(data=>setProjects(data))
       .catch(err=>console.log(err))
-  }, []);
+  }, [API_URL]);
 
   return (
     <>

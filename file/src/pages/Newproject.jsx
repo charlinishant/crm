@@ -4,6 +4,7 @@ import MasterLayout from "../masterLayout/MasterLayout";
 
 const NEWPROJECT = () => {
   const navigate = useNavigate();
+  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
   const [formData, setFormData] = useState({
     name: "",
@@ -13,6 +14,7 @@ const NEWPROJECT = () => {
     preSales: "",
     projectType: "residential",
     possession: false,
+    searchAddress: "",
     address: "",
     street: "",
     country: "",
@@ -79,7 +81,6 @@ const NEWPROJECT = () => {
     };
 
     try {
-      const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
       const response = await fetch(`${API_URL}/projects`, {
         method: "POST",
         headers: {
@@ -219,7 +220,7 @@ const NEWPROJECT = () => {
               {/* PROJECT NAME */}
               <div className="np-field">
                 <label>PROJECT NAME *</label>
-                <input name="name" onChange={handleChange} />
+                <input name="name" value={formData.name} onChange={handleChange} required />
               </div>
 
               {/* DESCRIPTION */}
@@ -242,33 +243,33 @@ const NEWPROJECT = () => {
               <div className="np-row">
                 <div className="np-field">
                   <label>RERA PROJECT ID</label>
-                  <input name="reraProjectId" onChange={handleChange} />
+                  <input name="reraProjectId" value={formData.reraProjectId} onChange={handleChange} />
                 </div>
 
                 <div className="np-field">
                   <label>SALES</label>
-                  <input name="sales" onChange={handleChange} />
+                  <input name="sales" value={formData.sales} onChange={handleChange} />
                 </div>
               </div>
 
               {/* PRE SALES */}
               <div className="np-field">
                 <label>PRE SALES</label>
-                <input name="preSales" onChange={handleChange} />
+                <input name="preSales" value={formData.preSales} onChange={handleChange} />
               </div>
 
               {/* POSSESSION + TYPE */}
               <div className="np-row">
                 <div className="np-field">
                   <label>POSSESSION</label>
-                  <input name="possession" onChange={handleChange} />
+                  <input name="possession" value={formData.possession} onChange={handleChange} />
                 </div>
 
                 <div className="np-field">
                   <label>PROJECT TYPE</label>
-                  <select name="projectType" onChange={handleChange}>
-                    <option>Residential</option>
-                    <option>Commercial</option>
+                  <select name="projectType" value={formData.projectType} onChange={handleChange}>
+                    <option value="residential">Residential</option>
+                    <option value="commercial">Commercial</option>
                   </select>
                 </div>
               </div>
@@ -276,7 +277,7 @@ const NEWPROJECT = () => {
               {/* SEARCH */}
               <div className="np-field">
                 <label>SEARCH ADDRESS</label>
-                <input name="searchAddress" onChange={handleChange} />
+                <input name="searchAddress" value={formData.searchAddress || ""} onChange={handleChange} />
               </div>
 
               {/* ADDRESS + MAP */}
@@ -287,19 +288,20 @@ const NEWPROJECT = () => {
 
                   <div className="np-field">
                     <label>ADDRESS</label>
-                    <input name="address" onChange={handleChange} />
+                    <input name="address" value={formData.address} onChange={handleChange} />
                   </div>
 
                   <div className="np-row">
                     <div className="np-field">
                       <label>STREET</label>
-                      <input name="street" onChange={handleChange} />
+                      <input name="street" value={formData.street} onChange={handleChange} />
                     </div>
 
                     <div className="np-field">
                       <label>COUNTRY</label>
-                      <select name="country" onChange={handleChange}>
-                        <option>India</option>
+                      <select name="country" value={formData.country} onChange={handleChange}>
+                        <option value="">Select Country</option>
+                        <option value="India">India</option>
                       </select>
                     </div>
                   </div>
@@ -307,17 +309,17 @@ const NEWPROJECT = () => {
                   <div className="np-row">
                     <div className="np-field">
                       <label>STATE</label>
-                      <input name="state" onChange={handleChange} />
+                      <input name="state" value={formData.state} onChange={handleChange} />
                     </div>
 
                     <div className="np-field">
                       <label>CITY</label>
-                      <input name="city" onChange={handleChange} />
+                      <input name="city" value={formData.city} onChange={handleChange} />
                     </div>
 
                     <div className="np-field">
                       <label>ZIP</label>
-                      <input name="zip" onChange={handleChange} />
+                      <input name="zip" value={formData.zip} onChange={handleChange} />
                     </div>
                   </div>
 
@@ -325,17 +327,17 @@ const NEWPROJECT = () => {
                   <div className="np-row">
                     <div className="np-field" style={{ flex: 2 }}>
                       <label>LOCALITY</label>
-                      <input name="locality" onChange={handleChange} />
+                      <input name="locality" value={formData.locality} onChange={handleChange} />
                     </div>
 
                     <div className="np-field">
                       <label>LATITUDE</label>
-                      <input name="latitude" onChange={handleChange} />
+                      <input name="latitude" value={formData.latitude} onChange={handleChange} />
                     </div>
 
                     <div className="np-field">
                       <label>LONGITUDE</label>
-                      <input name="longitude" onChange={handleChange} />
+                      <input name="longitude" value={formData.longitude} onChange={handleChange} />
                     </div>
                   </div>
 
@@ -361,7 +363,7 @@ const NEWPROJECT = () => {
                 <button type="submit" className="np-btn-save" disabled={isSaving}>
                   {isSaving ? "Saving..." : "Save"}
                 </button>
-                <button type="button" className="np-btn-cancel">Cancel</button>
+                <button type="button" className="np-btn-cancel" onClick={() => navigate("/column-chart")}>Cancel</button>
               </div>
 
             </form>

@@ -1,12 +1,52 @@
-import { Icon } from "@iconify/react/dist/iconify.js";
-import React from "react";
-import { Link } from "react-router-dom";
+import { Icon } from "@iconify/react/dist/iconify.js"
+import React, { useState } from "react"
+import { Link, useNavigate } from "react-router-dom"
 
 const SignUpLayer = () => {
+  const navigate = useNavigate()
+
+  const [formData, setFormData] = useState({
+    username: "",
+    email: "",
+    password: "",
+    role: "",
+  })
+
+  const handleChange = e => {
+    const { name, value } = e.target
+    setFormData({ ...formData, [name]: value })
+  }
+
+  const handleSignUp = async e => {
+    e.preventDefault()
+    const updatedFormData = {
+      ...formData,
+      role: "SALESPERSON",
+    }
+    await fetch(`${process.env.REACT_APP_API_URL}/auth/register`,
+      {
+        method:"POST",
+        headers:{
+          "Content-Type": "application/json"
+        },
+        body:JSON.stringify(updatedFormData),
+      }
+    ).then(res=>{
+        if(res.status === 201){
+          navigate("/sign-in")
+        }
+        else{
+          console.log(res);
+          alert("somwthing went wrong")
+        }
+        
+    })
+    .catch(err=>alert("somwthing went wrong"))
+    
+  }
   return (
     <section className="auth bg-base d-flex align-items-center justify-content-center min-vh-100">
       <div className="auth-box py-32 px-24 w-100" style={{ maxWidth: "420px" }}>
-        
         <div className="text-center">
           <Link to="/" className="mb-40 d-inline-block">
             <img src="assets/images/logo.png" alt="logo" />
@@ -18,7 +58,7 @@ const SignUpLayer = () => {
           </p>
         </div>
 
-        <form>
+        <form onSubmit={handleSignUp}>
           {/* Username */}
           <div className="icon-field mb-16">
             <span className="icon top-50 translate-middle-y">
@@ -28,6 +68,8 @@ const SignUpLayer = () => {
               type="text"
               className="form-control h-56-px bg-neutral-50 radius-12"
               placeholder="Username"
+              name="username"
+              onChange={handleChange}
             />
           </div>
 
@@ -40,6 +82,8 @@ const SignUpLayer = () => {
               type="email"
               className="form-control h-56-px bg-neutral-50 radius-12"
               placeholder="Email"
+              name="email"
+              onChange={handleChange}
             />
           </div>
 
@@ -54,6 +98,8 @@ const SignUpLayer = () => {
                   type="password"
                   className="form-control h-56-px bg-neutral-50 radius-12"
                   placeholder="Password"
+                  name="password"
+                  onChange={handleChange}
                 />
               </div>
             </div>
@@ -64,7 +110,11 @@ const SignUpLayer = () => {
 
           {/* Terms */}
           <div className="form-check mb-20">
-            <input className="form-check-input" type="checkbox" id="condition" />
+            <input
+              className="form-check-input"
+              type="checkbox"
+              id="condition"
+            />
             <label className="form-check-label text-sm" htmlFor="condition">
               I agree to the{" "}
               <Link to="#" className="text-primary-600 fw-semibold">
@@ -115,7 +165,7 @@ const SignUpLayer = () => {
         </form>
       </div>
     </section>
-  );
-};
+  )
+}
 
-export default SignUpLayer;
+export default SignUpLayer

@@ -1,16 +1,42 @@
-import React from "react";
+import React, {useState} from "react";
 import { Icon } from "@iconify/react";
 import { Link, useNavigate } from "react-router-dom";
 
 const SignInLayer = () => {
   const navigate = useNavigate();
+  const [formData, setFormData] = useState({
+    email:"",
+    password:""
+  })
 
-  const handleLogin = (e) => {
+  const handleChange = e =>{
+    const {name, value} = e.target
+    setFormData({...formData, [name]:value})
+  }
+
+  const handleLogin = async(e) => {
     e.preventDefault();
 
-    // 👉 Later: add API validation here
-    // For now: direct redirect
-    navigate("/index-11");
+    await fetch(`${process.env.REACT_APP_API_URL}/auth/login`, {
+      method:"POST",
+      headers:{
+        "Content-Type": "application/json"
+      },
+      body:JSON.stringify(formData)
+    })
+    .then(res=>{
+      if(res.status === 200){
+        console.log(res);
+        
+        navigate("/index-11")
+      }
+      else{
+        console.log(res);
+        
+        alert(res.json().message)
+      }
+    })
+    .catch(err=>alert("Something went wrong"))
   };
 
   return (
@@ -65,6 +91,8 @@ const SignInLayer = () => {
                 borderRadius: "8px",
                 border: "1px solid #ddd",
               }}
+              name="email"
+              onChange={handleChange}
             />
           </div>
 
@@ -89,6 +117,8 @@ const SignInLayer = () => {
                 borderRadius: "8px",
                 border: "1px solid #ddd",
               }}
+              name="password"
+              onChange={handleChange}
             />
           </div>
 
