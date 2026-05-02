@@ -75,16 +75,23 @@ enum AddressType{
   OFFICE
 }
 
-
+enum Status{
+  BOOKED
+  FRESH_LEAD
+  LOST
+  NP
+  PROSPECT
+  REGISTERED
+  UNQUALIFIED
+}
 model Lead{
   id Int @id @default(autoincrement())
   salutation String?
   firstName String?
   lastName  String?
-  emailType ContactType?
-  email String?
-  phoneType ContactType
-  phone String?
+  emails Json?
+  phones Json?
+  status Status?
   timeZone String?
   tags String?
   interestedProjects String?
@@ -103,7 +110,7 @@ model Lead{
   age Int?
   birthday DateTime?
   maritalStatus Boolean?
-  aniversary DateTime?
+  anniversary DateTime?
   industry String
   personalAddress PersonalAddress[]
   url Json?

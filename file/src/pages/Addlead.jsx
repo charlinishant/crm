@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
 import "./addLead.css";
 
@@ -45,17 +46,16 @@ const AddSection = ({ label, renderFields, defaultItem }) => {
 
 const ADDLEAD = () => {
   const [activeTab, setActiveTab] = useState("basic");
+  
+  const navigate = useNavigate()
 
   const [formData, setFormData] = useState({
       salutation:"",
       firstName:"",
       lastName:"",
-      emailType:"",
-      email:"",
       emails:[{ type: "Office", value: "" }],
-      phoneType:"",
-      phone:"",
       phones:[{ type: "Work", value: "" }],
+      status:"FRESH_LEAD",
       timeZone:"",
       tags:"",
       interestedProjects:"",
@@ -72,13 +72,13 @@ const ADDLEAD = () => {
         zip:""
       }],
       companyName:"",
-      type:"",
+      type:"MEETINGROOMS",
       carpetArea:"",
       seats:0,
       tenure:0.0,
-      gender:"",
+      gender:"MALE",
       occupations:"",
-      age:"",
+      age:0,
       birthday:null,
       maritalStatus:false,
       anniversary:null,
@@ -157,9 +157,31 @@ const ADDLEAD = () => {
     setFormData({ ...formData, phones: updated });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     console.log(formData);
+
+    await fetch(`${process.env.REACT_APP_API_URL}/leads`,
+      {
+        method:"POST",
+        headers:{
+          "Content-Type": "application/json"
+        },
+        body:JSON.stringify(formData),
+      }
+    ).then(res=>{
+        if(res.status === 201){
+          console.log("Created");
+          navigate("/marketplace")
+        }
+        else{
+          console.log(res);
+          alert("somwthing went wrong")
+        }
+        
+    })
+    .catch(err=>alert("somwthing went wrong"))
+
   };
 
   return (
@@ -791,7 +813,7 @@ const ADDLEAD = () => {
             <textarea className="lead-comment" placeholder="Comment"></textarea>
 
             <div className="lead-buttons">
-              <button type="submit" className="lead-save">Save</button>
+              <button type="submit" className="lead-save" >Save</button>
               <button type="button" className="lead-cancel">Cancel</button>
             </div>
 
