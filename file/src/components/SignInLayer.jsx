@@ -26,9 +26,13 @@ const SignInLayer = () => {
     })
     .then(res=>{
       if(res.status === 200){
-        navigate("/")
+        console.log(res);
+        
+        navigate("/index-11")
       }
       else{
+        console.log(res);
+        
         alert(res.json().message)
       }
     })
