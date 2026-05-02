@@ -705,13 +705,13 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/form-validation'
+                    to='/smsPage'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-success-main w-auto' />{" "}
-                    SMSes
+                    SMS
                   </NavLink>
                 </li>
                 <li>

@@ -1,8 +1,9 @@
  import React from 'react';
-import './FormLayoutLayer.css';
-const FormLayoutLayer = () => {
+import './Sms.css';
+
+const Sms = () => {
     return (
-    
+
     <div className="empty-state-container">
       {/* Header and Filter Controls */}
       <div className="controls-header">
@@ -42,5 +43,4 @@ const FormLayoutLayer = () => {
   );
 };
 
-
-export default FormLayoutLayer
+export default Sms;

@@ -1,10 +1,10 @@
 import React from "react";
 import MasterLayout from "../masterLayout/MasterLayout";
 import Breadcrumb from "../components/Breadcrumb";
-import FormValidationLayer from "../components/FormValidationLayer";
+import Sms from "../components/Sms";
 
 
-const FormValidationPage = () => {
+const SmsPage = () => {
   return (
     <>
 
@@ -13,9 +13,8 @@ const FormValidationPage = () => {
 
         {/* Breadcrumb */}
         <Breadcrumb title="Form Validation" />
-
-        {/* FormValidationLayer */}
-        <FormValidationLayer />
+        
+        <Sms/>
 
       </MasterLayout>
 
@@ -23,4 +22,5 @@ const FormValidationPage = () => {
   );
 };
 
-export default FormValidationPage;
+export default SmsPage;
+

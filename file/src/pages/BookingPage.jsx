@@ -1,25 +1,27 @@
 import React from "react";
 import MasterLayout from "../masterLayout/MasterLayout";
 import Breadcrumb from "../components/Breadcrumb";
-import ColorsLayer from "../components/ColorsLayer";
+import TypographyLayer from "../components/Booking";
+import Booking from "../components/Booking";
 
 
-const ColorsPage = () => {
+const BookingPage = () => {
   return (
     <>
+
       {/* MasterLayout */}
       <MasterLayout>
 
         {/* Breadcrumb */}
-        <Breadcrumb title="Components / Colors" />
+        <Breadcrumb title="Components / Typography" />
 
-        {/* ColorsLayer */}
-        <ColorsLayer />
-
+        {/* Booking */}
+        <Booking/>
 
       </MasterLayout>
+
     </>
   );
 };
 
-export default ColorsPage;
+export default BookingPage; 
