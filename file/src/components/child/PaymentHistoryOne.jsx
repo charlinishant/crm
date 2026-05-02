@@ -5,33 +5,309 @@ import { FaEllipsisV } from "react-icons/fa";
 const PaymentHistoryOne = () => {
   const [leadData, setLeadData] = useState([]);
   const [openMenu, setOpenMenu] = useState(null);
+  const [menuPosition, setMenuPosition] = useState(null);
   const navigate = useNavigate();
+  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
   useEffect(() => {
     const fetchLeadData = async () => {
       try {
-        const response = await fetch("http://localhost:5000/leads/");
+        const response = await fetch(`${API_URL}/leads/`);
         const result = await response.json();
-        console.log("API Response:", result);
-        setLeadData(result);
+        setLeadData(Array.isArray(result) ? result : result?.data || []);
       } catch (error) {
         console.error("Error fetching leads:", error);
       }
     };
 
     fetchLeadData();
-  }, []);
+  }, [API_URL]);
+
+  const getLeadName = (lead) => {
+    const fullName = `${lead.firstName || ""} ${lead.lastName || ""}`.trim();
+    return lead.name || fullName || "-";
+  };
+
+  const getLeadId = (lead) => {
+    const leadId = lead.id || lead._id || lead.lead_id;
+    return leadId ? `# ${leadId}` : "-";
+  };
+
+  const getLeadOwner = (lead) => {
+    return lead.owner || lead.sales || lead.team || "Tejas Sales";
+  };
+
+  const getLastSource = (lead) => {
+    return lead.source || lead.channelPartner || lead.tags || "-";
+  };
+
+  const getStage = (lead) => {
+    return lead.lead_status || lead.status || lead.stage || "New";
+  };
+
+  const getReceivedOn = (lead) => {
+    const value = lead.createdAt || lead.created_at || lead.received_on;
+    if (!value) return "-";
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+
+    return {
+      date: date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+      time: date.toLocaleTimeString("en-US", {
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+    };
+  };
+
+  const getRequirement = (lead) => {
+    return lead.requirementComment || lead.configration || lead.configuration || lead.propertyType || lead.type || "-";
+  };
+
+  const getTags = (lead) => {
+    return lead.tags || lead.source || "-";
+  };
+
+  const renderReceivedOn = (lead) => {
+    const receivedOn = getReceivedOn(lead);
+
+    if (typeof receivedOn === "string") return receivedOn;
+
+    return (
+      <>
+        <div>{receivedOn.date}</div>
+        <div className="lead-received-time">at {receivedOn.time}</div>
+      </>
+    );
+  };
 
   const handlePreview = (lead) => {
     window.sessionStorage.setItem("selectedLeadPreview", JSON.stringify(lead));
     const leadId = lead.id || lead._id || lead.lead_id || "";
+    setOpenMenu(null);
+    setMenuPosition(null);
     navigate(leadId ? `/preview?leadId=${leadId}` : "/preview", { state: { lead } });
   };
 
   const handleDetails = (lead) => {
     window.sessionStorage.setItem("selectedLeadDetails", JSON.stringify(lead));
     const leadId = lead.id || lead._id || lead.lead_id || "";
+    setOpenMenu(null);
+    setMenuPosition(null);
     navigate(leadId ? `/details?leadId=${leadId}` : "/details", { state: { lead } });
+  };
+
+  const formatValue = (value) => {
+    if (value === undefined || value === null || value === "") return "-";
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    if (Array.isArray(value)) {
+      if (value.length === 0) return "-";
+      return value
+        .map((item) => {
+          if (typeof item !== "object" || item === null) return String(item);
+          return Object.entries(item)
+            .filter(([key]) => !["id", "leadId"].includes(key))
+            .map(([key, itemValue]) => `${key}: ${formatValue(itemValue)}`)
+            .join(", ");
+        })
+        .join(" | ");
+    }
+    if (typeof value === "object") {
+      return Object.entries(value)
+        .map(([key, itemValue]) => `${key}: ${formatValue(itemValue)}`)
+        .join(", ");
+    }
+    return String(value);
+  };
+
+  const formatLabel = (key) => {
+    return key
+      .replace(/([A-Z])/g, " $1")
+      .replace(/_/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .replace(/^./, (char) => char.toUpperCase());
+  };
+
+  const buildPrintHtml = (lead) => {
+    const hiddenKeys = new Set(["password"]);
+    const rows = Object.entries(lead)
+      .filter(([key]) => !hiddenKeys.has(key))
+      .map(
+        ([key, value]) => `
+          <tr>
+            <th>${formatLabel(key)}</th>
+            <td>${formatValue(value)}</td>
+          </tr>
+        `
+      )
+      .join("");
+
+    return `
+      <!doctype html>
+      <html>
+        <head>
+          <title>Lead Details - ${getLeadName(lead)}</title>
+          <style>
+            * { box-sizing: border-box; }
+            body {
+              color: #263241;
+              font-family: Arial, sans-serif;
+              margin: 0;
+              padding: 28px;
+            }
+            .print-header {
+              align-items: center;
+              border-bottom: 2px solid #e5e7eb;
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 24px;
+              padding-bottom: 18px;
+            }
+            .print-logo {
+              height: 44px;
+              object-fit: contain;
+            }
+            .print-title {
+              text-align: right;
+            }
+            h1 {
+              font-size: 24px;
+              margin: 0 0 6px;
+            }
+            .print-subtitle {
+              color: #64748b;
+              font-size: 13px;
+            }
+            .lead-summary {
+              background: #f8fafc;
+              border: 1px solid #e2e8f0;
+              border-radius: 8px;
+              display: grid;
+              gap: 10px;
+              grid-template-columns: repeat(4, 1fr);
+              margin-bottom: 22px;
+              padding: 16px;
+            }
+            .summary-label {
+              color: #64748b;
+              font-size: 11px;
+              text-transform: uppercase;
+            }
+            .summary-value {
+              font-size: 15px;
+              font-weight: 600;
+              margin-top: 4px;
+            }
+            table {
+              border-collapse: collapse;
+              width: 100%;
+            }
+            th,
+            td {
+              border: 1px solid #e2e8f0;
+              font-size: 13px;
+              padding: 10px 12px;
+              text-align: left;
+              vertical-align: top;
+            }
+            th {
+              background: #f1f5f9;
+              color: #475569;
+              width: 230px;
+            }
+            @media print {
+              body { padding: 18px; }
+              .no-print { display: none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="print-header">
+            <img class="print-logo" src="${window.location.origin}/assets/images/logo.png" alt="Logo" />
+            <div class="print-title">
+              <h1>Lead Details</h1>
+              <div class="print-subtitle">Generated on ${new Date().toLocaleString()}</div>
+            </div>
+          </div>
+
+          <div class="lead-summary">
+            <div>
+              <div class="summary-label">Lead ID</div>
+              <div class="summary-value">${getLeadId(lead)}</div>
+            </div>
+            <div>
+              <div class="summary-label">Name</div>
+              <div class="summary-value">${getLeadName(lead)}</div>
+            </div>
+            <div>
+              <div class="summary-label">Stage</div>
+              <div class="summary-value">${getStage(lead)}</div>
+            </div>
+            <div>
+              <div class="summary-label">Source</div>
+              <div class="summary-value">${getLastSource(lead)}</div>
+            </div>
+          </div>
+
+          <table>
+            <tbody>${rows}</tbody>
+          </table>
+
+          <script>
+            window.addEventListener("load", function () {
+              window.print();
+            });
+          </script>
+        </body>
+      </html>
+    `;
+  };
+
+  const handlePrint = async (lead) => {
+    setOpenMenu(null);
+    setMenuPosition(null);
+
+    let printableLead = lead;
+    const leadId = lead.id || lead._id || lead.lead_id;
+
+    if (leadId) {
+      try {
+        const response = await fetch(`${API_URL}/leads/${leadId}`);
+        if (response.ok) {
+          printableLead = await response.json();
+        }
+      } catch (error) {
+        console.error("Unable to load full lead for print:", error);
+      }
+    }
+
+    const printWindow = window.open("", "_blank", "width=1100,height=800");
+    if (!printWindow) return;
+
+    printWindow.document.open();
+    printWindow.document.write(buildPrintHtml(printableLead));
+    printWindow.document.close();
+  };
+
+  const handleActionToggle = (event, index) => {
+    if (openMenu === index) {
+      setOpenMenu(null);
+      setMenuPosition(null);
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    setOpenMenu(index);
+    setMenuPosition({
+      top: rect.bottom + 6,
+      left: rect.right - 182,
+    });
   };
 
   return (
@@ -68,16 +344,17 @@ const PaymentHistoryOne = () => {
            HEADER
         ============================================ */
         .table-section table thead tr {
-          background: #2563eb;
+          background: #e9edf2;
         }
 
         .table-section table thead th {
-          padding: 12px 15px;
+          padding: 14px 15px;
           text-align: left;
-          color: #ffffff;
-          font-weight: 600;
-          font-size: 13px;
+          color: #405064;
+          font-weight: 500;
+          font-size: 12px;
           white-space: nowrap;
+          text-transform: uppercase;
         }
 
         /* ============================================
@@ -97,6 +374,32 @@ const PaymentHistoryOne = () => {
           color: #334155;
           font-size: 14px;
           position: relative;
+          vertical-align: middle;
+        }
+
+        .lead-name-main {
+          color: #000000;
+          font-size: 16px;
+          font-weight: 500;
+          margin-bottom: 3px;
+        }
+
+        .lead-name-owner,
+        .lead-received-time {
+          color: #7b8491;
+          font-size: 13px;
+        }
+
+        .lead-tags-cell {
+          max-width: 360px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .lead-action-cell {
+          overflow: visible;
+          position: relative;
         }
 
         .lead-action-btn {
@@ -113,31 +416,37 @@ const PaymentHistoryOne = () => {
         }
 
         .lead-action-menu {
-          position: absolute;
-          right: 14px;
-          top: 42px;
-          min-width: 128px;
+          position: fixed;
+          min-width: 142px;
+          width: 182px;
           background: #ffffff;
           border: 1px solid #e2e8f0;
           border-radius: 6px;
           box-shadow: 0 10px 22px rgba(15, 23, 42, 0.14);
-          z-index: 10;
-          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          overflow: visible;
+          z-index: 9999;
         }
 
         .lead-action-menu button {
           width: 100%;
           border: 0;
           background: #ffffff;
-          padding: 10px 12px;
+          padding: 12px 14px;
           text-align: left;
           color: #334155;
           cursor: pointer;
           font-size: 14px;
+          line-height: 1.2;
         }
 
         .lead-action-menu button:hover {
           background: #f8fafc;
+        }
+
+        .lead-action-menu button + button {
+          border-top: 1px solid #e2e8f0;
         }
 
         /* ============================================
@@ -181,42 +490,55 @@ const PaymentHistoryOne = () => {
         <table>
           <thead>
             <tr>
+              <th>Lead ID</th>
               <th>Name</th>
-              <th>Lead Status</th>
-              <th>Source</th>
-              <th>City</th>
-              <th>Budget</th>
-              <th>Action</th>
+              <th>Last Source</th>
+              <th>Stage</th>
+              <th>Received On</th>
+              <th>Requirement</th>
+              <th>Tags</th>
+              <th>Actions</th>
             </tr>
           </thead>
 
           <tbody>
             {leadData.length === 0 ? (
               <tr>
-                <td colSpan="6" className="empty-state">
+                <td colSpan="8" className="empty-state">
                   No Data Available
                 </td>
               </tr>
             ) : (
               leadData.map((lead, i) => (
                 <tr key={i}>
-                  <td>{lead.name || "-"}</td>
-                  <td>{lead.lead_status || "-"}</td>
-                  <td>{lead.source || "-"}</td>
-                  <td>{lead.city || "-"}</td>
-                  <td>{lead.budget || "-"}</td>
+                  <td>{getLeadId(lead)}</td>
                   <td>
+                    <div className="lead-name-main">{getLeadName(lead)}</div>
+                    <div className="lead-name-owner">{getLeadOwner(lead)}</div>
+                  </td>
+                  <td>{getLastSource(lead)}</td>
+                  <td>{getStage(lead)}</td>
+                  <td>{renderReceivedOn(lead)}</td>
+                  <td>{getRequirement(lead)}</td>
+                  <td className="lead-tags-cell" title={getTags(lead)}>{getTags(lead)}</td>
+                  <td className="lead-action-cell">
                     <button
                       type="button"
                       className="lead-action-btn"
-                      onClick={() => setOpenMenu(openMenu === i ? null : i)}
+                      onClick={(event) => handleActionToggle(event, i)}
                       aria-label="Open lead actions"
                     >
                       <FaEllipsisV />
                     </button>
 
-                    {openMenu === i && (
-                      <div className="lead-action-menu">
+                    {openMenu === i && menuPosition && (
+                      <div
+                        className="lead-action-menu"
+                        style={{
+                          left: `${menuPosition.left}px`,
+                          top: `${menuPosition.top}px`,
+                        }}
+                      >
                         <button
                           type="button"
                           onClick={() => handlePreview(lead)}
@@ -228,6 +550,12 @@ const PaymentHistoryOne = () => {
                           onClick={() => handleDetails(lead)}
                         >
                           Details
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePrint(lead)}
+                        >
+                          Print
                         </button>
                       </div>
                     )}
