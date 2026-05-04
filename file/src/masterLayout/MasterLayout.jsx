@@ -408,7 +408,7 @@ const MasterLayout = ({ children }) => {
                     All Leads
                   </NavLink>
                 </li>
-                <li>
+                {/* <li>
                   <NavLink
                     to='/preview'
                     className={(navData) =>
@@ -418,7 +418,7 @@ const MasterLayout = ({ children }) => {
                     <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
                     Lead Preview
                   </NavLink>
-                </li>
+                </li> */}
                 {/* <li>
                   <NavLink
                     to='/marketplace-details'
@@ -430,7 +430,7 @@ const MasterLayout = ({ children }) => {
                     Marketplace Details
                   </NavLink>
                 </li> */}
-                <li>
+                {/* <li>
                   <NavLink
                     to='/portfolio'
                     className={(navData) =>
@@ -440,7 +440,7 @@ const MasterLayout = ({ children }) => {
                     <i className='ri-circle-fill circle-icon text-warning-main w-auto' />
                     Portfolios
                   </NavLink>
-                </li>
+                </li> */}
               </ul>
             </li>
 
