@@ -83,3 +83,12 @@ exports.deleteProject = async (req, res)=>{
         res.status(500).json("something went wrong")
     }
 }
+
+exports.listProject = async (req, res)=>{
+    
+    const record = await prisma.project.findMany({select:{
+        id:true,
+        name:true
+    }})
+    res.status(200).json(record)
+}

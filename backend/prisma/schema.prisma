@@ -34,7 +34,47 @@ model Project{
   createdAt DateTime @default(now())
   integratedPortals String @default("")
   active Boolean @default(true)
+  tower Tower[] @relation("Project")
+  floor FloorPlan[] @relation("Project")
 }
+
+model Tower{
+  id Int @id @default(autoincrement())
+  name String 
+  projectId Int
+  project Project @relation("Project",  fields: [projectId], references: [id])
+  totalFloor Int? @default(0)
+  reraTowerId String?
+  floors FloorPlan[] @relation("Tower")
+}
+
+model FloorPlan{
+  id Int @id @default(autoincrement())
+  name String
+  projectId Int?
+  project Project? @relation("Project",  fields: [projectId], references: [id])
+  towerId Int?
+  tower Tower? @relation("Tower",  fields: [towerId], references: [id])
+  type String?
+  category String?
+  bedrooms Int?
+  bathrooms Int?
+
+  // Area
+  measure String?
+  carpet Float?
+  saleable Float?
+  loading Float?
+  coverArea Float?
+  terraceArea Float?
+
+  //costing
+  baseRate Float?
+
+  basePrice Float
+
+}
+
 
 enum Role{
   PRE_SALES
