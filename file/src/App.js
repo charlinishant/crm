@@ -80,6 +80,15 @@ import VoiceGeneratorPage from "./pages/VoiceGeneratorPage";
 import WalletPage from "./pages/WalletPage";
 import WidgetsPage from "./pages/WidgetsPage";
 import SiteVistsPage from "./pages/SiteVistsPage";
+import NewEnquiriesPage from "./pages/NewEnquiriesPage";
+import CallLaterPage from "./pages/CallLaterPage";
+import MissedCallPage from "./pages/MissedCallPage";
+import ReassignedToMePage from "./pages/ReassignedToMePage";
+import UnreadEmailPage from "./pages/UnreadEmailPage";
+import MissedFollowupsPage from "./pages/MissedFollowupsPage";
+import UntouchedLeadsAttemptsPage1 from "./pages/UntouchedLeadsAttemptsPage1";
+import UntouchedLeadsAttemptsPage2 from "./pages/UntouchedLeadsAttemptsPage2";
+import UntouchedLeadsAttemptsPage3 from "./pages/UntouchedLeadsAttemptsPage3";
 import FollowupsPage from "./pages/FollowupsPage";
 import WhatAppPage from "./pages/WhatAppPage";
 import BlukClickPage from "./pages/BlukClickPage";
@@ -254,9 +263,17 @@ function App() {
         <Route exact path='/voice-generator' element={<VoiceGeneratorPage />} />
         <Route exact path='/wallet' element={<WalletPage />} />
         <Route exact path='/widgets' element={<WidgetsPage />} />
-        <Route exact path='/SiteVists' element={< SiteVistsPage />} />
-
+        <Route exact path='/NewEnquiries' element={< NewEnquiriesPage />} />
+        <Route exact path='/CallLater' element={< CallLaterPage />} />
+        <Route exact path='/MissedCall' element={< MissedCallPage/>} />
+        <Route exact path='/ReassignedToMe' element={< ReassignedToMePage/>} />
+        <Route exact path='/UnreadEmailS' element={< UnreadEmailPage/>} />
+        <Route exact path='/MissedFollowups' element={< MissedFollowupsPage/>} />
+        <Route exact path='/UntouchedLeadsAttempts1' element={<UntouchedLeadsAttemptsPage1/>} />
+        <Route exact path='/UntouchedLeadsAttempts2' element={<UntouchedLeadsAttemptsPage2/>} />
+        <Route exact path='/UntouchedLeadsAttempts3' element={<UntouchedLeadsAttemptsPage3/>} />
         <Route exact path='/Followups' element={< FollowupsPage />} />
+        <Route exact path='/SiteVists' element={< SiteVistsPage/>} />
          <Route exact path='/WhatApp' element={< WhatAppPage />} />
          <Route exact path='/BlukClickToCalls' element={< BlukClickPage />} />
 

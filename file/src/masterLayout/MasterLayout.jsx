@@ -392,6 +392,105 @@ const MasterLayout = ({ children }) => {
                     All Leads
                   </NavLink>
                 </li>
+                  <li>
+                  <NavLink
+                    to='/NewEnquiries'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
+                    New Enquiries
+                  </NavLink>
+                </li>
+                  <li>
+                  <NavLink
+                    to='/MissedCall'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
+                   Misssed call
+                  </NavLink>
+                </li>
+                  <li>
+                  <NavLink
+                    to='/UntouchedLeadsAttempts1'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
+                    Untouched Leads -1 Attempt
+                  </NavLink>
+                </li>
+                  <li>
+                  <NavLink
+                    to='/UntouchedLeadsAttempts2'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
+                       Untouched Leads -2 Attempts
+                  </NavLink>
+                </li>
+                   <li>
+                  <NavLink
+                    to='/UntouchedLeadsAttempts3'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
+                       Untouched Leads -3+ Attempts
+                  </NavLink>
+                </li>
+                   <li>
+                  <NavLink
+                    to='/MissedFollowups'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
+                         Missed Followups
+                  </NavLink>
+                </li>
+                        <li>
+                  <NavLink
+                    to='/UnreadEmails'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
+                         Unread Emails
+                  </NavLink>
+                </li>
+                   <li>
+                  <NavLink
+                    to='/Reassignedtome'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
+                       Reassigned to me 
+                  </NavLink>
+                </li>
+                   <li>
+                  <NavLink
+                    to='/CallLater'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
+                      Call Later
+                  </NavLink>
+                </li>
                 <li>
                   <NavLink
                     to='/preview'

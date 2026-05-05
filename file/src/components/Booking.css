@@ -17,7 +17,7 @@
     border-bottom: 1px solid #e9ecef;
 }
 
-/* The horizontal line and Summary text */
+
 .summary-controls {
     display: flex;
     justify-content: flex-end;
@@ -29,7 +29,7 @@
     font-weight: 500;
 }
 
-/* The thin gray line below 355 items but above the actual data */
+
 .summary-divider {
     border-top: 1px solid #e9ecef;
     width: 100%;
@@ -43,7 +43,7 @@
 .summary-controls span {
     background: #fff;
     padding-left: 10px;
-    z-index: 2; /* Sits over the divider line */
+    z-index: 2; 
 }
 
 /* The Table Itself */
@@ -60,7 +60,7 @@ th {
     font-weight: 600;
     text-transform: uppercase;
     font-size: 11px;
-    padding: 16px 24px; /* Aligned with image density */
+    padding: 16px 24px; 
     border-bottom: 1px solid #e9ecef;
     white-space: nowrap;
     letter-spacing: 0.05em;
@@ -69,8 +69,8 @@ th {
 
 /* Data Cells */
 td {
-    padding: 16px 24px; /* Spacious, matching the screenshot */
-    border-bottom: 1px solid #f1f3f5; /* Very subtle cell border */
+    padding: 16px 24px; 
+    border-bottom: 1px solid #f1f3f5; 
     vertical-align: middle;
     color: #495057;
     white-space: nowrap;
@@ -78,14 +78,14 @@ td {
 
 /* Hover effect on rows */
 tr:hover {
-    background-color: #f8f9fa; /* Very light gray on hover */
+    background-color: #f8f9fa; 
 }
 
 /* Checkbox Column */
 .checkbox-col {
     width: 24px;
-    text-align: left; /* Align left to match image */
-    padding-right: 0; /* Pull close to the next column */
+    text-align: left !important; 
+    padding-right: 0; 
 }
 
 /* Checkbox Input Styling - Making it a square */
@@ -93,14 +93,14 @@ tr:hover {
     cursor: pointer;
     width: 16px;
     height: 16px;
-    accent-color: #0d6efd; /* Use the theme blue color when checked */
+    accent-color: #0d6efd; 
     border: 1px solid #ced4da;
     border-radius: 3px;
 }
 
 /* Muted Text (e.g., $47, names below names) */
 .text-muted {
-    color: #6c757d; /* Softer gray from screenshot */
+    color: #6c757d; 
     font-size: 12px;
     margin-top: 2px;
 }
@@ -113,30 +113,28 @@ tr:hover {
 
 /* Badges (Stage Status) */
 .badge-tentative {
-    background-color: #fff3cd; /* Yellowish background */
-    color: #856404; /* Brown text */
-    padding: 4px 10px; /* Aligned padding */
-    border-radius: 12px; /* Rounded pill shape */
+    background-color: #fff3cd; 
+    color: #856404; 
+    padding: 4px 10px; 
+    border-radius: 12px;
     font-weight: 500;
     font-size: 11px;
 }
 
 .badge-cancelled {
-    background-color: #f8d7da; /* Reddish background */
-    color: #721c24; /* Dark red text */
-    padding: 4px 10px; /* Aligned padding */
-    border-radius: 12px; /* Rounded pill shape */
+    background-color: #f8d7da; 
+    color: #721c24; 
+    padding: 4px 10px; 
+    border-radius: 12px; 
     font-weight: 500;
     font-size: 11px;
 }
 
-/* THEME BLUE FOR ACTIVE ELEMENTS (Sidebar item) */
-/* This is for the sidebar component, not the table directly, 
-   but added here for completeness. Assumes an .active-nav-item class */
+
 .active-nav-item {
-    background-color: #0d6efd !important; /* Theme blue color */
+    background-color: #0d6efd !important;
     color: #ffffff !important;
-    border-radius: 8px; /* Rounded corners as in image */
+    border-radius: 8px; 
 }
 
 /* Active sub-menu item dot */
