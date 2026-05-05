@@ -17,8 +17,7 @@ model Project{
   name String
   description String? @db.Text
   reraProjectId Int?
-  sales String?
-  preSales String?
+  salesId Int?
   projectType String
   possession Boolean @default(false)
   address String? @db.Text
@@ -38,18 +37,50 @@ model Project{
 }
 
 enum Role{
-  ADMIN
+  PRE_SALES
+  SALES
+  POST_SALES
   MANAGER
-  SALESPERSON
+  ADMIN
+  AGENCY_USER
+  AGENT
+}
+
+enum Department{
+  PRE_SALES
+  SALES
+  POST_SALES
 }
 model User{
   id Int @id @default(autoincrement())
-  username String @unique
+  isActive Boolean @default(true)
+
+  //personal details
+  username String? @unique
   email String @unique
-  password String
+  password String?
   firstName String?
   lastName  String?
-  role Role
+  phone String @unique @db.Char(10)
+  secondaryPhone String? @db.Char(10)
+  timeZone String?
+
+  //custom fields
+  linkedUrl String? 
+  description String?
+
+  // Professional details
+  role Role?
+  department Department?
+
+  defaultRouting Boolean? @default(false)
+  defaultRoutingRule Boolean? @default(false)
+  autoRoster Boolean? @default(false)
+  teamId Int?
+  team Team? @relation("Team", fields: [teamId], references: [id])
+  // Other settings
+  pushNotification Boolean? @default(false)
+  gpsTracking Boolean? @default(false)
   
 }
 
@@ -76,13 +107,13 @@ enum AddressType{
 }
 
 enum Status{
-  BOOKED
-  FRESH_LEAD
-  LOST
+  Booked
+  Fresh_Lead
+  Lost
   NP
-  PROSPECT
-  REGISTERED
-  UNQUALIFIED
+  Prospect
+  Registered
+  Unqualified
 }
 model Lead{
   id Int @id @default(autoincrement())
@@ -169,4 +200,15 @@ model LeadNote {
   note String @db.Text
   owner String?
   createdAt DateTime @default(now())
+}
+
+
+model Team{
+  id Int @id @default(autoincrement())
+  name String
+  location String?
+  parentId Int?
+  parent Team? @relation("ParentTeam", fields: [parentId], references: [id])
+  teams Team[] @relation("ParentTeam")
+  users User[] @relation("Team") 
 }

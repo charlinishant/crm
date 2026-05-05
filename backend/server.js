@@ -8,6 +8,8 @@ const prisma = require("./lib/prisma")
 const projectRouter = require("./router/project.routes")
 const authRouter = require("./router/authentication.routes")
 const leadNoteRouter = require("./router/leadNote.routes")
+const userRouter = require("./router/user.routes")
+const teamRouter = require("./router/team.routes")
 
 const leadRouter = require("./router/lead.routes")
 
@@ -19,7 +21,8 @@ app.use("/projects", projectRouter)
 app.use("/auth", authRouter)
 app.use("/lead-notes", leadNoteRouter)
 app.use("/leads", leadRouter)
-
+app.use("/users", userRouter)
+app.use("/teams", teamRouter)
 
 const PORT = 5000
 app.listen(PORT, ()=>{
