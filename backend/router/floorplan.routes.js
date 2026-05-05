@@ -1,6 +1,6 @@
 const {Router} = require("express")
 const {createFloor, getFloor, updateFloor, deleteFloor, listFloor} = require("../controller/floorplan.controller")
-
+    
 const router = Router()
 
 router.post("/", createFloor)

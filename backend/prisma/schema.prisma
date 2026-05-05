@@ -36,6 +36,7 @@ model Project{
   active Boolean @default(true)
   tower Tower[] @relation("Project")
   floor FloorPlan[] @relation("Project")
+  unit Unit[] @relation("Project")
 }
 
 model Tower{
@@ -46,6 +47,7 @@ model Tower{
   totalFloor Int? @default(0)
   reraTowerId String?
   floors FloorPlan[] @relation("Tower")
+  units Unit[] @relation("Tower")
 }
 
 model FloorPlan{
@@ -71,10 +73,44 @@ model FloorPlan{
   //costing
   baseRate Float?
 
-  basePrice Float
+  basePrice Float?
 
+  units Unit[] @relation("Floor")
 }
 
+model UnitModel{
+  id Int @id @default(autoincrement())
+  name String 
+  floor Int?
+  unitIndex Int?
+  baseRate Float? 
+  basePrice Float?
+  propertyPurpose String? 
+  unitId Int
+  unit Unit @relation(fields: [unitId], references: [id])
+}
+
+
+model Unit{
+  id Int @id @default(autoincrement())
+  unitList UnitModel[]
+  projectId Int?
+  project Project? @relation("Project",  fields: [projectId], references: [id])
+  towerId Int?
+  tower Tower? @relation("Tower",  fields: [towerId], references: [id])
+  floorId Int?
+  floor FloorPlan? @relation("Floor",  fields: [floorId], references: [id])
+  type String?
+  category String?
+  bedrooms Int? 
+  bathrooms Int?
+
+  measure String?
+  carpet Float?
+  saleable Float?
+  loading Float?
+  description String @db.Text
+}   
 
 enum Role{
   PRE_SALES
