@@ -175,17 +175,7 @@ const MasterLayout = ({ children }) => {
                 </li>
 
 
-                <li>
-                  <NavLink
-                    to='/index-2'
-                    className={(navData) =>
-                      navData.isActive ? "active-page" : ""
-                    }
-                  >
-                    <i className='ri-circle-fill circle-icon text-warning-main w-auto' />{" "}
-                    Smart Import
-                  </NavLink>
-                </li>
+                
                 <li>
                   <NavLink
                     to='/index-3'
@@ -406,6 +396,17 @@ const MasterLayout = ({ children }) => {
                   >
                     <i className='ri-circle-fill circle-icon text-warning-main w-auto' />
                     All Leads
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to='/index-2'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-warning-main w-auto' />{" "}
+                    Smart Import
                   </NavLink>
                 </li>
                 {/* <li>
@@ -960,7 +961,7 @@ const MasterLayout = ({ children }) => {
                     Units
                   </NavLink>
                 </li>
-                <li>
+                {/* <li>
                   <NavLink
                     to='/pie-chart'
                     className={(navData) =>
@@ -1015,7 +1016,7 @@ const MasterLayout = ({ children }) => {
                     <i className='ri-circle-fill circle-icon text-success-main w-auto' />{" "}
                     Price Quotes
                   </NavLink>
-                </li>
+                </li> */}
 
 
               </ul>

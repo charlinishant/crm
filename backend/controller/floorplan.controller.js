@@ -63,6 +63,9 @@ exports.getFloor  = async (req, res)=>{
                     category:true,
                     bedrooms:true,
                     bathrooms:true,
+                    carpet:true,
+                    saleable:true,
+                    measure:true,
                 }
             })
 

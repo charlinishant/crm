@@ -18,6 +18,10 @@ exports.createUnit = async (req, res) => {
       description,
     } = req.body
 
+    if (!Array.isArray(unitList) || unitList.length === 0) {
+      return res.status(400).json({ message: "Unit list is required" })
+    }
+
     const record = await prisma.unit.create({ data: {
       unitList:{
         create:unitList.map(unit=>({
@@ -26,8 +30,7 @@ exports.createUnit = async (req, res) => {
             unitIndex:unit.unitIndex,
             baseRate:unit.baseRate,
             basePrice:unit.basePrice,
-            propertyPurpose:unit.propertyPurpose,
-            unitId:unit.unitId
+            propertyPurpose:unit.propertyPurpose
         }))
       },
       projectId,
@@ -62,6 +65,27 @@ exports.getUnit = async (req, res) => {
     if (id) {
       const result = await prisma.unit.findUnique({
         where: { id: Number(id) },
+        include: {
+          unitList: true,
+          project: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          tower: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+          floor: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
       })
       if (!result) res.status(200).json("Unit not found")
       else {
@@ -81,6 +105,7 @@ exports.getUnit = async (req, res) => {
         skip: skip,
         take: limit,
         select: {
+          id:true,
           unitList:{
             select:{
                 id:true,
@@ -90,6 +115,24 @@ exports.getUnit = async (req, res) => {
                 baseRate:true,
                 basePrice:true,
                 propertyPurpose:true
+            }
+          },
+          project:{
+            select:{
+              id:true,
+              name:true
+            }
+          },
+          tower:{
+            select:{
+              id:true,
+              name:true
+            }
+          },
+          floor:{
+            select:{
+              id:true,
+              name:true
             }
           },
 
@@ -167,7 +210,12 @@ exports.listUnit = async (req, res) => {
     const record = await prisma.unit.findMany({
       select: {
         id: true,
-        name: true,
+        unitList: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
     })
     res.status(200).json(record)

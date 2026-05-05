@@ -1,0 +1,5 @@
+
+> wowdash@0.1.0 start
+> node ./node_modules/react-scripts/bin/react-scripts.js start
+
+Something is already running on port 3001.

@@ -7,12 +7,26 @@ const ColumnChartLayer = () => {
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
   const [projects, setProjects] = useState([])
+  const [loadError, setLoadError] = useState(null)
   
   useEffect(()=>{
       fetch(`${API_URL}/projects`)
-      .then(res=>res.json())
-      .then(data=>setProjects(data))
-      .catch(err=>console.log(err))
+      .then(res => res.json())
+      .then(data => {
+        const normalized = Array.isArray(data)
+          ? data
+          : Array.isArray(data.data)
+          ? data.data
+          : Array.isArray(data.items)
+          ? data.items
+          : []
+        setProjects(normalized)
+      })
+      .catch(err => {
+        console.error(err)
+        setLoadError('Unable to load projects')
+        setProjects([])
+      })
   }, [API_URL]);
 
   return (
@@ -196,7 +210,11 @@ const ColumnChartLayer = () => {
             </thead>
 
             <tbody>
-              {projects.length === 0 ? (
+              {loadError ? (
+                <tr>
+                  <td colSpan="8" className="text-danger">{loadError}</td>
+                </tr>
+              ) : projects.length === 0 ? (
                 <tr>
                   <td colSpan="8">No Data</td>
                 </tr>

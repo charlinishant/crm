@@ -1,8 +1,12 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
 import Breadcrumb from "../components/Breadcrumb";
 
 const AddFloorplan = () => {
+    const navigate = useNavigate();
+    const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
     const [formData, setFormData] = useState({
         project: "",
         projectTower: "",
@@ -22,41 +26,144 @@ const AddFloorplan = () => {
         baseRate: "",
         basePrice: ""
     });
+    const [projects, setProjects] = useState([]);
+    const [towers, setTowers] = useState([]);
+    const [loadingOptions, setLoadingOptions] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState("");
 
     const measures = [
         { value: "sqft", label: "Sq. Ft." },
         { value: "sqm", label: "Sq. M." }
     ];
 
-    const projects = [
-        { value: "", label: "Select a Project" },
-        { value: "binghatti-hills", label: "Binghatti Hills" },
-        { value: "nyati-baner", label: "Nyati Baner" },
-        { value: "default-project", label: "Default Project" }
-    ];
+    const toNumberOrNull = (value) => {
+        if (value === "" || value === null || value === undefined) return null;
+        const number = Number(value);
+        return Number.isNaN(number) ? null : number;
+    };
 
-    const towers = [
-        { value: "", label: "Select a Project Tower" },
-        { value: "tower-d", label: "TOWER D" },
-        { value: "tower-e", label: "TOWER E" },
-        { value: "tower-f", label: "TOWER F" }
-    ];
+    useEffect(() => {
+        const fetchProjects = async () => {
+            try {
+                setLoadingOptions(true);
+                setError("");
+
+                const response = await fetch(`${API_URL}/projects/list`);
+                if (!response.ok) {
+                    throw new Error("Unable to load projects");
+                }
+
+                const data = await response.json();
+                setProjects(Array.isArray(data) ? data : []);
+            } catch (err) {
+                console.error(err);
+                setError(err.message || "Unable to load projects");
+            } finally {
+                setLoadingOptions(false);
+            }
+        };
+
+        fetchProjects();
+    }, [API_URL]);
+
+    useEffect(() => {
+        const fetchTowers = async () => {
+            if (!formData.project) {
+                setTowers([]);
+                setFormData((prev) => ({ ...prev, projectTower: "" }));
+                return;
+            }
+
+            try {
+                setError("");
+                const response = await fetch(`${API_URL}/tower/list?projectId=${formData.project}`);
+                if (!response.ok) {
+                    throw new Error("Unable to load project towers");
+                }
+
+                const data = await response.json();
+                setTowers(Array.isArray(data) ? data : []);
+            } catch (err) {
+                console.error(err);
+                setError(err.message || "Unable to load project towers");
+            }
+        };
+
+        fetchTowers();
+    }, [API_URL, formData.project]);
 
     const handleChange = (event) => {
         const { name, value } = event.target;
-        setFormData((prev) => ({ ...prev, [name]: value }));
+        setFormData((prev) => ({
+            ...prev,
+            [name]: value,
+            ...(name === "project" ? { projectTower: "" } : {})
+        }));
     };
 
-    const handleSubmit = (event) => {
+    const handleSubmit = async (event) => {
         event.preventDefault();
-        console.log("Save floor plan", formData);
-        // TODO: submit the new floor plan to backend
+        setSaving(true);
+        setError("");
+
+        const payload = {
+            name: formData.floorPlanName.trim(),
+            projectId: toNumberOrNull(formData.project),
+            towerId: toNumberOrNull(formData.projectTower),
+            type: formData.type.trim(),
+            category: formData.category.trim(),
+            bedrooms: toNumberOrNull(formData.bedrooms),
+            bathrooms: toNumberOrNull(formData.bathrooms),
+            measure: formData.measure,
+            carpet: toNumberOrNull(formData.carpetArea),
+            saleable: toNumberOrNull(formData.saleableArea),
+            loading: toNumberOrNull(formData.loading),
+            coverArea: toNumberOrNull(formData.coveredArea),
+            terraceArea: toNumberOrNull(formData.terraceArea),
+            baseRate: toNumberOrNull(formData.baseRate),
+            basePrice: toNumberOrNull(formData.basePrice)
+        };
+
+        try {
+            const response = await fetch(`${API_URL}/floor`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(payload)
+            });
+
+            let result = {};
+            try {
+                result = await response.json();
+            } catch {
+                result = {};
+            }
+
+            if (!response.ok) {
+                throw new Error(result?.message || "Failed to create floor plan");
+            }
+
+            navigate("/floorplans", { replace: true });
+        } catch (err) {
+            console.error(err);
+            setError(err.message || "Something went wrong while saving floor plan");
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
         <MasterLayout>
             <div className="container-fluid px-0">
                 <Breadcrumb title="Add Floor Plan" />
+
+                {error && (
+                    <div className="alert alert-danger mb-4" role="alert">
+                        {error}
+                    </div>
+                )}
 
                 <div className="row gx-4">
                     <div className="col-12">
@@ -73,10 +180,14 @@ const AddFloorplan = () => {
                                                     onChange={handleChange}
                                                     className="form-control form-control-lg"
                                                     required
+                                                    disabled={loadingOptions}
                                                 >
+                                                    <option value="" disabled>
+                                                        {loadingOptions ? "Loading projects..." : "Select a Project"}
+                                                    </option>
                                                     {projects.map((project) => (
-                                                        <option key={project.value} value={project.value} disabled={!project.value}>
-                                                            {project.label}
+                                                        <option key={project.id} value={project.id}>
+                                                            {project.name}
                                                         </option>
                                                     ))}
                                                 </select>
@@ -91,10 +202,14 @@ const AddFloorplan = () => {
                                                     onChange={handleChange}
                                                     className="form-control form-control-lg"
                                                     required
+                                                    disabled={!formData.project}
                                                 >
+                                                    <option value="" disabled>
+                                                        {formData.project ? "Select a Project Tower" : "Select project first"}
+                                                    </option>
                                                     {towers.map((tower) => (
-                                                        <option key={tower.value} value={tower.value} disabled={!tower.value}>
-                                                            {tower.label}
+                                                        <option key={tower.id} value={tower.id}>
+                                                            {tower.name}
                                                         </option>
                                                     ))}
                                                 </select>
@@ -215,7 +330,7 @@ const AddFloorplan = () => {
                                                             placeholder="Carpet Area"
                                                             required
                                                         />
-                                                        <span className="input-group-text bg-base">Sq. ft.</span>
+                                                        <span className="input-group-text bg-base">{formData.measure === "sqm" ? "Sq. m." : "Sq. ft."}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -232,7 +347,7 @@ const AddFloorplan = () => {
                                                             placeholder="Saleable Area"
                                                             required
                                                         />
-                                                        <span className="input-group-text bg-base">Sq. ft.</span>
+                                                        <span className="input-group-text bg-base">{formData.measure === "sqm" ? "Sq. m." : "Sq. ft."}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -269,7 +384,7 @@ const AddFloorplan = () => {
                                                             placeholder="Covered/Usable Area"
                                                             required
                                                         />
-                                                        <span className="input-group-text bg-base">Sq. ft.</span>
+                                                        <span className="input-group-text bg-base">{formData.measure === "sqm" ? "Sq. m." : "Sq. ft."}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -285,7 +400,7 @@ const AddFloorplan = () => {
                                                             className="form-control form-control-lg"
                                                             placeholder="Terrace Area"
                                                         />
-                                                        <span className="input-group-text bg-base">Sq. ft.</span>
+                                                        <span className="input-group-text bg-base">{formData.measure === "sqm" ? "Sq. m." : "Sq. ft."}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -327,10 +442,10 @@ const AddFloorplan = () => {
                                     </div>
 
                                     <div className="d-flex justify-content-end gap-3">
-                                        <button type="submit" className="btn btn-primary px-30 py-12 radius-12">
-                                            Save Floor Plan
+                                        <button type="submit" className="btn btn-primary px-30 py-12 radius-12" disabled={saving}>
+                                            {saving ? "Saving..." : "Save Floor Plan"}
                                         </button>
-                                        <button type="button" className="btn btn-soft-dark px-30 py-12 radius-12">
+                                        <button type="button" className="btn btn-soft-dark px-30 py-12 radius-12" onClick={() => navigate("/floorplans")}>
                                             Cancel
                                         </button>
                                     </div>

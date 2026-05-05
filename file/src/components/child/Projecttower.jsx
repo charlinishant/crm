@@ -12,17 +12,18 @@ const Projecttower = () => {
     useEffect(() => {
         const fetchTowers = async () => {
             try {
-                const response = await fetch(`${API_URL}/projects`)
+                const response = await fetch(`${API_URL}/tower?limit=100`)
                 if (!response.ok) {
                     throw new Error('Unable to fetch tower data')
                 }
-                const data = await response.json()
-                const mapped = data.map((project) => ({
-                    id: project.id,
-                    name: project.name || 'Unknown',
-                    project: project.locality || project.city || project.state || project.country || project.projectType || 'Unknown',
-                    floorPlans: project.noOfTowers ?? 0,
-                    totalFloors: project.reraProjectId ?? project.noOfTowers ?? 0,
+                const json = await response.json()
+                const towerList = Array.isArray(json) ? json : json?.data ?? []
+                const mapped = towerList.map((tower) => ({
+                    id: tower.id,
+                    name: tower.name || 'Unknown',
+                    project: tower.project?.name || 'Unknown',
+                    floorPlans: tower.totalFloor ?? 0,
+                    totalFloors: tower.totalFloor ?? 0,
                 }))
                 setTowers(mapped)
             } catch (err) {

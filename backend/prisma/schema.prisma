@@ -241,7 +241,26 @@ model Lead{
   facing String?
   locationPreferences String?
   requirementComment String @db.Text
+  bookings Booking[]
 
+}
+
+model Booking{
+  id Int @id @default(autoincrement())
+  leadId Int?
+  lead Lead? @relation(fields: [leadId], references: [id])
+  unit String?
+  customerName String?
+  stage String? @default("Tentative")
+  projectDetails String?
+  bookedOn DateTime?
+  saleableArea Float?
+  basePrice Float?
+  baseRate Float?
+  source String?
+  bookedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model LeadAddress{

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
   FaBriefcase,
@@ -28,6 +28,17 @@ const fallbackLead = {
   tags: "channel_partner, channel_partn...",
 };
 
+const emptyBookingForm = {
+  unit: "",
+  customerName: "",
+  stage: "Tentative",
+  projectDetails: "",
+  bookedOn: "",
+  saleableArea: "",
+  basePrice: "",
+  baseRate: "",
+};
+
 const readStoredLead = () => {
   try {
     return JSON.parse(window.sessionStorage.getItem("selectedLeadPreview") || "null");
@@ -42,6 +53,30 @@ const getLeadValue = (lead, keys, fallback = "-") => {
     if (value !== undefined && value !== null && value !== "") return value;
   }
   return fallback;
+};
+
+const leadStatusOptions = [
+  { value: "Booked", label: "Booked" },
+  { value: "Fresh_Lead", label: "Fresh Lead" },
+  { value: "Lost", label: "Lost" },
+  { value: "NP", label: "NP" },
+  { value: "Prospect", label: "Prospect" },
+  { value: "Registered", label: "Registered" },
+  { value: "Unqualified", label: "Unqualified" },
+];
+
+const normalizeStatus = (value) => {
+  if (!value) return "Booked";
+  const match = leadStatusOptions.find(
+    (option) =>
+      option.value === value ||
+      option.label.toLowerCase() === String(value).toLowerCase()
+  );
+  return match?.value || "Booked";
+};
+
+const getStatusLabel = (value) => {
+  return leadStatusOptions.find((option) => option.value === value)?.label || value;
 };
 
 const formatLeadDate = (value, fallback) => {
@@ -64,6 +99,23 @@ const Preview = () => {
   const location = useLocation();
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const [lead, setLead] = useState(location.state?.lead || readStoredLead() || fallbackLead);
+  const [selectedStatus, setSelectedStatus] = useState(
+    normalizeStatus(
+      getLeadValue(
+        location.state?.lead || readStoredLead() || fallbackLead,
+        ["status", "lead_status", "stage"],
+        "Booked"
+      )
+    )
+  );
+  const [isSavingStatus, setIsSavingStatus] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [bookings, setBookings] = useState([]);
+  const [bookingForm, setBookingForm] = useState(emptyBookingForm);
+  const [isBookingFormOpen, setIsBookingFormOpen] = useState(false);
+  const [isSavingBooking, setIsSavingBooking] = useState(false);
+  const [bookingMessage, setBookingMessage] = useState("");
+  const bookingSectionRef = useRef(null);
   const leadIdFromUrl = useMemo(
     () => new URLSearchParams(location.search).get("leadId"),
     [location.search]
@@ -111,16 +163,17 @@ const Preview = () => {
     fetchLeadById();
   }, [API_URL, leadIdFromUrl, location.state]);
 
+  useEffect(() => {
+    setSelectedStatus(normalizeStatus(getLeadValue(lead, ["status", "lead_status", "stage"], "Booked")));
+  }, [lead]);
+
   const leadName = getLeadValue(
     lead,
     ["name", "full_name", "customer_name"],
     `${lead.firstName || ""} ${lead.lastName || ""}`.trim() || "chetan agrawal"
   );
   const leadId = getLeadValue(lead, ["id", "_id", "lead_id"], "10702");
-  const leadStatus = getLeadValue(lead, ["lead_status", "status", "stage"], "Booked");
-  const statusOptions = ["Booked", "New", "Follow Up", "Closed"].includes(leadStatus)
-    ? ["Booked", "New", "Follow Up", "Closed"]
-    : ["Booked", "New", "Follow Up", "Closed", leadStatus];
+  const leadStatus = normalizeStatus(getLeadValue(lead, ["status", "lead_status", "stage"], "Booked"));
   const leadSource = getLeadValue(lead, ["source", "lead_source"], "channel_partner");
   const leadSubSource = getLeadValue(lead, ["sub_source", "subSource", "channel_partner"], "Zeeshan Khan (Our N...");
   const projectName = getLeadValue(lead, ["project_name", "projectName", "interestedProjects"], "Binghatti Hills");
@@ -135,6 +188,7 @@ const Preview = () => {
     getLeadValue(lead, ["createdAt", "created_at", "received_on"], ""),
     "April 30, 2026 4:44 PM"
   );
+  const latestBooking = bookings[0];
 
   const detailRows = [
     ["RECEIVED ON", receivedOn],
@@ -151,6 +205,170 @@ const Preview = () => {
     ["LAST CONTACT ATTEMPTED BY SALES", lead.last_contact_attempted_by_sales || "-"],
     ["LAST CONTACT BY SALES", lead.last_contact_by_sales || "-"],
   ];
+
+  useEffect(() => {
+    if (!leadId) return;
+
+    const fetchBookings = async () => {
+      try {
+        const response = await fetch(`${API_URL}/bookings?leadId=${leadId}&limit=20`);
+        if (!response.ok) return;
+        const result = await response.json();
+        setBookings(Array.isArray(result) ? result : result?.data || []);
+      } catch (error) {
+        console.error("Unable to load bookings:", error);
+      }
+    };
+
+    fetchBookings();
+  }, [API_URL, leadId]);
+
+  useEffect(() => {
+    setBookingForm((prev) => ({
+      ...prev,
+      customerName: prev.customerName || leadName,
+      projectDetails: prev.projectDetails || projectName,
+    }));
+  }, [leadName, projectName]);
+
+  const updateStoredLead = (storageKey, updatedLead) => {
+    try {
+      const storedLead = JSON.parse(window.sessionStorage.getItem(storageKey) || "null");
+      const storedLeadId = storedLead?.id || storedLead?._id || storedLead?.lead_id;
+
+      if (!storedLead || String(storedLeadId) === String(leadId)) {
+        window.sessionStorage.setItem(storageKey, JSON.stringify(updatedLead));
+      }
+    } catch (error) {
+      window.sessionStorage.setItem(storageKey, JSON.stringify(updatedLead));
+    }
+  };
+
+  const handleSaveStatus = async () => {
+    setIsSavingStatus(true);
+    setStatusMessage("");
+
+    try {
+      const response = await fetch(`${API_URL}/leads/${leadId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: selectedStatus }),
+      });
+
+      let result = {};
+      try {
+        result = await response.json();
+      } catch {
+        result = {};
+      }
+
+      if (!response.ok) {
+        throw new Error(result?.message || "Unable to update status");
+      }
+
+      const savedStatus = result.status || selectedStatus;
+      const updatedLead = {
+        ...lead,
+        ...result,
+        status: savedStatus,
+        lead_status: savedStatus,
+        stage: savedStatus,
+      };
+
+      setLead(updatedLead);
+      updateStoredLead("selectedLeadPreview", updatedLead);
+      updateStoredLead("selectedLeadDetails", updatedLead);
+      setStatusMessage(`Saved: ${getStatusLabel(savedStatus)}`);
+
+      if (savedStatus === "Booked") {
+        handleOpenBookingForm("Lead booked. Complete the booking form.");
+      }
+    } catch (error) {
+      console.error("Unable to update lead status:", error);
+      setStatusMessage("Status could not be saved. Please check backend and database.");
+    } finally {
+      setIsSavingStatus(false);
+    }
+  };
+
+  const handleBookingChange = (event) => {
+    const { name, value } = event.target;
+    setBookingForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleOpenBookingForm = (message = "") => {
+    setBookingForm({
+      ...emptyBookingForm,
+      customerName: leadName,
+      projectDetails: projectName,
+    });
+    setBookingMessage(message);
+    setIsBookingFormOpen(true);
+
+    setTimeout(() => {
+      bookingSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  };
+
+  const formatBookingDate = (value) => {
+    if (!value) return "-";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+
+    return date.toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit",
+    });
+  };
+
+  const formatMoney = (value) => {
+    if (value === undefined || value === null || value === "") return "-";
+    return `Rs. ${Number(value).toLocaleString("en-IN")}`;
+  };
+
+  const handleSaveBooking = async (event) => {
+    event.preventDefault();
+    setIsSavingBooking(true);
+    setBookingMessage("");
+
+    try {
+      const response = await fetch(`${API_URL}/bookings`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...bookingForm,
+          leadId: Number(leadId),
+          source: leadSource,
+          bookedBy: owner,
+        }),
+      });
+
+      let result = {};
+      try {
+        result = await response.json();
+      } catch {
+        result = {};
+      }
+
+      if (!response.ok) {
+        throw new Error(result?.message || "Unable to create booking");
+      }
+
+      setBookings((current) => [result, ...current]);
+      setIsBookingFormOpen(false);
+      setBookingMessage("Booking saved successfully");
+    } catch (error) {
+      console.error("Unable to save booking:", error);
+      setBookingMessage("Booking could not be saved. Please check backend and database.");
+    } finally {
+      setIsSavingBooking(false);
+    }
+  };
 
   return (
     <MasterLayout>
@@ -407,7 +625,7 @@ const Preview = () => {
           }
 
           .lead-preview-select {
-            width: 102px;
+            width: 132px;
             height: 29px;
             border: 1px solid #6f42ff;
             border-radius: 4px;
@@ -415,6 +633,36 @@ const Preview = () => {
             background: #ffffff;
             padding: 0 10px;
             font-size: 14px;
+          }
+
+          .lead-preview-status-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+          }
+
+          .lead-preview-save-status {
+            min-height: 29px;
+            border: 0;
+            border-radius: 4px;
+            background: #0d6efd;
+            color: #ffffff;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            padding: 0 12px;
+          }
+
+          .lead-preview-save-status:disabled {
+            cursor: not-allowed;
+            opacity: 0.7;
+          }
+
+          .lead-preview-status-message {
+            color: #596271;
+            font-size: 12px;
+            margin-top: 6px;
           }
 
           .lead-preview-details {
@@ -529,6 +777,101 @@ const Preview = () => {
 
           .lead-preview-booking-body {
             padding: 19px;
+          }
+
+          .lead-preview-booking-head-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+          }
+
+          .lead-preview-create-booking {
+            border: 0;
+            border-radius: 4px;
+            background: #0d6efd;
+            color: #ffffff;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            min-height: 32px;
+            padding: 0 12px;
+          }
+
+          .lead-preview-booking-form {
+            border: 1px solid #cfd6df;
+            border-radius: 5px;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+            margin-bottom: 16px;
+            padding: 16px;
+          }
+
+          .lead-preview-booking-form label {
+            color: #6b7280;
+            display: grid;
+            font-size: 12px;
+            font-weight: 600;
+            gap: 5px;
+            text-transform: uppercase;
+          }
+
+          .lead-preview-booking-form input,
+          .lead-preview-booking-form select {
+            border: 1px solid #cfd6df;
+            border-radius: 4px;
+            color: #404a57;
+            font-size: 14px;
+            min-height: 34px;
+            padding: 0 10px;
+            width: 100%;
+          }
+
+          .lead-preview-booking-form-actions {
+            align-items: end;
+            display: flex;
+            gap: 8px;
+          }
+
+          .lead-preview-booking-save,
+          .lead-preview-booking-cancel {
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            min-height: 34px;
+            padding: 0 13px;
+          }
+
+          .lead-preview-booking-save {
+            background: #0d6efd;
+            border: 0;
+            color: #ffffff;
+          }
+
+          .lead-preview-booking-save:disabled {
+            cursor: not-allowed;
+            opacity: 0.7;
+          }
+
+          .lead-preview-booking-cancel {
+            background: #ffffff;
+            border: 1px solid #cfd6df;
+            color: #404a57;
+          }
+
+          .lead-preview-booking-message {
+            color: #596271;
+            font-size: 13px;
+            margin-bottom: 12px;
+          }
+
+          .lead-preview-booking-empty {
+            border: 1px dashed #cfd6df;
+            border-radius: 5px;
+            color: #6b7280;
+            padding: 18px;
+            text-align: center;
           }
 
           .lead-preview-booking-card {
@@ -667,6 +1010,7 @@ const Preview = () => {
             .lead-preview-main,
             .lead-preview-stage,
             .lead-preview-details,
+            .lead-preview-booking-form,
             .lead-preview-booking-grid,
             .lead-preview-campaign-grid {
               grid-template-columns: 1fr;
@@ -768,11 +1112,33 @@ const Preview = () => {
                   <div className="lead-preview-stage">
                     <div>
                       <div className="lead-preview-label">Stage & Status</div>
-                      <select className="lead-preview-select" key={leadStatus} defaultValue={leadStatus}>
-                        {statusOptions.map((option) => (
-                          <option key={option}>{option}</option>
-                        ))}
-                      </select>
+                      <div className="lead-preview-status-row">
+                        <select
+                          className="lead-preview-select"
+                          value={selectedStatus}
+                          onChange={(event) => {
+                            setSelectedStatus(event.target.value);
+                            setStatusMessage("");
+                          }}
+                        >
+                          {leadStatusOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="lead-preview-save-status"
+                          onClick={handleSaveStatus}
+                          disabled={isSavingStatus || (selectedStatus === leadStatus && selectedStatus !== "Booked")}
+                        >
+                          {isSavingStatus ? "Saving..." : "Save"}
+                        </button>
+                      </div>
+                      {statusMessage && (
+                        <div className="lead-preview-status-message">{statusMessage}</div>
+                      )}
                     </div>
                     <div>
                       <div className="lead-preview-label">Last Note</div>
@@ -825,63 +1191,131 @@ const Preview = () => {
                 <div className="lead-preview-panel-empty" />
               </div>
 
-              <div className="lead-preview-panel">
+              <div className="lead-preview-panel" ref={bookingSectionRef}>
                 <div className="lead-preview-panel-head">
                   <div className="lead-preview-panel-title">
                     <FaBriefcase className="lead-preview-panel-icon" />
-                    <span>Bookings (# {leadId})</span>
+                    <span>Bookings ({bookings.length})</span>
+                  </div>
+                  <div className="lead-preview-booking-head-actions">
+                    <button
+                      type="button"
+                      className="lead-preview-create-booking"
+                      onClick={handleOpenBookingForm}
+                    >
+                      Create Booking
+                    </button>
                   </div>
                 </div>
                 <div className="lead-preview-booking-body">
-                  <div className="lead-preview-booking-card">
-                    <FaEllipsisV className="lead-preview-booking-menu" />
-                    <div className="lead-preview-booking-grid">
-                      <div className="lead-preview-booking-column">
-                        <div>
-                          <div className="lead-preview-field-label">Booking ID</div>
-                          <div className="lead-preview-value">676</div>
-                        </div>
-                        <div>
-                          <div className="lead-preview-field-label">Unit</div>
-                          <div className="lead-preview-value">1606</div>
-                        </div>
-                        <div>
-                          <div className="lead-preview-field-label">Saleable Area</div>
-                          <div className="lead-preview-value">2,150 sq_ft</div>
-                        </div>
+                  {bookingMessage && (
+                    <div className="lead-preview-booking-message">{bookingMessage}</div>
+                  )}
+                  {isBookingFormOpen && (
+                    <form className="lead-preview-booking-form" onSubmit={handleSaveBooking}>
+                      <label>
+                        Unit
+                        <input name="unit" value={bookingForm.unit} onChange={handleBookingChange} required />
+                      </label>
+                      <label>
+                        Customer Name
+                        <input name="customerName" value={bookingForm.customerName} onChange={handleBookingChange} required />
+                      </label>
+                      <label>
+                        Stage
+                        <select name="stage" value={bookingForm.stage} onChange={handleBookingChange}>
+                          <option>Tentative</option>
+                          <option>Booked</option>
+                          <option>Cancelled</option>
+                        </select>
+                      </label>
+                      <label>
+                        Project Details
+                        <input name="projectDetails" value={bookingForm.projectDetails} onChange={handleBookingChange} />
+                      </label>
+                      <label>
+                        Booked On
+                        <input name="bookedOn" type="date" value={bookingForm.bookedOn} onChange={handleBookingChange} />
+                      </label>
+                      <label>
+                        Saleable Area
+                        <input name="saleableArea" type="number" value={bookingForm.saleableArea} onChange={handleBookingChange} />
+                      </label>
+                      <label>
+                        Base Price
+                        <input name="basePrice" type="number" value={bookingForm.basePrice} onChange={handleBookingChange} />
+                      </label>
+                      <label>
+                        Base Rate
+                        <input name="baseRate" type="number" value={bookingForm.baseRate} onChange={handleBookingChange} />
+                      </label>
+                      <div className="lead-preview-booking-form-actions">
+                        <button type="submit" className="lead-preview-booking-save" disabled={isSavingBooking}>
+                          {isSavingBooking ? "Saving..." : "Save"}
+                        </button>
+                        <button
+                          type="button"
+                          className="lead-preview-booking-cancel"
+                          onClick={() => setIsBookingFormOpen(false)}
+                        >
+                          Cancel
+                        </button>
                       </div>
+                    </form>
+                  )}
+                  {latestBooking ? (
+                    <div className="lead-preview-booking-card">
+                      <FaEllipsisV className="lead-preview-booking-menu" />
+                      <div className="lead-preview-booking-grid">
+                        <div className="lead-preview-booking-column">
+                          <div>
+                            <div className="lead-preview-field-label">Booking ID</div>
+                            <div className="lead-preview-value">{latestBooking.id}</div>
+                          </div>
+                          <div>
+                            <div className="lead-preview-field-label">Unit</div>
+                            <div className="lead-preview-value">{latestBooking.unit || "-"}</div>
+                          </div>
+                          <div>
+                            <div className="lead-preview-field-label">Saleable Area</div>
+                            <div className="lead-preview-value">{latestBooking.saleableArea || "-"} sq_ft</div>
+                          </div>
+                        </div>
 
-                      <div className="lead-preview-booking-column">
-                        <div>
-                          <div className="lead-preview-field-label">Customer Name</div>
-                          <div className="lead-preview-value">{leadName}</div>
+                        <div className="lead-preview-booking-column">
+                          <div>
+                            <div className="lead-preview-field-label">Customer Name</div>
+                            <div className="lead-preview-value">{latestBooking.customerName || leadName}</div>
+                          </div>
+                          <div>
+                            <div className="lead-preview-field-label">Stage</div>
+                            <div className="lead-preview-stage-pill">{latestBooking.stage || "Tentative"}</div>
+                          </div>
+                          <div>
+                            <div className="lead-preview-field-label">Base Price</div>
+                            <div className="lead-preview-value">{formatMoney(latestBooking.basePrice)}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="lead-preview-field-label">Stage</div>
-                          <div className="lead-preview-stage-pill">Tentative</div>
-                        </div>
-                        <div>
-                          <div className="lead-preview-field-label">Base Price</div>
-                          <div className="lead-preview-value">Rs. 2Cr (2,01,02,500)</div>
-                        </div>
-                      </div>
 
-                      <div className="lead-preview-booking-column">
-                        <div>
-                          <div className="lead-preview-field-label">Project Details</div>
-                          <div className="lead-preview-value">{projectName}</div>
-                        </div>
-                        <div>
-                          <div className="lead-preview-field-label">Booked On</div>
-                          <div className="lead-preview-value">01/05/26</div>
-                        </div>
-                        <div>
-                          <div className="lead-preview-field-label">Base Rate</div>
-                          <div className="lead-preview-value">Rs. 7.8K (7,750)</div>
+                        <div className="lead-preview-booking-column">
+                          <div>
+                            <div className="lead-preview-field-label">Project Details</div>
+                            <div className="lead-preview-value">{latestBooking.projectDetails || projectName}</div>
+                          </div>
+                          <div>
+                            <div className="lead-preview-field-label">Booked On</div>
+                            <div className="lead-preview-value">{formatBookingDate(latestBooking.bookedOn)}</div>
+                          </div>
+                          <div>
+                            <div className="lead-preview-field-label">Base Rate</div>
+                            <div className="lead-preview-value">{formatMoney(latestBooking.baseRate)}</div>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="lead-preview-booking-empty">No booking created for this lead yet.</div>
+                  )}
                 </div>
               </div>
 
