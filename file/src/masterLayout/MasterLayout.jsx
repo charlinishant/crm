@@ -940,7 +940,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/pie-chart'
+                    to='/floorplans'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -951,7 +951,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/pie-chart'
+                    to='/units'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
