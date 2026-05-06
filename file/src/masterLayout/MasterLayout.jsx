@@ -1,12 +1,28 @@
 import React, { useEffect, useState } from "react";
 import { Icon } from "@iconify/react/dist/iconify.js";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import ThemeToggleButton from "../helper/ThemeToggleButton";
 
 const MasterLayout = ({ children }) => {
   let [sidebarActive, seSidebarActive] = useState(false);
   let [mobileMenu, setMobileMenu] = useState(false);
   const location = useLocation(); // Hook to get the current route
+  const navigate = useNavigate();
+  const savedUser = JSON.parse(localStorage.getItem("authUser") || "null");
+  const displayName =
+    [savedUser?.firstName, savedUser?.lastName].filter(Boolean).join(" ") ||
+    savedUser?.username ||
+    "User";
+  const displayRole = savedUser?.role
+    ? savedUser.role.charAt(0).toUpperCase() +
+      savedUser.role.slice(1).toLowerCase()
+    : "User";
+
+  const handleLogout = () => {
+    localStorage.removeItem("authToken");
+    localStorage.removeItem("authUser");
+    navigate("/sign-in");
+  };
 
   useEffect(() => {
     const handleDropdownClick = (event) => {
@@ -159,17 +175,7 @@ const MasterLayout = ({ children }) => {
                 </li>
 
 
-                <li>
-                  <NavLink
-                    to='/index-2'
-                    className={(navData) =>
-                      navData.isActive ? "active-page" : ""
-                    }
-                  >
-                    <i className='ri-circle-fill circle-icon text-warning-main w-auto' />{" "}
-                    Smart Import
-                  </NavLink>
-                </li>
+                
                 <li>
                   <NavLink
                     to='/index-3'
@@ -392,106 +398,18 @@ const MasterLayout = ({ children }) => {
                     All Leads
                   </NavLink>
                 </li>
-                  <li>
-                  <NavLink
-                    to='/NewEnquiries'
-                    className={(navData) =>
-                      navData.isActive ? "active-page" : ""
-                    }
-                  >
-                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
-                    New Enquiries
-                  </NavLink>
-                </li>
-                  <li>
-                  <NavLink
-                    to='/MissedCall'
-                    className={(navData) =>
-                      navData.isActive ? "active-page" : ""
-                    }
-                  >
-                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
-                   Misssed call
-                  </NavLink>
-                </li>
-                  <li>
-                  <NavLink
-                    to='/UntouchedLeadsAttempts1'
-                    className={(navData) =>
-                      navData.isActive ? "active-page" : ""
-                    }
-                  >
-                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
-                    Untouched Leads -1 Attempt
-                  </NavLink>
-                </li>
-                  <li>
-                  <NavLink
-                    to='/UntouchedLeadsAttempts2'
-                    className={(navData) =>
-                      navData.isActive ? "active-page" : ""
-                    }
-                  >
-                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
-                       Untouched Leads -2 Attempts
-                  </NavLink>
-                </li>
-                   <li>
-                  <NavLink
-                    to='/UntouchedLeadsAttempts3'
-                    className={(navData) =>
-                      navData.isActive ? "active-page" : ""
-                    }
-                  >
-                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
-                       Untouched Leads -3+ Attempts
-                  </NavLink>
-                </li>
-                   <li>
-                  <NavLink
-                    to='/MissedFollowups'
-                    className={(navData) =>
-                      navData.isActive ? "active-page" : ""
-                    }
-                  >
-                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
-                         Missed Followups
-                  </NavLink>
-                </li>
-                        <li>
-                  <NavLink
-                    to='/UnreadEmails'
-                    className={(navData) =>
-                      navData.isActive ? "active-page" : ""
-                    }
-                  >
-                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
-                         Unread Emails
-                  </NavLink>
-                </li>
-                   <li>
-                  <NavLink
-                    to='/Reassignedtome'
-                    className={(navData) =>
-                      navData.isActive ? "active-page" : ""
-                    }
-                  >
-                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
-                       Reassigned to me 
-                  </NavLink>
-                </li>
-                   <li>
-                  <NavLink
-                    to='/CallLater'
-                    className={(navData) =>
-                      navData.isActive ? "active-page" : ""
-                    }
-                  >
-                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
-                      Call Later
-                  </NavLink>
-                </li>
                 <li>
+                  <NavLink
+                    to='/index-2'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-warning-main w-auto' />{" "}
+                    Smart Import
+                  </NavLink>
+                </li>
+                {/* <li>
                   <NavLink
                     to='/preview'
                     className={(navData) =>
@@ -501,7 +419,7 @@ const MasterLayout = ({ children }) => {
                     <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
                     Lead Preview
                   </NavLink>
-                </li>
+                </li> */}
                 {/* <li>
                   <NavLink
                     to='/marketplace-details'
@@ -513,7 +431,7 @@ const MasterLayout = ({ children }) => {
                     Marketplace Details
                   </NavLink>
                 </li> */}
-                <li>
+                {/* <li>
                   <NavLink
                     to='/portfolio'
                     className={(navData) =>
@@ -523,7 +441,7 @@ const MasterLayout = ({ children }) => {
                     <i className='ri-circle-fill circle-icon text-warning-main w-auto' />
                     Portfolios
                   </NavLink>
-                </li>
+                </li> */}
               </ul>
             </li>
 
@@ -1023,7 +941,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/pie-chart'
+                    to='/floorplans'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -1034,7 +952,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/pie-chart'
+                    to='/units'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -1043,7 +961,7 @@ const MasterLayout = ({ children }) => {
                     Units
                   </NavLink>
                 </li>
-                <li>
+                {/* <li>
                   <NavLink
                     to='/pie-chart'
                     className={(navData) =>
@@ -1098,7 +1016,7 @@ const MasterLayout = ({ children }) => {
                     <i className='ri-circle-fill circle-icon text-success-main w-auto' />{" "}
                     Price Quotes
                   </NavLink>
-                </li>
+                </li> */}
 
 
               </ul>
@@ -2136,10 +2054,10 @@ const MasterLayout = ({ children }) => {
                     <div className='py-12 px-16 radius-8 bg-primary-50 mb-16 d-flex align-items-center justify-content-between gap-2'>
                       <div>
                         <h6 className='text-lg text-primary-light fw-semibold mb-2'>
-                          Shaidul Islam
+                          {displayName}
                         </h6>
                         <span className='text-secondary-light fw-medium text-sm'>
-                          Admin
+                          {displayRole}
                         </span>
                       </div>
                       <button type='button' className='hover-text-danger'>
@@ -2187,13 +2105,14 @@ const MasterLayout = ({ children }) => {
                         </Link>
                       </li>
                       <li>
-                        <Link
+                        <button
+                          type='button'
                           className='dropdown-item text-black px-0 py-8 hover-bg-transparent hover-text-danger d-flex align-items-center gap-3'
-                          to='#'
+                          onClick={handleLogout}
                         >
                           <Icon icon='lucide:power' className='icon text-xl' />{" "}
                           Log Out
-                        </Link>
+                        </button>
                       </li>
                     </ul>
                   </div>
