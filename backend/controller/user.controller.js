@@ -1,9 +1,57 @@
+const bcrypt = require("bcryptjs")
 const prisma = require("../lib/prisma")
 
 
 exports.createUser = async (req, res)=>{
     try {
-        const data = req.body
+        const data = {...req.body}
+        const nullableFields = ["username", "phone", "secondaryPhone", "linkedUrl", "description", "timeZone"]
+
+        nullableFields.forEach((field) => {
+            if(typeof data[field] === "string"){
+                data[field] = data[field].trim()
+            }
+            if(data[field] === ""){
+                data[field] = null
+            }
+        })
+
+        if(typeof data.email === "string"){
+            data.email = data.email.trim().toLowerCase()
+        }
+
+        const duplicateChecks = []
+        if(data.email){
+            duplicateChecks.push({email:data.email})
+        }
+        if(data.username){
+            duplicateChecks.push({username:data.username})
+        }
+        if(data.phone){
+            duplicateChecks.push({phone:data.phone})
+        }
+
+        if(duplicateChecks.length){
+            const existingUser = await prisma.user.findFirst({
+                where:{OR:duplicateChecks},
+                select:{email:true, username:true, phone:true}
+            })
+
+            if(existingUser){
+                const duplicateFields = []
+                if(existingUser.email === data.email) duplicateFields.push("email")
+                if(data.username && existingUser.username === data.username) duplicateFields.push("username")
+                if(data.phone && existingUser.phone === data.phone) duplicateFields.push("phone")
+
+                return res.status(409).json({
+                    message:`User already exists with this ${duplicateFields.join(", ")}`
+                })
+            }
+        }
+
+        if(data.password){
+            data.password = await bcrypt.hash(data.password, 10)
+        }
 
         const user = await prisma.user.create({data:data})
 
@@ -14,8 +62,18 @@ exports.createUser = async (req, res)=>{
 
     } catch (error) {
         console.log(error);
+
+        if(error.code === "P2002"){
+            const fields = Array.isArray(error.meta?.target)
+                ? error.meta.target.join(", ")
+                : "email, username, or phone"
+
+            return res.status(409).json({
+                message:`User already exists with this ${fields}`
+            })
+        }
         
-        res.status(500).json("Something went wrong")
+        res.status(500).json({message:"Something went wrong"})
     }
 }
 
@@ -101,5 +159,56 @@ exports.deleteUser = async (req, res)=>{
     } catch (error) {
         console.log(error);
         res.status(500).json("Something went wrong")
+    }
+}
+
+exports.getAccessPanel = async (req, res)=>{
+    try {
+        const user = await prisma.user.findUnique({
+            where:{id:Number(req.authUser.id)},
+            include:{team:true}
+        })
+
+        if(!user){
+            return res.status(404).json({message:"User not found"})
+        }
+
+        const leads = await prisma.lead.findMany({
+            take:25,
+            orderBy:{id:"desc"},
+            include:{bookings:true}
+        })
+
+        const bookings = await prisma.booking.findMany({
+            take:10,
+            orderBy:{createdAt:"desc"}
+        })
+
+        const displayUser = {
+            id:user.id,
+            username:user.username,
+            email:user.email,
+            firstName:user.firstName,
+            lastName:user.lastName,
+            phone:user.phone,
+            role:user.role,
+            department:user.department,
+            team:user.team
+        }
+
+        res.status(200).json({
+            user:displayUser,
+            stats:{
+                assignedLeads:leads.length,
+                followupsDue:leads.filter(lead => lead.status === "Fresh_Lead" || lead.status === "Prospect").length,
+                siteVisits:leads.filter(lead => lead.conductSiteVisit).length,
+                bookings:bookings.length
+            },
+            leads:leads,
+            bookings:bookings
+        })
+    } catch (error) {
+        console.log(error)
+        res.status(500).json({message:"Something went wrong"})
     }
 }

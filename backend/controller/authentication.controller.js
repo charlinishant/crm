@@ -5,7 +5,7 @@ const prisma = require("../lib/prisma");
 
 exports.register = async (req, res)=>{
     try{
-        const {email, username, password, role} = req.body;
+        const {email, username, password, role, firstName, lastName, phone, department} = req.body;
         
         const existUser = await prisma.user.findUnique({where:{email}})
 
@@ -23,6 +23,11 @@ exports.register = async (req, res)=>{
             email:email,
             username:username,
             password:hashPassword,
+            // role:role,
+            // firstName:firstName,
+            // lastName:lastName,
+            // phone:phone,
+            // department:department,
         }})
 
         res.status(201).json({"message":"User register successfully"})
@@ -49,7 +54,7 @@ exports.login = async (req, res)=>{
         if(!isMatch){
             return res.status(404).json({"message":"Invalid password"})
         }
-        const token = jwt.sign({email:user.email}, 
+        const token = jwt.sign({id:user.id, email:user.email, role:user.role}, 
                                 process.env.JWT_SECRET,
                             {expiresIn:"1h"})
         const data = {
@@ -57,7 +62,11 @@ exports.login = async (req, res)=>{
             "username":user.username,
             "firstName":user.firstName,
             "lastName":user.lastName,
-            "role":user.role
+            "email":user.email,
+            "phone":user.phone,
+            "role":user.role,
+            "department":user.department,
+            "teamId":user.teamId
         }
         res.status(200).json({"message":"Success", "token":token, "data":data})
     }

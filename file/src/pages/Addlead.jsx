@@ -55,7 +55,7 @@ const ADDLEAD = () => {
       lastName:"",
       emails:[{ type: "Office", value: "" }],
       phones:[{ type: "Work", value: "" }],
-      status:"FRESH_LEAD",
+      status:"Fresh_Lead",
       timeZone:"",
       tags:"",
       interestedProjects:"",

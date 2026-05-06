@@ -122,6 +122,7 @@ import Floorplans from "./pages/Floorplans";
 import AddFloorplan from "./pages/addfloorplan";
 import Units from "./pages/Units";
 import AddUnits from "./pages/addunits";
+import SalesUserPanel from "./user/SalesUserPanel";
 
 
 
@@ -135,6 +136,7 @@ function App() {
         <Route exact path='/preview' element={<Preview />} />
         <Route exact path='/details' element={<Details />} />
         <Route exact path='/index-11' element={<HomePageEleven />} />
+        <Route exact path='/user/sales' element={<SalesUserPanel />} />
         <Route exact path='/index-2' element={<HomePageTwo />} />
          <Route exact path='/index-3' element={<HomePageThree />} />
          <Route exact path='/index-4' element={<HomePageFour />} />

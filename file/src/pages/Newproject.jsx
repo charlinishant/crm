@@ -10,8 +10,7 @@ const NEWPROJECT = () => {
     name: "",
     description: "",
     reraProjectId: "",
-    sales: "",
-    preSales: "",
+    salesId: null,
     projectType: "residential",
     possession: false,
     searchAddress: "",
@@ -61,8 +60,7 @@ const NEWPROJECT = () => {
       name: formData.name,
       description,
       reraProjectId: formData.reraProjectId ? Number(formData.reraProjectId) : null,
-      sales: formData.sales || "",
-      preSales: formData.preSales || "",
+      salesId: formData.salesId ? Number(formData.salesId) : null,
       projectType: formData.projectType,
       possession: parseBoolean(formData.possession),
       address: formData.address,
@@ -248,7 +246,7 @@ const NEWPROJECT = () => {
 
                 <div className="np-field">
                   <label>SALES</label>
-                  <input name="sales" value={formData.sales} onChange={handleChange} />
+                  <input name="salesId" value={formData.salesId} onChange={handleChange} />
                 </div>
               </div>
 

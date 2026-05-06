@@ -51,7 +51,12 @@ const SignInLayer = () => {
       if(res.ok){
         localStorage.setItem("authToken", result.token);
         localStorage.setItem("authUser", JSON.stringify(result.data));
-        navigate("/index-11")
+        const role = result.data?.role;
+        if (role === "SALES" || role === "PRE_SALES" || role === "POST_SALES") {
+          navigate("/user/sales");
+        } else {
+          navigate("/index-11");
+        }
         return;
       }
 
