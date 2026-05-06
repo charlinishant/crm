@@ -148,6 +148,10 @@ exports.getLeadById = async (req, res) => {
     const id = req.params.id
     const lead = await prisma.lead.findUnique({ where: { id: Number(id) }, include:{leadAddress:true, personalAddress:true} })
     if (!lead) return res.status(404).json("Lead not found")
+    
+    if(lead.status == "Fresh_Lead"){
+      lead.status = "Fresh Lead"
+    }
     res.status(200).json(lead)
   } catch (err) {
     console.log(err)

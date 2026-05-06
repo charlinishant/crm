@@ -137,7 +137,7 @@ model User{
   password String?
   firstName String?
   lastName  String?
-  phone String @unique @db.Char(10)
+  phone String? @unique @db.Char(10)
   secondaryPhone String? @db.Char(10)
   timeZone String?
 
