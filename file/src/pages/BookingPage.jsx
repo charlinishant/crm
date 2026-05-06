@@ -13,7 +13,7 @@ const BookingPage = () => {
       <MasterLayout>
 
         {/* Breadcrumb */}
-        <Breadcrumb title="Components / Typography" />
+        <Breadcrumb title="Booking" />
 
         {/* Booking */}
         <Booking/>

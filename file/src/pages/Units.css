@@ -1,0 +1,153 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+.floor-dashboard {
+  background-color: #f8fafc;
+  padding: 16px;
+  font-family: 'Inter', sans-serif;
+}
+
+.floor-card {
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.floor-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  background-color: #f8fafc;
+}
+
+.item-count {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.action-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-new-plan {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background-color: #6b21a8; 
+  color: #ffffff;
+  font-weight: 500;
+  font-size: 13px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-new-plan:hover {
+  background-color: #581c87;
+  box-shadow: 0 1px 3px rgba(107, 33, 168, 0.2);
+}
+
+.btn-filter {
+  padding: 8px;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #475569;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.btn-filter:hover {
+  background-color: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.table-responsive {
+  overflow-x: auto;
+}
+
+.floor-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.floor-table th {
+  padding: 16px 24px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid #e2e8f0;
+  background-color: #fafafa;
+  text-transform: uppercase;
+}
+
+.floor-table td {
+  padding: 16px 24px;
+  font-size: 13px;
+  color: #334155;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.floor-table tbody tr {
+  transition: background-color 0.15s ease;
+}
+
+.floor-table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+.floor-table .fw-bold {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.floor-table .text-muted {
+  color: #64748b;
+}
+
+.btn-action {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  border-radius: 6px;
+  padding: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-action:hover {
+  background-color: #e2e8f0;
+  color: #0f172a;
+}
+
+.btn-action-delete:hover {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+.info-icon {
+  display: inline-block;
+  margin-left: 6px;
+  width: 16px;
+  height: 16px;
+  background: #e2e8f0;
+  color: #475569;
+  border-radius: 50%;
+  text-align: center;
+  font-size: 11px;
+  line-height: 16px;
+  cursor: pointer;
+  vertical-align: middle;
+}

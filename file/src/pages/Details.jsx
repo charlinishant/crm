@@ -379,52 +379,58 @@ const Details = () => {
       <>
         <style>{`
           .details-page {
-            background: #f6f8fa;
+            background-color: #f8fafc;
             min-height: 100vh;
-            padding: 0 10px 28px;
-            color: #404a57;
+            padding: 24px 20px 40px;
+            color: #1e293b;
+            font-family: system-ui, -apple-system, sans-serif;
             font-size: 14px;
+            line-height: 1.5;
           }
 
           .details-grid {
             display: grid;
-            grid-template-columns: minmax(420px, 0.88fr) minmax(520px, 1.12fr);
+            grid-template-columns: 1fr 1.2fr;
             gap: 24px;
             align-items: start;
+            max-width: 1440px;
+            margin: 0 auto;
           }
 
           .details-card {
             background: #ffffff;
-            border: 1px solid #cfd6df;
-            border-radius: 4px;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
             overflow: hidden;
           }
 
           .details-left-head {
-            min-height: 158px;
+            min-height: 160px;
             display: grid;
-            grid-template-columns: 1fr 90px 90px;
-            gap: 18px;
+            grid-template-columns: 1fr auto auto;
+            gap: 24px;
             align-items: start;
-            padding: 10px 18px 18px;
-            border-bottom: 1px solid #d9dee6;
+            padding: 24px;
+            border-bottom: 1px solid #f1f5f9;
           }
 
           .details-person {
-            display: grid;
-            grid-template-columns: 28px 1fr;
-            gap: 17px;
-            align-items: start;
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
             min-width: 0;
           }
 
           .details-flag {
-            width: 27px;
-            height: 18px;
-            margin-top: 15px;
-            box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.12);
+            width: 32px;
+            height: 20px;
+            margin-top: 6px;
+            border-radius: 2px;
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.08);
             background: linear-gradient(to bottom, #ff9933 0 33%, #ffffff 33% 66%, #138808 66% 100%);
             position: relative;
+            flex-shrink: 0;
           }
 
           .details-flag::after {
@@ -432,29 +438,31 @@ const Details = () => {
             position: absolute;
             left: 50%;
             top: 50%;
-            width: 5px;
-            height: 5px;
+            width: 6px;
+            height: 6px;
             border: 1px solid #1a4fb5;
             border-radius: 50%;
             transform: translate(-50%, -50%);
           }
 
           .details-lead-id {
-            color: #8f96a3;
-            font-size: 14px;
-            line-height: 1.2;
-            margin-bottom: 6px;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 4px;
           }
 
           .details-lead-name {
             display: flex;
             align-items: center;
-            gap: 12px;
-            color: #43505d;
-            font-size: 18px;
-            line-height: 1.25;
+            gap: 8px;
+            color: #0f172a;
+            font-size: 20px;
+            font-weight: 700;
+            line-height: 1.2;
             min-width: 0;
-            text-transform: lowercase;
           }
 
           .details-lead-name span {
@@ -464,49 +472,64 @@ const Details = () => {
           }
 
           .details-edit {
-            color: #000000;
-            font-size: 13px;
-            flex: 0 0 auto;
+            color: #64748b;
+            font-size: 14px;
+            cursor: pointer;
+            transition: color 0.2s;
+          }
+          
+          .details-edit:hover {
+            color: #0d6efd;
           }
 
           .details-whatsapp {
-            width: 34px;
-            height: 34px;
-            border-radius: 50%;
-            background: #42b755;
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            background: #25d366;
             color: #ffffff;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 21px;
-            margin-top: 32px;
+            font-size: 20px;
+            margin-top: 12px;
+            box-shadow: 0 2px 4px rgba(37, 211, 102, 0.25);
+            transition: transform 0.2s;
+          }
+          
+          .details-whatsapp:hover {
+            transform: scale(1.05);
           }
 
           .details-count {
             text-align: center;
-            color: #3f4650;
-            font-size: 14px;
-            padding-top: 0;
+            color: #475569;
+            font-size: 13px;
+            background: #f8fafc;
+            padding: 12px 16px;
+            border-radius: 8px;
+            min-width: 76px;
           }
 
           .details-badge {
-            width: 30px;
-            height: 30px;
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
-            background: #41ad50;
+            background: #3b82f6;
             color: #ffffff;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            font-size: 18px;
+            font-size: 14px;
             font-weight: 700;
+            margin-bottom: 4px;
           }
 
           .details-left-main {
             display: grid;
-            grid-template-columns: minmax(150px, 210px) minmax(190px, 1fr);
-            gap: 30px 34px;
-            padding: 20px 18px 28px;
+            grid-template-columns: 200px 1fr;
+            gap: 32px;
+            padding: 24px;
           }
 
           .details-score {
@@ -515,7 +538,7 @@ const Details = () => {
             height: 104px;
             margin: 0 auto;
             border-radius: 50%;
-            background: conic-gradient(#42ad50 0 42%, #f8f8f8 42% 100%);
+            background: conic-gradient(#3b82f6 0 42%, #f1f5f9 42% 100%);
           }
 
           .details-score::before {
@@ -532,309 +555,359 @@ const Details = () => {
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #c2c5ca;
-            font-size: 18px;
+            color: #94a3b8;
+            font-size: 16px;
             font-weight: 700;
           }
 
           .details-score-number {
             position: absolute;
-            right: -12px;
+            right: -8px;
             top: 0;
-            width: 44px;
-            height: 44px;
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
-            background: #62666e;
+            background: #64748b;
             color: #ffffff;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 16px;
+            font-size: 13px;
             font-weight: 700;
+            border: 2px solid #ffffff;
           }
 
           .details-stage {
             display: grid;
-            grid-template-columns: repeat(2, minmax(160px, 1fr));
+            grid-template-columns: repeat(2, 1fr);
             gap: 20px;
-            margin-bottom: 0;
           }
 
           .details-label {
-            color: #89919d;
-            font-size: 13px;
+            color: #64748b;
+            font-size: 12px;
+            font-weight: 600;
             text-transform: uppercase;
+            letter-spacing: 0.05em;
             margin-bottom: 6px;
           }
 
           .details-value {
-            color: #404a57;
-            font-size: 16px;
-            line-height: 1.35;
-            overflow-wrap: anywhere;
-            word-break: normal;
+            color: #1e293b;
+            font-size: 14px;
+            font-weight: 500;
+            word-break: break-word;
           }
 
           .details-select {
-            width: 132px;
-            height: 30px;
-            border: 1px solid #6f42ff;
-            border-radius: 4px;
-            color: #5c35d8;
+            width: 100%;
+            max-width: 160px;
+            height: 36px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            color: #334155;
             background: #ffffff;
-            padding: 0 10px;
-            font-size: 14px;
+            padding: 0 12px;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s;
+            cursor: pointer;
+          }
+          
+          .details-select:focus {
+            border-color: #3b82f6;
           }
 
           .details-status-row {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 12px;
             flex-wrap: wrap;
           }
 
           .details-status-save {
-            min-height: 30px;
+            min-height: 36px;
             border: 0;
-            border-radius: 4px;
+            border-radius: 6px;
             background: #0d6efd;
             color: #ffffff;
             cursor: pointer;
             font-size: 13px;
             font-weight: 600;
-            padding: 0 12px;
+            padding: 0 16px;
+            transition: background-color 0.2s;
+          }
+          
+          .details-status-save:hover {
+            background: #0b5ed7;
           }
 
           .details-status-save:disabled {
             cursor: not-allowed;
-            opacity: 0.7;
+            opacity: 0.6;
           }
 
           .details-status-message {
-            color: #596271;
+            color: #64748b;
             font-size: 12px;
             margin-top: 6px;
           }
 
           .details-info-grid {
-            display: grid;
             grid-column: 1 / -1;
-            grid-template-columns: repeat(3, minmax(150px, 1fr));
-            gap: 24px 28px;
-          }
-
-          .details-info-grid > div,
-          .details-requirement-grid > div {
-            min-width: 0;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px 24px;
+            margin-top: 24px;
+            padding-top: 24px;
+            border-top: 1px solid #f1f5f9;
           }
 
           .details-actions {
             display: flex;
             align-items: center;
             gap: 8px;
-            min-height: 58px;
-            padding: 10px 14px;
-            border-bottom: 1px solid #d9dee6;
-            overflow: visible;
-            white-space: normal;
-            flex-wrap: wrap;
+            min-height: 64px;
+            padding: 12px 20px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            overflow-x: auto;
+            white-space: nowrap;
           }
 
           .details-action {
-            border: 1px solid #d9dee6;
+            border: 1px solid #cbd5e1;
             background: #ffffff;
             border-radius: 6px;
-            color: #404a57;
+            color: #475569;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             gap: 6px;
-            font-size: 14px;
-            min-height: 34px;
-            padding: 0 11px;
-            flex: 0 0 auto;
+            font-size: 13px;
+            font-weight: 500;
+            min-height: 36px;
+            padding: 0 12px;
             cursor: pointer;
-            transition: background 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+            transition: all 0.2s;
           }
 
           .details-action:hover,
           .details-action.active {
-            background: #eef5ff;
-            border-color: #0d6efd;
-            color: #0d6efd;
+            background: #eff6ff;
+            border-color: #3b82f6;
+            color: #2563eb;
           }
 
           .details-action-panel {
-            padding: 18px 22px 22px;
+            padding: 24px;
           }
 
           .details-action-card {
-            border: 1px solid #cfd6df;
-            border-radius: 6px;
-            background: #fbfdff;
-            padding: 18px;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            background: #ffffff;
+            padding: 20px;
           }
 
           .details-action-title {
-            color: #404a57;
+            color: #0f172a;
             font-size: 16px;
             font-weight: 700;
-            margin-bottom: 12px;
+            margin-bottom: 14px;
           }
 
           .details-action-grid {
             display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 14px;
-            margin-bottom: 16px;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 18px;
           }
 
           .details-action-muted {
-            color: #89919d;
+            color: #64748b;
             font-size: 13px;
-            line-height: 1.45;
+            line-height: 1.5;
           }
 
           .details-action-primary {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            min-height: 36px;
+            min-height: 40px;
             border: 0;
-            border-radius: 5px;
-            background: #0d6efd;
+            border-radius: 6px;
+            background: #3b82f6;
             color: #ffffff;
             font-size: 14px;
             font-weight: 600;
-            padding: 0 15px;
+            padding: 0 18px;
             text-decoration: none;
+            transition: background-color 0.2s;
+          }
+          
+          .details-action-primary:hover {
+            background: #2563eb;
           }
 
           .details-action-primary.disabled {
-            background: #cbd5e1;
+            background: #94a3b8;
             cursor: not-allowed;
             pointer-events: none;
           }
 
           .details-note {
-            padding: 20px 22px 23px;
+            padding: 24px;
           }
 
           .details-editor {
-            border: 1px solid #cfd6df;
-            border-radius: 4px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
             overflow: hidden;
+            background: #ffffff;
           }
 
           .details-toolbar {
-            min-height: 59px;
+            min-height: 52px;
             display: flex;
             align-items: center;
-            gap: 7px;
-            padding: 9px 11px;
-            border-bottom: 1px solid #d9dee6;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
             flex-wrap: wrap;
           }
 
           .details-tool,
           .details-tool-wide {
-            height: 36px;
-            min-width: 50px;
-            border: 1px solid #cfd6df;
-            border-radius: 4px;
-            background: #f8fafc;
-            color: #58616d;
+            height: 34px;
+            min-width: 40px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: #ffffff;
+            color: #475569;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 7px;
-            font-size: 16px;
+            gap: 6px;
+            font-size: 14px;
+            transition: all 0.2s;
+            cursor: pointer;
+          }
+          
+          .details-tool:hover, .details-tool-wide:hover {
+            background: #f1f5f9;
           }
 
           .details-tool-wide {
-            min-width: 62px;
-            font-size: 14px;
+            min-width: 60px;
+            font-size: 13px;
+            font-weight: 500;
           }
 
           .details-highlight {
-            color: #182d87;
-            background: #f1f222;
-            padding: 0 2px;
-            font-weight: 700;
+            color: #1e3a8a;
+            background: #fef08a;
+            padding: 0 4px;
+            font-weight: 600;
+            border-radius: 2px;
           }
 
           .details-note-area {
-            min-height: 214px;
-            padding: 14px 12px;
-            color: #737b86;
+            min-height: 160px;
+            padding: 16px;
+            color: #334155;
             font-size: 14px;
-            line-height: 1.55;
+            line-height: 1.6;
             outline: none;
-            overflow-wrap: anywhere;
           }
 
           .details-note-resize {
-            height: 14px;
+            height: 12px;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #9aa1aa;
-            font-size: 18px;
+            color: #cbd5e1;
+            font-size: 14px;
+            border-top: 1px solid #f1f5f9;
+            background: #f8fafc;
           }
 
           .details-note-foot {
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            gap: 6px;
-            margin-top: 6px;
-            color: #404a57;
-            font-size: 13px;
+            gap: 8px;
+            margin-top: 8px;
+            color: #64748b;
+            font-size: 12px;
           }
 
           .details-save-row {
             display: flex;
             align-items: center;
             justify-content: flex-end;
-            gap: 6px;
-            margin-top: 28px;
+            gap: 12px;
+            margin-top: 20px;
           }
 
           .details-save,
           .details-mic {
-            height: 44px;
+            height: 40px;
             border: 0;
-            border-radius: 5px;
-            background: #673ab7;
-            color: #ffffff;
-            font-size: 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
           }
 
           .details-save {
-            min-width: 148px;
-            padding: 0 18px;
+            min-width: 130px;
+            background: #7c3aed;
+            color: #ffffff;
+            font-weight: 600;
+            text-align: revert-layer;
+          }
+          
+          .details-save:hover {
+            background: #6d28d9;
           }
 
           .details-note-error {
-            color: #dc2626;
-            font-size: 13px;
-            margin-top: 10px;
+            color: #ef4444;
+            font-size: 12px;
+            margin-top: 8px;
             text-align: right;
           }
 
           .details-mic {
-            width: 52px;
+            width: 44px;
+            background: #e2e8f0;
+            color: #334155;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          
+          .details-mic:hover {
+            background: #cbd5e1;
           }
 
           .details-overview {
-            margin-top: 38px;
+            margin-top: 32px;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
           }
 
           .details-overview-title {
-            padding: 20px;
-            color: #45515f;
-            font-size: 22px;
-            border-bottom: 1px solid #d9dee6;
+            padding: 20px 24px;
+            color: #0f172a;
+            font-size: 18px;
+            font-weight: 700;
+            border-bottom: 1px solid #f1f5f9;
           }
 
           .details-overview-table {
@@ -844,16 +917,17 @@ const Details = () => {
 
           .details-overview-table th,
           .details-overview-table td {
-            border-right: 1px solid #d9dee6;
-            border-bottom: 1px solid #d9dee6;
+            border-right: 1px solid #f1f5f9;
+            border-bottom: 1px solid #f1f5f9;
             text-align: center;
-            color: #404a57;
-            font-size: 16px;
-            padding: 10px 14px;
+            color: #334155;
+            font-size: 14px;
+            padding: 12px 16px;
           }
 
           .details-overview-table th {
-            font-weight: 400;
+            font-weight: 600;
+            background: #f8fafc;
           }
 
           .details-overview-table th:last-child,
@@ -862,71 +936,88 @@ const Details = () => {
           }
 
           .details-section-block {
-            border-top: 1px solid #e2e7ee;
+            border-top: 1px solid #e2e8f0;
+            margin-top: 32px;
+            background: #ffffff;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
           }
 
           .details-section-head {
-            min-height: 73px;
+            min-height: 72px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 16px;
-            padding: 0 19px;
-            border-bottom: 1px solid #e2e7ee;
+            gap: 20px;
+            padding: 0 24px;
+            border-bottom: 1px solid #f1f5f9;
           }
 
           .details-section-title {
-            color: #45515f;
-            font-size: 22px;
-            font-weight: 400;
+            color: #0f172a;
+            font-size: 18px;
+            font-weight: 700;
           }
 
           .details-match-btn {
-            height: 30px;
-            min-width: 312px;
-            border: 1px solid #6f42ff;
-            border-radius: 4px;
+            height: 36px;
+            min-width: 240px;
+            border: 1px solid #7c3aed;
+            border-radius: 6px;
             background: #ffffff;
-            color: #5c35d8;
+            color: #7c3aed;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 14px;
-            font-size: 14px;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+          }
+          
+          .details-match-btn:hover {
+            background: #f5f3ff;
           }
 
           .details-requirement-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
-            gap: 38px 64px;
-            padding: 25px 19px 27px;
+            gap: 28px 32px;
+            padding: 28px 24px;
           }
 
           .details-inline-input {
             width: 100%;
             border: 0;
             background: transparent;
-            color: #404a57;
-            font-size: 16px;
+            color: #1e293b;
+            font-size: 14px;
+            font-weight: 500;
             padding: 0;
             outline: 0;
             text-overflow: ellipsis;
           }
 
           .details-partner-area {
-            padding: 24px 19px 33px;
+            padding: 24px;
           }
 
           .details-feed-card {
-            grid-column: 2;
-            margin-top: 22px;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+            margin-top: 24px;
           }
 
           .details-feed-tabs {
             display: flex;
             align-items: center;
-            gap: 32px;
-            border-bottom: 1px solid #d9dee6;
+            gap: 24px;
+            padding: 0 20px;
+            border-bottom: 1px solid #e2e8f0;
             overflow-x: auto;
             white-space: nowrap;
           }
@@ -934,10 +1025,18 @@ const Details = () => {
           .details-feed-tabs button {
             border: 0;
             background: transparent;
-            color: #000000;
-            font-size: 16px;
-            padding: 0 10px 13px;
+            color: #64748b;
+            font-size: 14px;
+            font-weight: 600;
+            padding: 16px 8px;
             position: relative;
+            cursor: pointer;
+            transition: color 0.2s;
+          }
+          
+          .details-feed-tabs button:hover,
+          .details-feed-tabs button.active {
+            color: #0f172a;
           }
 
           .details-feed-tabs button.active::after {
@@ -946,67 +1045,72 @@ const Details = () => {
             left: 0;
             right: 0;
             bottom: 0;
-            height: 2px;
-            background: #6f42ff;
+            height: 2.5px;
+            background: #3b82f6;
+            border-radius: 2px 2px 0 0;
           }
 
           .details-feed-subtabs {
             display: flex;
             align-items: center;
-            gap: 38px;
-            min-height: 43px;
-            padding: 0 20px;
-            border-bottom: 1px solid #d9dee6;
+            gap: 24px;
+            min-height: 48px;
+            padding: 0 24px;
+            border-bottom: 1px solid #f1f5f9;
+            background: #f8fafc;
           }
 
           .details-feed-filter {
-            border: 1px solid #d9dee6;
-            border-radius: 5px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
             background: #ffffff;
-            color: #404a57;
-            font-size: 14px;
+            color: #334155;
+            font-size: 13px;
             margin: 16px 0 0 24px;
-            padding: 10px 16px;
+            padding: 8px 12px;
+            outline: none;
           }
 
           .details-timeline {
             position: relative;
-            padding: 0 16px 22px 39px;
+            padding: 12px 20px 24px 36px;
           }
 
           .details-timeline::before {
             content: "";
             position: absolute;
-            left: 0;
-            top: 0;
-            bottom: 0;
+            left: 16px;
+            top: 16px;
+            bottom: 16px;
             width: 2px;
-            background: #cfd6df;
+            background: #e2e8f0;
           }
 
           .details-feed-item {
             position: relative;
-            margin-top: 38px;
-            border: 1px solid #cfd6df;
-            border-radius: 4px;
+            margin-top: 24px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
             background: #ffffff;
-            padding: 22px 18px;
+            padding: 18px;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
           }
 
           .details-empty-notes {
-            color: #89919d;
-            font-size: 15px;
-            padding: 28px 16px 10px;
+            color: #64748b;
+            font-size: 14px;
+            padding: 32px 20px;
+            text-align: center;
           }
 
           .details-feed-item::before {
             content: "";
             position: absolute;
-            left: -47px;
-            top: 36px;
-            width: 14px;
-            height: 14px;
-            border: 2px solid #cfd6df;
+            left: -33px;
+            top: 22px;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #3b82f6;
             border-radius: 50%;
             background: #ffffff;
           }
@@ -1019,26 +1123,33 @@ const Details = () => {
           }
 
           .details-feed-text {
-            color: #45515f;
+            color: #334155;
             font-size: 14px;
-            line-height: 1.55;
-            overflow-wrap: anywhere;
+            line-height: 1.5;
+            word-break: break-word;
           }
 
           .details-feed-actions {
             display: flex;
             align-items: center;
-            gap: 18px;
-            color: #c4c7cc;
-            font-size: 20px;
+            gap: 14px;
+            color: #94a3b8;
+            font-size: 18px;
           }
 
           .details-feed-link {
             border: 0;
             background: transparent;
-            color: #000000;
-            font-size: 14px;
-            padding: 18px 0 19px;
+            color: #3b82f6;
+            font-size: 13px;
+            font-weight: 500;
+            padding: 12px 0;
+            cursor: pointer;
+            transition: color 0.2s;
+          }
+          
+          .details-feed-link:hover {
+            color: #1d4ed8;
           }
 
           .details-feed-meta {
@@ -1046,10 +1157,11 @@ const Details = () => {
             align-items: center;
             justify-content: space-between;
             gap: 16px;
-            border-top: 1px solid #e1e5ea;
-            padding-top: 22px;
-            color: #89919d;
-            font-size: 14px;
+            border-top: 1px solid #f1f5f9;
+            padding-top: 14px;
+            margin-top: 14px;
+            color: #64748b;
+            font-size: 12px;
           }
 
           @media (max-width: 1200px) {
@@ -1076,7 +1188,7 @@ const Details = () => {
             .details-section-head {
               align-items: flex-start;
               flex-direction: column;
-              padding: 18px 19px;
+              padding: 16px 20px;
             }
 
             .details-match-btn {
@@ -1118,34 +1230,34 @@ const Details = () => {
               <div className="details-left-main">
                 <div>
                   <div className="details-score">
-                    <span className="details-score-text">CA</span>
-                    <span className="details-score-number">41</span>
+                    <div className="details-score-text">42%</div>
+                    <div className="details-score-number">1</div>
                   </div>
                 </div>
 
                 <div className="details-stage">
                   <div>
-                    <div className="details-label">Stage & Status</div>
+                    <div className="details-label">Lead Stage</div>
+                    <div className="details-value">{getStatusLabel(leadStatus)}</div>
+                  </div>
+                  <div>
+                    <div className="details-label">Change Stage</div>
                     <div className="details-status-row">
                       <select
                         className="details-select"
                         value={selectedStatus}
-                        onChange={(event) => {
-                          setSelectedStatus(event.target.value);
-                          setStatusMessage("");
-                        }}
+                        onChange={(e) => setSelectedStatus(e.target.value)}
                       >
-                        {leadStatusOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
+                        {leadStatusOptions.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
                           </option>
                         ))}
                       </select>
                       <button
-                        type="button"
                         className="details-status-save"
+                        disabled={isSavingStatus}
                         onClick={handleSaveStatus}
-                        disabled={isSavingStatus || selectedStatus === leadStatus}
                       >
                         {isSavingStatus ? "Saving..." : "Save"}
                       </button>
@@ -1154,246 +1266,199 @@ const Details = () => {
                       <div className="details-status-message">{statusMessage}</div>
                     )}
                   </div>
-                  <div>
-                    <div className="details-label">Last Note</div>
-                    <div className="details-value">-</div>
+
+                  <div className="details-info-grid">
+                    {detailItems.map(([label, value, isHighlight], index) => (
+                      <div key={index}>
+                        <div className="details-label">{label}</div>
+                        <div className={`details-value ${isHighlight ? "details-highlight" : ""}`}>
+                          <input className="details-inline-input" readOnly value={value} />
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
+              </div>
 
-                <div />
+              <div className="details-actions">
+                {actionItems.map((item) => (
+                  <button
+                    key={item.key}
+                    className={`details-action ${activeAction === item.key ? "active" : ""}`}
+                    title={item.title}
+                    onClick={() => setActiveAction(item.key)}
+                  >
+                    {item.icon}
+                    {item.label}
+                  </button>
+                ))}
+              </div>
 
-                <div className="details-info-grid">
-                  {detailItems.map(([label, value, editable]) => (
-                    <div key={label}>
-                      <div className="details-label">
-                        {label}
-                        {editable && <FaEdit className="details-edit" style={{ marginLeft: 12 }} />}
+              {activeAction === "note" && (
+                <div className="details-action-panel">
+                  <div className="details-action-card">
+                    <div className="details-action-title">Add a note for {leadName}</div>
+                    <div className="details-action-grid">
+                      <div className="details-action-muted">
+                        Enter details about the lead's discussion, requirements, or any further action required.
                       </div>
+                    </div>
+                    
+                    <div className="details-editor">
+                      <div className="details-toolbar">
+                        <button className="details-tool" title="Bold">
+                          <FaBold />
+                        </button>
+                        <button className="details-tool" title="Italic">
+                          <FaItalic />
+                        </button>
+                        <button className="details-tool" title="Underline">
+                          <FaUnderline />
+                        </button>
+                        <button className="details-tool" title="Bullet List">
+                          <FaListUl />
+                        </button>
+                        <button className="details-tool" title="Numbered List">
+                          <FaListOl />
+                        </button>
+                        <button className="details-tool" title="Quote">
+                          <FaQuoteLeft />
+                        </button>
+                        <button className="details-tool" title="Link">
+                          <FaLink />
+                        </button>
+                        <div style={{ width: "1px", height: "24px", background: "#cbd5e1" }} />
+                        <button className="details-tool" title="Undo">
+                          <FaUndo />
+                        </button>
+                        <button className="details-tool" title="Redo">
+                          <FaRedo />
+                        </button>
+                        <button className="details-tool" title="Clear Formatting">
+                          <FaEraser />
+                        </button>
+                      </div>
+
+                      <div
+                        className="details-note-area"
+                        contentEditable
+                        ref={noteRef}
+                        onFocus={(e) => {
+                          if (e.target.innerText.trim() === "Add note for lead") {
+                            e.target.innerText = "";
+                          }
+                        }}
+                        onBlur={(e) => {
+                          if (e.target.innerText.trim() === "") {
+                            e.target.innerText = "Add note for lead";
+                          }
+                        }}
+                      >
+                        Add note for lead
+                      </div>
+
+                      <div className="details-note-resize">...</div>
+                    </div>
+
+                    {noteError && <div className="details-note-error">{noteError}</div>}
+
+                    <div className="details-save-row">
+                      <button className="details-mic" title="Voice Input">
+                        <FaMicrophone />
+                      </button>
+                      <button
+                        className="details-save"
+                        disabled={isSavingNote}
+                        onClick={handleSaveNote}
+                      >
+                        {isSavingNote ? "Saving..." : "Save Note"}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="details-feed-card">
+                    <div className="details-feed-tabs">
+                      <button className="active">All Notes ({savedNotes.length})</button>
+                      <button>Saved Filters</button>
+                    </div>
+                    
+                    <div className="details-timeline">
+                      {savedNotes.length === 0 ? (
+                        <div className="details-empty-notes">No notes created yet.</div>
+                      ) : (
+                        savedNotes.map((note) => (
+                          <div key={note.id || note._id} className="details-feed-item">
+                            <div className="details-feed-row">
+                              <div className="details-feed-text">
+                                {note.note}
+                              </div>
+                              <div className="details-feed-actions">
+                                <FaEllipsisV />
+                              </div>
+                            </div>
+                            <div className="details-feed-meta">
+                              <div>Created by: {note.owner}</div>
+                              <div>{formatNoteDate(note.createdAt || new Date())}</div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </section>
+
+            <section>
+              <div className="details-card">
+                <div className="details-overview-title">Lead & Property Requirements</div>
+                <div className="details-section-head">
+                  <div className="details-section-title">Requirements</div>
+                  <button className="details-match-btn">
+                    <FaStar style={{ color: "#7c3aed" }} /> Match with Inventory
+                  </button>
+                </div>
+                
+                <div className="details-requirement-grid">
+                  {requirementItems.map(([label, value], index) => (
+                    <div key={index}>
+                      <div className="details-label">{label}</div>
                       <div className="details-value">{value}</div>
                     </div>
                   ))}
                 </div>
               </div>
-            </section>
 
-            <section>
-              <div className="details-card">
-                <div className="details-actions">
-                  {actionItems.map((action) => (
-                    <button
-                      key={action.key}
-                      className={`details-action ${activeAction === action.key ? "active" : ""}`}
-                      type="button"
-                      title={action.title}
-                      onClick={() => setActiveAction(action.key)}
-                    >
-                      {action.icon} {action.label}
-                    </button>
-                  ))}
-                </div>
-
-                {activeAction === "note" ? (
-                <div className="details-note">
-                  <div className="details-editor">
-                    <div className="details-toolbar">
-                      <button className="details-tool-wide" type="button"><FaEraser /><FaCaretDown /></button>
-                      <button className="details-tool" type="button"><FaBold /></button>
-                      <button className="details-tool" type="button"><FaItalic /></button>
-                      <button className="details-tool" type="button"><FaUnderline /></button>
-                      <button className="details-tool" type="button"><FaEraser /></button>
-                      <button className="details-tool-wide" type="button">14 <FaCaretDown /></button>
-                      <button className="details-tool" type="button"><span className="details-highlight">A</span></button>
-                      <button className="details-tool" type="button"><FaCaretDown /></button>
-                      <button className="details-tool" type="button"><FaListUl /></button>
-                      <button className="details-tool" type="button"><FaListOl /></button>
-                      <button className="details-tool-wide" type="button"><span>≡</span><FaCaretDown /></button>
-                      <button className="details-tool" type="button"><FaLink /></button>
-                      <button className="details-tool" type="button"><FaUndo /></button>
-                      <button className="details-tool" type="button"><FaRedo /></button>
-                    </div>
-                    <div
-                      ref={noteRef}
-                      className="details-note-area"
-                      contentEditable
-                      suppressContentEditableWarning
-                      onFocus={() => {
-                        if (noteRef.current?.innerText === "Add note for lead") {
-                          noteRef.current.innerText = "";
-                        }
-                      }}
-                    >
-                      Add note for lead
-                    </div>
-                    <div className="details-note-resize">≡</div>
-                  </div>
-                  <div className="details-note-foot">Maximum 2000 characters are allowed.</div>
-                  {noteError && <div className="details-note-error">{noteError}</div>}
-                  <div className="details-save-row">
-                    <button className="details-save" type="button" onClick={handleSaveNote} disabled={isSavingNote}>
-                      {isSavingNote ? "Saving..." : "Save Note"}
-                    </button>
-                    <button className="details-mic" type="button" aria-label="Record note"><FaMicrophone /></button>
+              <div className="details-card" style={{ marginTop: "24px" }}>
+                <div className="details-overview-title">Partner Information</div>
+                <div className="details-partner-area">
+                  <div className="details-label">CHANNEL PARTNER NAME</div>
+                  <div className="details-value" style={{ fontWeight: 600, color: "#3b82f6" }}>
+                    {cpName}
                   </div>
                 </div>
-                ) : (
-                  <div className="details-action-panel">
-                    <div className="details-action-card">
-                      <div className="details-action-title">
-                        {actionItems.find((action) => action.key === activeAction)?.label}
-                      </div>
-                      <div className="details-action-grid">
-                        <div>
-                          <div className="details-label">Lead</div>
-                          <div className="details-value">{leadName}</div>
-                        </div>
-                        <div>
-                          <div className="details-label">Owner</div>
-                          <div className="details-value">{owner}</div>
-                        </div>
-                        <div>
-                          <div className="details-label">Phone</div>
-                          <div className="details-value">{primaryPhone || "-"}</div>
-                        </div>
-                        <div>
-                          <div className="details-label">Email</div>
-                          <div className="details-value">{primaryEmail || "-"}</div>
-                        </div>
-                        <div>
-                          <div className="details-label">Project</div>
-                          <div className="details-value">{projectName}</div>
-                        </div>
-                        <div>
-                          <div className="details-label">Status</div>
-                          <div className="details-value">{getStatusLabel(leadStatus)}</div>
-                        </div>
-                      </div>
-
-                      {activeAction === "call" && (
-                        <a className={`details-action-primary ${primaryPhone ? "" : "disabled"}`} href={primaryPhone ? `tel:${primaryPhone}` : undefined}>
-                          Start Call
-                        </a>
-                      )}
-                      {activeAction === "email" && (
-                        <a className={`details-action-primary ${primaryEmail ? "" : "disabled"}`} href={primaryEmail ? `mailto:${primaryEmail}?subject=Regarding ${encodeURIComponent(projectName)}` : undefined}>
-                          Compose Email
-                        </a>
-                      )}
-                      {activeAction === "sms" && (
-                        <a className={`details-action-primary ${primaryPhone ? "" : "disabled"}`} href={primaryPhone ? `sms:${primaryPhone}` : undefined}>
-                          Send SMS
-                        </a>
-                      )}
-                      {activeAction === "whatsapp" && (
-                        <a className={`details-action-primary ${whatsappPhone ? "" : "disabled"}`} href={whatsappPhone ? `https://wa.me/${whatsappPhone}` : undefined} target="_blank" rel="noreferrer">
-                          Open WhatsApp
-                        </a>
-                      )}
-                      {["siteVisit", "followup", "more"].includes(activeAction) && (
-                        <div className="details-action-muted">
-                          {activeAction === "siteVisit" && "Use these lead details to schedule a site visit with the assigned owner."}
-                          {activeAction === "followup" && "Use these lead details to plan the next followup activity."}
-                          {activeAction === "more" && "More lead actions can be connected here."}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
 
-              <div className="details-card details-overview">
-                <div className="details-overview-title">Lead Activities Overview</div>
+              <div className="details-overview">
+                <div className="details-overview-title">Overview Dashboard</div>
                 <table className="details-overview-table">
                   <thead>
                     <tr>
-                      <th>Conducted Site<br />Visits</th>
-                      <th>Outgoing Not Answered<br />Calls</th>
-                      <th>Outgoing Answered<br />Calls</th>
-                      <th>Incoming Not Answered<br />Calls</th>
-                      <th>Incoming Answered<br />Calls</th>
+                      <th>Status</th>
+                      <th>Count</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
+                      <td>Booked</td>
                       <td>1</td>
-                      <td>0</td>
-                      <td>0</td>
-                      <td>0</td>
+                    </tr>
+                    <tr>
+                      <td>Pending Tasks</td>
                       <td>0</td>
                     </tr>
                   </tbody>
                 </table>
-              </div>
-            </section>
-
-            <section className="details-card">
-              <div className="details-section-block">
-                <div className="details-section-head">
-                  <h3 className="details-section-title">Requirement</h3>
-                  <button type="button" className="details-match-btn">
-                    <FaSearch />
-                    Show Matching Properties <strong>(315 found)</strong>
-                  </button>
-                </div>
-
-                <div className="details-requirement-grid">
-                  {requirementItems.map(([label, value]) => (
-                    <div key={label}>
-                      <div className="details-label">{label}</div>
-                      <input className="details-inline-input" defaultValue={value} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="details-section-block">
-                <div className="details-section-head">
-                  <h3 className="details-section-title">Channel Partners</h3>
-                </div>
-                <div className="details-partner-area">
-                  <div className="details-label">CP Name (Company Name)</div>
-                  <input className="details-inline-input" defaultValue={cpName} />
-                </div>
-              </div>
-            </section>
-
-            <section className="details-feed-card">
-              <div className="details-feed-tabs">
-                {["Activity", "Starred", "Notes", "Calls", "Site visit", "Feed", "Followups", "Emails", "SMS", "Whatsapp"].map((tab, index) => (
-                  <button key={tab} type="button" className={index === 0 ? "active" : ""}>
-                    {tab}
-                  </button>
-                ))}
-              </div>
-              <div className="details-feed-subtabs">
-                <button className="details-action" type="button">Merge Leads</button>
-                <button className="details-action" type="button">History</button>
-              </div>
-              <button type="button" className="details-feed-filter">Filter <FaCaretDown /></button>
-
-              <div className="details-timeline">
-                {savedNotes.length === 0 && (
-                  <div className="details-empty-notes">No notes saved yet.</div>
-                )}
-
-                {savedNotes.map((note) => (
-                  <div className="details-feed-item" key={note.id}>
-                    <div className="details-feed-row">
-                      <div className="details-feed-text">
-                        <FaQuoteLeft style={{ marginRight: 12 }} />
-                        {note.note}
-                      </div>
-                      <div className="details-feed-actions">
-                        <FaStar />
-                        <FaEllipsisV />
-                      </div>
-                    </div>
-                    <button type="button" className="details-feed-link">view note</button>
-                    <div className="details-feed-meta">
-                      <span>{formatNoteDate(note.createdAt)} &nbsp; | &nbsp; {note.owner || owner}</span>
-                      <span>Note</span>
-                    </div>
-                  </div>
-                ))}
               </div>
             </section>
           </div>

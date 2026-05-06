@@ -375,693 +375,763 @@ const Preview = () => {
       <>
         <style>{`
           .preview-page {
-            min-height: 100vh;
-            background: #f4f6f8;
-            padding: 0 16px 32px;
-          }
-
-          .lead-preview-shell {
-            width: min(100%, 960px);
-            margin: 0 auto;
-            background: #ffffff;
-            border: 1px solid #cfd6df;
-            border-radius: 5px 5px 0 0;
-            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
-            overflow: hidden;
-          }
-
-          .lead-preview-topbar {
-            height: 62px;
-            background: #666666;
-            color: #ffffff;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 16px;
-          }
-
-          .lead-preview-title {
-            font-size: 22px !important;
-            font-weight: 400;
-            margin: 0;
-            line-height: 1.2;
-            max-width: calc(100% - 56px);
-            overflow: hidden;
-            text-overflow: ellipsis;
-            text-transform: lowercase;
-            white-space: nowrap;
-          }
-
-          .lead-preview-close {
-            border: 0;
-            background: transparent;
-            color: #d2d2d2;
-            font-size: 26px;
-            line-height: 1;
-            cursor: pointer;
-          }
-
-          .lead-preview-body {
-            position: relative;
-            padding: 24px 20px 0;
-          }
-
-          .lead-preview-tooltip {
-            position: absolute;
-            top: -36px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #454545;
-            color: #ffffff;
-            border-radius: 4px;
-            padding: 7px 11px;
-            font-size: 12px;
-            font-weight: 700;
-            white-space: nowrap;
-          }
-
-          .lead-preview-tooltip::after {
-            content: "";
-            position: absolute;
-            left: 50%;
-            bottom: -7px;
-            transform: translateX(-50%);
-            border-left: 7px solid transparent;
-            border-right: 7px solid transparent;
-            border-top: 7px solid #454545;
-          }
-
-          .lead-preview-summary {
-            display: grid;
-            grid-template-columns: minmax(330px, 1fr) 120px 120px;
-            align-items: center;
-            gap: 22px;
-            padding-bottom: 14px;
-            border-bottom: 1px solid #dbe1e8;
-          }
-
-          .lead-preview-person {
-            display: flex;
-            align-items: flex-start;
-            gap: 14px;
-            min-width: 0;
-          }
-
-          .lead-preview-person-info {
-            min-width: 0;
-          }
-
-          .lead-preview-flag {
-            width: 27px;
-            height: 18px;
-            box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.12);
-            background: linear-gradient(to bottom, #ff9933 0 33%, #ffffff 33% 66%, #138808 66% 100%);
-            position: relative;
-          }
-
-          .lead-preview-flag::after {
-            content: "";
-            position: absolute;
-            left: 50%;
-            top: 50%;
-            width: 5px;
-            height: 5px;
-            border: 1px solid #1a4fb5;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-          }
-
-          .lead-preview-id {
-            color: #8f96a3;
-            font-size: 14px;
-            line-height: 1.2;
-            margin-bottom: 7px;
-          }
-
-          .lead-preview-name {
-            color: #45515f;
-            font-size: 20px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            line-height: 1.2;
-            min-width: 0;
-            text-transform: lowercase;
-          }
-
-          .lead-preview-name-text {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-          }
-
-          .lead-preview-edit {
-            color: #000000;
-            font-size: 13px;
-          }
-
-          .lead-preview-whatsapp {
-            width: 34px;
-            height: 34px;
-            flex: 0 0 34px;
-            border-radius: 50%;
-            background: #42b755;
-            color: #ffffff;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 21px;
-            margin-top: 16px;
-          }
-
-          .lead-preview-count {
-            text-align: center;
-            color: #3f4650;
-            font-size: 14px;
-          }
-
-          .lead-preview-badge {
-            width: 30px;
-            height: 30px;
-            border-radius: 50%;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            background: #41ad50;
-            color: #ffffff;
-            font-size: 18px;
-            font-weight: 700;
-          }
-
-          .lead-preview-main {
-            display: grid;
-            grid-template-columns: 230px 1fr;
-            gap: 62px;
-            padding: 20px 0 36px;
-          }
-
-          .lead-preview-score {
-            position: relative;
-            width: 104px;
-            height: 104px;
-            margin: 0 auto 26px;
-            border-radius: 50%;
-            background: conic-gradient(#42ad50 0 42%, #f8f8f8 42% 100%);
-          }
-
-          .lead-preview-score::before {
-            content: "";
-            position: absolute;
-            inset: 8px;
-            border-radius: 50%;
-            background: #ffffff;
-          }
-
-          .lead-preview-score-text {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #c2c5ca;
-            font-size: 18px;
-            font-weight: 700;
-          }
-
-          .lead-preview-score-number {
-            position: absolute;
-            right: -12px;
-            top: 0;
-            width: 44px;
-            height: 44px;
-            border-radius: 50%;
-            background: #62666e;
-            color: #ffffff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 16px;
-            font-weight: 700;
-          }
-
-          .lead-preview-stage {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(160px, 1fr));
-            gap: 28px 64px;
-            margin-bottom: 42px;
-          }
-
-          .lead-preview-label {
-            color: #939aa5;
-            font-size: 14px;
-            text-transform: uppercase;
-            margin-bottom: 6px;
-          }
-
-          .lead-preview-value {
-            color: #404a57;
-            font-size: 18px;
-            line-height: 1.35;
-          }
-
-          .lead-preview-select {
-            width: 132px;
-            height: 29px;
-            border: 1px solid #6f42ff;
-            border-radius: 4px;
-            color: #5c35d8;
-            background: #ffffff;
-            padding: 0 10px;
-            font-size: 14px;
-          }
-
-          .lead-preview-status-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex-wrap: wrap;
-          }
-
-          .lead-preview-save-status {
-            min-height: 29px;
-            border: 0;
-            border-radius: 4px;
-            background: #0d6efd;
-            color: #ffffff;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 600;
-            padding: 0 12px;
-          }
-
-          .lead-preview-save-status:disabled {
-            cursor: not-allowed;
-            opacity: 0.7;
-          }
-
-          .lead-preview-status-message {
-            color: #596271;
-            font-size: 12px;
-            margin-top: 6px;
-          }
-
-          .lead-preview-details {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(160px, 1fr));
-            gap: 34px 64px;
-          }
-
-          .lead-preview-section {
-            border-top: 1px solid #e4e8ee;
-            padding: 0;
-          }
-
-          .lead-preview-section h3 {
-            margin: 0;
-            color: #45515f;
-            font-size: 23px;
-            font-weight: 400;
-          }
-
-          .lead-preview-section-title {
-            min-height: 78px;
-            display: flex;
-            align-items: center;
-            padding: 0 20px;
-            border-bottom: 1px solid #e4e8ee;
-          }
-
-          .lead-preview-partner-body {
-            padding: 24px 20px 34px;
-          }
-
-          .lead-preview-field-label {
-            color: #89919d;
-            font-size: 14px;
-            text-transform: uppercase;
-            margin-bottom: 5px;
-          }
-
-          .lead-preview-field-value {
-            color: #000000;
-            font-size: 18px;
-            line-height: 1.35;
-          }
-
-          .lead-preview-lower {
-            display: flex;
-            flex-direction: column;
-            gap: 37px;
-            padding: 38px 0 12px;
-          }
-
-          .lead-preview-panel {
-            border: 1px solid #cfd6df;
-            border-radius: 5px;
-            background: #ffffff;
-            overflow: hidden;
-          }
-
-          .lead-preview-panel-head {
-            min-height: 70px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            padding: 0 20px;
-            border-bottom: 1px solid #dbe1e8;
-          }
-
-          .lead-preview-panel-title {
-            display: flex;
-            align-items: center;
-            gap: 18px;
-            color: #4c5562;
-            font-size: 24px;
-            font-weight: 400;
-          }
-
-          .lead-preview-panel-icon {
-            color: #707070;
-            font-size: 27px;
-          }
-
-          .lead-preview-task-actions {
-            display: flex;
-            align-items: center;
-            gap: 28px;
-          }
-
-          .lead-preview-add-task {
-            border: 0;
-            background: transparent;
-            color: #000000;
-            font-size: 20px;
-            cursor: pointer;
-          }
-
-          .lead-preview-status-btn {
-            height: 30px;
-            min-width: 86px;
-            border: 1px solid #6f42ff;
-            border-radius: 4px;
-            color: #5c35d8;
-            background: #ffffff;
-            padding: 0 13px;
-            font-size: 14px;
-          }
-
-          .lead-preview-panel-empty {
-            min-height: 39px;
-          }
-
-          .lead-preview-booking-body {
-            padding: 19px;
-          }
-
-          .lead-preview-booking-head-actions {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-          }
-
-          .lead-preview-create-booking {
-            border: 0;
-            border-radius: 4px;
-            background: #0d6efd;
-            color: #ffffff;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 600;
-            min-height: 32px;
-            padding: 0 12px;
-          }
-
-          .lead-preview-booking-form {
-            border: 1px solid #cfd6df;
-            border-radius: 5px;
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 14px;
-            margin-bottom: 16px;
-            padding: 16px;
-          }
-
-          .lead-preview-booking-form label {
-            color: #6b7280;
-            display: grid;
-            font-size: 12px;
-            font-weight: 600;
-            gap: 5px;
-            text-transform: uppercase;
-          }
-
-          .lead-preview-booking-form input,
-          .lead-preview-booking-form select {
-            border: 1px solid #cfd6df;
-            border-radius: 4px;
-            color: #404a57;
-            font-size: 14px;
-            min-height: 34px;
-            padding: 0 10px;
-            width: 100%;
-          }
-
-          .lead-preview-booking-form-actions {
-            align-items: end;
-            display: flex;
-            gap: 8px;
-          }
-
-          .lead-preview-booking-save,
-          .lead-preview-booking-cancel {
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 600;
-            min-height: 34px;
-            padding: 0 13px;
-          }
-
-          .lead-preview-booking-save {
-            background: #0d6efd;
-            border: 0;
-            color: #ffffff;
-          }
-
-          .lead-preview-booking-save:disabled {
-            cursor: not-allowed;
-            opacity: 0.7;
-          }
-
-          .lead-preview-booking-cancel {
-            background: #ffffff;
-            border: 1px solid #cfd6df;
-            color: #404a57;
-          }
-
-          .lead-preview-booking-message {
-            color: #596271;
-            font-size: 13px;
-            margin-bottom: 12px;
-          }
-
-          .lead-preview-booking-empty {
-            border: 1px dashed #cfd6df;
-            border-radius: 5px;
-            color: #6b7280;
-            padding: 18px;
-            text-align: center;
-          }
-
-          .lead-preview-booking-card {
-            position: relative;
-            border: 1px solid #cfd6df;
-            border-radius: 5px;
-            padding: 24px 50px 20px 19px;
-          }
-
-          .lead-preview-booking-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 54px;
-          }
-
-          .lead-preview-booking-column {
-            display: grid;
-            gap: 6px;
-          }
-
-          .lead-preview-booking-menu {
-            position: absolute;
-            right: 19px;
-            top: 27px;
-            color: #000000;
-            font-size: 19px;
-          }
-
-          .lead-preview-stage-pill {
-            width: fit-content;
-            border-radius: 4px;
-            background: #44b858;
-            color: #ffffff;
-            padding: 2px 6px;
-            font-size: 14px;
-            font-weight: 700;
-            line-height: 1.2;
-          }
-
-          .lead-preview-campaign-head {
-            min-height: 70px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            padding: 0 20px;
-            border-bottom: 1px solid #dbe1e8;
-          }
-
-          .lead-preview-sort {
-            height: 30px;
-            min-width: 174px;
-            border: 1px solid #6f42ff;
-            border-radius: 4px;
-            color: #5c35d8;
-            background: #ffffff;
-            padding: 0 13px;
-            font-size: 14px;
-          }
-
-          .lead-preview-campaign-body {
-            padding: 25px 20px 38px;
-          }
-
-          .lead-preview-campaign-grid {
-            display: grid;
-            grid-template-columns: 1.2fr 0.6fr 1.1fr;
-            gap: 27px 66px;
-            padding-bottom: 22px;
-            border-bottom: 1px solid #e1e5ea;
-          }
-
-          .lead-preview-campaign-wide {
-            grid-column: span 2;
-          }
-
-          .lead-preview-link {
-            border: 0;
-            background: transparent;
-            color: #000000;
-            padding: 0;
-            font-size: 18px;
-            cursor: pointer;
-          }
-
-          .lead-preview-campaign-footer {
-            min-height: 38px;
-            border-top: 1px solid #eef1f4;
-          }
-
-          .lead-preview-action-bar {
-            height: 58px;
-            background: #696969;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 24px;
-          }
-
-          .lead-preview-action-icons {
-            display: flex;
-            align-items: center;
-            gap: 39px;
-          }
-
-          .lead-preview-action-icons button,
-          .lead-preview-profile-btn {
-            border: 0;
-            cursor: pointer;
-          }
-
-          .lead-preview-action-icons button {
-            width: 22px;
-            height: 30px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0;
-            background: transparent;
-            color: #ffffff;
-            font-size: 19px;
-          }
-
-          .lead-preview-profile-btn {
-            min-width: 112px;
-            height: 30px;
-            border: 1px solid #6f42ff;
-            border-radius: 4px;
-            background: #ffffff;
-            color: #5c35d8;
-            font-size: 14px;
-          }
-
-          @media (max-width: 900px) {
-            .lead-preview-summary,
-            .lead-preview-main,
-            .lead-preview-stage,
-            .lead-preview-details,
-            .lead-preview-booking-form,
-            .lead-preview-booking-grid,
-            .lead-preview-campaign-grid {
-              grid-template-columns: 1fr;
-            }
-
-            .lead-preview-summary {
-              gap: 16px;
-            }
-
-            .lead-preview-count {
-              text-align: left;
-            }
-
-            .lead-preview-main {
-              gap: 24px;
-            }
-
-            .lead-preview-panel-head {
-              align-items: flex-start;
-              flex-direction: column;
-              padding: 18px 20px;
-            }
-
-            .lead-preview-task-actions {
-              width: 100%;
-              justify-content: space-between;
-              gap: 16px;
-            }
-
-            .lead-preview-campaign-head {
-              align-items: flex-start;
-              flex-direction: column;
-              padding: 18px 20px;
-            }
-
-            .lead-preview-campaign-wide {
-              grid-column: span 1;
-            }
-
-            .lead-preview-action-bar {
-              padding: 0 12px;
-            }
-
-            .lead-preview-action-icons {
-              gap: 16px;
-            }
-
-            .lead-preview-profile-btn {
-              min-width: 96px;
-            }
-          }
+  min-height: 100vh;
+  background: #f8fafc;
+  padding: 0 16px 32px;
+}
+
+.lead-preview-shell {
+  width: min(100%, 960px);
+  margin: 32px auto 0;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px 8px 0 0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  overflow: hidden;
+}
+
+.lead-preview-topbar {
+  height: 64px;
+  background-color: #487fff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+}
+
+.lead-preview-title {
+  font-size: 20px !important;
+  font-weight: 500;
+  margin: 0;
+  line-height: 1.2;
+  max-width: calc(100% - 56px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+  white-space: nowrap;
+  color: #ffffff;
+}
+
+.lead-preview-close {
+  border: 0;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.lead-preview-close:hover {
+  color: #ffffff;
+}
+
+.lead-preview-body {
+  position: relative;
+  padding: 28px 24px 0;
+}
+
+.lead-preview-tooltip {
+  position: absolute;
+  top: -36px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #475569;
+  color: #ffffff;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lead-preview-tooltip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid #475569;
+}
+
+.lead-preview-summary {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) auto auto;
+  align-items: center;
+  gap: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.lead-preview-person {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  min-width: 0;
+}
+
+.lead-preview-person-info {
+  min-width: 0;
+}
+
+.lead-preview-flag {
+  width: 28px;
+  height: 18px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+  background: linear-gradient(to bottom, #ff9933 0 33%, #ffffff 33% 66%, #138808 66% 100%);
+  position: relative;
+  margin-top: 4px;
+  border-radius: 2px;
+}
+
+.lead-preview-flag::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border: 1px solid #1a4fb5;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.lead-preview-id {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+
+.lead-preview-name {
+  color: #0f172a;
+  font-size: 20px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  line-height: 1.2;
+  min-width: 0;
+  text-transform: capitalize;
+}
+
+.lead-preview-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lead-preview-edit {
+  color: #3b82f6;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.lead-preview-whatsapp {
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  border-radius: 50%;
+  background: #25d366;
+  color: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.lead-preview-count {
+  text-align: center;
+  color: #475569;
+  font-size: 14px;
+}
+
+.lead-preview-badge {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #22c55e;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.lead-preview-main {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 48px;
+  padding: 28px 0 36px;
+}
+
+.lead-preview-score {
+  position: relative;
+  width: 112px;
+  height: 112px;
+  margin: 0 auto 24px;
+  border-radius: 50%;
+  background: conic-gradient(#22c55e 0 42%, #f1f5f9 42% 100%);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.lead-preview-score::before {
+  content: "";
+  position: absolute;
+  inset: 10px;
+  border-radius: 50%;
+  background: #ffffff;
+}
+
+.lead-preview-score-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.lead-preview-score-number {
+  position: absolute;
+  right: -8px;
+  top: 4px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #475569;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  border: 2px solid #ffffff;
+}
+
+.lead-preview-stage {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(160px, 1fr));
+  gap: 28px 48px;
+  margin-bottom: 36px;
+}
+
+.lead-preview-label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-bottom: 6px;
+}
+
+.lead-preview-value {
+  color: #1e293b;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.lead-preview-select {
+  width: 140px;
+  height: 36px;
+  border: 1px solid #6366f1;
+  border-radius: 6px;
+  color: #4f46e5;
+  background: #ffffff;
+  padding: 0 10px;
+  font-size: 14px;
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
+}
+
+.lead-preview-status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.lead-preview-save-status {
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  background: #3b82f6;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 16px;
+  transition: background-color 0.2s ease;
+}
+
+.lead-preview-save-status:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.lead-preview-save-status:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.lead-preview-status-message {
+  color: #64748b;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.lead-preview-details {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(160px, 1fr));
+  gap: 28px 32px;
+}
+
+.lead-preview-section {
+  border-top: 1px solid #e2e8f0;
+  padding: 0;
+}
+
+.lead-preview-section h3 {
+  margin: 0;
+  color: #1e293b;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.lead-preview-section-title {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.lead-preview-partner-body {
+  padding: 28px 24px 36px;
+}
+
+.lead-preview-field-label {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-bottom: 6px;
+}
+
+.lead-preview-field-value {
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.lead-preview-lower {
+  display: flex;
+  flex-direction: column;
+  gap: 32px;
+  padding: 32px 0 16px;
+}
+
+.lead-preview-panel {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.lead-preview-panel-head {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.lead-preview-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: #1e293b;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.lead-preview-panel-icon {
+  color: #64748b;
+  font-size: 22px;
+}
+
+.lead-preview-task-actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.lead-preview-add-task {
+  border: 0;
+  background: transparent;
+  color: #3b82f6;
+  font-size: 18px;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.lead-preview-add-task:hover {
+  color: #1d4ed8;
+}
+
+.lead-preview-status-btn {
+  height: 34px;
+  min-width: 96px;
+  border: 1px solid #c7d2fe;
+  border-radius: 6px;
+  color: #4f46e5;
+  background: #ffffff;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.lead-preview-status-btn:hover {
+  background: #e0e7ff;
+}
+
+.lead-preview-panel-empty {
+  min-height: 48px;
+}
+
+.lead-preview-booking-body {
+  padding: 24px;
+}
+
+.lead-preview-booking-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lead-preview-create-booking {
+  border: 0;
+  border-radius: 6px;
+  background: #3b82f6;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  min-height: 34px;
+  padding: 0 16px;
+  transition: background-color 0.2s ease;
+}
+
+.lead-preview-create-booking:hover {
+  background: #2563eb;
+}
+
+.lead-preview-booking-form {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+  padding: 20px;
+  background: #f8fafc;
+}
+
+.lead-preview-booking-form label {
+  color: #475569;
+  display: grid;
+  font-size: 11px;
+  font-weight: 600;
+  gap: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+}
+
+.lead-preview-booking-form input,
+.lead-preview-booking-form select {
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #1e293b;
+  font-size: 14px;
+  min-height: 36px;
+  padding: 0 12px;
+  width: 100%;
+  background: #ffffff;
+}
+
+.lead-preview-booking-form input:focus,
+.lead-preview-booking-form select:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px #3b82f6;
+}
+
+.lead-preview-booking-form-actions {
+  align-items: end;
+  display: flex;
+  gap: 10px;
+}
+
+.lead-preview-booking-save,
+.lead-preview-booking-cancel {
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  min-height: 36px;
+  padding: 0 16px;
+  transition: all 0.2s ease;
+}
+
+.lead-preview-booking-save {
+  background: #3b82f6;
+  border: 0;
+  color: #ffffff;
+}
+
+.lead-preview-booking-save:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.lead-preview-booking-save:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.lead-preview-booking-cancel {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+}
+
+.lead-preview-booking-cancel:hover {
+  background: #f1f5f9;
+}
+
+.lead-preview-booking-message {
+  color: #64748b;
+  font-size: 13px;
+  margin-bottom: 14px;
+}
+
+.lead-preview-booking-empty {
+  border: 1px dashed #cbd5e1;
+  border-radius: 6px;
+  color: #64748b;
+  padding: 24px;
+  text-align: center;
+  background: #f8fafc;
+}
+
+.lead-preview-booking-card {
+  position: relative;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 24px 60px 20px 20px;
+  background: #ffffff;
+}
+
+.lead-preview-booking-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 36px;
+}
+
+.lead-preview-booking-column {
+  display: grid;
+  gap: 8px;
+}
+
+.lead-preview-booking-menu {
+  position: absolute;
+  right: 20px;
+  top: 24px;
+  color: #64748b;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.lead-preview-stage-pill {
+  width: fit-content;
+  border-radius: 4px;
+  background: #22c55e;
+  color: #ffffff;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.lead-preview-campaign-head {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.lead-preview-sort {
+  height: 36px;
+  min-width: 174px;
+  border: 1px solid #c7d2fe;
+  border-radius: 6px;
+  color: #4f46e5;
+  background: #ffffff;
+  padding: 0 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.lead-preview-campaign-body {
+  padding: 28px 24px 36px;
+}
+
+.lead-preview-campaign-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 0.6fr 1.1fr;
+  gap: 28px 48px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.lead-preview-campaign-wide {
+  grid-column: span 1;
+}
+
+.lead-preview-link {
+  border: 0;
+  background: transparent;
+  color: #3b82f6;
+  padding: 0;
+  font-size: 16px;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.lead-preview-link:hover {
+  color: #1d4ed8;
+}
+
+.lead-preview-campaign-footer {
+  min-height: 44px;
+  border-top: 1px solid #f1f5f9;
+  background: #f8fafc;
+}
+
+.lead-preview-action-bar {
+  height: 64px;
+  background: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+  border-radius: 0 0 8px 8px;
+}
+
+.lead-preview-action-icons {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.lead-preview-action-icons button,
+.lead-preview-profile-btn {
+  border: 0;
+  cursor: pointer;
+}
+
+.lead-preview-action-icons button {
+  width: 24px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 18px;
+  transition: color 0.2s ease;
+}
+
+.lead-preview-action-icons button:hover {
+  color: #ffffff;
+}
+
+.lead-preview-profile-btn {
+  min-width: 104px;
+  height: 34px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.lead-preview-profile-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+@media (max-width: 900px) {
+  .lead-preview-summary,
+  .lead-preview-main,
+  .lead-preview-stage,
+  .lead-preview-details,
+  .lead-preview-booking-form,
+  .lead-preview-booking-grid,
+  .lead-preview-campaign-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  
+  .lead-preview-summary {
+    gap: 20px;
+  }
+
+  .lead-preview-main {
+    gap: 32px;
+  }
+
+  .lead-preview-panel-head,
+  .lead-preview-campaign-head {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 18px 20px;
+    gap: 16px;
+  }
+
+  .lead-preview-task-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .lead-preview-action-bar {
+    padding: 0 16px;
+  }
+
+  .lead-preview-profile-btn {
+    min-width: 96px;
+  }
+}
         `}</style>
 
         <div className="preview-page">
@@ -1074,8 +1144,7 @@ const Preview = () => {
             </div>
 
             <div className="lead-preview-body">
-              <div className="lead-preview-tooltip">{leadName}</div>
-
+            
               <div className="lead-preview-summary">
                 <div className="lead-preview-person">
                   <span className="lead-preview-flag" aria-label="India" />

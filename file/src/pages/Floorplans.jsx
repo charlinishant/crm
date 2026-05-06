@@ -3,6 +3,7 @@ import { Icon } from "@iconify/react";
 import { useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
 import Breadcrumb from "../components/Breadcrumb";
+import "./FloorPlans.css"; 
 
 const Floorplans = () => {
     const navigate = useNavigate();
@@ -65,38 +66,42 @@ const Floorplans = () => {
 
     return (
         <MasterLayout>
-            <div className="container-fluid px-0">
+            <div className="container-fluid px-0 floor-dashboard">
                 <Breadcrumb title="Floor Plans" />
 
-                {/* HEADER */}
-                <div className="d-flex justify-content-between align-items-center mb-4">
-                    <div>
-                        <h5 className="mb-1">All Floor Plans</h5>
-                        <span className="text-muted">{totalItems} items</span>
+                <div className="floor-card">
+                    {/* HEADER */}
+                    <div className="floor-header d-flex justify-content-between align-items-center">
+                        <div>
+                            <span className="item-count">{totalItems} items.</span>
+                        </div>
+
+                        <div className="action-wrapper">
+                            <button
+                                className="btn-new-plan d-flex align-items-center gap-2"
+                                onClick={() => navigate("/addfloorplan")}
+                            >
+                                <Icon icon="ic:baseline-add" width="16" />
+                                New Floor Plan
+                            </button>
+                            <button className="btn-filter">
+                                <Icon icon="mdi:filter" width="18" />
+                            </button>
+                        </div>
                     </div>
 
-                    <button
-                        className="btn btn-primary d-flex align-items-center gap-2"
-                        onClick={() => navigate("/addfloorplan")}
-                    >
-                        <Icon icon="ic:baseline-add" />
-                        New Floor Plan
-                    </button>
-                </div>
-
-                {/* TABLE */}
-                <div className="card shadow-sm border-0">
+                    {/* TABLE */}
                     <div className="table-responsive">
-                        <table className="table align-middle mb-0">
-                            <thead className="bg-primary text-white">
+                        <table className="floor-table">
+                            <thead>
                                 <tr>
-                                    <th>Name</th>
-                                    <th>Saleable</th>
-                                    <th>Carpet</th>
-                                    <th>Project</th>
-                                    <th>Tower</th>
-                                    <th>Type</th>
-                                    <th className="text-end">Actions</th>
+                                    <th>NAME</th>
+                                    <th>SALEABLE AREA</th>
+                                    <th>CARPET AREA</th>
+                                    <th>PROJECT</th>
+                                    <th>TOWER</th>
+                                    <th>TYPE</th>
+                                    <th className="text-right">ACTIONS</th>
                                 </tr>
                             </thead>
 
@@ -109,54 +114,55 @@ const Floorplans = () => {
                                     </tr>
                                 ) : error ? (
                                     <tr>
-                                        <td colSpan="7" className="text-center text-danger">
+                                        <td colSpan="7" className="text-center text-danger py-4">
                                             {error}
                                         </td>
                                     </tr>
                                 ) : floorplans.length === 0 ? (
                                     <tr>
-                                        <td colSpan="7" className="text-center">
+                                        <td colSpan="7" className="text-center py-4">
                                             No Data Found
                                         </td>
                                     </tr>
                                 ) : (
                                     floorplans.map((plan) => (
                                         <tr key={plan.id}>
-                                            <td className="fw-semibold">{plan.name}</td>
+                                            <td className="fw-bold">{plan.name}</td>
                                             <td>{plan.saleableArea}</td>
                                             <td>{plan.carpetArea}</td>
-                                            <td>{plan.project}</td>
-                                            <td>{plan.tower}</td>
+                                            <td className="text-muted">{plan.project}</td>
+                                            <td className="text-muted">{plan.tower}</td>
                                             <td>{plan.type}</td>
 
                                             {/* ✅ ACTIONS */}
-                                            <td className="text-end">
-                                                <div className="d-flex justify-content-end gap-2">
-
+                                            <td className="text-right">
+                                                <div className="d-flex justify-content-end gap-1">
                                                     {/* VIEW */}
                                                     <button
-                                                        className="btn btn-sm btn-light"
+                                                        className="btn-action"
                                                         onClick={() => navigate(`/floor/${plan.id}`)}
+                                                        title="View"
                                                     >
-                                                        <Icon icon="mdi:eye-outline" />
+                                                        <Icon icon="mdi:eye-outline" width="16" />
                                                     </button>
 
                                                     {/* EDIT */}
                                                     <button
-                                                        className="btn btn-sm btn-warning text-white"
+                                                        className="btn-action"
                                                         onClick={() => navigate(`/edit-floor/${plan.id}`)}
+                                                        title="Edit"
                                                     >
-                                                        <Icon icon="mdi:pencil-outline" />
+                                                        <Icon icon="mdi:pencil-outline" width="16" />
                                                     </button>
 
                                                     {/* DELETE */}
                                                     <button
-                                                        className="btn btn-sm btn-danger"
+                                                        className="btn-action btn-action-delete"
                                                         onClick={() => handleDelete(plan.id)}
+                                                        title="Delete"
                                                     >
-                                                        <Icon icon="mdi:delete-outline" />
+                                                        <Icon icon="mdi:delete-outline" width="16" />
                                                     </button>
-
                                                 </div>
                                             </td>
                                         </tr>

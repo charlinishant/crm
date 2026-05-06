@@ -81,6 +81,7 @@
 
 .leads-table th {
   padding: 16px 12px;
+   background-color: #487fff;
   font-weight: 500;
   border-bottom: 1px solid #dee2e6;
   text-transform: uppercase;

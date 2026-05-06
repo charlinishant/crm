@@ -1,104 +1,176 @@
-import React, { useEffect, useState } from 'react'
-import { Icon } from '@iconify/react/dist/iconify.js'
-import { useNavigate } from 'react-router-dom'
+import React, { useState } from 'react';
+import { Plus, Filter, MoreVertical, Layers, Building, Trash2 } from 'lucide-react';
+import './Projecttower.css';
 
-const Projecttower = () => {
-    const navigate = useNavigate()
-    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000'
-    const [towers, setTowers] = useState([])
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState(null)
+const initialTowerData = [
+  { id: 1, name: 'TOWER D', project: 'Binghatti Hills', floorPlans: 27, totalFloors: 36 },
+  { id: 2, name: 'TOWER E', project: 'Binghatti Hills', floorPlans: 5, totalFloors: 30 },
+  { id: 3, name: 'Aa', project: 'Binghatti Hills', floorPlans: 2, totalFloors: 1 },
+  { id: 4, name: 'A', project: 'Binghatti Hills', floorPlans: 3, totalFloors: 1 },
+  { id: 5, name: 'Default Tower', project: 'Nyati Baner', floorPlans: 1, totalFloors: 1 },
+  { id: 6, name: 'Towe', project: 'Binghatti Hills', floorPlans: 1, totalFloors: 1 },
+  { id: 7, name: 'Default Tower', project: 'Lodha Greens', floorPlans: 2, totalFloors: 1 },
+  { id: 8, name: 'Default Tower', project: 'ABC', floorPlans: 1, totalFloors: 1 },
+  { id: 9, name: 'Default Tower', project: 'Vasant utsav', floorPlans: 1, totalFloors: 1 },
+  { id: 10, name: 'T1', project: 'Binghatti Hills', floorPlans: 1, totalFloors: 22 },
+  { id: 11, name: 'Default Tower', project: 'Adhinn PG', floorPlans: 2, totalFloors: 1 },
+];
 
-    useEffect(() => {
-        const fetchTowers = async () => {
-            try {
-                const response = await fetch(`${API_URL}/tower?limit=100`)
-                if (!response.ok) {
-                    throw new Error('Unable to fetch tower data')
-                }
-                const json = await response.json()
-                const towerList = Array.isArray(json) ? json : json?.data ?? []
-                const mapped = towerList.map((tower) => ({
-                    id: tower.id,
-                    name: tower.name || 'Unknown',
-                    project: tower.project?.name || 'Unknown',
-                    floorPlans: tower.totalFloor ?? 0,
-                    totalFloors: tower.totalFloor ?? 0,
-                }))
-                setTowers(mapped)
-            } catch (err) {
-                console.error(err)
-                setError(err.message || 'Failed to load towers')
-            } finally {
-                setLoading(false)
-            }
-        }
+export default function Projecttower() {
+  const [towers, setTowers] = useState(initialTowerData);
+  const [name, setName] = useState('');
+  const [project, setProject] = useState('');
+  const [floorPlans, setFloorPlans] = useState('');
+  const [totalFloors, setTotalFloors] = useState('');
 
-        fetchTowers()
-    }, [API_URL])
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!name || !project) return;
 
-    return (
-        <div>
-            <div className="card-header border-bottom bg-base py-16 px-24 d-flex align-items-center flex-wrap gap-3 justify-content-between">
-                <div>
-                    <h6 className="text-lg fw-semibold mb-0">Project Towers</h6>
-                    <p className="text-sm text-secondary mb-0">Manage all towers with project, floor plans, and total floors.</p>
-                </div>
-                <button type="button" className="btn btn-primary text-sm btn-sm px-16 py-10 radius-8 d-flex align-items-center gap-2" onClick={() => navigate('/new-tower')}>
-                    <Icon icon="ic:baseline-add" className="icon text-xl line-height-1" />
-                    New Tower
-                </button>
+    const newTower = {
+      id: Date.now(),
+      name,
+      project,
+      floorPlans: parseInt(floorPlans) || 1,
+      totalFloors: parseInt(totalFloors) || 1,
+    };
+
+    setTowers([newTower, ...towers]);
+    
+    // Reset individual fields after adding
+    setName('');
+    setProject('');
+    setFloorPlans('');
+    setTotalFloors('');
+  };
+
+  const handleDelete = (id) => {
+    const updatedTowers = towers.filter((tower) => tower.id !== id);
+    setTowers(updatedTowers);
+  };
+
+  return (
+    <div className="tower-dashboard">
+      <div className="dashboard-container">
+        
+        {/* Left Side: Tower List Grid */}
+        <div className="list-column">
+          <div className="list-header">
+            <div>
+              <h2>Towers</h2>
+              <span className="item-count">{towers.length} active projects and towers available.</span>
             </div>
-            <div className="card-body p-0">
-                <table className="table bordered-table sm-table mb-0" style={{ width: '100%' }}>
-                    <thead style={{ backgroundColor: '#0d6efd', color: '#ffffff' }}>
-                        <tr>
-                            <th scope="col" className="text-uppercase fw-semibold text-white" style={{ backgroundColor: '#0d6efd', color: '#ffffff' }}>NAME</th>
-                            <th scope="col" className="text-uppercase fw-semibold text-white" style={{ backgroundColor: '#0d6efd', color: '#ffffff' }}>PROJECT</th>
-                            <th scope="col" className="text-uppercase fw-semibold text-white" style={{ backgroundColor: '#0d6efd', color: '#ffffff' }}>FLOOR PLANS</th>
-                            <th scope="col" className="text-uppercase fw-semibold text-white" style={{ backgroundColor: '#0d6efd', color: '#ffffff' }}>TOTAL FLOORS</th>
-                            <th scope="col" className="text-uppercase fw-semibold text-white text-end" style={{ backgroundColor: '#0d6efd', color: '#ffffff' }}>ACTIONS</th>
-                        </tr>
-                    </thead>
-                        <tbody>
-                            {loading ? (
-                                <tr>
-                                    <td colSpan="5" className="text-center py-20 text-secondary">
-                                        Loading tower data...
-                                    </td>
-                                </tr>
-                            ) : error ? (
-                                <tr>
-                                    <td colSpan="5" className="text-center py-20 text-danger">
-                                        {error}
-                                    </td>
-                                </tr>
-                            ) : towers.length === 0 ? (
-                                <tr>
-                                    <td colSpan="5" className="text-center py-20 text-secondary">
-                                        No towers found.
-                                    </td>
-                                </tr>
-                            ) : (
-                                towers.map((tower) => (
-                                    <tr key={tower.id}>
-                                        <td className="fw-semibold">{tower.name}</td>
-                                        <td className="fw-semibold">{tower.project}</td>
-                                        <td className="fw-semibold">{tower.floorPlans}</td>
-                                        <td className="fw-semibold">{tower.totalFloors}</td>
-                                        <td className="text-end">
-                                            <button type="button" className="btn btn-soft-dark btn-sm px-12 py-8 radius-8">
-                                                <Icon icon="lucide:more-vertical" className="icon text-lg" />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+            <div className="action-wrapper">
+              <button className="btn-filter" title="Filter Towers">
+                <Filter size={18} />
+              </button>
             </div>
-    )
+          </div>
+
+          <div className="tower-grid">
+            {towers.map((tower) => (
+              <div key={tower.id} className="tower-item-card">
+                <div className="tower-item-header">
+                  <div className="tower-title-section">
+                    <Building className="building-icon" size={20} />
+                    <div>
+                      <h4 className="tower-name">{tower.name}</h4>
+                      <p className="tower-project">{tower.project}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="card-actions">
+                    <button className="btn-action" onClick={() => handleDelete(tower.id)} title="Delete Tower">
+                      <Trash2 size={16} />
+                    </button>
+                    <button className="btn-action">
+                      <MoreVertical size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="tower-metrics">
+                  <div className="metric-box">
+                    <Layers size={16} className="metric-icon" />
+                    <div>
+                      <span className="metric-label">Floor Plans</span>
+                      <span className="metric-value">{tower.floorPlans}</span>
+                    </div>
+                  </div>
+                  <div className="metric-box">
+                    <Building size={16} className="metric-icon" />
+                    <div>
+                      <span className="metric-label">Total Floors</span>
+                      <span className="metric-value">{tower.totalFloors}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right Side: Form Fields Section */}
+        <div className="form-column">
+          <div className="card-header">
+            <h3>Add New Tower</h3>
+            <p>Create a new tower and map it to a project.</p>
+          </div>
+          
+          <form onSubmit={handleSubmit}>
+            <div className="form-group">
+              <label>Tower Name *</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. TOWER F"
+                required
+              />
+            </div>
+            
+            <div className="form-group">
+              <label>Project Name *</label>
+              <input
+                type="text"
+                value={project}
+                onChange={(e) => setProject(e.target.value)}
+                placeholder="e.g. Binghatti Hills"
+                required
+              />
+            </div>
+
+            <div className="form-row">
+              <div className="form-group half">
+                <label>Floor Plans</label>
+                <input
+                  type="number"
+                  value={floorPlans}
+                  onChange={(e) => setFloorPlans(e.target.value)}
+                  placeholder="1"
+                />
+              </div>
+              
+              <div className="form-group half">
+                <label>Total Floors</label>
+                <input
+                  type="number"
+                  value={totalFloors}
+                  onChange={(e) => setTotalFloors(e.target.value)}
+                  placeholder="1"
+                />
+              </div>
+            </div>
+
+            <div className="form-footer">
+              <button type="submit" className="btn-primary">
+                <Plus size={16} /> Save Tower
+              </button>
+            </div>
+          </form>
+        </div>
+
+      </div>
+    </div>
+  );
 }
-
-export default Projecttower
