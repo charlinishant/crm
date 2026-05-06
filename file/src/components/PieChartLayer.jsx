@@ -1,27 +1,13 @@
 import React from 'react'
-import BasicPieChart from './child/BasicPieChart'
-import DonutChart from './child/DonutChart'
-import RadarChart from './child/RadarChart'
-import MultipleSeries from './child/MultipleSeries'
+import Projecttower from './child/Projecttower'
 
 const PieChartLayer = () => {
     return (
-        <div className="row gy-4">
-
-            {/* BasicPieChart */}
-            <BasicPieChart />
-
-            {/* DonutChart */}
-            <DonutChart />
-
-            {/* RadarChart */}
-            <RadarChart />
-
-            {/* MultipleSeries */}
-            <MultipleSeries />
-
+        <div className="row gy-4 gx-0">
+            <div className="col-12 px-0">
+                <Projecttower />
+            </div>
         </div>
-
     )
 }
 

@@ -8,6 +8,12 @@ const prisma = require("./lib/prisma")
 const projectRouter = require("./router/project.routes")
 const authRouter = require("./router/authentication.routes")
 const leadNoteRouter = require("./router/leadNote.routes")
+const userRouter = require("./router/user.routes")
+const teamRouter = require("./router/team.routes")
+const towerRouter = require("./router/tower.routes")
+const floorRouter = require("./router/floorplan.routes")
+const unitRouter = require("./router/unit.routes")
+const bookingRouter = require("./router/booking.routes")
 
 const leadRouter = require("./router/lead.routes")
 
@@ -19,7 +25,12 @@ app.use("/projects", projectRouter)
 app.use("/auth", authRouter)
 app.use("/lead-notes", leadNoteRouter)
 app.use("/leads", leadRouter)
-
+app.use("/users", userRouter)
+app.use("/teams", teamRouter)
+app.use("/tower", towerRouter)
+app.use("/floor", floorRouter   )
+app.use("/unit", unitRouter)
+app.use("/bookings", bookingRouter)
 
 const PORT = 5000
 app.listen(PORT, ()=>{

@@ -18,12 +18,12 @@ const Booking = () => {
             source: "Direct_walkin",
             bookedBy: "Tejas Sales",
             bookedOn: "Jul 26, 2024",
-            agreement: "₹ 0",
-            totalDemanded: "₹ 0",
-            actualDemanded: "₹ 0",
-            overdue: "₹ 0",
-            receipts: "₹ 0",
-            creditNotes: "₹ 0"
+            agreement: "Rs. 0",
+            totalDemanded: "Rs. 0",
+            actualDemanded: "Rs. 0",
+            overdue: "Rs. 0",
+            receipts: "Rs. 0",
+            creditNotes: "Rs. 0"
         },
         {
             id: 70,
@@ -38,12 +38,12 @@ const Booking = () => {
             source: "-",
             bookedBy: "Tejas Sales",
             bookedOn: "Sep 13, 2024",
-            agreement: "₹ 1.2Cr",
-            totalDemanded: "₹ 0",
-            actualDemanded: "₹ 0",
-            overdue: "₹ 0",
-            receipts: "₹ 0",
-            creditNotes: "₹ 0"
+            agreement: "Rs. 1.2Cr",
+            totalDemanded: "Rs. 0",
+            actualDemanded: "Rs. 0",
+            overdue: "Rs. 0",
+            receipts: "Rs. 0",
+            creditNotes: "Rs. 0"
         },
         {
             id: 86,
@@ -58,12 +58,12 @@ const Booking = () => {
             source: "-",
             bookedBy: "Tejas Sales",
             bookedOn: "Sep 25, 2024",
-            agreement: "₹ 1.2Cr",
-            totalDemanded: "₹ 1.3Cr",
-            actualDemanded: "₹ 0",
-            overdue: "₹ 0",
-            receipts: "₹ 0",
-            creditNotes: "₹ 0"
+            agreement: "Rs. 1.2Cr",
+            totalDemanded: "Rs. 1.3Cr",
+            actualDemanded: "Rs. 0",
+            overdue: "Rs. 0",
+            receipts: "Rs. 0",
+            creditNotes: "Rs. 0"
         },
         {
             id: 137,
@@ -78,12 +78,12 @@ const Booking = () => {
             source: "Website_",
             bookedBy: "Tejas Sales",
             bookedOn: "Nov 29, 2024",
-            agreement: "₹ 1.3Cr",
-            totalDemanded: "₹ 1.2Cr",
-            actualDemanded: "₹ 0",
-            overdue: "₹ 0",
-            receipts: "₹ 0",
-            creditNotes: "₹ 0"
+            agreement: "Rs. 1.3Cr",
+            totalDemanded: "Rs. 1.2Cr",
+            actualDemanded: "Rs. 0",
+            overdue: "Rs. 0",
+            receipts: "Rs. 0",
+            creditNotes: "Rs. 0"
         },
         {
             id: 162,
@@ -98,12 +98,12 @@ const Booking = () => {
             source: "-",
             bookedBy: "Tejas Sales",
             bookedOn: "Feb 6, 2025",
-            agreement: "₹ 1.2Cr",
-            totalDemanded: "₹ 1Cr",
-            actualDemanded: "₹ 0",
-            overdue: "₹ 0",
-            receipts: "₹ 0",
-            creditNotes: "₹ 0"
+            agreement: "Rs. 1.2Cr",
+            totalDemanded: "Rs. 1Cr",
+            actualDemanded: "Rs. 0",
+            overdue: "Rs. 0",
+            receipts: "Rs. 0",
+            creditNotes: "Rs. 0"
         },
         {
             id: 156,
@@ -118,12 +118,12 @@ const Booking = () => {
             source: "-",
             bookedBy: "Tejas Sales",
             bookedOn: "Jan 28, 2025",
-            agreement: "₹ 1.2Cr",
-            totalDemanded: "₹ 1Cr",
-            actualDemanded: "₹ 0",
-            overdue: "₹ 0",
-            receipts: "₹ 0",
-            creditNotes: "₹ 0"
+            agreement: "Rs. 1.2Cr",
+            totalDemanded: "Rs. 1Cr",
+            actualDemanded: "Rs. 0",
+            overdue: "Rs. 0",
+            receipts: "Rs. 0",
+            creditNotes: "Rs. 0"
         },
         {
             id: 130,
@@ -138,12 +138,12 @@ const Booking = () => {
             source: "-",
             bookedBy: "Tejas Sales",
             bookedOn: "Oct 29, 2024",
-            agreement: "₹ 1.7Cr",
-            totalDemanded: "₹ 1.4Cr",
-            actualDemanded: "₹ 0",
-            overdue: "₹ 0",
-            receipts: "₹ 0",
-            creditNotes: "₹ 0"
+            agreement: "Rs. 1.7Cr",
+            totalDemanded: "Rs. 1.4Cr",
+            actualDemanded: "Rs. 0",
+            overdue: "Rs. 0",
+            receipts: "Rs. 0",
+            creditNotes: "Rs. 0"
         },
         {
             id: 183,
@@ -158,12 +158,12 @@ const Booking = () => {
             source: "Website_",
             bookedBy: "Tejas Sales",
             bookedOn: "Mar 5, 2025",
-            agreement: "₹ 1.7Cr",
-            totalDemanded: "₹ 1.4Cr",
-            actualDemanded: "₹ 0",
-            overdue: "₹ 0",
-            receipts: "₹ 0",
-            creditNotes: "₹ 0"
+            agreement: "Rs. 1.7Cr",
+            totalDemanded: "Rs. 1.4Cr",
+            actualDemanded: "Rs. 0",
+            overdue: "Rs. 0",
+            receipts: "Rs. 0",
+            creditNotes: "Rs. 0"
         },
         {
             id: 78,
@@ -178,12 +178,12 @@ const Booking = () => {
             source: "Website_",
             bookedBy: "Tejas Sales",
             bookedOn: "Sep 23, 2024",
-            agreement: "₹ 1.7Cr",
-            totalDemanded: "₹ 1.4Cr",
-            actualDemanded: "₹ 0",
-            overdue: "₹ 0",
-            receipts: "₹ 0",
-            creditNotes: "₹ 0"
+            agreement: "Rs. 1.7Cr",
+            totalDemanded: "Rs. 1.4Cr",
+            actualDemanded: "Rs. 0",
+            overdue: "Rs. 0",
+            receipts: "Rs. 0",
+            creditNotes: "Rs. 0"
         },
         {
             id: 79,
@@ -198,25 +198,22 @@ const Booking = () => {
             source: "-",
             bookedBy: "Tejas Sales",
             bookedOn: "Sep 23, 2024",
-            agreement: "₹ 1.7Cr",
-            totalDemanded: "₹ 1.8Cr",
-            actualDemanded: "₹ 0",
-            overdue: "₹ 0",
-            receipts: "₹ 0",
-            creditNotes: "₹ 0"
+            agreement: "Rs. 1.7Cr",
+            totalDemanded: "Rs. 1.8Cr",
+            actualDemanded: "Rs. 0",
+            overdue: "Rs. 0",
+            receipts: "Rs. 0",
+            creditNotes: "Rs. 0"
         }
     ];
 
-    // Filtered bookings calculation
     const filteredBookings = useMemo(() => {
         const query = searchQuery ? searchQuery.toLowerCase() : '';
         return bookings.filter(item => {
-            // Check if any property includes the string
-            const matchesSearch = Object.values(item).some(val => 
+            const matchesSearch = Object.values(item).some(val =>
                 String(val).toLowerCase().includes(query)
             );
 
-            // If dropdown filter is active, check stage
             if (bookingFilter !== 'All Bookings') {
                 return matchesSearch && item.stage === bookingFilter;
             }
@@ -228,10 +225,8 @@ const Booking = () => {
     return (
         <div className="row gy-4" style={{ padding: '24px', backgroundColor: '#f8fafc', minHeight: '100vh' }}>
             <div className="table-container">
-                
-                {/* Search / Toolbar */}
                 <div className="table-filter-toolbar">
-                    <select 
+                    <select
                         className="booking-dropdown"
                         value={bookingFilter}
                         onChange={(e) => setBookingFilter(e.target.value)}
@@ -242,11 +237,11 @@ const Booking = () => {
                     </select>
 
                     <div className="search-container">
-                        <input 
-                            type="text" 
-                            placeholder="Search" 
+                        <input
+                            type="text"
+                            placeholder="Search"
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)} 
+                            onChange={(e) => setSearchQuery(e.target.value)}
                         />
                         <span className="search-icon">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -287,7 +282,6 @@ const Booking = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {/* Summary Row */}
                             <tr className="summary-row">
                                 <td></td>
                                 <td></td>
@@ -299,16 +293,15 @@ const Booking = () => {
                                 <td></td>
                                 <td></td>
                                 <td className="text-right summary-title">Summary</td>
-                                <td className="text-right summary-val">₹ 21Cr</td>
-                                <td className="text-right summary-val">₹ 16Cr</td>
-                                <td className="text-right summary-val">₹ 0</td>
+                                <td className="text-right summary-val">Rs. 21Cr</td>
+                                <td className="text-right summary-val">Rs. 16Cr</td>
+                                <td className="text-right summary-val">Rs. 0</td>
                                 <td></td>
                                 <td></td>
                                 <td></td>
                                 <td></td>
                             </tr>
-                            
-                            {/* Filtered Rows */}
+
                             {filteredBookings.map((item) => (
                                 <tr key={item.id}>
                                     <td className="checkbox-col">

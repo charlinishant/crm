@@ -116,6 +116,12 @@ import Alltask from "./pages/Alltask";
 import OpenTask from "./pages/opentask";
 import CompletedTask from "./pages/completedtask";
 import Archivedtask from "./pages/Archivedtask";
+import Projecttower from "./components/child/Projecttower";
+import Newtower from "./components/Newtower";
+import Floorplans from "./pages/Floorplans";
+import AddFloorplan from "./pages/addfloorplan";
+import Units from "./pages/Units";
+import AddUnits from "./pages/addunits";
 
 
 
@@ -219,7 +225,14 @@ function App() {
           exact
           path='/notification-alert'
           element={<NotificationAlertPage />}
+        
         />
+         <Route exact path='/add-units' element={<AddUnits />} />
+        <Route exact path='/units' element={<Units />} />
+        <Route exact path='/floorplans' element={<Floorplans />} />
+        <Route exact path='/addfloorplan' element={<AddFloorplan />} />
+        <Route exact path='/new-tower' element={<Newtower />} />
+        <Route exact path='/project-towers' element={<Projecttower />} />
         <Route exact path='/notification' element={<NotificationPage />} />
         <Route exact path='/pagination' element={<PaginationPage />} />
         <Route exact path='/payment-gateway' element={<PaymentGatewayPage />} />

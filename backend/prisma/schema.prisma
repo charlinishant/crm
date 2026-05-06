@@ -17,8 +17,7 @@ model Project{
   name String
   description String? @db.Text
   reraProjectId Int?
-  sales String?
-  preSales String?
+  salesId Int?
   projectType String
   possession Boolean @default(false)
   address String? @db.Text
@@ -35,21 +34,129 @@ model Project{
   createdAt DateTime @default(now())
   integratedPortals String @default("")
   active Boolean @default(true)
+  tower Tower[] @relation("Project")
+  floor FloorPlan[] @relation("Project")
+  unit Unit[] @relation("Project")
 }
 
+model Tower{
+  id Int @id @default(autoincrement())
+  name String 
+  projectId Int
+  project Project @relation("Project",  fields: [projectId], references: [id])
+  totalFloor Int? @default(0)
+  reraTowerId String?
+  floors FloorPlan[] @relation("Tower")
+  units Unit[] @relation("Tower")
+}
+
+model FloorPlan{
+  id Int @id @default(autoincrement())
+  name String
+  projectId Int?
+  project Project? @relation("Project",  fields: [projectId], references: [id])
+  towerId Int?
+  tower Tower? @relation("Tower",  fields: [towerId], references: [id])
+  type String?
+  category String?
+  bedrooms Int?
+  bathrooms Int?
+
+  // Area
+  measure String?
+  carpet Float?
+  saleable Float?
+  loading Float?
+  coverArea Float?
+  terraceArea Float?
+
+  //costing
+  baseRate Float?
+
+  basePrice Float?
+
+  units Unit[] @relation("Floor")
+}
+
+model UnitModel{
+  id Int @id @default(autoincrement())
+  name String 
+  floor Int?
+  unitIndex Int?
+  baseRate Float? 
+  basePrice Float?
+  propertyPurpose String? 
+  unitId Int
+  unit Unit @relation(fields: [unitId], references: [id])
+}
+
+
+model Unit{
+  id Int @id @default(autoincrement())
+  unitList UnitModel[]
+  projectId Int?
+  project Project? @relation("Project",  fields: [projectId], references: [id])
+  towerId Int?
+  tower Tower? @relation("Tower",  fields: [towerId], references: [id])
+  floorId Int?
+  floor FloorPlan? @relation("Floor",  fields: [floorId], references: [id])
+  type String?
+  category String?
+  bedrooms Int? 
+  bathrooms Int?
+
+  measure String?
+  carpet Float?
+  saleable Float?
+  loading Float?
+  description String @db.Text
+}   
+
 enum Role{
-  ADMIN
+  PRE_SALES
+  SALES
+  POST_SALES
   MANAGER
-  SALESPERSON
+  ADMIN
+  AGENCY_USER
+  AGENT
+}
+
+enum Department{
+  PRE_SALES
+  SALES
+  POST_SALES
 }
 model User{
   id Int @id @default(autoincrement())
-  username String @unique
+  isActive Boolean @default(true)
+
+  //personal details
+  username String? @unique
   email String @unique
-  password String
+  password String?
   firstName String?
   lastName  String?
-  role Role
+  phone String? @unique @db.Char(10)
+  secondaryPhone String? @db.Char(10)
+  timeZone String?
+
+  //custom fields
+  linkedUrl String? 
+  description String?
+
+  // Professional details
+  role Role?
+  department Department?
+
+  defaultRouting Boolean? @default(false)
+  defaultRoutingRule Boolean? @default(false)
+  autoRoster Boolean? @default(false)
+  teamId Int?
+  team Team? @relation("Team", fields: [teamId], references: [id])
+  // Other settings
+  pushNotification Boolean? @default(false)
+  gpsTracking Boolean? @default(false)
   
 }
 
@@ -76,13 +183,13 @@ enum AddressType{
 }
 
 enum Status{
-  BOOKED
-  FRESH_LEAD
-  LOST
+  Booked
+  Fresh_Lead
+  Lost
   NP
-  PROSPECT
-  REGISTERED
-  UNQUALIFIED
+  Prospect
+  Registered
+  Unqualified
 }
 model Lead{
   id Int @id @default(autoincrement())
@@ -134,7 +241,26 @@ model Lead{
   facing String?
   locationPreferences String?
   requirementComment String @db.Text
+  bookings Booking[]
 
+}
+
+model Booking{
+  id Int @id @default(autoincrement())
+  leadId Int?
+  lead Lead? @relation(fields: [leadId], references: [id])
+  unit String?
+  customerName String?
+  stage String? @default("Tentative")
+  projectDetails String?
+  bookedOn DateTime?
+  saleableArea Float?
+  basePrice Float?
+  baseRate Float?
+  source String?
+  bookedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model LeadAddress{
@@ -169,4 +295,15 @@ model LeadNote {
   note String @db.Text
   owner String?
   createdAt DateTime @default(now())
+}
+
+
+model Team{
+  id Int @id @default(autoincrement())
+  name String
+  location String?
+  parentId Int?
+  parent Team? @relation("ParentTeam", fields: [parentId], references: [id])
+  teams Team[] @relation("ParentTeam")
+  users User[] @relation("Team") 
 }
