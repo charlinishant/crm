@@ -68,9 +68,17 @@ const normalizeTask = (task, index) => ({
   dueOn: formatDate(task.dueOn || task.dueDate || task.due_on),
 });
 
+const getUserName = (user) =>
+  [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+  user?.username ||
+  user?.email ||
+  (user?.id ? `User #${user.id}` : "");
+
 const Alltask = () => {
   const [tasks, setTasks] = useState(fallbackTasks);
+  const [users, setUsers] = useState([]);
   const [statusFilter, setStatusFilter] = useState("All");
+  const [assigneeFilter, setAssigneeFilter] = useState("All");
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState("");
 
@@ -92,11 +100,13 @@ const Alltask = () => {
         const taskList = Array.isArray(data) ? data : data.tasks || data.data || [];
 
         if (isMounted) {
-          setTasks(taskList.map(normalizeTask));
+          const savedTasks = JSON.parse(window.localStorage.getItem("savedTasks") || "[]");
+          setTasks([...savedTasks, ...taskList].map(normalizeTask));
         }
       } catch (error) {
         if (isMounted) {
-          setTasks(fallbackTasks);
+          const savedTasks = JSON.parse(window.localStorage.getItem("savedTasks") || "[]");
+          setTasks([...savedTasks, ...fallbackTasks].map(normalizeTask));
           setFetchError("Showing sample tasks until the task API is available.");
         }
       } finally {
@@ -113,13 +123,42 @@ const Alltask = () => {
     };
   }, []);
 
-  const filteredTasks = useMemo(() => {
-    if (statusFilter === "All") {
-      return tasks;
-    }
+  useEffect(() => {
+    let isMounted = true;
 
-    return tasks.filter((task) => task.status === statusFilter);
-  }, [statusFilter, tasks]);
+    const fetchUsers = async () => {
+      try {
+        const response = await fetch(`${API_URL}/users?limit=100`);
+        if (!response.ok) throw new Error("Unable to fetch users");
+
+        const result = await response.json();
+        const userList = Array.isArray(result) ? result : result?.data || result?.users || [];
+
+        if (isMounted) {
+          setUsers(userList);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setUsers([]);
+        }
+      }
+    };
+
+    fetchUsers();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const filteredTasks = useMemo(() => {
+    return tasks.filter((task) => {
+      const matchesStatus = statusFilter === "All" || task.status === statusFilter;
+      const matchesAssignee = assigneeFilter === "All" || task.assignedTo === assigneeFilter;
+
+      return matchesStatus && matchesAssignee;
+    });
+  }, [assigneeFilter, statusFilter, tasks]);
 
   const totalTasks = tasks.length || 0;
 
@@ -138,8 +177,27 @@ const Alltask = () => {
               <option value="Closed">Closed</option>
               <option value="Completed">Completed</option>
             </select>
+            <select
+              className="all-task-filter all-task-user-filter"
+              value={assigneeFilter}
+              onChange={(event) => setAssigneeFilter(event.target.value)}
+            >
+              <option value="All">All Users</option>
+              {users.map((user) => {
+                const userName = getUserName(user);
+
+                if (!userName) return null;
+
+                return (
+                  <option key={user.id || user.email} value={userName}>
+                    {userName}
+                    {user.role ? ` (${user.role})` : ""}
+                  </option>
+                );
+              })}
+            </select>
             <p className="all-task-total">
-              {isLoading ? "LOADING TASKS..." : `TOTAL TASKS : ${totalTasks}`}
+              {isLoading ? "LOADING TASKS..." : `TOTAL TASKS : ${filteredTasks.length} / ${totalTasks}`}
             </p>
             {fetchError && <p className="all-task-error">{fetchError}</p>}
           </div>
@@ -219,6 +277,11 @@ const Alltask = () => {
           height: 55px;
           padding: 0 10px;
           width: 436px;
+        }
+
+        .all-task-user-filter {
+          margin-left: 12px;
+          width: 320px;
         }
 
         .all-task-total,
@@ -367,6 +430,12 @@ const Alltask = () => {
           }
 
           .all-task-filter {
+            width: min(436px, calc(100vw - 28px));
+          }
+
+          .all-task-user-filter {
+            margin-left: 0;
+            margin-top: 10px;
             width: min(436px, calc(100vw - 28px));
           }
         }

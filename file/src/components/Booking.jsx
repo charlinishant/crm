@@ -1,56 +1,75 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import './Booking.css';
 
 const Booking = () => {
+    const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
     const [searchQuery, setSearchQuery] = useState('');
     const [bookingFilter, setBookingFilter] = useState('All Bookings');
+    const [bookings, setBookings] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    const bookings = [
-        {
-            id: 16,
-            leadId: "$47",
-            bookingName: "Tejas Test 2",
-            bookingSales: "-",
-            applicantName: "Tejas Test 2",
-            applicantSales: "-",
-            projectUnit: "Palm Jumeriah",
-            projectSales: "",
-            stage: "Tentative",
-            source: "Direct_walkin",
-            bookedBy: "Tejas Sales",
-            bookedOn: "Jul 26, 2024",
-            agreement: "Rs. 0",
-            totalDemanded: "Rs. 0",
-            actualDemanded: "Rs. 0",
-            overdue: "Rs. 0",
-            receipts: "Rs. 0",
-            creditNotes: "Rs. 0"
-        },
-        {
-            id: 70,
-            leadId: "$94",
-            bookingName: "Prashanth P",
-            bookingSales: "Tejas Sales",
-            applicantName: "Prashanth P",
-            applicantSales: "Tejas Sales",
-            projectUnit: "2703",
-            projectSales: "Binghatti Hills",
-            stage: "Cancelled",
-            source: "-",
-            bookedBy: "Tejas Sales",
-            bookedOn: "Sep 13, 2024",
-            agreement: "Rs. 1.2Cr",
-            totalDemanded: "Rs. 0",
-            actualDemanded: "Rs. 0",
-            overdue: "Rs. 0",
-            receipts: "Rs. 0",
-            creditNotes: "Rs. 0"
-        }
-    ];
+    const formatMoney = (value) => {
+        if (value === undefined || value === null || value === "") return "Rs. 0";
+        return `Rs. ${Number(value).toLocaleString("en-IN")}`;
+    };
+
+    const formatDate = (value) => {
+        if (!value) return "-";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+
+        return date.toLocaleDateString("en-IN", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+        });
+    };
+
+    useEffect(() => {
+        const fetchBookings = async () => {
+            try {
+                setLoading(true);
+                const response = await fetch(`${API_URL}/bookings?limit=100`);
+                if (!response.ok) throw new Error("Unable to load bookings");
+
+                const result = await response.json();
+                const bookingList = Array.isArray(result) ? result : result?.data || [];
+                setBookings(bookingList);
+            } catch (error) {
+                console.error("Unable to load bookings:", error);
+                setBookings([]);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchBookings();
+    }, [API_URL]);
+
+    const rows = useMemo(() => bookings.map((booking) => ({
+        id: booking.id,
+        leadId: booking.leadId ? `$${booking.leadId}` : "-",
+        bookingName: booking.customerName || "Customer",
+        bookingSales: booking.bookedBy || "-",
+        applicantName: booking.customerName || "Customer",
+        applicantSales: booking.bookedBy || "-",
+        projectUnit: booking.unit || "-",
+        projectSales: booking.projectDetails || "",
+        stage: booking.stage || "Tentative",
+        source: booking.source || "-",
+        bookedBy: booking.bookedBy || "-",
+        bookedOn: formatDate(booking.bookedOn),
+        agreement: formatMoney(booking.basePrice),
+        totalDemanded: "Rs. 0",
+        actualDemanded: "Rs. 0",
+        overdue: "Rs. 0",
+        receipts: "Rs. 0",
+        creditNotes: "Rs. 0"
+    })), [bookings]);
 
     const filteredBookings = useMemo(() => {
         const query = searchQuery ? searchQuery.toLowerCase() : '';
-        return bookings.filter(item => {
+        return rows.filter(item => {
             const matchesSearch = Object.values(item).some(val =>
                 String(val).toLowerCase().includes(query)
             );
@@ -61,7 +80,7 @@ const Booking = () => {
 
             return matchesSearch;
         });
-    }, [searchQuery, bookingFilter]);
+    }, [searchQuery, bookingFilter, rows]);
 
     return (
         <div className="floor-dashboard">
@@ -76,6 +95,7 @@ const Booking = () => {
                         >
                             <option>All Bookings</option>
                             <option>Tentative</option>
+                            <option>Booked</option>
                             <option>Cancelled</option>
                         </select>
                         <span className="item-count">{filteredBookings.length} items.</span>
@@ -151,7 +171,7 @@ const Booking = () => {
                             {filteredBookings.length === 0 ? (
                                 <tr>
                                     <td colSpan="17" className="text-center py-4">
-                                        No bookings found.
+                                        {loading ? "Loading bookings..." : "No bookings found."}
                                     </td>
                                 </tr>
                             ) : (

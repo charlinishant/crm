@@ -137,6 +137,7 @@ function App() {
         <Route exact path='/details' element={<Details />} />
         <Route exact path='/index-11' element={<HomePageEleven />} />
         <Route exact path='/user/sales' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/leads' element={<SalesUserPanel />} />
         <Route exact path='/index-2' element={<HomePageTwo />} />
          <Route exact path='/index-3' element={<HomePageThree />} />
          <Route exact path='/index-4' element={<HomePageFour />} />

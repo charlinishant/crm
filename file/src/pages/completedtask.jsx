@@ -111,15 +111,21 @@ const CompletedTask = () => {
         const taskList = Array.isArray(data) ? data : data.tasks || data.data || [];
 
         if (isMounted) {
+          const savedTasks = JSON.parse(window.localStorage.getItem("savedTasks") || "[]");
           setTasks(
-            taskList
+            [...savedTasks, ...taskList]
               .map(normalizeTask)
               .filter((task) => task.status === "Completed")
           );
         }
       } catch (error) {
         if (isMounted) {
-          setTasks(fallbackTasks);
+          const savedTasks = JSON.parse(window.localStorage.getItem("savedTasks") || "[]");
+          setTasks(
+            [...savedTasks, ...fallbackTasks]
+              .map(normalizeTask)
+              .filter((task) => task.status === "Completed")
+          );
         }
       } finally {
         if (isMounted) {
@@ -147,7 +153,7 @@ const CompletedTask = () => {
               <option value="Closed">Closed</option>
             </select>
             <p className="completed-task-total">
-              {isLoading ? "LOADING TASKS..." : `TOTAL TASKS : ${tasks.length || 7}`}
+              {isLoading ? "LOADING TASKS..." : `TOTAL TASKS : ${tasks.length}`}
             </p>
           </div>
 

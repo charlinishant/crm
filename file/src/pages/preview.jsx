@@ -116,9 +116,16 @@ const Preview = () => {
   const [isSavingBooking, setIsSavingBooking] = useState(false);
   const [bookingMessage, setBookingMessage] = useState("");
   const bookingSectionRef = useRef(null);
+  const bookingOpenRequestedRef = useRef(false);
   const leadIdFromUrl = useMemo(
     () => new URLSearchParams(location.search).get("leadId"),
     [location.search]
+  );
+  const shouldOpenBookingForm = useMemo(
+    () =>
+      location.state?.openBooking ||
+      new URLSearchParams(location.search).get("openBooking") === "1",
+    [location.search, location.state]
   );
 
   useEffect(() => {
@@ -311,6 +318,23 @@ const Preview = () => {
       bookingSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 0);
   };
+
+  useEffect(() => {
+    if (!shouldOpenBookingForm || bookingOpenRequestedRef.current) return;
+
+    bookingOpenRequestedRef.current = true;
+    setBookingForm({
+      ...emptyBookingForm,
+      customerName: leadName,
+      projectDetails: projectName,
+    });
+    setBookingMessage("Fill the booking form for this lead.");
+    setIsBookingFormOpen(true);
+
+    setTimeout(() => {
+      bookingSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  }, [shouldOpenBookingForm, leadName, projectName]);
 
   const formatBookingDate = (value) => {
     if (!value) return "-";

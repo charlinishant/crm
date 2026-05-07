@@ -906,7 +906,7 @@ const MasterLayout = ({ children }) => {
                 <span>Products & Services</span>
               </Link>
               <ul className='sidebar-submenu'>
-                <li>
+                {/* <li>
                   <NavLink
                     to='/line-chart'
                     className={(navData) =>
@@ -916,7 +916,7 @@ const MasterLayout = ({ children }) => {
                     <i className='ri-circle-fill circle-icon text-danger-main w-auto' />{" "}
                     Product Management
                   </NavLink>
-                </li>
+                </li> */}
                 <li>
                   <NavLink
                     to='/column-chart'

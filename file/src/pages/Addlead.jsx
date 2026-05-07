@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
 import "./addLead.css";
@@ -44,8 +44,16 @@ const AddSection = ({ label, renderFields, defaultItem }) => {
   );
 };
 
+const INDIA_STATES = [
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand",
+  "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
+  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
+  "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"
+];
+
 const ADDLEAD = () => {
   const [activeTab, setActiveTab] = useState("basic");
+  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   
   const navigate = useNavigate()
 
@@ -68,7 +76,7 @@ const ADDLEAD = () => {
         street:"",
         city:"",
         state:"",
-        country:"",
+        country:"India",
         zip:""
       }],
       companyName:"",
@@ -98,10 +106,10 @@ const ADDLEAD = () => {
       basiComment:"",
       purpose:"",
       nri:false,
-      budejetMin:0,
-      budejetMax:0,
-      professionMin:"",
-      professionMax:"",
+      budgetMin:0,
+      budgetMax:0,
+      possessionMin:"",
+      possessionMax:"",
       area:"",
       fundingSouurce:"",
       propertyType:"",
@@ -113,10 +121,80 @@ const ADDLEAD = () => {
       locationPreferences:"",
       requirementComment:"",
   });
+  const [projects, setProjects] = useState([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
+  const [users, setUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(true);
+
+  const getUserName = (user) =>
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+    user?.username ||
+    user?.email ||
+    `User #${user?.id}`;
+
+  useEffect(() => {
+    const fetchProjects = async () => {
+      try {
+        setLoadingProjects(true);
+        const response = await fetch(`${API_URL}/projects/list`);
+
+        if (!response.ok) {
+          throw new Error("Unable to load projects");
+        }
+
+        const data = await response.json();
+        setProjects(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error(err);
+        setProjects([]);
+      } finally {
+        setLoadingProjects(false);
+      }
+    };
+
+    fetchProjects();
+  }, [API_URL]);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        setLoadingUsers(true);
+        const response = await fetch(`${API_URL}/users`);
+
+        if (!response.ok) {
+          throw new Error("Unable to load users");
+        }
+
+        const data = await response.json();
+        const userList = Array.isArray(data) ? data : data?.data || data?.users || [];
+        setUsers(Array.isArray(userList) ? userList : []);
+      } catch (err) {
+        console.error(err);
+        setUsers([]);
+      } finally {
+        setLoadingUsers(false);
+      }
+    };
+
+    fetchUsers();
+  }, [API_URL]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
+  };
+
+  const handleLeadAddressChange = (field, value) => {
+    setFormData((prev) => {
+      const leadAddress = prev.leadAddress.length ? [...prev.leadAddress] : [{}];
+      leadAddress[0] = {
+        ...leadAddress[0],
+        [field]: value,
+        ...(field === "country" ? { state: "" } : {}),
+      };
+
+      return { ...prev, leadAddress };
+    });
   };
 
   // EMAIL
@@ -159,7 +237,16 @@ const ADDLEAD = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log(formData);
+    const payload = {
+      ...formData,
+      budgetMin: Number(formData.budgetMin) || 0,
+      budgetMax: Number(formData.budgetMax) || 0,
+      seats: Number(formData.seats) || 0,
+      tenure: Number(formData.tenure) || 0,
+      age: Number(formData.age) || 0,
+    };
+
+    console.log(payload);
 
     await fetch(`${process.env.REACT_APP_API_URL}/leads`,
       {
@@ -167,7 +254,7 @@ const ADDLEAD = () => {
         headers:{
           "Content-Type": "application/json"
         },
-        body:JSON.stringify(formData),
+        body:JSON.stringify(payload),
       }
     ).then(res=>{
         if(res.status === 201){
@@ -310,20 +397,42 @@ const ADDLEAD = () => {
                 {/* INTERESTED PROJECTS */}
                 <div className="lead-group lead-full">
                   <label>Interested Projects</label>
-                  <input name="interestedProjects" placeholder="Select projects" onChange={handleChange} />
+                  <select
+                    name="interestedProjects"
+                    value={formData.interestedProjects}
+                    onChange={handleChange}
+                    disabled={loadingProjects}
+                  >
+                    <option value="">
+                      {loadingProjects ? "Loading projects..." : "Select project"}
+                    </option>
+                    {projects.map((project) => (
+                      <option key={project.id} value={project.name}>
+                        {project.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* TEAMS */}
                 <div className="lead-group lead-full">
                   <label>TEAMS</label>
-                  <div className="lead-search-box">
-                    <select>
-                      <option>Select Team</option>
-                    </select>
-                    <input type="text" placeholder="Search team..." />
-                    <span className="lead-search-icon">🔍</span>
-                  </div>
-                  <p className="lead-hint">Please enter 3 more characters</p>
+                  <select
+                    name="team"
+                    value={formData.team}
+                    onChange={handleChange}
+                    disabled={loadingUsers}
+                  >
+                    <option value="">
+                      {loadingUsers ? "Loading users..." : "Select user"}
+                    </option>
+                    {users.map((user) => (
+                      <option key={user.id || user.email} value={getUserName(user)}>
+                        {getUserName(user)}
+                        {user.role ? ` (${user.role})` : ""}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* CHANNEL PARTNER */}
@@ -358,8 +467,23 @@ const ADDLEAD = () => {
                 <div className="lead-group lead-full">
                   <label>COUNTRY & STATE</label>
                   <div className="lead-grid">
-                    <select><option>Select country</option></select>
-                    <select><option>Select state</option></select>
+                    <select
+                      value={formData.leadAddress[0]?.country || "India"}
+                      onChange={(e) => handleLeadAddressChange("country", e.target.value)}
+                    >
+                      <option value="India">India</option>
+                    </select>
+                    <select
+                      value={formData.leadAddress[0]?.state || ""}
+                      onChange={(e) => handleLeadAddressChange("state", e.target.value)}
+                    >
+                      <option value="">Select state</option>
+                      {INDIA_STATES.map((state) => (
+                        <option key={state} value={state}>
+                          {state}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -687,8 +811,8 @@ const ADDLEAD = () => {
     <div className="lead-group lead-full">
       <label>BUDGET</label>
       <div className="section-grid-2">
-        <input type="text" name="minBudget" placeholder="Min budget" onChange={handleChange} />
-        <input type="text" name="maxBudget" placeholder="Max budget" onChange={handleChange} />
+        <input type="number" name="budgetMin" placeholder="Min budget" onChange={handleChange} />
+        <input type="number" name="budgetMax" placeholder="Max budget" onChange={handleChange} />
       </div>
     </div>
 
@@ -696,7 +820,7 @@ const ADDLEAD = () => {
     <div className="lead-group lead-full">
       <label>POSSESSION</label>
       <div className="section-grid-2">
-        <select name="minPossession" onChange={handleChange}>
+        <select name="possessionMin" onChange={handleChange}>
           <option value="">Min possession</option>
           <option>Ready to Move</option>
           <option>Within 6 Months</option>
@@ -704,7 +828,7 @@ const ADDLEAD = () => {
           <option>Within 2 Years</option>
           <option>Within 3 Years</option>
         </select>
-        <select name="maxPossession" onChange={handleChange}>
+        <select name="possessionMax" onChange={handleChange}>
           <option value="">Max possession</option>
           <option>Ready to Move</option>
           <option>Within 6 Months</option>

@@ -1,9 +1,88 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Icon } from "@iconify/react/dist/iconify.js";
 import { Link } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
 
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
+const formatDate = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
+const normalizeTask = (task, index) => ({
+  id: task.id || task._id || index,
+  title: task.title || task.name || "Untitled Task",
+  subtitle: task.subtitle || task.description || task.type || "",
+  assignedTo: task.assignedTo || task.assignee || task.assigned_to || "-",
+  assignedBy: task.assignedBy || task.createdBy || task.created_by || "-",
+  status: task.status || "Archived",
+  priority: task.priority || "Medium",
+  createdOn: formatDate(task.createdOn || task.createdAt || task.created_on),
+  dueOn: formatDate(task.dueOn || task.dueDate || task.due_on),
+});
+
 const Archivedtask = () => {
+  const [tasks, setTasks] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchTasks = async () => {
+      setIsLoading(true);
+
+      try {
+        const response = await fetch(`${API_URL}/tasks?status=Archived`);
+
+        if (!response.ok) {
+          throw new Error(`Unable to fetch archived tasks: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const taskList = Array.isArray(data) ? data : data.tasks || data.data || [];
+        const savedTasks = JSON.parse(window.localStorage.getItem("savedTasks") || "[]");
+
+        if (isMounted) {
+          setTasks(
+            [...savedTasks, ...taskList]
+              .map(normalizeTask)
+              .filter((task) => task.status === "Archived")
+          );
+        }
+      } catch (error) {
+        if (isMounted) {
+          const savedTasks = JSON.parse(window.localStorage.getItem("savedTasks") || "[]");
+          setTasks(
+            savedTasks
+              .map(normalizeTask)
+              .filter((task) => task.status === "Archived")
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchTasks();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <MasterLayout>
       <div className="archived-task-page">
@@ -15,7 +94,9 @@ const Archivedtask = () => {
               <option value="Open">Open</option>
               <option value="Completed">Completed</option>
             </select>
-            <p className="archived-task-total">TOTAL TASKS : 0</p>
+            <p className="archived-task-total">
+              {isLoading ? "LOADING TASKS..." : `TOTAL TASKS : ${tasks.length}`}
+            </p>
           </div>
 
           <div className="archived-task-actions">
@@ -45,10 +126,35 @@ const Archivedtask = () => {
                 <th>ACTIONS</th>
               </tr>
             </thead>
+            <tbody>
+              {tasks.map((task) => (
+                <tr key={task.id}>
+                  <td>
+                    <div className="archived-task-title">{task.title}</div>
+                    {task.subtitle && <div className="archived-task-subtitle">{task.subtitle}</div>}
+                  </td>
+                  <td>
+                    <div className="archived-task-title">{task.assignedTo}</div>
+                    <div className="archived-task-subtitle">by {task.assignedBy}</div>
+                  </td>
+                  <td>{task.status}</td>
+                  <td>{task.priority}</td>
+                  <td>{task.createdOn}</td>
+                  <td>{task.dueOn}</td>
+                  <td className="archived-task-action-cell">
+                    <button type="button" className="archived-task-menu" aria-label="Task actions">
+                      <Icon icon="ph:dots-three-vertical-bold" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
           </table>
-          <div className="archived-task-empty">
-            We couldn't find anything relevant for you.
-          </div>
+          {tasks.length === 0 && (
+            <div className="archived-task-empty">
+              We couldn't find anything relevant for you.
+            </div>
+          )}
         </div>
       </div>
 
@@ -179,6 +285,44 @@ const Archivedtask = () => {
           justify-content: center;
           margin: 19px 28px 0 24px;
           min-width: 760px;
+        }
+
+        .archived-task-table td {
+          border-bottom: 1px solid #e2e8f0;
+          font-size: 18px;
+          height: 62px;
+          padding: 6px 8px;
+          vertical-align: middle;
+        }
+
+        .archived-task-title {
+          color: #3f4650;
+          font-size: 18px;
+          line-height: 1.25;
+        }
+
+        .archived-task-subtitle {
+          color: #818b98;
+          font-size: 16px;
+          line-height: 1.45;
+          margin-top: 3px;
+        }
+
+        .archived-task-action-cell {
+          text-align: right;
+        }
+
+        .archived-task-menu {
+          align-items: center;
+          background: transparent;
+          border: 0;
+          color: #000;
+          display: inline-flex;
+          font-size: 27px;
+          height: 32px;
+          justify-content: center;
+          padding: 0;
+          width: 32px;
         }
 
         @media (max-width: 767px) {

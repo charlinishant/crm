@@ -4,6 +4,7 @@ import {
   Bell,
   CalendarDays,
   ChevronDown,
+  MoreVertical,
   Home,
   LayoutDashboard,
   LogOut,
@@ -97,6 +98,8 @@ const getLeadEmail = (lead) => {
 
 const getActionPhone = (lead) => getLeadPhone(lead).replace(/[^\d+]/g, "");
 
+const getLeadId = (lead) => lead?.id || lead?._id || lead?.lead_id || "";
+
 const getCreatedLabel = (lead) => {
   const rawDate = lead?.createdAt || lead?.conductSiteDate || lead?.birthday;
   if (!rawDate) return "-";
@@ -158,13 +161,16 @@ const getPercent = (value, total) => {
 const SalesUserPanel = () => {
   const navigate = useNavigate();
   const initialScreen =
-    new URLSearchParams(window.location.search).get("screen") || "home";
+    window.location.pathname.endsWith("/leads")
+      ? "leads"
+      : new URLSearchParams(window.location.search).get("screen") || "home";
   const [panel, setPanel] = useState(fallbackPanel);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeScreen, setActiveScreen] = useState(initialScreen);
   const [activeLeadStage, setActiveLeadStage] = useState("all");
   const [selectedLead, setSelectedLead] = useState(null);
+  const [openActionLeadId, setOpenActionLeadId] = useState(null);
 
   useEffect(() => {
     const loadPanel = async () => {
@@ -328,6 +334,31 @@ const SalesUserPanel = () => {
     if (!teamValue) return;
 
     patchSelectedLead({ team: teamValue });
+  };
+
+  const openLeadPreview = (lead, openBooking = false) => {
+    const leadId = getLeadId(lead);
+    setOpenActionLeadId(null);
+    window.sessionStorage.setItem("selectedLeadPreview", JSON.stringify(lead));
+    navigate(
+      leadId
+        ? `/preview?leadId=${leadId}${openBooking ? "&openBooking=1" : ""}`
+        : `/preview${openBooking ? "?openBooking=1" : ""}`,
+      { state: { lead, openBooking } }
+    );
+  };
+
+  const openLeadDetails = (lead) => {
+    const leadId = getLeadId(lead);
+    setOpenActionLeadId(null);
+    window.sessionStorage.setItem("selectedLeadDetails", JSON.stringify(lead));
+    navigate(leadId ? `/details?leadId=${leadId}` : "/details", { state: { lead } });
+  };
+
+  const toggleLeadActionMenu = (event, lead) => {
+    event.stopPropagation();
+    const leadId = getLeadId(lead);
+    setOpenActionLeadId((current) => (current === leadId ? null : leadId));
   };
 
   const logout = () => {
@@ -502,8 +533,11 @@ const SalesUserPanel = () => {
                 {filteredLeads.length === 0 && (
                   <div className="sales-empty">No leads available for this sales user yet.</div>
                 )}
-                {filteredLeads.map((lead) => (
-                  <button className="sales-row" key={lead.id} type="button" onClick={() => setSelectedLead(lead)}>
+                {filteredLeads.map((lead) => {
+                  const leadId = getLeadId(lead);
+
+                  return (
+                  <div className="sales-row" key={leadId || lead.email} onClick={() => setSelectedLead(lead)}>
                     <span className="sales-lead-name">
                       <span className="sales-avatar small">{initials(getLeadName(lead))}</span>
                       <span>
@@ -518,9 +552,33 @@ const SalesUserPanel = () => {
                     <span>
                       <mark>{statusLabel[lead.status] || lead.status || "New"}</mark>
                     </span>
-                    <span className="sales-open">Open</span>
-                  </button>
-                ))}
+                    <span className="sales-row-actions" onClick={(event) => event.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="sales-row-menu-btn"
+                        title="Open lead actions"
+                        aria-label="Open lead actions"
+                        onClick={(event) => toggleLeadActionMenu(event, lead)}
+                      >
+                        <MoreVertical size={16} />
+                      </button>
+                      {openActionLeadId === leadId && (
+                        <div className="sales-row-menu">
+                          <button type="button" onClick={() => openLeadPreview(lead)}>
+                            Preview
+                          </button>
+                          <button type="button" onClick={() => openLeadDetails(lead)}>
+                            Details
+                          </button>
+                          <button type="button" onClick={() => openLeadPreview(lead, true)}>
+                            Booking
+                          </button>
+                        </div>
+                      )}
+                    </span>
+                  </div>
+                  );
+                })}
               </div>
             </section>
 

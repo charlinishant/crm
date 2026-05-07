@@ -1,8 +1,58 @@
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
+const getUserName = (user) =>
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+    user?.username ||
+    user?.email ||
+    (user?.id ? `User #${user.id}` : "");
 
 const BorderedTables = () => {
     const fileInputRef = useRef(null)
     const [attachments, setAttachments] = useState([])
+    const [users, setUsers] = useState([])
+    const [isLoadingUsers, setIsLoadingUsers] = useState(true)
+    const [message, setMessage] = useState("")
+    const [formData, setFormData] = useState({
+        title: "",
+        description: "",
+        dueDate: "",
+        dueTime: "2:00 PM",
+        assignee: "",
+        remark: "",
+        priority: "Medium",
+    })
+
+    useEffect(() => {
+        const fetchUsers = async () => {
+            try {
+                setIsLoadingUsers(true)
+                const response = await fetch(`${API_URL}/users?limit=100`)
+                if (!response.ok) throw new Error("Unable to load users")
+
+                const result = await response.json()
+                const userList = Array.isArray(result) ? result : result?.data || result?.users || []
+                setUsers(userList)
+                setFormData((current) => ({
+                    ...current,
+                    assignee: current.assignee || (userList[0] ? getUserName(userList[0]) : ""),
+                }))
+            } catch (error) {
+                console.error("Unable to load users:", error)
+                setUsers([])
+            } finally {
+                setIsLoadingUsers(false)
+            }
+        }
+
+        fetchUsers()
+    }, [])
+
+    const handleChange = (event) => {
+        const { name, value } = event.target
+        setFormData((current) => ({ ...current, [name]: value }))
+    }
 
     const handleUploadClick = () => {
         fileInputRef.current?.click()
@@ -22,6 +72,49 @@ const BorderedTables = () => {
         }
     }
 
+    const handleSave = () => {
+        if (!formData.title.trim() || !formData.assignee) {
+            setMessage("Please add title and assignee.")
+            return
+        }
+
+        const savedTasks = JSON.parse(window.localStorage.getItem("savedTasks") || "[]")
+        const authUser = JSON.parse(window.localStorage.getItem("authUser") || "null")
+        const assignedBy = getUserName(authUser) || "Admin"
+
+        const newTask = {
+            id: Date.now(),
+            title: formData.title.trim(),
+            description: formData.description.trim(),
+            subtitle: formData.remark.trim(),
+            assignedTo: formData.assignee,
+            assignedBy,
+            status: "Open",
+            priority: formData.priority,
+            createdOn: new Date().toISOString(),
+            dueOn: formData.dueDate,
+            dueTime: formData.dueTime,
+            attachments: attachments.map((file) => file.name),
+        }
+
+        window.localStorage.setItem("savedTasks", JSON.stringify([newTask, ...savedTasks]))
+        setMessage(`Task assigned to ${formData.assignee}.`)
+        setAttachments([])
+        setFormData({
+            title: "",
+            description: "",
+            dueDate: "",
+            dueTime: "2:00 PM",
+            assignee: users[0] ? getUserName(users[0]) : "",
+            remark: "",
+            priority: "Medium",
+        })
+
+        if (fileInputRef.current) {
+            fileInputRef.current.value = ""
+        }
+    }
+
     return (
         <div className="col-12">
             <div className="new-task-panel">
@@ -34,19 +127,41 @@ const BorderedTables = () => {
                         <label htmlFor="taskTitle">
                             TITLE <span>*</span>
                         </label>
-                        <input id="taskTitle" type="text" />
+                        <input
+                            id="taskTitle"
+                            name="title"
+                            type="text"
+                            value={formData.title}
+                            onChange={handleChange}
+                        />
                     </div>
 
                     <div className="new-task-field">
                         <label htmlFor="taskDescription">DESCRIPTION</label>
-                        <textarea id="taskDescription" rows="5" />
+                        <textarea
+                            id="taskDescription"
+                            name="description"
+                            rows="5"
+                            value={formData.description}
+                            onChange={handleChange}
+                        />
                     </div>
 
                     <div className="new-task-field">
                         <label>DUE ON</label>
                         <div className="new-task-date-row">
-                            <input type="text" placeholder="Due Date" />
-                            <input type="text" defaultValue="2:00 PM" />
+                            <input
+                                type="date"
+                                name="dueDate"
+                                value={formData.dueDate}
+                                onChange={handleChange}
+                            />
+                            <input
+                                type="text"
+                                name="dueTime"
+                                value={formData.dueTime}
+                                onChange={handleChange}
+                            />
                         </div>
                     </div>
 
@@ -54,28 +169,49 @@ const BorderedTables = () => {
                         <label htmlFor="taskAssignee">
                             ASSIGNEE <span>*</span>
                         </label>
-                        <select id="taskAssignee" defaultValue="tejas-sales">
-                            <option value="tejas-sales">
-                                Tejas Sales (Manager) (Selldo Sales Team)
+                        <select
+                            id="taskAssignee"
+                            name="assignee"
+                            value={formData.assignee}
+                            onChange={handleChange}
+                            disabled={isLoadingUsers}
+                        >
+                            <option value="">
+                                {isLoadingUsers ? "Loading users..." : "Select user"}
                             </option>
-                            <option value="sales-team">Sales Team</option>
-                            <option value="support-team">Support Team</option>
+                            {users.map((user) => (
+                                <option key={user.id || user.email} value={getUserName(user)}>
+                                    {getUserName(user)}
+                                    {user.role ? ` (${user.role})` : ""}
+                                </option>
+                            ))}
                         </select>
                     </div>
 
                     <div className="new-task-field">
                         <label htmlFor="taskRemark">REMARK</label>
-                        <textarea id="taskRemark" rows="5" />
+                        <textarea
+                            id="taskRemark"
+                            name="remark"
+                            rows="5"
+                            value={formData.remark}
+                            onChange={handleChange}
+                        />
                     </div>
 
                     <div className="new-task-field">
                         <label htmlFor="taskPriority">
                             PRIORITY <span>*</span>
                         </label>
-                        <select id="taskPriority" defaultValue="medium">
-                            <option value="medium">Medium</option>
-                            <option value="high">High</option>
-                            <option value="low">Low</option>
+                        <select
+                            id="taskPriority"
+                            name="priority"
+                            value={formData.priority}
+                            onChange={handleChange}
+                        >
+                            <option value="Medium">Medium</option>
+                            <option value="High">High</option>
+                            <option value="Low">Low</option>
                         </select>
                     </div>
 
@@ -114,7 +250,8 @@ const BorderedTables = () => {
                 </form>
 
                 <div className="new-task-footer">
-                    <button type="button" className="new-task-save">
+                    {message && <span className="new-task-message">{message}</span>}
+                    <button type="button" className="new-task-save" onClick={handleSave}>
                         Save
                     </button>
                 </div>
@@ -282,7 +419,13 @@ const BorderedTables = () => {
                     display: flex;
                     height: 61px;
                     justify-content: flex-end;
+                    gap: 14px;
                     padding: 0 18px;
+                }
+
+                .new-task-message {
+                    color: #fff;
+                    font-size: 14px;
                 }
 
                 .new-task-save {
