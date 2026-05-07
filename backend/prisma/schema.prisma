@@ -193,6 +193,8 @@ enum Status{
 }
 model Lead{
   id Int @id @default(autoincrement())
+
+  // basic profile
   salutation String?
   firstName String?
   lastName  String?
@@ -214,6 +216,8 @@ model Lead{
   tenure Float
   gender Gender?
   occupations String?
+
+  // personal details
   age Int?
   birthday DateTime?
   maritalStatus Boolean?
@@ -225,14 +229,17 @@ model Lead{
   companyTitle Json?
   income Json?
   basiComment String @db.Text
+
+  // requirement
   purpose Json?
   nri Boolean @default(false)  
-  budejetMin Int? @default(0)
-  budejetMax Int? @default(0)
-  professionMin String?
-  professionMax String?
+  budgetMin Int? @default(0)
+  budgetMax Int? @default(0)
+  possessionMin String?
+  possessionMax String?
   area String?
-  fundingSouurce String?
+  fundingSource String?
+  transactionType String? @default("")
   propertyType String?
   configration String?
   budget String?
@@ -241,6 +248,8 @@ model Lead{
   facing String?
   locationPreferences String?
   requirementComment String @db.Text
+
+
   bookings Booking[]
 
 }
