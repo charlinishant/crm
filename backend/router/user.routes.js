@@ -16,7 +16,7 @@ const authenticate = require("../middleware/auth.middleware")
 const router = Router()
 
 router.post("/", createUser)
-router.get("/getallusers", getUser)
+router.get("/", getUser)
 router.get("/access-panel", authenticate, getAccessPanel)
 
 
