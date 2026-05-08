@@ -123,6 +123,7 @@ import AddFloorplan from "./pages/addfloorplan";
 import Units from "./pages/Units";
 import AddUnits from "./pages/addunits";
 import SalesUserPanel from "./user/SalesUserPanel";
+import UserPreview from "./user/userPreview";
 
 
 
@@ -134,6 +135,7 @@ function App() {
          <Route exact path='/' element={<SignInPage />} />
         <Route exact path='/add-lead' element={<ADDLEAD />} />
         <Route exact path='/preview' element={<Preview />} />
+        <Route exact path='/user-preview' element={<UserPreview />} />
         <Route exact path='/details' element={<Details />} />
         <Route exact path='/index-11' element={<HomePageEleven />} />
         <Route exact path='/user/sales' element={<SalesUserPanel />} />
