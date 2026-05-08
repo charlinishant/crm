@@ -67,7 +67,7 @@ const ADDLEAD = () => {
       timeZone:"",
       tags:"",
       interestedProjects:"",
-      team:"",
+      teamId:"",
       assignee:"",
       channelPartner:"",
       conductSiteVisit:"",
@@ -420,7 +420,7 @@ const ADDLEAD = () => {
                   <label>TEAMS</label>
                   <select
                     name="team"
-                    value={formData.team}
+                    value={formData.teamId}
                     onChange={handleChange}
                     disabled={loadingUsers}
                   >
@@ -428,7 +428,7 @@ const ADDLEAD = () => {
                       {loadingUsers ? "Loading users..." : "Select user"}
                     </option>
                     {users.map((user) => (
-                      <option key={user.id || user.email} value={getUserName(user)}>
+                      <option key={user.id || user.email} value={user.id}>
                         {getUserName(user)}
                         {user.role ? ` (${user.role})` : ""}
                       </option>
