@@ -154,6 +154,8 @@ model User{
   autoRoster Boolean? @default(false)
   teamId Int?
   team Team? @relation("Team", fields: [teamId], references: [id])
+  
+  leads Lead[]
   // Other settings
   pushNotification Boolean? @default(false)
   gpsTracking Boolean? @default(false)
@@ -204,16 +206,18 @@ model Lead{
   timeZone String?
   tags String?
   interestedProjects String?
-  team String?
+  teamId Int?
+  team User? @relation(fields: [teamId], references: [id])
   channelPartner String?
   conductSiteVisit String?
   conductSiteDate DateTime?
   leadAddress LeadAddress[]
   companyName String?
-  type Type?
+  type String?
   carpetArea String?
   seats Int
   tenure Float
+  leadReassigned Boolean? @default(false)
   gender Gender?
   occupations String?
 
@@ -228,7 +232,6 @@ model Lead{
   education Json?
   companyTitle Json?
   income Json?
-  basiComment String @db.Text
 
   // requirement
   purpose Json?
@@ -247,7 +250,6 @@ model Lead{
   furnishing String?
   facing String?
   locationPreferences String?
-  requirementComment String @db.Text
 
 
   bookings Booking[]

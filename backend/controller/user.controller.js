@@ -174,6 +174,9 @@ exports.getAccessPanel = async (req, res)=>{
         }
 
         const leads = await prisma.lead.findMany({
+            where:{
+                teamId:user.id
+            },
             take:25,
             orderBy:{id:"desc"},
             include:{bookings:true}

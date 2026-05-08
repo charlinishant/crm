@@ -5,7 +5,7 @@ const { create } = require("domain")
 
 exports.createLead = async (req, res) => {
   try {
-    const {
+    let {
       salutation,
       firstName,
       lastName,
@@ -37,7 +37,6 @@ exports.createLead = async (req, res) => {
       education,
       companyTitle,
       income,
-      basiComment,
       purpose,
       nri,
       budgetMin,
@@ -55,6 +54,8 @@ exports.createLead = async (req, res) => {
       locationPreferences,
       requirementComment,
     } = req.body
+
+    gender = gender.toUpperCase()
     const lead = await prisma.lead.create({
       data: {
         salutation,
@@ -107,7 +108,6 @@ exports.createLead = async (req, res) => {
         education,
         companyTitle,
         income,
-        basiComment,
         purpose,
         nri,
         budgetMin,
@@ -123,7 +123,6 @@ exports.createLead = async (req, res) => {
         furnishing,
         facing,
         locationPreferences,
-        requirementComment,
       },
       include: {
         leadAddress: true,
@@ -139,11 +138,21 @@ exports.createLead = async (req, res) => {
 
 exports.getLeads = async (req, res) => {
   try {
-    const Leads = await prisma.lead.findMany()
-    res.status(200).json(Leads)
+    const userId = req.query.userId || null
+    if (userId) {
+      const leads = await prisma.lead.findMany({
+        where: {
+          teamId: parseInt(userId),
+        },
+      })
+      res.status(200).json(leads)
+    } else {
+      const Leads = await prisma.lead.findMany()
+      res.status(200).json(Leads)
+    }
   } catch (err) {
-    console.log(err)
-    res.status(500).json("something went wrong")
+  console.log(err)
+  res.status(500).json("something went wrong")
   }
 }
 
@@ -243,7 +252,8 @@ exports.importExcel = async (req, res) => {
         team: row["Team"] || null,
         channelPartner: row["Channel partner"] || null,
         conductSiteVisit: row["Conduct site visit"] || null,
-        conductSiteDate: row["Conduct site date"] && row["Conduct site date"] !== ""
+        conductSiteDate:
+          row["Conduct site date"] && row["Conduct site date"] !== ""
             ? new Date(row["Conduct site date"])
             : null,
         leadAddress: {
@@ -266,7 +276,10 @@ exports.importExcel = async (req, res) => {
           row["Birthday"] && row["Birthday"] !== ""
             ? new Date(row["Birthday"])
             : null,
-        maritalStatus: row["Marital status"] && row["Marital status"] == "Married"? true : false,
+        maritalStatus:
+          row["Marital status"] && row["Marital status"] == "Married"
+            ? true
+            : false,
         anniversary:
           row["Anniversary"] && row["Anniversary"] !== ""
             ? new Date(row["Anniversary"])
@@ -286,7 +299,7 @@ exports.importExcel = async (req, res) => {
         income: row["Income"] || null,
         basiComment: row["Basi comment"] || null,
         purpose: row["Purpose"] || null,
-        nri: row["NRI"] == "Yes"|| "y" ? true : false,
+        nri: row["NRI"] == "Yes" || "y" ? true : false,
         budgetMin: parseInt(row["Budget min"]) || null,
         budgetMax: parseInt(row["Budget max"]) || null,
         possessionMin: row["Possession min"] || null,
@@ -305,23 +318,24 @@ exports.importExcel = async (req, res) => {
     })
 
     const result = []
-    for(const row of mapData){
-       const lead = await prisma.lead .create({data:{
-        ...row,
-        leadAddress:{
-          create:row.leadAddress
+    for (const row of mapData) {
+      const lead = await prisma.lead.create({
+        data: {
+          ...row,
+          leadAddress: {
+            create: row.leadAddress,
+          },
+          personalAddress: {
+            create: row.personalAddress,
+          },
         },
-        personalAddress:{
-          create:row.personalAddress
-        }
-       }}
-      )
-      result.push(lead) 
+      })
+      result.push(lead)
     }
 
     // const leads = await prisma.lead.createMany({ data: mapData })
-    console.log(result);
-    
+    console.log(result)
+
     res.status(201).json("lead inserted successfully")
   } catch (error) {
     console.log(error)

@@ -342,8 +342,8 @@ const SalesUserPanel = () => {
     window.sessionStorage.setItem("selectedLeadPreview", JSON.stringify(lead));
     navigate(
       leadId
-        ? `/preview?leadId=${leadId}${openBooking ? "&openBooking=1" : ""}`
-        : `/preview${openBooking ? "?openBooking=1" : ""}`,
+        ? `/user-preview?leadId=${leadId}${openBooking ? "&openBooking=1" : ""}`
+        : `/user-preview${openBooking ? "?openBooking=1" : ""}`,
       { state: { lead, openBooking } }
     );
   };
