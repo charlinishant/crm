@@ -68,7 +68,6 @@ const ADDLEAD = () => {
       tags:"",
       interestedProjects:"",
       teamId:"",
-      assignee:"",
       channelPartner:"",
       conductSiteVisit:"",
       conductSiteDate:null,
@@ -419,7 +418,7 @@ const ADDLEAD = () => {
                 <div className="lead-group lead-full">
                   <label>TEAMS</label>
                   <select
-                    name="team"
+                    name="teamId"
                     value={formData.teamId}
                     onChange={handleChange}
                     disabled={loadingUsers}
@@ -429,27 +428,6 @@ const ADDLEAD = () => {
                     </option>
                     {users.map((user) => (
                       <option key={user.id || user.email} value={user.id}>
-                        {getUserName(user)}
-                        {user.role ? ` (${user.role})` : ""}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* ASSIGNEE */}
-                <div className="lead-group lead-full">
-                  <label>ASSIGNEE</label>
-                  <select
-                    name="assignee"
-                    value={formData.assignee}
-                    onChange={handleChange}
-                    disabled={loadingUsers}
-                  >
-                    <option value="">
-                      {loadingUsers ? "Loading users..." : "Select assignee"}
-                    </option>
-                    {users.map((user) => (
-                      <option key={user.id || user.email} value={getUserName(user)}>
                         {getUserName(user)}
                         {user.role ? ` (${user.role})` : ""}
                       </option>

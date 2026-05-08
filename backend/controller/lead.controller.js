@@ -56,6 +56,7 @@ exports.createLead = async (req, res) => {
     } = req.body
 
     gender = gender.toUpperCase()
+    teamId = teamId!= null ? parseInt(teamId):null
     const lead = await prisma.lead.create({
       data: {
         salutation,
