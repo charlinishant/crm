@@ -372,6 +372,7 @@ const SalesUserPanel = () => {
     { key: "leads", label: "My Leads", icon: Users, count: panel.stats.assignedLeads },
     { key: "followups", label: "Follow-ups", icon: CalendarDays, count: panel.stats.followupsDue },
     { key: "bookings", label: "Bookings", icon: LayoutDashboard, count: panel.stats.bookings },
+    { key: "tasks", label: "Tasks", icon: LayoutDashboard, count: panel.stats.tasks },
   ];
 
   return (
