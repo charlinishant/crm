@@ -16,7 +16,7 @@
 }
 
 /* Card Box */
-.card {
+.smart-import-card {
   background: #ffffff;
   padding: 25px;
   border-radius: 12px;
@@ -78,6 +78,11 @@ button {
   background: #1e40af;
 }
 
+.upload-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 /* Download CSV Button */
 .download-btn {
   width: 25%;
@@ -92,6 +97,22 @@ button {
 
 .download-btn:hover {
   background: #1e40af;
+}
+
+.selected-file {
+  color: #334155;
+  font-size: 14px;
+  margin: -6px 0 16px;
+}
+
+.import-message {
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  color: #1e3a8a;
+  background: #eff6ff;
+  font-size: 14px;
+  margin: 0 0 18px;
+  padding: 10px 12px;
 }
 
 /* Magic Fields Section */

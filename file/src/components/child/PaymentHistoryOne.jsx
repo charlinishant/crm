@@ -1,26 +1,54 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaEllipsisV } from "react-icons/fa";
 
 const PaymentHistoryOne = () => {
   const [leadData, setLeadData] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [openMenu, setOpenMenu] = useState(null);
   const [menuPosition, setMenuPosition] = useState(null);
   const navigate = useNavigate();
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
+  const getUserName = (user) =>
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+    user?.username ||
+    user?.email ||
+    (user?.id ? `User #${user.id}` : "");
+
+  const fetchLeadData = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_URL}/leads/`);
+      const result = await response.json();
+      setLeadData(Array.isArray(result) ? result : result?.data || []);
+    } catch (error) {
+      console.error("Error fetching leads:", error);
+    }
+  }, [API_URL]);
+
   useEffect(() => {
-    const fetchLeadData = async () => {
+    fetchLeadData();
+  }, [fetchLeadData]);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
       try {
-        const response = await fetch(`${API_URL}/leads/`);
+        setIsLoadingUsers(true);
+        const response = await fetch(`${API_URL}/users`);
+        if (!response.ok) throw new Error("Unable to load users");
         const result = await response.json();
-        setLeadData(Array.isArray(result) ? result : result?.data || []);
+        const userList = Array.isArray(result) ? result : result?.data || result?.users || [];
+        setUsers(userList);
       } catch (error) {
-        console.error("Error fetching leads:", error);
+        console.error("Error fetching users:", error);
+        setUsers([]);
+      } finally {
+        setIsLoadingUsers(false);
       }
     };
 
-    fetchLeadData();
+    fetchUsers();
   }, [API_URL]);
 
   const getLeadName = (lead) => {
@@ -34,7 +62,7 @@ const PaymentHistoryOne = () => {
   };
 
   const getLeadOwner = (lead) => {
-    return lead.owner || lead.sales || lead.team || "Tejas Sales";
+    return lead.owner || lead.sales || getUserName(lead.team) || "Unassigned";
   };
 
   const getLastSource = (lead) => {
@@ -310,6 +338,39 @@ const PaymentHistoryOne = () => {
     });
   };
 
+  const handleTeamChange = async (lead, userId) => {
+    const leadId = lead.id || lead._id || lead.lead_id;
+    const previousData = leadData;
+    const nextTeam = users.find((user) => String(user.id) === String(userId)) || null;
+    const nextTeamId = userId ? Number(userId) : null;
+
+    setLeadData((current) =>
+      current.map((item) =>
+        (item.id || item._id || item.lead_id) === leadId
+          ? { ...item, teamId: nextTeamId, team: nextTeam }
+          : item
+      )
+    );
+
+    try {
+      const response = await fetch(`${API_URL}/leads/${leadId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ teamId: nextTeamId }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || "Unable to assign lead");
+      await fetchLeadData();
+    } catch (error) {
+      console.error("Unable to assign lead:", error);
+      setLeadData(previousData);
+      alert(error.message || "Unable to assign lead");
+    }
+  };
+
   return (
     <>
       <style>{`
@@ -395,6 +456,16 @@ const PaymentHistoryOne = () => {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+        }
+
+        .lead-team-select {
+          min-width: 180px;
+          height: 36px;
+          border: 1px solid #cbd5e1;
+          border-radius: 6px;
+          background: #ffffff;
+          color: #334155;
+          padding: 0 10px;
         }
 
         .lead-action-cell {
@@ -496,6 +567,7 @@ const PaymentHistoryOne = () => {
               <th>Stage</th>
               <th>Received On</th>
               <th>Requirement</th>
+              <th>Team</th>
               <th>Tags</th>
               <th>Actions</th>
             </tr>
@@ -504,7 +576,7 @@ const PaymentHistoryOne = () => {
           <tbody>
             {leadData.length === 0 ? (
               <tr>
-                <td colSpan="8" className="empty-state">
+                <td colSpan="9" className="empty-state">
                   No Data Available
                 </td>
               </tr>
@@ -520,6 +592,23 @@ const PaymentHistoryOne = () => {
                   <td>{getStage(lead)}</td>
                   <td>{renderReceivedOn(lead)}</td>
                   <td>{getRequirement(lead)}</td>
+                  <td>
+                    <select
+                      className="lead-team-select"
+                      value={lead.teamId || ""}
+                      onChange={(event) => handleTeamChange(lead, event.target.value)}
+                      disabled={isLoadingUsers}
+                    >
+                      <option value="">
+                        {isLoadingUsers ? "Loading users..." : "Unassigned"}
+                      </option>
+                      {users.map((user) => (
+                        <option key={user.id || user.email} value={user.id}>
+                          {getUserName(user)}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
                   <td className="lead-tags-cell" title={getTags(lead)}>{getTags(lead)}</td>
                   <td className="lead-action-cell">
                     <button

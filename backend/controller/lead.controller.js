@@ -140,15 +140,17 @@ exports.createLead = async (req, res) => {
 exports.getLeads = async (req, res) => {
   try {
     const userId = req.query.userId || null
+    const include = { team: true }
     if (userId) {
       const leads = await prisma.lead.findMany({
         where: {
           teamId: parseInt(userId),
         },
+        include,
       })
       res.status(200).json(leads)
     } else {
-      const Leads = await prisma.lead.findMany()
+      const Leads = await prisma.lead.findMany({ include })
       res.status(200).json(Leads)
     }
   } catch (err) {
@@ -226,15 +228,27 @@ exports.importExcel = async (req, res) => {
       where: { name: { in: projectNames } },
       select: { id: true, name: true },
     })
+    const usersFromDb = await prisma.user.findMany({
+      select: { id: true, firstName: true, lastName: true, username: true, email: true },
+    })
 
     const projectMap = {}
     projectsFromDb.forEach(p => {
       projectMap[p.name] = p.name
     })
+    const userMap = {}
+    usersFromDb.forEach(user => {
+      const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim()
+      ;[fullName, user.username, user.email, String(user.id)].filter(Boolean).forEach(key => {
+        userMap[key.toLowerCase()] = user.id
+      })
+    })
 
     const mapData = data.map(row => {
       const projectName = row["Interested projects"]
       const projectId = projectMap[projectName] || null
+      const teamValue = row["Team"] ? String(row["Team"]).trim().toLowerCase() : ""
+      const teamId = userMap[teamValue] || null
 
       return {
         salutation: row["Salutation"] || null,
@@ -250,7 +264,7 @@ exports.importExcel = async (req, res) => {
         timeZone: row["Timezone"] || null,
         tags: row["Tags"] || null,
         interestedProjects: projectId,
-        team: row["Team"] || null,
+        teamId,
         channelPartner: row["Channel partner"] || null,
         conductSiteVisit: row["Conduct site visit"] || null,
         conductSiteDate:
@@ -298,9 +312,8 @@ exports.importExcel = async (req, res) => {
         education: row["Education"] || null,
         companyTitle: row["Company title"] || null,
         income: row["Income"] || null,
-        basiComment: row["Basi comment"] || null,
         purpose: row["Purpose"] || null,
-        nri: row["NRI"] == "Yes" || "y" ? true : false,
+        nri: ["yes", "y", "true"].includes(String(row["NRI"] || "").toLowerCase()),
         budgetMin: parseInt(row["Budget min"]) || null,
         budgetMax: parseInt(row["Budget max"]) || null,
         possessionMin: row["Possession min"] || null,
@@ -314,7 +327,6 @@ exports.importExcel = async (req, res) => {
         furnishing: row["Furnishing"] || null,
         facing: row["Facing"] || null,
         locationPreferences: row["Location preferences"] || null,
-        requirementComment: row["Requirement comment"] || null,
       }
     })
 
@@ -323,6 +335,7 @@ exports.importExcel = async (req, res) => {
       const lead = await prisma.lead.create({
         data: {
           ...row,
+          gender: row.gender ? String(row.gender).toUpperCase() : null,
           leadAddress: {
             create: row.leadAddress,
           },
