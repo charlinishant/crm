@@ -199,7 +199,7 @@ const MasterLayout = ({ children }) => {
                   </NavLink>
                 </li>
 
-                <li>
+                {/* <li>
                   <NavLink
                     to='/index-5'
                     className={(navData) =>
@@ -209,8 +209,8 @@ const MasterLayout = ({ children }) => {
                     <i className='ri-circle-fill circle-icon text-success-main w-auto' />{" "}
                     Conversation Tracker
                   </NavLink>
-                </li>
-                <li>
+                </li> */}
+                {/* <li>
                   <NavLink
                     to='/index-6'
                     className={(navData) =>
@@ -220,8 +220,8 @@ const MasterLayout = ({ children }) => {
                     <i className='ri-circle-fill circle-icon text-purple w-auto' />{" "}
                     Outbound Tracker
                   </NavLink>
-                </li>
-                <li>
+                </li> */}
+                {/* <li>
                   <NavLink
                     to='/index-7'
                     className={(navData) =>
@@ -231,7 +231,7 @@ const MasterLayout = ({ children }) => {
                     <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
                     VoiceOps Panel
                   </NavLink>
-                </li>
+                </li> */}
                 {/* <li>
                   <NavLink
                     to='/index-8'
@@ -1041,7 +1041,7 @@ const MasterLayout = ({ children }) => {
               <ul className='sidebar-submenu'>
                 <li>
                   <NavLink
-                    to='/users-list'
+                    to='/all-users'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -1072,7 +1072,7 @@ const MasterLayout = ({ children }) => {
                     Add User
                   </NavLink>
                 </li>
-                <li>
+                {/* <li>
                   <NavLink
                     to='/view-profile'
                     className={(navData) =>
@@ -1082,7 +1082,7 @@ const MasterLayout = ({ children }) => {
                     <i className='ri-circle-fill circle-icon text-danger-main w-auto' />{" "}
                     View Profile
                   </NavLink>
-                </li>
+                </li> */}
               </ul>
             </li>
 

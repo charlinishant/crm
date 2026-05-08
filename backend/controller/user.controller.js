@@ -212,3 +212,39 @@ exports.getAccessPanel = async (req, res)=>{
         res.status(500).json({message:"Something went wrong"})
     }
 }
+exports.getAllUser = async (req, res) => {
+    try {
+        const users = await prisma.user.findMany({
+          
+            include: {
+                team: true
+            },
+          
+            select: {
+                id: true,
+                username: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                phone: true,
+                role: true,
+                department: true,
+                isActive: true,
+                team: true,
+                createdAt: true 
+            }
+        });
+
+        if (users.length === 0) {
+            return res.status(200).json({ message: "No users found", data: [] });
+        }
+
+        res.status(200).json({
+            count: users.length,
+            data: users
+        });
+    } catch (error) {
+        console.log(error);
+        res.status(500).json({ message: "Error fetching all users" });
+    }
+};

@@ -28,9 +28,10 @@ app.use("/leads", leadRouter)
 app.use("/users", userRouter)
 app.use("/teams", teamRouter)
 app.use("/tower", towerRouter)
-app.use("/floor", floorRouter   )
+app.use("/floor", floorRouter)
 app.use("/unit", unitRouter)
 app.use("/bookings", bookingRouter)
+// app.use('/all-users', userRouter)
 
 const PORT = 5000
 app.listen(PORT, ()=>{
