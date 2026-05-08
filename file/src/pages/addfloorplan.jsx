@@ -3,6 +3,20 @@ import { useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
 import Breadcrumb from "../components/Breadcrumb";
 
+const fallbackTowers = [
+    { id: 1, name: "TOWER D", project: "Binghatti Hills" },
+    { id: 2, name: "TOWER E", project: "Binghatti Hills" },
+    { id: 3, name: "Aa", project: "Binghatti Hills" },
+    { id: 4, name: "A", project: "Binghatti Hills" },
+    { id: 5, name: "Default Tower", project: "Nyati Baner" },
+    { id: 6, name: "Towe", project: "Binghatti Hills" },
+    { id: 7, name: "Default Tower", project: "Lodha Greens" },
+    { id: 8, name: "Default Tower", project: "ABC" },
+    { id: 9, name: "Default Tower", project: "Vasant utsav" },
+    { id: 10, name: "T1", project: "Binghatti Hills" },
+    { id: 11, name: "Default Tower", project: "Adhinn PG" }
+];
+
 const AddFloorplan = () => {
     const navigate = useNavigate();
     const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
@@ -43,62 +57,67 @@ const AddFloorplan = () => {
         return Number.isNaN(number) ? null : number;
     };
 
+    const readStoredTowers = () => {
+        try {
+            const stored = JSON.parse(window.localStorage.getItem("projectTowers") || "[]");
+            return Array.isArray(stored) && stored.length ? stored : fallbackTowers;
+        } catch {
+            return fallbackTowers;
+        }
+    };
+
+    const normalizeList = (data) => {
+        if (Array.isArray(data)) return data;
+        if (Array.isArray(data?.data)) return data.data;
+        if (Array.isArray(data?.value)) return data.value;
+        return [];
+    };
+
     useEffect(() => {
-        const fetchProjects = async () => {
+        const fetchOptions = async () => {
             try {
                 setLoadingOptions(true);
                 setError("");
 
-                const response = await fetch(`${API_URL}/projects/list`);
-                if (!response.ok) {
+                const [projectResponse, towerResponse] = await Promise.all([
+                    fetch(`${API_URL}/projects/list`),
+                    fetch(`${API_URL}/tower/list`)
+                ]);
+
+                if (!projectResponse.ok) {
                     throw new Error("Unable to load projects");
                 }
+                if (!towerResponse.ok) {
+                    throw new Error("Unable to load project towers");
+                }
 
-                const data = await response.json();
-                setProjects(Array.isArray(data) ? data : []);
+                const projectData = await projectResponse.json();
+                const towerData = await towerResponse.json();
+                const backendTowers = normalizeList(towerData);
+                const storedTowers = readStoredTowers();
+
+                setProjects(normalizeList(projectData));
+                setTowers(backendTowers.length ? backendTowers : storedTowers);
             } catch (err) {
                 console.error(err);
-                setError(err.message || "Unable to load projects");
+                const storedTowers = readStoredTowers();
+                if (storedTowers.length) {
+                    setTowers(storedTowers);
+                }
+                setError(err.message || "Unable to load form options");
             } finally {
                 setLoadingOptions(false);
             }
         };
 
-        fetchProjects();
+        fetchOptions();
     }, [API_URL]);
-
-    useEffect(() => {
-        const fetchTowers = async () => {
-            if (!formData.project) {
-                setTowers([]);
-                setFormData((prev) => ({ ...prev, projectTower: "" }));
-                return;
-            }
-
-            try {
-                setError("");
-                const response = await fetch(`${API_URL}/tower/list?projectId=${formData.project}`);
-                if (!response.ok) {
-                    throw new Error("Unable to load project towers");
-                }
-
-                const data = await response.json();
-                setTowers(Array.isArray(data) ? data : []);
-            } catch (err) {
-                console.error(err);
-                setError(err.message || "Unable to load project towers");
-            }
-        };
-
-        fetchTowers();
-    }, [API_URL, formData.project]);
 
     const handleChange = (event) => {
         const { name, value } = event.target;
         setFormData((prev) => ({
             ...prev,
-            [name]: value,
-            ...(name === "project" ? { projectTower: "" } : {})
+            [name]: value
         }));
     };
 
@@ -202,10 +221,10 @@ const AddFloorplan = () => {
                                                     onChange={handleChange}
                                                     className="form-control form-control-lg"
                                                     required
-                                                    disabled={!formData.project}
+                                                    disabled={loadingOptions}
                                                 >
                                                     <option value="" disabled>
-                                                        {formData.project ? "Select a Project Tower" : "Select project first"}
+                                                        {loadingOptions ? "Loading towers..." : "Select a Project Tower"}
                                                     </option>
                                                     {towers.map((tower) => (
                                                         <option key={tower.id} value={tower.id}>

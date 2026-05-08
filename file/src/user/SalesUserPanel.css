@@ -775,6 +775,51 @@
   grid-column: 2;
 }
 
+.sales-tasks-card {
+  width: 100%;
+}
+
+.sales-task-list {
+  display: grid;
+  gap: 10px;
+}
+
+.sales-task-row {
+  align-items: center;
+  border-top: 1px solid var(--sales-line);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(260px, 1fr) 120px 120px 150px;
+  padding: 14px 0;
+}
+
+.sales-task-row > div,
+.sales-task-status {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+
+.sales-task-row strong {
+  color: var(--sales-text);
+  font-size: 14px;
+}
+
+.sales-task-row small,
+.sales-task-row span,
+.sales-task-status span {
+  color: var(--sales-muted);
+  font-size: 12px;
+}
+
+.sales-task-status select {
+  border: 1px solid var(--sales-line);
+  border-radius: 6px;
+  color: var(--sales-text);
+  min-height: 34px;
+  padding: 0 10px;
+}
+
 @media (max-width: 980px) {
   .sales-panel {
     grid-template-columns: 1fr;
@@ -787,6 +832,10 @@
 
   .sales-stat-grid,
   .sales-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .sales-task-row {
     grid-template-columns: 1fr;
   }
 }

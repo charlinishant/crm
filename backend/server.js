@@ -14,6 +14,7 @@ const towerRouter = require("./router/tower.routes")
 const floorRouter = require("./router/floorplan.routes")
 const unitRouter = require("./router/unit.routes")
 const bookingRouter = require("./router/booking.routes")
+const taskRouter = require("./router/task.routes")
 
 const leadRouter = require("./router/lead.routes")
 
@@ -31,6 +32,7 @@ app.use("/tower", towerRouter)
 app.use("/floor", floorRouter)
 app.use("/unit", unitRouter)
 app.use("/bookings", bookingRouter)
+app.use("/tasks", taskRouter)
 // app.use('/all-users', userRouter)
 
 const PORT = 5000

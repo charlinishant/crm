@@ -29,9 +29,11 @@ const fallbackPanel = {
     followupsDue: 0,
     siteVisits: 0,
     bookings: 0,
+    tasks: 0,
   },
   leads: [],
   bookings: [],
+  tasks: [],
 };
 
 const statusLabel = {
@@ -148,6 +150,8 @@ const pipelineStageLabels = {
   booked: "Booked",
 };
 
+const taskStatusOptions = ["Open", "Completed", "Archived"];
+
 const getPipelineIndex = (lead) => {
   const index = pipelineStages.indexOf(getLeadStage(lead));
   return index >= 0 ? index : 0;
@@ -156,6 +160,18 @@ const getPipelineIndex = (lead) => {
 const getPercent = (value, total) => {
   if (!total) return "0%";
   return `${Math.round((value / total) * 100)}%`;
+};
+
+const formatTaskDate = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 };
 
 const SalesUserPanel = () => {
@@ -336,6 +352,40 @@ const SalesUserPanel = () => {
     patchSelectedLead({ team: teamValue });
   };
 
+  const updateTaskStatus = async (taskId, status) => {
+    const previousTasks = panel.tasks || [];
+
+    setPanel((current) => ({
+      ...current,
+      tasks: (current.tasks || []).map((task) =>
+        task.id === taskId ? { ...task, status } : task
+      ),
+    }));
+
+    try {
+      const response = await fetch(`${API_URL}/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || "Unable to update task");
+
+      setPanel((current) => ({
+        ...current,
+        tasks: (current.tasks || []).map((task) =>
+          task.id === taskId ? { ...task, ...result } : task
+        ),
+      }));
+    } catch (err) {
+      setPanel((current) => ({ ...current, tasks: previousTasks }));
+      alert(err.message || "Unable to update task");
+    }
+  };
+
   const openLeadPreview = (lead, openBooking = false) => {
     const leadId = getLeadId(lead);
     setOpenActionLeadId(null);
@@ -367,6 +417,7 @@ const SalesUserPanel = () => {
     window.location.href = "/sign-in";
   };
 
+  const assignedTasks = panel.tasks || [];
   const navItems = [
     { key: "home", label: "Home", icon: Home },
     { key: "leads", label: "My Leads", icon: Users, count: panel.stats.assignedLeads },
@@ -502,6 +553,51 @@ const SalesUserPanel = () => {
             </section>
           )}
 
+          {activeScreen === "tasks" ? (
+            <section className="sales-card sales-tasks-card">
+              <div className="sales-card-head">
+                <div>
+                  <h2>My tasks</h2>
+                  <p>{assignedTasks.length} assigned task records</p>
+                </div>
+              </div>
+
+              <div className="sales-task-list">
+                {assignedTasks.length === 0 && (
+                  <div className="sales-empty">No tasks assigned to this user yet.</div>
+                )}
+                {assignedTasks.map((task) => (
+                  <div className="sales-task-row" key={task.id}>
+                    <div>
+                      <strong>{task.title || "Untitled Task"}</strong>
+                      <small>{task.description || task.subtitle || task.type || "Follow up"}</small>
+                    </div>
+                    <div>
+                      <span>Priority</span>
+                      <strong>{task.priority || "Medium"}</strong>
+                    </div>
+                    <div>
+                      <span>Due</span>
+                      <strong>{formatTaskDate(task.dueDate || task.dueOn)}</strong>
+                    </div>
+                    <label className="sales-task-status">
+                      <span>Status</span>
+                      <select
+                        value={task.status || "Open"}
+                        onChange={(event) => updateTaskStatus(task.id, event.target.value)}
+                      >
+                        {taskStatusOptions.map((status) => (
+                          <option key={status} value={status}>
+                            {status}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : (
           <div className="sales-grid">
             <section className="sales-card sales-leads-card">
               <div className="sales-card-head">
@@ -613,6 +709,7 @@ const SalesUserPanel = () => {
               </div>
             </aside>
           </div>
+          )}
         </section>
       </main>
 

@@ -60,8 +60,8 @@ const normalizeTask = (task, index) => ({
   id: task.id || task._id || index,
   title: task.title || task.name || "Untitled Task",
   subtitle: task.subtitle || task.description || task.type || "",
-  assignedTo: task.assignedTo || task.assignee || task.assigned_to || "-",
-  assignedBy: task.assignedBy || task.createdBy || task.created_by || "-",
+  assignedTo: task.assignedTo || task.assignee || task.assigneeName || task.assigned_to || "-",
+  assignedBy: task.assignedBy || task.assignedByName || task.createdBy || task.created_by || "-",
   status: task.status || "Open",
   priority: task.priority || "Medium",
   createdOn: formatDate(task.createdOn || task.createdAt || task.created_on),
@@ -162,6 +162,35 @@ const Alltask = () => {
 
   const totalTasks = tasks.length || 0;
 
+  const updateTaskStatus = async (taskId, status) => {
+    const previousTasks = tasks;
+    setTasks((current) =>
+      current.map((task) => (task.id === taskId ? { ...task, status } : task))
+    );
+
+    try {
+      const response = await fetch(`${API_URL}/tasks/${taskId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || "Unable to update task");
+
+      setTasks((current) =>
+        current.map((task) =>
+          task.id === taskId ? normalizeTask({ ...task, ...result }, task.id) : task
+        )
+      );
+    } catch (error) {
+      setTasks(previousTasks);
+      setFetchError(error.message || "Unable to update task status.");
+    }
+  };
+
   return (
     <MasterLayout>
       <div className="all-task-page">
@@ -174,8 +203,8 @@ const Alltask = () => {
             >
               <option value="All">All</option>
               <option value="Open">Open</option>
-              <option value="Closed">Closed</option>
               <option value="Completed">Completed</option>
+              <option value="Archived">Archived</option>
             </select>
             <select
               className="all-task-filter all-task-user-filter"
@@ -236,7 +265,17 @@ const Alltask = () => {
                     <div className="all-task-title">{task.assignedTo}</div>
                     <div className="all-task-subtitle">by {task.assignedBy}</div>
                   </td>
-                  <td>{task.status}</td>
+                  <td>
+                    <select
+                      className="all-task-status-select"
+                      value={task.status}
+                      onChange={(event) => updateTaskStatus(task.id, event.target.value)}
+                    >
+                      <option value="Open">Open</option>
+                      <option value="Completed">Completed</option>
+                      <option value="Archived">Archived</option>
+                    </select>
+                  </td>
                   <td>{task.priority}</td>
                   <td>{task.createdOn}</td>
                   <td>{task.dueOn}</td>
@@ -416,6 +455,18 @@ const Alltask = () => {
           justify-content: center;
           padding: 0;
           width: 32px;
+        }
+
+        .all-task-status-select {
+          appearance: auto;
+          background: #fff;
+          border: 1px solid #cdd5df;
+          border-radius: 4px;
+          color: #3f4650;
+          font-size: 15px;
+          min-height: 34px;
+          padding: 0 8px;
+          width: 130px;
         }
 
         @media (max-width: 767px) {

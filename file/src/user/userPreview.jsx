@@ -15,7 +15,6 @@ import {
   FaTimes,
   FaWhatsapp,
 } from "react-icons/fa";
-import MasterLayout from "../masterLayout/MasterLayout";
 
 const fallbackLead = {
   id: 10702,
@@ -29,6 +28,7 @@ const fallbackLead = {
 };
 
 const emptyBookingForm = {
+  projectId: "",
   unit: "",
   customerName: "",
   stage: "Tentative",
@@ -64,6 +64,19 @@ const leadStatusOptions = [
   { value: "Registered", label: "Registered" },
   { value: "Unqualified", label: "Unqualified" },
 ];
+
+const bookingSteps = [
+  "Filter Project",
+  "Select A Unit",
+  "Quotation",
+  "Booking Confirmation",
+];
+
+const defaultBookingFilters = {
+  propertyPurpose: "Sale",
+  unitType: "Residential",
+  propertyType: "Villa",
+};
 
 const normalizeStatus = (value) => {
   if (!value) return "Booked";
@@ -113,6 +126,15 @@ const UserPreview = () => {
   const [bookings, setBookings] = useState([]);
   const [bookingForm, setBookingForm] = useState(emptyBookingForm);
   const [isBookingFormOpen, setIsBookingFormOpen] = useState(false);
+  const [bookingStepIndex, setBookingStepIndex] = useState(0);
+  const [bookingProjects, setBookingProjects] = useState([]);
+  const [bookingProjectDetails, setBookingProjectDetails] = useState(null);
+  const [bookingProjectUnits, setBookingProjectUnits] = useState([]);
+  const [isLoadingBookingProject, setIsLoadingBookingProject] = useState(false);
+  const [bookingProjectMessage, setBookingProjectMessage] = useState("");
+  const [bookingFilters, setBookingFilters] = useState(defaultBookingFilters);
+  const [bookingUnitView, setBookingUnitView] = useState("listing");
+  const [shouldCheckAvailability, setShouldCheckAvailability] = useState(true);
   const [isSavingBooking, setIsSavingBooking] = useState(false);
   const [bookingMessage, setBookingMessage] = useState("");
   const bookingSectionRef = useRef(null);
@@ -196,6 +218,60 @@ const UserPreview = () => {
     "April 30, 2026 4:44 PM"
   );
   const latestBooking = bookings[0];
+  const selectedBookingProject = useMemo(() => {
+    if (bookingForm.projectId) {
+      return bookingProjects.find((project) => String(project.id) === String(bookingForm.projectId));
+    }
+
+    return bookingProjects.find(
+      (project) => project.name?.toLowerCase() === bookingForm.projectDetails?.toLowerCase()
+    );
+  }, [bookingForm.projectDetails, bookingForm.projectId, bookingProjects]);
+  const flattenedBookingUnits = useMemo(
+    () =>
+      bookingProjectUnits.flatMap((group) =>
+        (group.unitList || []).map((unit) => ({
+          ...unit,
+          groupId: group.id,
+          project: group.project,
+          tower: group.tower,
+          floorPlan: group.floor,
+          category: group.category,
+          type: group.type,
+          bedrooms: group.bedrooms,
+          bathrooms: group.bathrooms,
+          saleable: group.saleable,
+        }))
+      ),
+    [bookingProjectUnits]
+  );
+  const selectedBookingUnit = flattenedBookingUnits.find(
+    (unit) => unit.name === bookingForm.unit || String(unit.id) === String(bookingForm.unit)
+  );
+  const visibleBookingUnits = useMemo(() => {
+    return flattenedBookingUnits.filter((unit) => {
+      const purposeMatches =
+        !bookingFilters.propertyPurpose ||
+        !unit.propertyPurpose ||
+        unit.propertyPurpose.toLowerCase() === bookingFilters.propertyPurpose.toLowerCase();
+      const unitTypeMatches =
+        !bookingFilters.unitType ||
+        !unit.type ||
+        unit.type.toLowerCase() === bookingFilters.unitType.toLowerCase();
+      const propertyTypeMatches =
+        !bookingFilters.propertyType ||
+        !unit.category ||
+        unit.category.toLowerCase() === bookingFilters.propertyType.toLowerCase();
+
+      return purposeMatches && unitTypeMatches && propertyTypeMatches;
+    });
+  }, [bookingFilters, flattenedBookingUnits]);
+  const bookingProjectSelectValue =
+    bookingForm.projectId || (bookingForm.projectDetails ? "__lead_project__" : "");
+  const activeTowerName =
+    selectedBookingUnit?.tower?.name ||
+    bookingProjectUnits.find((group) => group.tower?.name)?.tower?.name ||
+    "Tower D";
 
   const detailRows = [
     ["RECEIVED ON", receivedOn],
@@ -237,6 +313,35 @@ const UserPreview = () => {
       projectDetails: prev.projectDetails || projectName,
     }));
   }, [leadName, projectName]);
+
+  useEffect(() => {
+    if (!isBookingFormOpen) return;
+
+    const fetchBookingProjects = async () => {
+      try {
+        const response = await fetch(`${API_URL}/projects/list`);
+        if (!response.ok) throw new Error("Unable to load projects");
+        const result = await response.json();
+        const projects = Array.isArray(result) ? result : [];
+        setBookingProjects(projects);
+
+        if (!bookingForm.projectId && bookingForm.projectDetails) {
+          const matchingProject = projects.find(
+            (project) => project.name?.toLowerCase() === bookingForm.projectDetails.toLowerCase()
+          );
+
+          if (matchingProject) {
+            setBookingForm((prev) => ({ ...prev, projectId: matchingProject.id }));
+          }
+        }
+      } catch (error) {
+        console.error("Unable to load booking projects:", error);
+        setBookingProjectMessage("Projects could not be loaded. You can still type project details manually.");
+      }
+    };
+
+    fetchBookingProjects();
+  }, [API_URL, bookingForm.projectDetails, bookingForm.projectId, isBookingFormOpen]);
 
   const updateStoredLead = (storageKey, updatedLead) => {
     try {
@@ -305,6 +410,113 @@ const UserPreview = () => {
     setBookingForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  const handleBookingProjectChange = (event) => {
+    const projectId = event.target.value;
+
+    if (projectId === "__lead_project__") {
+      setBookingProjectDetails(null);
+      setBookingProjectUnits([]);
+      setBookingProjectMessage("");
+      setBookingForm((prev) => ({
+        ...prev,
+        projectId: "",
+        projectDetails: prev.projectDetails || projectName,
+        unit: "",
+      }));
+      return;
+    }
+
+    const project = bookingProjects.find((item) => String(item.id) === String(projectId));
+
+    setBookingProjectDetails(null);
+    setBookingProjectUnits([]);
+    setBookingProjectMessage("");
+    setBookingForm((prev) => ({
+      ...prev,
+      projectId,
+      projectDetails: project?.name || "",
+      unit: "",
+    }));
+  };
+
+  const handleBookingFilterChange = (filterKey, value) => {
+    setBookingFilters((prev) => ({ ...prev, [filterKey]: value }));
+    setBookingForm((prev) => ({ ...prev, unit: "" }));
+  };
+
+  const handleClearBookingFilters = () => {
+    setBookingFilters(defaultBookingFilters);
+    setBookingForm((prev) => ({ ...prev, unit: "" }));
+  };
+
+  const handleBookingUnitSelect = (unit) => {
+    const unitName = unit.name || `Unit ${unit.unitIndex || unit.id}`;
+
+    setBookingProjectMessage("");
+    setBookingForm((prev) => ({
+      ...prev,
+      unit: unitName,
+      basePrice: unit.basePrice || "",
+      baseRate: unit.baseRate || "",
+      saleableArea: unit.saleable || prev.saleableArea,
+    }));
+  };
+
+  const loadSelectedProjectDetails = async () => {
+    const projectId = bookingForm.projectId || selectedBookingProject?.id;
+
+    if (!projectId && !bookingForm.projectDetails) {
+      setBookingProjectMessage("Please select a project before continuing.");
+      return false;
+    }
+
+    setIsLoadingBookingProject(true);
+    setBookingProjectMessage("");
+
+    try {
+      let selectedProjectDetails = selectedBookingProject || null;
+
+      if (projectId) {
+        const projectResponse = await fetch(`${API_URL}/projects/${projectId}`);
+        if (projectResponse.ok) {
+          selectedProjectDetails = await projectResponse.json();
+          setBookingProjectDetails(selectedProjectDetails);
+        }
+      }
+
+      const unitsResponse = await fetch(`${API_URL}/unit?limit=100`);
+      if (!unitsResponse.ok) throw new Error("Unable to load units");
+      const unitsResult = await unitsResponse.json();
+      const unitGroups = Array.isArray(unitsResult) ? unitsResult : unitsResult?.data || [];
+      const filteredUnits = unitGroups.filter((group) => {
+        if (projectId) return String(group.project?.id) === String(projectId);
+        return group.project?.name?.toLowerCase() === bookingForm.projectDetails.toLowerCase();
+      });
+
+      setBookingProjectUnits(filteredUnits);
+
+      if (selectedProjectDetails?.name) {
+        setBookingForm((prev) => ({
+          ...prev,
+          projectId: projectId || prev.projectId,
+          projectDetails: selectedProjectDetails.name,
+        }));
+      }
+
+      if (filteredUnits.length === 0) {
+        setBookingProjectMessage("No units found for this project yet.");
+      }
+
+      return true;
+    } catch (error) {
+      console.error("Unable to load selected project details:", error);
+      setBookingProjectMessage("Project details could not be loaded. Please check backend and database.");
+      return false;
+    } finally {
+      setIsLoadingBookingProject(false);
+    }
+  };
+
   const handleOpenBookingForm = (message = "") => {
     setBookingForm({
       ...emptyBookingForm,
@@ -312,11 +524,19 @@ const UserPreview = () => {
       projectDetails: projectName,
     });
     setBookingMessage(message);
+    setBookingProjectMessage("");
+    setBookingProjectDetails(null);
+    setBookingProjectUnits([]);
+    setBookingFilters(defaultBookingFilters);
+    setBookingUnitView("listing");
+    setShouldCheckAvailability(true);
+    setBookingStepIndex(0);
     setIsBookingFormOpen(true);
+  };
 
-    setTimeout(() => {
-      bookingSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 0);
+  const handleCloseBookingForm = () => {
+    setIsBookingFormOpen(false);
+    setBookingStepIndex(0);
   };
 
   useEffect(() => {
@@ -329,11 +549,11 @@ const UserPreview = () => {
       projectDetails: projectName,
     });
     setBookingMessage("Fill the booking form for this lead.");
+    setBookingStepIndex(0);
+    setBookingFilters(defaultBookingFilters);
+    setBookingUnitView("listing");
+    setShouldCheckAvailability(true);
     setIsBookingFormOpen(true);
-
-    setTimeout(() => {
-      bookingSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 0);
   }, [shouldOpenBookingForm, leadName, projectName]);
 
   const formatBookingDate = (value) => {
@@ -353,8 +573,68 @@ const UserPreview = () => {
     return `Rs. ${Number(value).toLocaleString("en-IN")}`;
   };
 
+  const formatBookingDetail = (value, fallback = "-") => {
+    if (value === undefined || value === null || value === "") return fallback;
+    if (typeof value === "object") {
+      return value.name || value.title || value.label || value.value || fallback;
+    }
+    return value;
+  };
+
+  const quotationProjectName =
+    bookingProjectDetails?.name || bookingForm.projectDetails || projectName || "Binghatti Hills";
+  const quotationUnitName =
+    selectedBookingUnit?.name || bookingForm.unit || "2304";
+  const quotationTowerName =
+    formatBookingDetail(selectedBookingUnit?.tower, activeTowerName || "Tower D");
+  const quotationFloor =
+    formatBookingDetail(selectedBookingUnit?.floorPlan, "") ||
+    formatBookingDetail(selectedBookingUnit?.floor, "23");
+  const quotationSaleable =
+    formatBookingDetail(selectedBookingUnit?.saleable, "") || bookingForm.saleableArea || "1,500 sq_ft";
+  const quotationBaseRate =
+    bookingForm.baseRate || selectedBookingUnit?.baseRate || "7.8K (7,750)";
+  const quotationName = `${quotationProjectName} - ${quotationTowerName} - ${quotationUnitName}`;
+  const quotationCostRows = [
+    { type: "section", serial: "1.", name: "Basic Details" },
+    { serial: "1.a", name: "Base Rate", original: "7,750.0", newValue: "7750.0", highlight: true },
+    { serial: "1.b", name: "Floor Rise", original: "2,000.0", newValue: "2000.0" },
+    { type: "section", serial: "2.", name: "Agreement Value Details" },
+    { serial: "2.a", name: "Base Price", original: "14,625,000.0", newValue: "14625000.0" },
+    { serial: "2.b", name: "Guideline Value", original: "450,000.0", newValue: "450000.0" },
+    { serial: "2.c", name: "Development Invoice", original: "600,000.0", newValue: "600000.0" },
+    { serial: "2.d", name: "Advance Maintainence", original: "290,100,000.0", newValue: "290100000.0" },
+    { serial: "2.e", name: "Agreement Value", original: "305,775,000.0", newValue: "305775000.0", highlight: true },
+    { type: "section", serial: "3.", name: "Additional Details" },
+    { serial: "3.a", name: "Legal Documentation Fee", original: "50,000.0", newValue: "50000.0" },
+    { serial: "3.b", name: "Clubhouse Charges", original: "75,000.0", newValue: "75000.0" },
+    { serial: "3.c", name: "Maintenance Deposit", original: "125,000.0", newValue: "125000.0" },
+  ];
+
   const handleSaveBooking = async (event) => {
     event.preventDefault();
+
+    if (bookingStepIndex === 0) {
+      const canContinue = await loadSelectedProjectDetails();
+      if (!canContinue) return;
+
+      setBookingMessage("");
+      setBookingStepIndex(1);
+      return;
+    }
+
+    if (!bookingForm.unit) {
+      setBookingProjectMessage("Please select a unit before continuing.");
+      return;
+    }
+
+    if (bookingStepIndex === 1) {
+      setBookingProjectMessage("");
+      setBookingMessage("");
+      setBookingStepIndex(2);
+      return;
+    }
+
     setIsSavingBooking(true);
     setBookingMessage("");
 
@@ -865,24 +1145,11 @@ const UserPreview = () => {
 }
 
 .lead-preview-booking-form {
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
-  padding: 20px;
-  background: #f8fafc;
+  display: contents;
 }
 
 .lead-preview-booking-form label {
-  color: #475569;
-  display: grid;
-  font-size: 11px;
-  font-weight: 600;
-  gap: 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.01em;
+  display: contents;
 }
 
 .lead-preview-booking-form input,
@@ -904,31 +1171,426 @@ const UserPreview = () => {
   box-shadow: 0 0 0 1px #3b82f6;
 }
 
-.lead-preview-booking-form-actions {
-  align-items: end;
+.booking-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1050;
+  background: rgba(15, 23, 42, 0.58);
   display: flex;
-  gap: 10px;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.booking-modal {
+  width: 100%;
+  min-height: 100vh;
+  max-height: 100vh;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+  overflow: hidden;
+}
+
+.booking-modal-header {
+  min-height: 48px;
+  background: #676767;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+}
+
+.booking-modal-title {
+  margin: 0;
+  color: #ffffff;
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.booking-modal-close {
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  padding: 6px;
+}
+
+.booking-modal-close:hover {
+  color: #ffffff;
+}
+
+.booking-modal-stepper {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  padding: 32px 56px 22px;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.booking-step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #4c2eca;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.booking-step::before {
+  content: "";
+  position: absolute;
+  top: 17px;
+  left: -50%;
+  width: 100%;
+  height: 1px;
+  background: #d7dde5;
+  z-index: 0;
+}
+
+.booking-step:first-child::before {
+  display: none;
+}
+
+.booking-step.is-complete::before,
+.booking-step.is-active::before {
+  background: #673ab7;
+}
+
+.booking-step-number {
+  position: relative;
+  z-index: 1;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #cbd5e1;
+  border-radius: 50%;
+  background: #ffffff;
+  color: #4b5563;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.booking-step.is-complete .booking-step-number {
+  background: #673ab7;
+  border-color: #673ab7;
+  color: #ffffff;
+}
+
+.booking-modal-main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 60px minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+  padding: 20px 56px 12px;
+  overflow-y: auto;
+}
+
+.booking-choice {
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.booking-illustration {
+  width: min(100%, 430px);
+  height: 220px;
+  position: relative;
+  overflow: hidden;
+}
+
+.booking-illustration-city::before,
+.booking-illustration-city::after,
+.booking-illustration-phone::before,
+.booking-illustration-phone::after {
+  content: "";
+  position: absolute;
+}
+
+.booking-illustration-city .booking-building {
+  position: absolute;
+  bottom: 34px;
+  left: 47%;
+  width: 54px;
+  height: 190px;
+  background: #d1d5db;
+  box-shadow:
+    -84px 34px 0 -2px #334854,
+    -39px 70px 0 -3px #263742,
+    62px 72px 0 -5px #3c4f59;
+}
+
+.booking-illustration-city .booking-house {
+  position: absolute;
+  right: 72px;
+  bottom: 34px;
+  width: 116px;
+  height: 62px;
+  background: #6d42c4;
+  box-shadow: -30px 20px 0 #4d2da0;
+}
+
+.booking-illustration-city .booking-house::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: -28px;
+  border-left: 25px solid transparent;
+  border-right: 25px solid transparent;
+  border-bottom: 28px solid #7d5ad0;
+  box-shadow: 48px 0 0 -1px #5632ae;
+}
+
+.booking-person-search {
+  position: absolute;
+  left: 58px;
+  bottom: 34px;
+  width: 86px;
+  height: 142px;
+  border-radius: 44px 44px 20px 20px;
+  background: #405461;
+}
+
+.booking-person-search::before {
+  content: "";
+  position: absolute;
+  left: 30px;
+  top: -58px;
+  width: 58px;
+  height: 72px;
+  border-radius: 44% 50% 46% 42%;
+  background: #ffb18c;
+  box-shadow: -24px -7px 0 3px #5930ad;
+}
+
+.booking-magnifier {
+  position: absolute;
+  left: 148px;
+  top: 136px;
+  width: 45px;
+  height: 45px;
+  border: 5px solid #22313a;
+  border-radius: 50%;
+  transform: rotate(25deg);
+}
+
+.booking-magnifier::after {
+  content: "";
+  position: absolute;
+  right: -18px;
+  bottom: -8px;
+  width: 24px;
+  height: 6px;
+  border-radius: 8px;
+  background: #22313a;
+}
+
+.booking-illustration-phone .booking-phone {
+  position: absolute;
+  left: 50%;
+  bottom: 50px;
+  width: 122px;
+  height: 254px;
+  border: 7px solid #455c67;
+  border-radius: 20px;
+  transform: translateX(-50%);
+  background: #ffffff;
+}
+
+.booking-illustration-phone .booking-phone::before {
+  content: "";
+  position: absolute;
+  left: 36px;
+  top: 0;
+  width: 40px;
+  height: 12px;
+  background: #455c67;
+  border-radius: 0 0 6px 6px;
+}
+
+.booking-phone-house {
+  position: absolute;
+  left: 25px;
+  top: 74px;
+  width: 64px;
+  height: 36px;
+  background: #f4f2ff;
+  border: 1px solid #d7d2ed;
+}
+
+.booking-phone-house::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: -22px;
+  border-left: 42px solid transparent;
+  border-right: 42px solid transparent;
+  border-bottom: 22px solid #5d32b6;
+}
+
+.booking-phone-button {
+  position: absolute;
+  left: 22px;
+  top: 160px;
+  width: 72px;
+  height: 20px;
+  border-radius: 10px;
+  background: #5d32b6;
+}
+
+.booking-person-unit {
+  position: absolute;
+  right: 36px;
+  bottom: 8px;
+  width: 74px;
+  height: 184px;
+  border-radius: 30px 30px 0 0;
+  background: linear-gradient(#5630ad 0 53%, #1f2933 53% 100%);
+}
+
+.booking-person-unit::before {
+  content: "";
+  position: absolute;
+  left: 17px;
+  top: -44px;
+  width: 38px;
+  height: 50px;
+  border-radius: 44%;
+  background: #ffad86;
+}
+
+.booking-choice-title {
+  margin: 4px 0 8px;
+  color: #17202a;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.booking-choice-copy {
+  margin: 0;
+  max-width: 660px;
+  color: #17202a;
+  font-size: 18px;
+  line-height: 1.45;
+}
+
+.booking-divider {
+  align-self: center;
+  color: #17202a;
+  font-size: 18px;
+  font-weight: 500;
+  padding-top: 190px;
+}
+
+.booking-choice-field {
+  width: min(100%, 520px);
+  margin-top: auto;
+  text-align: left;
+}
+
+.booking-choice-field label {
+  display: block;
+  margin-bottom: 14px;
+  color: #59616b;
+  font-size: 15px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.booking-choice-field > span {
+  display: block;
+  margin-bottom: 10px;
+  color: #59616b;
+  font-size: 15px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.booking-choice-field input,
+.booking-choice-field select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  color: #1e293b;
+  font-size: 15px;
+  padding: 0 12px;
+  background: #ffffff;
+}
+
+.booking-choice-note {
+  color: #334155;
+  font-size: 15px;
+}
+
+.booking-choice-note span {
+  color: #5d32c8;
+}
+
+.booking-modal-footer {
+  min-height: 58px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 0 26px;
+}
+
+.booking-modal-footer-note {
+  color: #405060;
+  font-size: 16px;
+}
+
+.booking-modal-footer-note span {
+  color: #5d32c8;
+}
+
+.booking-modal-footer-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 14px;
+}
+
+.booking-modal-footer.is-project-step {
+  justify-content: flex-end;
 }
 
 .lead-preview-booking-save,
 .lead-preview-booking-cancel {
-  border-radius: 6px;
+  min-width: 74px;
+  min-height: 38px;
+  border-radius: 5px;
   cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  min-height: 36px;
-  padding: 0 16px;
+  font-size: 15px;
+  font-weight: 500;
+  padding: 0 18px;
   transition: all 0.2s ease;
 }
 
 .lead-preview-booking-save {
-  background: #3b82f6;
-  border: 0;
+  background: #673ab7;
+  border: 1px solid #673ab7;
   color: #ffffff;
 }
 
 .lead-preview-booking-save:hover:not(:disabled) {
-  background: #2563eb;
+  background: #562aa7;
 }
 
 .lead-preview-booking-save:disabled {
@@ -938,12 +1600,601 @@ const UserPreview = () => {
 
 .lead-preview-booking-cancel {
   background: #ffffff;
-  border: 1px solid #cbd5e1;
-  color: #475569;
+  border: 1px solid #673ab7;
+  color: #111827;
 }
 
 .lead-preview-booking-cancel:hover {
-  background: #f1f5f9;
+  background: #f8f5ff;
+}
+
+.booking-modal-alert {
+  margin: 10px 56px 0;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.booking-modal-alert.is-error {
+  color: #b42318;
+}
+
+.booking-unit-main {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr) 320px;
+  gap: 0;
+  padding: 14px 14px 10px;
+  overflow-y: auto;
+}
+
+.booking-unit-filters,
+.booking-unit-selection,
+.booking-unit-gallery {
+  min-height: 360px;
+  padding: 10px 16px;
+}
+
+.booking-unit-filters,
+.booking-unit-selection {
+  border-right: 1px solid #d7d7d7;
+}
+
+.booking-unit-filter-head,
+.booking-unit-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.booking-unit-filter-head h3,
+.booking-unit-selection h3,
+.booking-unit-gallery h3 {
+  margin: 0;
+  color: #343434;
+  font-size: 21px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.booking-clear-filter,
+.booking-change-tower {
+  border: 0;
+  background: transparent;
+  color: #673ab7;
+  cursor: pointer;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.booking-filter-block {
+  border-top: 1px solid #dddddd;
+  padding: 14px 0 12px;
+}
+
+.booking-filter-block:first-of-type {
+  margin-top: 18px;
+}
+
+.booking-filter-label {
+  margin-bottom: 10px;
+  color: #3f3f46;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.booking-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.booking-filter-pill {
+  min-height: 38px;
+  border: 1px solid #d1d1d1;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #666666;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 16px;
+}
+
+.booking-filter-pill.is-selected {
+  border-color: #673ab7;
+  background: #673ab7;
+  color: #ffffff;
+}
+
+.booking-unit-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.booking-radio,
+.booking-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #666666;
+  font-size: 15px;
+}
+
+.booking-radio input,
+.booking-checkbox input {
+  width: 17px;
+  height: 17px;
+  accent-color: #673ab7;
+}
+
+.booking-tower-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.booking-tower-name {
+  color: #43a047;
+  font-size: 15px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.booking-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 48px;
+}
+
+.booking-unit-results {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: -28px auto 14px;
+  width: min(100%, 520px);
+}
+
+.booking-unit-results.is-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.booking-unit-option {
+  border: 1px solid #d7d7d7;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #344054;
+  cursor: pointer;
+  min-height: 40px;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.booking-unit-option.is-selected {
+  border-color: #673ab7;
+  box-shadow: 0 0 0 1px #673ab7;
+  background: #fbf9ff;
+}
+
+.booking-unit-option strong,
+.booking-unit-option span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.booking-unit-option span {
+  color: #667085;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.booking-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #666666;
+  font-size: 14px;
+}
+
+.booking-swatch {
+  width: 19px;
+  height: 19px;
+  border-radius: 3px;
+  background: #673ab7;
+}
+
+.booking-swatch.filtered {
+  background: #cfc5df;
+}
+
+.booking-swatch.interested {
+  background: #4caf50;
+}
+
+.booking-unit-empty-art {
+  position: relative;
+  width: min(100%, 520px);
+  height: 160px;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+.booking-unit-agent {
+  position: absolute;
+  left: 68px;
+  bottom: 0;
+  width: 58px;
+  height: 124px;
+  border-radius: 28px 28px 4px 4px;
+  background: linear-gradient(#f2f2f2 0 42%, #31215f 42% 62%, #27323b 62% 100%);
+}
+
+.booking-unit-agent::before {
+  content: "";
+  position: absolute;
+  left: 18px;
+  top: -36px;
+  width: 34px;
+  height: 44px;
+  border-radius: 48%;
+  background: #ffaf8b;
+  box-shadow: -4px -12px 0 #673ab7;
+}
+
+.booking-unit-card-art {
+  position: absolute;
+  left: 128px;
+  bottom: 0;
+  width: 250px;
+  height: 160px;
+  border: 1px solid #f1f1f1;
+  background:
+    linear-gradient(135deg, transparent 0 56%, #f4f4f4 56% 100%),
+    linear-gradient(#ffffff, #ffffff);
+}
+
+.booking-unit-card-art::before {
+  content: "";
+  position: absolute;
+  left: 52px;
+  top: 36px;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: rgba(103, 58, 183, 0.45);
+  border: 7px solid rgba(103, 58, 183, 0.32);
+  box-shadow: 72px -2px 0 -52px #a991d2, 82px 68px 0 -54px #a991d2;
+}
+
+.booking-unit-card-art::after {
+  content: "";
+  position: absolute;
+  left: 34px;
+  top: 100px;
+  width: 104px;
+  height: 14px;
+  border-radius: 10px;
+  background: rgba(103, 58, 183, 0.5);
+  transform: rotate(-34deg);
+}
+
+.booking-gallery-map {
+  width: 238px;
+  height: 270px;
+  margin: 10px auto 0;
+  border: 1px solid #d4d4d4;
+  background:
+    radial-gradient(circle at 52% 28%, #e6eef0 0 6%, transparent 7%),
+    radial-gradient(circle at 48% 64%, #7ec9d2 0 9%, transparent 10%),
+    linear-gradient(145deg, transparent 0 18%, #59626a 18% 22%, #d8d4c7 22% 28%, #59626a 28% 32%, transparent 32% 100%),
+    linear-gradient(22deg, transparent 0 48%, #59626a 48% 53%, #d8d4c7 53% 58%, #59626a 58% 63%, transparent 63% 100%),
+    repeating-radial-gradient(circle at 18% 20%, #77a765 0 4px, #98be82 5px 10px);
+  position: relative;
+}
+
+.booking-gallery-map::before {
+  content: "";
+  position: absolute;
+  inset: 70px 56px 58px 74px;
+  background:
+    linear-gradient(90deg, #f7f7f7 0 18%, transparent 18% 30%, #f7f7f7 30% 48%, transparent 48% 64%, #f7f7f7 64% 84%, transparent 84%),
+    linear-gradient(#8861ca, #8861ca);
+  border-radius: 12px;
+  opacity: 0.95;
+}
+
+.booking-unit-gallery .booking-choice-field {
+  width: 238px;
+  margin: 10px auto 0;
+}
+
+.booking-project-summary {
+  width: 238px;
+  margin: 8px auto 0;
+  color: #475467;
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.booking-project-summary strong {
+  color: #343434;
+}
+
+.booking-unit-empty-state {
+  width: min(100%, 520px);
+  margin: -28px auto 14px;
+  border: 1px dashed #d0d5dd;
+  border-radius: 6px;
+  color: #667085;
+  padding: 12px;
+  text-align: center;
+}
+
+.booking-quote-main {
+  flex: 1;
+  overflow-y: auto;
+  background: #ffffff;
+  color: #555555;
+}
+
+.booking-quote-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 86px;
+  padding: 0 22px;
+  border-bottom: 1px solid #d9dee5;
+  box-shadow: 0 1px 5px rgba(15, 23, 42, 0.12);
+}
+
+.booking-quote-tabs button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: #111111;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 0 16px;
+}
+
+.booking-quote-tabs button.is-active {
+  background: #673ab7;
+  color: #ffffff;
+}
+
+.booking-quote-unit-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 44px;
+  padding: 20px 22px 18px;
+  border-bottom: 1px solid #e4e7ec;
+  box-shadow: 0 1px 5px rgba(15, 23, 42, 0.08);
+}
+
+.booking-quote-unit-strip > div {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  min-height: 126px;
+}
+
+.booking-quote-unit-strip span,
+.booking-quote-controls span,
+.booking-quote-inventory span {
+  color: #8a8a8a;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.booking-quote-controls span,
+.booking-quote-inventory span {
+  text-transform: uppercase;
+}
+
+.booking-quote-unit-strip strong {
+  color: #666666;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.2;
+  min-height: 16px;
+}
+
+.booking-quote-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 28px 32px;
+  padding: 20px 22px 16px;
+}
+
+.booking-quote-controls label,
+.booking-quote-inventory label {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.booking-quote-controls input,
+.booking-quote-controls select,
+.booking-quote-inventory select {
+  width: 100%;
+  min-height: 41px;
+  border: 1px solid #cbd5e1;
+  border-radius: 3px;
+  background: #ffffff;
+  color: #666666;
+  font-size: 14px;
+  padding: 0 12px;
+}
+
+.booking-quote-controls input:focus,
+.booking-quote-controls select:focus,
+.booking-quote-inventory select:focus {
+  outline: none;
+  border-color: #673ab7;
+  box-shadow: 0 0 0 1px rgba(103, 58, 183, 0.18);
+}
+
+.booking-quote-inventory {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 0.9fr) auto;
+  align-items: end;
+  gap: 32px;
+  padding: 16px 22px 24px;
+  border-bottom: 1px solid #eceff3;
+}
+
+.booking-quote-apply {
+  min-width: 68px;
+  min-height: 35px;
+  border: 1px solid #673ab7;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #673ab7;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.booking-quote-apply:hover {
+  background: #f8f5ff;
+}
+
+.booking-quote-cost {
+  padding: 14px 22px 0;
+  overflow-x: auto;
+}
+
+.booking-quote-cost h3 {
+  margin: 0 0 14px;
+  color: #606060;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.booking-quote-table {
+  min-width: 940px;
+  border: 1px solid #e1e5eb;
+  border-bottom: 0;
+}
+
+.booking-quote-row {
+  display: grid;
+  grid-template-columns: 92px minmax(180px, 1.25fr) minmax(150px, 0.75fr) minmax(250px, 1fr) minmax(210px, 1fr) minmax(170px, 0.9fr);
+  min-height: 42px;
+  border-bottom: 1px solid #e1e5eb;
+}
+
+.booking-quote-row > span,
+.booking-quote-row > strong {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  color: #444444;
+  font-size: 14px;
+  border-right: 1px solid #e1e5eb;
+}
+
+.booking-quote-row > :last-child {
+  border-right: 0;
+  justify-content: flex-end;
+}
+
+.booking-quote-row.is-head {
+  background: #ffffff;
+  font-weight: 700;
+}
+
+.booking-quote-row.is-head > span {
+  color: #444444;
+  font-weight: 700;
+}
+
+.booking-quote-row.is-section {
+  display: flex;
+  min-height: 40px;
+}
+
+.booking-quote-row.is-section > strong {
+  width: 100%;
+  border-right: 0;
+  font-weight: 700;
+}
+
+.booking-quote-row.is-line {
+  min-height: 54px;
+}
+
+.booking-quote-row.is-highlight {
+  background: #eee9f6;
+}
+
+.booking-quote-row.is-line > span:first-child {
+  justify-content: flex-end;
+}
+
+.booking-quote-row.is-line > span:nth-child(3) {
+  justify-content: flex-end;
+}
+
+.booking-quote-row.is-line > span:nth-child(4),
+.booking-quote-row.is-line > span:nth-child(5),
+.booking-quote-row.is-line > span:nth-child(6) {
+  padding: 6px 8px;
+}
+
+.booking-quote-row select {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #666666;
+  font-size: 14px;
+  padding: 0 10px;
+}
+
+.booking-quote-money-field {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr);
+  margin: 0;
+}
+
+.booking-quote-money-field b {
+  min-height: 40px;
+  border: 1px solid #cbd5e1;
+  border-right: 0;
+  border-radius: 4px 0 0 4px;
+  background: #eef1f4;
+  color: #555555;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.booking-quote-money-field input {
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid #cbd5e1;
+  border-radius: 0 4px 4px 0;
+  color: #666666;
+  font-size: 14px;
+  padding: 0 12px;
+  text-align: right;
 }
 
 .lead-preview-booking-message {
@@ -1155,6 +2406,131 @@ const UserPreview = () => {
   .lead-preview-profile-btn {
     min-width: 96px;
   }
+
+  .booking-modal {
+    overflow-y: auto;
+  }
+
+  .booking-modal-header {
+    padding: 0 16px;
+  }
+
+  .booking-modal-title {
+    font-size: 22px;
+  }
+
+  .booking-modal-stepper {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px 16px;
+    padding: 32px 18px 24px;
+  }
+
+  .booking-step {
+    gap: 12px;
+    font-size: 12px;
+  }
+
+  .booking-step::before {
+    display: none;
+  }
+
+  .booking-modal-main {
+    grid-template-columns: 1fr;
+    gap: 20px;
+    padding: 24px 18px;
+  }
+
+  .booking-unit-main {
+    grid-template-columns: 1fr;
+    overflow-y: visible;
+    padding: 18px;
+  }
+
+  .booking-unit-filters,
+  .booking-unit-selection {
+    border-right: 0;
+    border-bottom: 1px solid #d7d7d7;
+  }
+
+  .booking-unit-filters,
+  .booking-unit-selection,
+  .booking-unit-gallery {
+    min-height: auto;
+    padding: 18px 0;
+  }
+
+  .booking-unit-toolbar,
+  .booking-unit-topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .booking-legend {
+    margin-bottom: 28px;
+  }
+
+  .booking-unit-results {
+    grid-template-columns: 1fr;
+    margin: 0 auto 24px;
+  }
+
+  .booking-unit-results.is-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .booking-unit-empty-state {
+    margin: 0 auto 24px;
+  }
+
+  .booking-choice {
+    min-height: auto;
+  }
+
+  .booking-illustration {
+    height: 220px;
+    transform: scale(0.86);
+    transform-origin: center top;
+    margin-bottom: -24px;
+  }
+
+  .booking-divider {
+    padding-top: 0;
+  }
+
+  .booking-choice-title {
+    font-size: 22px;
+  }
+
+  .booking-choice-copy {
+    font-size: 17px;
+  }
+
+  .booking-choice-field {
+    margin-top: 22px;
+  }
+
+  .booking-modal-alert {
+    margin: 14px 18px 0;
+  }
+
+  .booking-modal-footer {
+    position: sticky;
+    bottom: 0;
+    background: #ffffff;
+    border-top: 1px solid #e2e8f0;
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 10px 12px;
+  }
+
+  .booking-modal-footer-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .booking-modal-footer-actions button {
+    flex: 1 1 auto;
+  }
 }
         `}</style>
 
@@ -1304,58 +2680,6 @@ const UserPreview = () => {
                   {bookingMessage && (
                     <div className="lead-preview-booking-message">{bookingMessage}</div>
                   )}
-                  {isBookingFormOpen && (
-                    <form className="lead-preview-booking-form" onSubmit={handleSaveBooking}>
-                      <label>
-                        Unit
-                        <input name="unit" value={bookingForm.unit} onChange={handleBookingChange} required />
-                      </label>
-                      <label>
-                        Customer Name
-                        <input name="customerName" value={bookingForm.customerName} onChange={handleBookingChange} required />
-                      </label>
-                      <label>
-                        Stage
-                        <select name="stage" value={bookingForm.stage} onChange={handleBookingChange}>
-                          <option>Tentative</option>
-                          <option>Booked</option>
-                          <option>Cancelled</option>
-                        </select>
-                      </label>
-                      <label>
-                        Project Details
-                        <input name="projectDetails" value={bookingForm.projectDetails} onChange={handleBookingChange} />
-                      </label>
-                      <label>
-                        Booked On
-                        <input name="bookedOn" type="date" value={bookingForm.bookedOn} onChange={handleBookingChange} />
-                      </label>
-                      <label>
-                        Saleable Area
-                        <input name="saleableArea" type="number" value={bookingForm.saleableArea} onChange={handleBookingChange} />
-                      </label>
-                      <label>
-                        Base Price
-                        <input name="basePrice" type="number" value={bookingForm.basePrice} onChange={handleBookingChange} />
-                      </label>
-                      <label>
-                        Base Rate
-                        <input name="baseRate" type="number" value={bookingForm.baseRate} onChange={handleBookingChange} />
-                      </label>
-                      <div className="lead-preview-booking-form-actions">
-                        <button type="submit" className="lead-preview-booking-save" disabled={isSavingBooking}>
-                          {isSavingBooking ? "Saving..." : "Save"}
-                        </button>
-                        <button
-                          type="button"
-                          className="lead-preview-booking-cancel"
-                          onClick={() => setIsBookingFormOpen(false)}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </form>
-                  )}
                   {latestBooking ? (
                     <div className="lead-preview-booking-card">
                       <FaEllipsisV className="lead-preview-booking-menu" />
@@ -1493,6 +2817,447 @@ const UserPreview = () => {
                 View Profile
               </button>
             </div>
+
+            {isBookingFormOpen && (
+              <div className="booking-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="booking-modal-title">
+                <form className="booking-modal lead-preview-booking-form" onSubmit={handleSaveBooking}>
+                  <div className="booking-modal-header">
+                    <h2 className="booking-modal-title" id="booking-modal-title">Booking Details</h2>
+                    <button
+                      type="button"
+                      className="booking-modal-close"
+                      onClick={handleCloseBookingForm}
+                      aria-label="Close booking details"
+                    >
+                      <FaTimes />
+                    </button>
+                  </div>
+
+                  <div className="booking-modal-stepper" aria-label="Booking progress">
+                    {bookingSteps.map((step, index) => (
+                      <div
+                        className={`booking-step${index < bookingStepIndex ? " is-complete" : ""}${index === bookingStepIndex ? " is-active" : ""}`}
+                        key={step}
+                      >
+                        <span className="booking-step-number">{String(index + 1).padStart(2, "0")}</span>
+                        <span>{step}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {bookingMessage && (
+                    <div className="booking-modal-alert">{bookingMessage}</div>
+                  )}
+                  {bookingStepIndex === 1 && bookingProjectMessage && (
+                    <div className="booking-modal-alert">{bookingProjectMessage}</div>
+                  )}
+
+                  {bookingStepIndex === 0 ? (
+                    <div className="booking-modal-main">
+                      <section className="booking-choice">
+                        <div className="booking-illustration booking-illustration-city" aria-hidden="true">
+                          <span className="booking-building" />
+                          <span className="booking-house" />
+                          <span className="booking-person-search" />
+                          <span className="booking-magnifier" />
+                        </div>
+                        <h3 className="booking-choice-title">Select Project For Booking</h3>
+                        <p className="booking-choice-copy">Start by selecting a project that you like and we will guide you further</p>
+                        <div className="booking-choice-field">
+                          <label htmlFor="booking-project">Select Project</label>
+                          <select
+                            id="booking-project"
+                            name="projectDetails"
+                            value={bookingProjectSelectValue}
+                            onChange={handleBookingProjectChange}
+                          >
+                            <option value="">
+                              {bookingProjects.length ? "Select a Project" : bookingForm.projectDetails || "Loading projects..."}
+                            </option>
+                            {bookingForm.projectDetails && !selectedBookingProject && (
+                              <option value="__lead_project__">
+                                {bookingForm.projectDetails}
+                              </option>
+                            )}
+                            {bookingProjects.map((project) => (
+                              <option key={project.id} value={project.id}>
+                                {project.name}
+                              </option>
+                            ))}
+                          </select>
+                          {bookingProjectMessage && (
+                            <div className="booking-modal-alert is-error" style={{ margin: "10px 0 0" }}>
+                              {bookingProjectMessage}
+                            </div>
+                          )}
+                          <div className="booking-choice-note">
+                            You are taking a booking for <span>{leadName}</span>
+                          </div>
+                        </div>
+                      </section>
+
+                      <div className="booking-divider">OR</div>
+
+                      <section className="booking-choice">
+                        <div className="booking-illustration booking-illustration-phone" aria-hidden="true">
+                          <span className="booking-phone">
+                            <span className="booking-phone-house" />
+                            <span className="booking-phone-button" />
+                          </span>
+                          <span className="booking-person-unit" />
+                        </div>
+                        <h3 className="booking-choice-title">Quick Unit Selection</h3>
+                        <p className="booking-choice-copy">Know your unit? Select it here and proceed to book directly.</p>
+                        <div className="booking-choice-field">
+                          <label htmlFor="booking-unit-quick">Select Unit</label>
+                          <input
+                            id="booking-unit-quick"
+                            name="unit"
+                            value={bookingForm.unit}
+                            onChange={handleBookingChange}
+                            placeholder="Enter unit"
+                          />
+                        </div>
+                      </section>
+                    </div>
+                  ) : bookingStepIndex === 1 ? (
+                    <div className="booking-unit-main">
+                      <aside className="booking-unit-filters">
+                        <div className="booking-unit-filter-head">
+                          <h3>Filters By</h3>
+                          <button type="button" className="booking-clear-filter" onClick={handleClearBookingFilters}>
+                            Clear Filters
+                          </button>
+                        </div>
+
+                        {[
+                          ["propertyPurpose", "Property purpose", ["Sale", "Resale", "Rental"]],
+                          ["unitType", "Unit type", ["Residential", "Commercial", "Plot"]],
+                          ["propertyType", "Property type", ["Villa", "Bungalow", "Apartment"]],
+                        ].map(([filterKey, label, options]) => (
+                          <div className="booking-filter-block" key={label}>
+                            <div className="booking-filter-label">{label}</div>
+                            <div className="booking-pill-row">
+                              {options.map((option) => (
+                                <button
+                                  type="button"
+                                  className={`booking-filter-pill${bookingFilters[filterKey] === option ? " is-selected" : ""}`}
+                                  key={option}
+                                  onClick={() => handleBookingFilterChange(filterKey, option)}
+                                >
+                                  {option}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </aside>
+
+                      <section className="booking-unit-selection">
+                        <div className="booking-unit-toolbar">
+                          <label className="booking-radio">
+                            <input
+                              type="radio"
+                              name="unitView"
+                              checked={bookingUnitView === "grid"}
+                              onChange={() => setBookingUnitView("grid")}
+                            />
+                            <span>Grid Layout</span>
+                          </label>
+                          <label className="booking-radio">
+                            <input
+                              type="radio"
+                              name="unitView"
+                              checked={bookingUnitView === "listing"}
+                              onChange={() => setBookingUnitView("listing")}
+                            />
+                            <span>Listing View</span>
+                          </label>
+                        </div>
+
+                        <div className="booking-unit-topbar">
+                          <h3>Select Unit</h3>
+                          <button type="button" className="booking-change-tower">Change Tower/Cluster</button>
+                          <label className="booking-checkbox">
+                            <input
+                              type="checkbox"
+                              checked={shouldCheckAvailability}
+                              onChange={(event) => setShouldCheckAvailability(event.target.checked)}
+                            />
+                            <span>Check Availability</span>
+                          </label>
+                        </div>
+                        <div className="booking-tower-row">
+                          <span className="booking-tower-name">{activeTowerName}</span>
+                        </div>
+
+                        <div className="booking-legend">
+                          <span className="booking-legend-item"><span className="booking-swatch filtered" />Filtered and Available</span>
+                          <span className="booking-legend-item"><span className="booking-swatch interested" />Interested</span>
+                          <span className="booking-legend-item"><span className="booking-swatch" />Selected</span>
+                          <span className="booking-legend-item"><strong>N/A</strong> Unavailable</span>
+                        </div>
+
+                        {visibleBookingUnits.length > 0 ? (
+                          <div className={`booking-unit-results${bookingUnitView === "grid" ? " is-grid" : ""}`}>
+                            {visibleBookingUnits.slice(0, 6).map((unit) => (
+                              <button
+                                type="button"
+                                className={`booking-unit-option${bookingForm.unit === unit.name ? " is-selected" : ""}`}
+                                key={`${unit.groupId}-${unit.id}`}
+                                onClick={() => handleBookingUnitSelect(unit)}
+                              >
+                                <strong>{unit.name || `Unit ${unit.unitIndex || unit.id}`}</strong>
+                                <span>{unit.tower?.name || activeTowerName} · Rs. {Number(unit.basePrice || 0).toLocaleString("en-IN")}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="booking-unit-empty-state">
+                            {flattenedBookingUnits.length
+                              ? "No units match the selected filters."
+                              : bookingProjectMessage || "No units found for this project yet."}
+                          </div>
+                        )}
+
+                        <div className="booking-unit-empty-art" aria-hidden="true">
+                          <span className="booking-unit-agent" />
+                          <span className="booking-unit-card-art" />
+                        </div>
+                      </section>
+
+                      <aside className="booking-unit-gallery">
+                        <h3>Gallery and Unit Details</h3>
+                        <div className="booking-gallery-map" aria-hidden="true" />
+                        <label className="booking-choice-field" htmlFor="booking-unit-final">
+                          <span>Select Unit</span>
+                          {visibleBookingUnits.length > 0 ? (
+                            <select
+                              id="booking-unit-final"
+                              name="unit"
+                              value={bookingForm.unit}
+                              onChange={(event) => {
+                                const unit = visibleBookingUnits.find((item) => item.name === event.target.value);
+                                if (unit) handleBookingUnitSelect(unit);
+                                else setBookingForm((prev) => ({ ...prev, unit: "" }));
+                              }}
+                              required
+                            >
+                              <option value="">Select Unit</option>
+                              {visibleBookingUnits.map((unit) => (
+                                <option key={`${unit.groupId}-select-${unit.id}`} value={unit.name}>
+                                  {unit.name || `Unit ${unit.unitIndex || unit.id}`}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                            id="booking-unit-final"
+                            name="unit"
+                            value={bookingForm.unit}
+                            onChange={handleBookingChange}
+                            placeholder="Enter unit"
+                            required
+                            />
+                          )}
+                        </label>
+                        <div className="booking-project-summary">
+                          <strong>{bookingProjectDetails?.name || bookingForm.projectDetails || "Project details"}</strong>
+                          <span>{bookingProjectDetails?.projectType || "Residential"} · {visibleBookingUnits.length} of {flattenedBookingUnits.length} units shown</span>
+                          {selectedBookingUnit && (
+                            <span>Base price Rs. {Number(selectedBookingUnit.basePrice || 0).toLocaleString("en-IN")}</span>
+                          )}
+                        </div>
+                      </aside>
+                    </div>
+                  ) : (
+                    <div className="booking-quote-main">
+                      <div className="booking-quote-tabs" aria-label="Quotation tabs">
+                        <button type="button" className="is-active">Unit Details</button>
+                        <button type="button">Cost Sheet</button>
+                        <button type="button">Payment Schedule</button>
+                      </div>
+
+                      <section className="booking-quote-unit-strip">
+                        <div>
+                          <span>Name</span>
+                          <strong>{quotationUnitName}</strong>
+                          <span>Bedrooms</span>
+                          <strong>{formatBookingDetail(selectedBookingUnit?.bedrooms, "3")}</strong>
+                          <span>Base Rate</span>
+                          <strong>Rs. {quotationBaseRate}</strong>
+                          <span>Agreement Value</span>
+                        </div>
+                        <div>
+                          <span>Status</span>
+                          <strong>{formatBookingDetail(selectedBookingUnit?.status, "Available")}</strong>
+                          <span>Bathrooms</span>
+                          <strong>{formatBookingDetail(selectedBookingUnit?.bathrooms, "2")}</strong>
+                          <span>Floor Rise</span>
+                        </div>
+                        <div>
+                          <span>Floor</span>
+                          <strong>{quotationFloor}</strong>
+                          <span>Carpet</span>
+                          <strong>{formatBookingDetail(selectedBookingUnit?.carpet, "967")}</strong>
+                          <span>Effective Rate</span>
+                        </div>
+                        <div>
+                          <span>Project Tower Name</span>
+                          <strong>{quotationTowerName}</strong>
+                          <span>Saleable</span>
+                          <strong>{quotationSaleable}</strong>
+                          <span>Total Price</span>
+                        </div>
+                      </section>
+
+                      <section className="booking-quote-controls">
+                        <label>
+                          <span>Select Scheme</span>
+                          <select defaultValue="default">
+                            <option value="default">Default Scheme</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>Select Payment Schedule</span>
+                          <select defaultValue="80-20">
+                            <option value="80-20">80:20 Payment Schedule</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>Quotation Name</span>
+                          <input value={quotationName} readOnly />
+                        </label>
+                        <label>
+                          <span>Payment Schedule Name</span>
+                          <input value={quotationName} readOnly />
+                        </label>
+                      </section>
+
+                      <section className="booking-quote-inventory">
+                        <label>
+                          <span>Additional Inventory Configuration</span>
+                          <select defaultValue="">
+                            <option value="">Choose Inventory Configuration</option>
+                          </select>
+                        </label>
+                        <label>
+                          <span>Additional Inventory</span>
+                          <select defaultValue="">
+                            <option value="">Choose Additional Inventory</option>
+                          </select>
+                        </label>
+                        <button type="button" className="booking-quote-apply">Apply</button>
+                      </section>
+
+                      <section className="booking-quote-cost">
+                        <h3>Cost Sheet</h3>
+                        <div className="booking-quote-table" role="table" aria-label="Cost sheet">
+                          <div className="booking-quote-row is-head" role="row">
+                            <span>Sr. No.</span>
+                            <span>Field Name</span>
+                            <span>Original Value</span>
+                            <span>Discount Or AdHoc Cost</span>
+                            <span>Input Field</span>
+                            <span>New Value</span>
+                          </div>
+                          {quotationCostRows.map((row) =>
+                            row.type === "section" ? (
+                              <div className="booking-quote-row is-section" role="row" key={`${row.serial}-${row.name}`}>
+                                <strong>{row.serial} {row.name}</strong>
+                              </div>
+                            ) : (
+                              <div className={`booking-quote-row is-line${row.highlight ? " is-highlight" : ""}`} role="row" key={`${row.serial}-${row.name}`}>
+                                <span>{row.serial}</span>
+                                <span>{row.name}</span>
+                                <span>Rs. {row.original}</span>
+                                <span>
+                                  <select defaultValue="Discount" aria-label={`${row.name} discount type`}>
+                                    <option>Discount</option>
+                                    <option>AdHoc Cost</option>
+                                  </select>
+                                </span>
+                                <span>
+                                  <label className="booking-quote-money-field">
+                                    <b>Rs.</b>
+                                    <input value="0" readOnly aria-label={`${row.name} input value`} />
+                                  </label>
+                                </span>
+                                <span>
+                                  <label className="booking-quote-money-field">
+                                    <b>Rs.</b>
+                                    <input value={row.newValue} readOnly aria-label={`${row.name} new value`} />
+                                  </label>
+                                </span>
+                              </div>
+                            )
+                          )}
+                        </div>
+                      </section>
+                    </div>
+                  )}
+
+                  <input name="customerName" type="hidden" value={bookingForm.customerName} readOnly />
+                  <input name="stage" type="hidden" value={bookingForm.stage} readOnly />
+                  <input name="bookedOn" type="hidden" value={bookingForm.bookedOn} readOnly />
+                  <input name="saleableArea" type="hidden" value={bookingForm.saleableArea} readOnly />
+                  <input name="basePrice" type="hidden" value={bookingForm.basePrice} readOnly />
+                  <input name="baseRate" type="hidden" value={bookingForm.baseRate} readOnly />
+
+                  <div className={`booking-modal-footer${bookingStepIndex === 0 ? " is-project-step" : ""}`}>
+                    {bookingStepIndex > 0 && (
+                      <div className="booking-modal-footer-note">
+                        You are taking a booking for <span>{leadName}</span>
+                      </div>
+                    )}
+                    <div className="booking-modal-footer-actions">
+                      <button
+                        type="button"
+                        className="lead-preview-booking-cancel"
+                        onClick={bookingStepIndex === 0 ? handleCloseBookingForm : () => setBookingStepIndex((current) => Math.max(0, current - 1))}
+                      >
+                        {bookingStepIndex === 0 ? "Cancel" : "Previous"}
+                      </button>
+                      {bookingStepIndex === 1 && (
+                        <button
+                          type="button"
+                          className="lead-preview-booking-cancel"
+                          onClick={() =>
+                            setBookingProjectMessage(
+                              bookingForm.unit
+                                ? `${bookingForm.unit} marked as interested.`
+                                : "Select a unit before marking interest."
+                            )
+                          }
+                        >
+                          Mark as Interested
+                        </button>
+                      )}
+                      <button
+                        type="submit"
+                        className="lead-preview-booking-save"
+                        disabled={
+                          isSavingBooking ||
+                          isLoadingBookingProject ||
+                          (bookingStepIndex === 0 && !bookingProjectSelectValue) ||
+                          (bookingStepIndex > 0 && !bookingForm.unit)
+                        }
+                      >
+                        {isSavingBooking
+                          ? "Saving..."
+                          : isLoadingBookingProject
+                            ? "Loading..."
+                            : bookingStepIndex === 0
+                              ? "Next"
+                              : bookingStepIndex === 1
+                                ? "Select Unit"
+                                : "Generate Quote"}
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+            )}
           </div>
         </div>
       </>

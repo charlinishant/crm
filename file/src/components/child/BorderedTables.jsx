@@ -13,13 +13,14 @@ const BorderedTables = () => {
     const [attachments, setAttachments] = useState([])
     const [users, setUsers] = useState([])
     const [isLoadingUsers, setIsLoadingUsers] = useState(true)
+    const [isSaving, setIsSaving] = useState(false)
     const [message, setMessage] = useState("")
     const [formData, setFormData] = useState({
         title: "",
         description: "",
         dueDate: "",
         dueTime: "2:00 PM",
-        assignee: "",
+        assigneeId: "",
         remark: "",
         priority: "Medium",
     })
@@ -36,7 +37,7 @@ const BorderedTables = () => {
                 setUsers(userList)
                 setFormData((current) => ({
                     ...current,
-                    assignee: current.assignee || (userList[0] ? getUserName(userList[0]) : ""),
+                    assigneeId: current.assigneeId || (userList[0]?.id ? String(userList[0].id) : ""),
                 }))
             } catch (error) {
                 console.error("Unable to load users:", error)
@@ -72,46 +73,75 @@ const BorderedTables = () => {
         }
     }
 
-    const handleSave = () => {
-        if (!formData.title.trim() || !formData.assignee) {
+    const handleSave = async () => {
+        if (!formData.title.trim() || !formData.assigneeId) {
             setMessage("Please add title and assignee.")
             return
         }
 
-        const savedTasks = JSON.parse(window.localStorage.getItem("savedTasks") || "[]")
         const authUser = JSON.parse(window.localStorage.getItem("authUser") || "null")
         const assignedBy = getUserName(authUser) || "Admin"
+        const selectedUser = users.find((user) => String(user.id) === String(formData.assigneeId))
 
         const newTask = {
-            id: Date.now(),
             title: formData.title.trim(),
             description: formData.description.trim(),
-            subtitle: formData.remark.trim(),
-            assignedTo: formData.assignee,
-            assignedBy,
+            remark: formData.remark.trim(),
+            type: "Follow up",
+            assigneeId: Number(formData.assigneeId),
+            assigneeName: getUserName(selectedUser),
+            assignedById: authUser?.id || null,
+            assignedByName: assignedBy,
             status: "Open",
             priority: formData.priority,
-            createdOn: new Date().toISOString(),
-            dueOn: formData.dueDate,
+            dueDate: formData.dueDate || null,
             dueTime: formData.dueTime,
             attachments: attachments.map((file) => file.name),
         }
 
-        window.localStorage.setItem("savedTasks", JSON.stringify([newTask, ...savedTasks]))
-        setMessage(`Task assigned to ${formData.assignee}.`)
-        setAttachments([])
-        setFormData({
-            title: "",
-            description: "",
-            dueDate: "",
-            dueTime: "2:00 PM",
-            assignee: users[0] ? getUserName(users[0]) : "",
-            remark: "",
-            priority: "Medium",
-        })
+        setIsSaving(true)
+        setMessage("")
 
-        if (fileInputRef.current) {
-            fileInputRef.current.value = ""
+        try {
+            const response = await fetch(`${API_URL}/tasks`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(newTask),
+            })
+
+            let result = {}
+            try {
+                result = await response.json()
+            } catch {
+                result = {}
+            }
+
+            if (!response.ok) {
+                throw new Error(result?.message || "Unable to save task")
+            }
+
+            setMessage(`Task assigned to ${getUserName(selectedUser)}.`)
+            setAttachments([])
+            setFormData({
+                title: "",
+                description: "",
+                dueDate: "",
+                dueTime: "2:00 PM",
+                assigneeId: users[0]?.id ? String(users[0].id) : "",
+                remark: "",
+                priority: "Medium",
+            })
+
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ""
+            }
+        } catch (error) {
+            console.error("Unable to save task:", error)
+            setMessage(error.message || "Unable to save task.")
+        } finally {
+            setIsSaving(false)
         }
     }
 
@@ -171,8 +201,8 @@ const BorderedTables = () => {
                         </label>
                         <select
                             id="taskAssignee"
-                            name="assignee"
-                            value={formData.assignee}
+                            name="assigneeId"
+                            value={formData.assigneeId}
                             onChange={handleChange}
                             disabled={isLoadingUsers}
                         >
@@ -180,7 +210,7 @@ const BorderedTables = () => {
                                 {isLoadingUsers ? "Loading users..." : "Select user"}
                             </option>
                             {users.map((user) => (
-                                <option key={user.id || user.email} value={getUserName(user)}>
+                                <option key={user.id || user.email} value={user.id}>
                                     {getUserName(user)}
                                     {user.role ? ` (${user.role})` : ""}
                                 </option>
@@ -251,8 +281,8 @@ const BorderedTables = () => {
 
                 <div className="new-task-footer">
                     {message && <span className="new-task-message">{message}</span>}
-                    <button type="button" className="new-task-save" onClick={handleSave}>
-                        Save
+                    <button type="button" className="new-task-save" onClick={handleSave} disabled={isSaving}>
+                        {isSaving ? "Saving..." : "Save"}
                     </button>
                 </div>
             </div>
