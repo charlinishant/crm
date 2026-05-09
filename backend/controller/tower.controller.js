@@ -78,7 +78,7 @@ exports.updateTower = async (req, res)=>{
         const data = req.body
         const id = req.params.id
         if(!id)
-            res.status(400).json("ID is reuqred")    
+            res.status(400).json("ID is required")    
 
         const record = await prisma.tower.findUnique({where:{id:parseInt(id)}})
         if(!record)
@@ -100,7 +100,7 @@ exports.deleteTower = async (req, res)=>{
     try {
         const id = req.params.id
         if(!id)
-            res.status(400).json("ID is reuqred")    
+            res.status(400).json("ID is required")    
 
         const record = await prisma.tower.findUnique({where:{id:parseInt(id)}})
         if(!record)

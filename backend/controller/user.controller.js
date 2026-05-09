@@ -124,7 +124,7 @@ exports.updateUser = async (req, res)=>{
         const data = req.body
         const id = req.params.id
         if(!id)
-            res.status(400).json("ID is reuqred")    
+            res.status(400).json("ID is required")    
 
         const user = await prisma.user.findUnique({where:{id:parseInt(id)}})
         if(!user)
@@ -146,7 +146,7 @@ exports.deleteUser = async (req, res)=>{
     try {
         const id = req.params.id
         if(!id)
-            res.status(400).json("ID is reuqred")    
+            res.status(400).json("ID is required")    
 
         const user = await prisma.user.findUnique({where:{id:parseInt(id)}})
         if(!user)

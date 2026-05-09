@@ -89,7 +89,7 @@ exports.updateFloor = async (req, res)=>{
         const data = req.body
         const id = req.params.id
         if(!id)
-            res.status(400).json("ID is reuqred")    
+            res.status(400).json("ID is required")    
 
         const record = await prisma.floorPlan.findUnique({where:{id:parseInt(id)}})
         if(!record)
@@ -111,7 +111,7 @@ exports.deleteFloor = async (req, res)=>{
     try {
         const id = req.params.id
         if(!id)
-            res.status(400).json("ID is reuqred")    
+            res.status(400).json("ID is required")    
 
         const record = await prisma.floorPlan.findUnique({where:{id:parseInt(id)}})
         if(!record)
