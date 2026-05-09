@@ -7,6 +7,8 @@ const Booking = () => {
     const [bookingFilter, setBookingFilter] = useState('All Bookings');
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [updatingBookingId, setUpdatingBookingId] = useState(null);
+    const [statusMessage, setStatusMessage] = useState('');
 
     const formatMoney = (value) => {
         if (value === undefined || value === null || value === "") return "Rs. 0";
@@ -67,6 +69,47 @@ const Booking = () => {
         creditNotes: "Rs. 0"
     })), [bookings]);
 
+    const handleStageChange = async (bookingId, stage) => {
+        setUpdatingBookingId(bookingId);
+        setStatusMessage('');
+
+        const previousBookings = bookings;
+        setBookings((current) =>
+            current.map((booking) =>
+                booking.id === bookingId ? { ...booking, stage } : booking
+            )
+        );
+
+        try {
+            const response = await fetch(`${API_URL}/bookings/${bookingId}`, {
+                method: "PATCH",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ stage }),
+            });
+
+            const result = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                throw new Error(result?.message || "Unable to update booking status");
+            }
+
+            setBookings((current) =>
+                current.map((booking) =>
+                    booking.id === bookingId ? { ...booking, ...result, stage: result.stage || stage } : booking
+                )
+            );
+            setStatusMessage(`Booking #${bookingId} status updated.`);
+        } catch (error) {
+            console.error("Unable to update booking status:", error);
+            setBookings(previousBookings);
+            setStatusMessage("Booking status could not be updated.");
+        } finally {
+            setUpdatingBookingId(null);
+        }
+    };
+
     const filteredBookings = useMemo(() => {
         const query = searchQuery ? searchQuery.toLowerCase() : '';
         return rows.filter(item => {
@@ -122,6 +165,9 @@ const Booking = () => {
                 </div>
 
                 <div className="table-responsive">
+                    {statusMessage && (
+                        <div className="booking-status-message">{statusMessage}</div>
+                    )}
                     <table className="floor-table">
                         <thead>
                             <tr>
@@ -148,7 +194,7 @@ const Booking = () => {
                         </thead>
 
                         <tbody>
-                            <tr className="summary-row">
+                            {/* <tr className="summary-row">
                                 <td></td>
                                 <td></td>
                                 <td></td>
@@ -158,15 +204,11 @@ const Booking = () => {
                                 <td></td>
                                 <td></td>
                                 <td></td>
-                                <td className="text-right summary-title">Summary:</td>
-                                <td className="text-right summary-val">Rs. 21Cr</td>
-                                <td className="text-right summary-val">Rs. 16Cr</td>
-                                <td className="text-right summary-val">Rs. 0</td>
                                 <td></td>
                                 <td></td>
                                 <td></td>
                                 <td></td>
-                            </tr>
+                            </tr> */}
 
                             {filteredBookings.length === 0 ? (
                                 <tr>
@@ -202,13 +244,17 @@ const Booking = () => {
                                             )}
                                         </td>
                                         <td>
-                                            <span className={
-                                                item.stage === "Tentative"
-                                                    ? "badge-tentative"
-                                                    : "badge-cancelled"
-                                            }>
-                                                {item.stage}
-                                            </span>
+                                            <select
+                                                className={`booking-stage-select booking-stage-${String(item.stage).toLowerCase()}`}
+                                                value={item.stage}
+                                                onChange={(event) => handleStageChange(item.id, event.target.value)}
+                                                disabled={updatingBookingId === item.id}
+                                                aria-label={`Update booking ${item.id} stage`}
+                                            >
+                                                <option value="Tentative">Tentative</option>
+                                                <option value="Booked">Booked</option>
+                                                <option value="Cancelled">Cancelled</option>
+                                            </select>
                                         </td>
                                         <td>{item.source}</td>
                                         <td>{item.bookedBy}</td>

@@ -9,6 +9,7 @@ const toNumberOrNull = (value) => {
 exports.createBooking = async (req, res) => {
   try {
     const data = req.body
+    let createdBookingId = null
 
     await prisma.$transaction(async(tx)=>{
       let  bookingData =  {
@@ -32,31 +33,58 @@ exports.createBooking = async (req, res) => {
       const booking = await tx.booking.create({
         data:bookingData,
       })
+      createdBookingId = booking.id
 
-      let costSheetData = req.body.costSheet
-      
-      const costSheet = await tx.costSheet.createMany({
-        data:costSheetData.map(item=>({
-          ...item,
-          bookingId:booking.id
-        }))
-      })
+      let costSheetData = Array.isArray(req.body.costSheet) ? req.body.costSheet : []
+      const firstCostSheet = costSheetData[0]
+
+      if (firstCostSheet) {
+        await tx.costSheet.create({
+          data: {
+            fieldName: firstCostSheet.fieldName,
+            orignalValue: toNumberOrNull(firstCostSheet.orignalValue),
+            costType: firstCostSheet.costType || "Discount",
+            inputField: toNumberOrNull(firstCostSheet.inputField),
+            newValue: Number(firstCostSheet.newValue) || 0,
+            bookingId: booking.id,
+          },
+        })
+      }
 
       
-      let paymentScheduleData = data.paymentSchedule
-      
-      const paymentSchedule = await tx.paymentSchedule.createMany({
-        data:paymentScheduleData.map(item=>({
-          ...item,
-          bookingId:booking.id
-        }))
-      })
+      let paymentScheduleData = Array.isArray(data.paymentSchedule) ? data.paymentSchedule : []
+      const firstPaymentSchedule = paymentScheduleData[0]
+
+      if (firstPaymentSchedule) {
+        await tx.paymentSchedule.create({
+          data: {
+            name: firstPaymentSchedule.name,
+            towerMilestone: firstPaymentSchedule.towerMilestone,
+            value: toNumberOrNull(firstPaymentSchedule.value),
+            amount: toNumberOrNull(firstPaymentSchedule.amount),
+            taxes: toNumberOrNull(firstPaymentSchedule.taxes),
+            tds: toNumberOrNull(firstPaymentSchedule.tds),
+            grandTotal: Number(firstPaymentSchedule.grandTotal) || 0,
+            bookingId: booking.id,
+          },
+        })
+      }
       
       
       
     })
 
-    res.status(201).json("Booking create successfully")
+    const createdBooking = await prisma.booking.findFirst({
+      where: { id: createdBookingId },
+      include: { costSheet: true, paymentSchedule: true },
+      orderBy: { createdAt: "desc" },
+    })
+
+    res.status(201).json(
+      createdBooking
+        ? { ...createdBooking, unit: data.unit || null }
+        : { message: "Booking create successfully", unit: data.unit || null }
+    )
   } catch (error) {
     console.log(error)
     res.status(500).json({ message: "Something went wrong" })
@@ -102,20 +130,27 @@ exports.updateBooking = async (req, res) => {
 
     if (!booking) return res.status(404).json({ message: "Booking not found" })
 
+    const updateData = {}
+
+    if (data.customerName !== undefined) updateData.customerName = data.customerName
+    if (data.stage !== undefined) updateData.stage = data.stage
+    if (data.projectDetails !== undefined) updateData.projectDetails = data.projectDetails
+    if (data.bookedOn !== undefined) updateData.bookedOn = data.bookedOn ? new Date(data.bookedOn) : null
+    if (data.saleableArea !== undefined) updateData.saleableArea = toNumberOrNull(data.saleableArea)
+    if (data.basePrice !== undefined) updateData.basePrice = toNumberOrNull(data.basePrice)
+    if (data.baseRate !== undefined) updateData.baseRate = toNumberOrNull(data.baseRate)
+    if (data.source !== undefined) updateData.source = data.source
+    if (data.bookedBy !== undefined) updateData.bookedBy = data.bookedBy
+    if (data.unitId !== undefined) updateData.unitId = toNumberOrNull(data.unitId)
+
+    if (!Object.keys(updateData).length) {
+      return res.status(400).json({ message: "No booking fields provided" })
+    }
+
     const result = await prisma.booking.update({
       where: { id },
-      data: {
-        unit: data.unit,
-        customerName: data.customerName,
-        stage: data.stage,
-        projectDetails: data.projectDetails,
-        bookedOn: data.bookedOn ? new Date(data.bookedOn) : data.bookedOn,
-        saleableArea: toNumberOrNull(data.saleableArea),
-        basePrice: toNumberOrNull(data.basePrice),
-        baseRate: toNumberOrNull(data.baseRate),
-        source: data.source,
-        bookedBy: data.bookedBy,
-      },
+      data: updateData,
+      include: { costSheet: true, paymentSchedule: true },
     })
 
     res.status(200).json(result)

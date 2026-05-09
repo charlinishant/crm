@@ -3,6 +3,9 @@ const XLSX = require("xlsx")
 const prisma = require("../lib/prisma")
 const { create } = require("domain")
 
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+const phoneRegex = /^\d{10}$/
+
 exports.createLead = async (req, res) => {
   try {
     let {
@@ -55,7 +58,22 @@ exports.createLead = async (req, res) => {
       requirementComment,
     } = req.body
 
-    gender = gender.toUpperCase()
+    const validEmails = Array.isArray(emails) ? emails.filter(item => item?.value) : []
+    const validPhones = Array.isArray(phones) ? phones.filter(item => item?.value) : []
+
+    if (!firstName || !lastName) {
+      return res.status(400).json({ message: "First name and last name are required" })
+    }
+
+    if (!validEmails.length || validEmails.some(item => !emailRegex.test(String(item.value).trim()))) {
+      return res.status(400).json({ message: "A valid email address is required" })
+    }
+
+    if (!validPhones.length || validPhones.some(item => !phoneRegex.test(String(item.value).trim()))) {
+      return res.status(400).json({ message: "Phone number must be exactly 10 digits" })
+    }
+
+    gender = gender ? gender.toUpperCase() : null
     teamId = teamId!= null ? parseInt(teamId):null
     const lead = await prisma.lead.create({
       data: {

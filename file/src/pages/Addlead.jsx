@@ -51,6 +51,9 @@ const INDIA_STATES = [
   "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry"
 ];
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PHONE_REGEX = /^\d{10}$/;
+
 const ADDLEAD = () => {
   const [activeTab, setActiveTab] = useState("basic");
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
@@ -125,6 +128,7 @@ const ADDLEAD = () => {
   const [loadingProjects, setLoadingProjects] = useState(true);
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
+  const [formErrors, setFormErrors] = useState({});
 
   const getUserName = (user) =>
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
@@ -180,8 +184,9 @@ const ADDLEAD = () => {
   }, [API_URL]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    const { name, value, type, checked } = e.target;
+    setFormData({ ...formData, [name]: type === "checkbox" ? checked : value });
+    setFormErrors((current) => ({ ...current, [name]: "" }));
   };
 
   const handleLeadAddressChange = (field, value) => {
@@ -202,6 +207,7 @@ const ADDLEAD = () => {
     const updated = [...formData.emails];
     updated[index][field] = value;
     setFormData({ ...formData, emails: updated });
+    setFormErrors((current) => ({ ...current, emails: "" }));
   };
 
   const addEmail = () => {
@@ -219,8 +225,9 @@ const ADDLEAD = () => {
   // PHONE
   const handlePhoneChange = (index, field, value) => {
     const updated = [...formData.phones];
-    updated[index][field] = value;
+    updated[index][field] = field === "value" ? value.replace(/\D/g, "").slice(0, 10) : value;
     setFormData({ ...formData, phones: updated });
+    setFormErrors((current) => ({ ...current, phones: "" }));
   };
 
   const addPhone = () => {
@@ -235,8 +242,43 @@ const ADDLEAD = () => {
     setFormData({ ...formData, phones: updated });
   };
 
+  const validateLeadForm = () => {
+    const errors = {};
+    const validEmails = formData.emails.filter((email) => email.value?.trim());
+    const validPhones = formData.phones.filter((phone) => phone.value?.trim());
+
+    if (!formData.firstName.trim()) errors.firstName = "First name is required.";
+    if (!formData.lastName.trim()) errors.lastName = "Last name is required.";
+    if (!validEmails.length) errors.emails = "Primary email is required.";
+    if (validEmails.some((email) => !EMAIL_REGEX.test(email.value.trim()))) {
+      errors.emails = "Enter a valid email address.";
+    }
+    if (!validPhones.length) errors.phones = "Primary phone is required.";
+    if (validPhones.some((phone) => !PHONE_REGEX.test(phone.value.trim()))) {
+      errors.phones = "Phone number must be exactly 10 digits.";
+    }
+    if (Number(formData.budgetMin) < 0 || Number(formData.budgetMax) < 0) {
+      errors.budget = "Budget cannot be negative.";
+    }
+    if (Number(formData.budgetMax) && Number(formData.budgetMin) > Number(formData.budgetMax)) {
+      errors.budget = "Min budget cannot be greater than max budget.";
+    }
+    if (Number(formData.seats) < 0) errors.seats = "Seats cannot be negative.";
+    if (Number(formData.tenure) < 0) errors.tenure = "Tenure cannot be negative.";
+
+    return errors;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const errors = validateLeadForm();
+    setFormErrors(errors);
+
+    if (Object.keys(errors).length) {
+      setActiveTab("basic");
+      return;
+    }
+
     const payload = {
       ...formData,
       budgetMin: Number(formData.budgetMin) || 0,
@@ -248,7 +290,7 @@ const ADDLEAD = () => {
 
     console.log(payload);
 
-    await fetch(`${process.env.REACT_APP_API_URL}/leads`,
+    await fetch(`${API_URL}/leads`,
       {
         method:"POST",
         headers:{
@@ -317,9 +359,11 @@ const ADDLEAD = () => {
                       <option>Mrs.</option>
                       <option>Ms.</option>
                     </select>
-                    <input name="firstName" placeholder="First Name" onChange={handleChange} />
-                    <input name="lastName" placeholder="Last Name" onChange={handleChange} />
+                    <input name="firstName" placeholder="First Name" value={formData.firstName} onChange={handleChange} required />
+                    <input name="lastName" placeholder="Last Name" value={formData.lastName} onChange={handleChange} required />
                   </div>
+                  {formErrors.firstName && <p className="lead-error">{formErrors.firstName}</p>}
+                  {formErrors.lastName && <p className="lead-error">{formErrors.lastName}</p>}
                 </div>
 
                 {/* EMAIL */}
@@ -339,6 +383,7 @@ const ADDLEAD = () => {
                         placeholder={index === 0 ? "Primary Email" : "Secondary Email"}
                         value={email.value}
                         onChange={(e) => handleEmailChange(index, "value", e.target.value)}
+                        required={index === 0}
                       />
                       {index === 0 ? (
                         <button type="button" className="lead-add" onClick={addEmail}>+ Add</button>
@@ -347,6 +392,7 @@ const ADDLEAD = () => {
                       )}
                     </div>
                   ))}
+                  {formErrors.emails && <p className="lead-error">{formErrors.emails}</p>}
                 </div>
 
                 {/* PHONE */}
@@ -366,7 +412,11 @@ const ADDLEAD = () => {
                         <input
                           placeholder={index === 0 ? "Primary Phone" : "Secondary Phone"}
                           value={phone.value}
+                          inputMode="numeric"
+                          maxLength={10}
+                          pattern="[0-9]{10}"
                           onChange={(e) => handlePhoneChange(index, "value", e.target.value)}
+                          required={index === 0}
                         />
                       </div>
                       {index === 0 ? (
@@ -377,6 +427,7 @@ const ADDLEAD = () => {
                     </div>
                   ))}
                   <p className="lead-hint">Enter phone number (country code pre-added).</p>
+                  {formErrors.phones && <p className="lead-error">{formErrors.phones}</p>}
                 </div>
 
                 {/* TIMEZONE */}
@@ -526,12 +577,14 @@ const ADDLEAD = () => {
                 <div className="lead-group lead-full">
                   <label>SEATS</label>
                   <input type="number" name="seats" placeholder="Seats" onChange={handleChange} />
+                  {formErrors.seats && <p className="lead-error">{formErrors.seats}</p>}
                 </div>
 
                 {/* TENURE */}
                 <div className="lead-group lead-full">
                   <label>TENURE (IN MONTHS)</label>
                   <input type="text" name="tenure" placeholder="Tenure (in Months)" onChange={handleChange} />
+                  {formErrors.tenure && <p className="lead-error">{formErrors.tenure}</p>}
                 </div>
 
                 {/* LEAD REASSIGNED */}
@@ -814,6 +867,7 @@ const ADDLEAD = () => {
         <input type="number" name="budgetMin" placeholder="Min budget" onChange={handleChange} />
         <input type="number" name="budgetMax" placeholder="Max budget" onChange={handleChange} />
       </div>
+      {formErrors.budget && <p className="lead-error">{formErrors.budget}</p>}
     </div>
 
     {/* POSSESSION */}

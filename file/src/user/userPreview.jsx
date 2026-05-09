@@ -30,6 +30,7 @@ const fallbackLead = {
 const emptyBookingForm = {
   projectId: "",
   unit: "",
+  unitId: "",
   customerName: "",
   stage: "Tentative",
   projectDetails: "",
@@ -37,6 +38,23 @@ const emptyBookingForm = {
   saleableArea: "",
   basePrice: "",
   baseRate: "",
+  bookingCancellationReason: "",
+  bookingCancellationNote: "",
+  campaign: "walkin",
+  source: "",
+  channelPartner: "",
+  companyName: "",
+  numberOfSeats: "",
+  physicalSeats: "",
+  carpetArea: "",
+  tenureMonths: "",
+  perSeatPrice: "",
+  monthlyRevenue: "",
+  noticePeriodMonths: "",
+  lockInPeriod: "",
+  securityDeposit: "",
+  leaseStartDate: "",
+  leaseEndDate: "",
 };
 
 const readStoredLead = () => {
@@ -73,10 +91,26 @@ const bookingSteps = [
 ];
 
 const defaultBookingFilters = {
-  propertyPurpose: "Sale",
-  unitType: "Residential",
-  propertyType: "Villa",
+  propertyPurpose: "",
+  unitType: "",
+  propertyType: "",
 };
+
+const toCleanNumber = (value) => {
+  if (value === undefined || value === null || value === "") return 0;
+  const number = Number(String(value).replace(/,/g, ""));
+  return Number.isNaN(number) ? 0 : number;
+};
+
+const calculateCostNewValue = (row) => {
+  const original = toCleanNumber(row.originalValue);
+  const input = toCleanNumber(row.inputField);
+
+  return row.costType === "AdHoc Cost" ? original + input : Math.max(original - input, 0);
+};
+
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const phonePattern = /^\d{10}$/;
 
 const normalizeStatus = (value) => {
   if (!value) return "Booked";
@@ -112,6 +146,10 @@ const UserPreview = () => {
   const location = useLocation();
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const [lead, setLead] = useState(location.state?.lead || readStoredLead() || fallbackLead);
+  const [isLeadEditOpen, setIsLeadEditOpen] = useState(false);
+  const [leadEditForm, setLeadEditForm] = useState({});
+  const [isSavingLeadEdit, setIsSavingLeadEdit] = useState(false);
+  const [leadEditMessage, setLeadEditMessage] = useState("");
   const [selectedStatus, setSelectedStatus] = useState(
     normalizeStatus(
       getLeadValue(
@@ -134,6 +172,12 @@ const UserPreview = () => {
   const [bookingProjectMessage, setBookingProjectMessage] = useState("");
   const [bookingFilters, setBookingFilters] = useState(defaultBookingFilters);
   const [bookingUnitView, setBookingUnitView] = useState("listing");
+  const [selectedBookingTowerId, setSelectedBookingTowerId] = useState("");
+  const [quotationTab, setQuotationTab] = useState("unit");
+  const [quotationScheme, setQuotationScheme] = useState("default");
+  const [quotationPaymentPlan, setQuotationPaymentPlan] = useState("80-20");
+  const [editableCostRows, setEditableCostRows] = useState([]);
+  const [editablePaymentRows, setEditablePaymentRows] = useState([]);
   const [shouldCheckAvailability, setShouldCheckAvailability] = useState(true);
   const [isSavingBooking, setIsSavingBooking] = useState(false);
   const [bookingMessage, setBookingMessage] = useState("");
@@ -194,6 +238,23 @@ const UserPreview = () => {
 
   useEffect(() => {
     setSelectedStatus(normalizeStatus(getLeadValue(lead, ["status", "lead_status", "stage"], "Booked")));
+    const primaryEmail = Array.isArray(lead.emails)
+      ? lead.emails.find((email) => email?.value)?.value || ""
+      : lead.email || "";
+    const primaryPhone = Array.isArray(lead.phones)
+      ? lead.phones.find((phone) => phone?.value)?.value || ""
+      : lead.phone || "";
+
+    setLeadEditForm({
+      firstName: lead.firstName || "",
+      lastName: lead.lastName || "",
+      email: primaryEmail,
+      phone: primaryPhone,
+      tags: lead.tags || "",
+      interestedProjects: lead.interestedProjects || lead.project_name || lead.projectName || "",
+      channelPartner: lead.channelPartner || lead.channel_partner || "",
+      companyName: lead.companyName || "",
+    });
   }, [lead]);
 
   const leadName = getLeadValue(
@@ -240,16 +301,37 @@ const UserPreview = () => {
           type: group.type,
           bedrooms: group.bedrooms,
           bathrooms: group.bathrooms,
+          carpet: group.carpet,
           saleable: group.saleable,
         }))
       ),
     [bookingProjectUnits]
   );
+  const bookingTowerOptions = useMemo(() => {
+    const towerMap = new Map();
+    bookingProjectUnits.forEach((group) => {
+      if (group.tower?.id || group.tower?.name) {
+        const key = String(group.tower.id || group.tower.name);
+        towerMap.set(key, {
+          id: group.tower.id || group.tower.name,
+          name: group.tower.name || `Tower ${group.tower.id}`,
+        });
+      }
+    });
+
+    return Array.from(towerMap.values());
+  }, [bookingProjectUnits]);
   const selectedBookingUnit = flattenedBookingUnits.find(
-    (unit) => unit.name === bookingForm.unit || String(unit.id) === String(bookingForm.unit)
+    (unit) =>
+      unit.name === bookingForm.unit ||
+      String(unit.id) === String(bookingForm.unit) ||
+      String(unit.groupId) === String(bookingForm.unitId)
   );
   const visibleBookingUnits = useMemo(() => {
     return flattenedBookingUnits.filter((unit) => {
+      const towerMatches =
+        !selectedBookingTowerId ||
+        String(unit.tower?.id || unit.tower?.name || "") === String(selectedBookingTowerId);
       const purposeMatches =
         !bookingFilters.propertyPurpose ||
         !unit.propertyPurpose ||
@@ -263,13 +345,14 @@ const UserPreview = () => {
         !unit.category ||
         unit.category.toLowerCase() === bookingFilters.propertyType.toLowerCase();
 
-      return purposeMatches && unitTypeMatches && propertyTypeMatches;
+      return towerMatches && purposeMatches && unitTypeMatches && propertyTypeMatches;
     });
-  }, [bookingFilters, flattenedBookingUnits]);
+  }, [bookingFilters, flattenedBookingUnits, selectedBookingTowerId]);
   const bookingProjectSelectValue =
     bookingForm.projectId || (bookingForm.projectDetails ? "__lead_project__" : "");
   const activeTowerName =
     selectedBookingUnit?.tower?.name ||
+    bookingTowerOptions.find((tower) => String(tower.id) === String(selectedBookingTowerId))?.name ||
     bookingProjectUnits.find((group) => group.tower?.name)?.tower?.name ||
     "Tower D";
 
@@ -356,6 +439,82 @@ const UserPreview = () => {
     }
   };
 
+  const handleLeadEditChange = (event) => {
+    const { name, value } = event.target;
+    setLeadEditForm((prev) => ({
+      ...prev,
+      [name]: name === "phone" ? value.replace(/\D/g, "").slice(0, 10) : value,
+    }));
+    setLeadEditMessage("");
+  };
+
+  const handleSaveLeadEdit = async (event) => {
+    event.preventDefault();
+    setLeadEditMessage("");
+
+    if (!leadEditForm.firstName?.trim() || !leadEditForm.lastName?.trim()) {
+      setLeadEditMessage("First name and last name are required.");
+      return;
+    }
+
+    if (!emailPattern.test(String(leadEditForm.email || "").trim())) {
+      setLeadEditMessage("Enter a valid email address.");
+      return;
+    }
+
+    if (!phonePattern.test(String(leadEditForm.phone || "").trim())) {
+      setLeadEditMessage("Phone number must be exactly 10 digits.");
+      return;
+    }
+
+    setIsSavingLeadEdit(true);
+
+    try {
+      const payload = {
+        firstName: leadEditForm.firstName.trim(),
+        lastName: leadEditForm.lastName.trim(),
+        emails: [{ type: "Office", value: leadEditForm.email.trim() }],
+        phones: [{ type: "Work", value: leadEditForm.phone.trim() }],
+        tags: leadEditForm.tags || "",
+        interestedProjects: leadEditForm.interestedProjects || "",
+        channelPartner: leadEditForm.channelPartner || "",
+        companyName: leadEditForm.companyName || "",
+      };
+
+      const response = await fetch(`${API_URL}/leads/${leadId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(result?.message || "Unable to update lead");
+      }
+
+      const updatedLead = {
+        ...lead,
+        ...payload,
+        ...result,
+        name: `${payload.firstName} ${payload.lastName}`.trim(),
+      };
+
+      setLead(updatedLead);
+      updateStoredLead("selectedLeadPreview", updatedLead);
+      updateStoredLead("selectedLeadDetails", updatedLead);
+      setLeadEditMessage("Lead details saved.");
+      setIsLeadEditOpen(false);
+    } catch (error) {
+      console.error("Unable to save lead details:", error);
+      setLeadEditMessage("Lead details could not be saved.");
+    } finally {
+      setIsSavingLeadEdit(false);
+    }
+  };
+
   const handleSaveStatus = async () => {
     setIsSavingStatus(true);
     setStatusMessage("");
@@ -417,11 +576,13 @@ const UserPreview = () => {
       setBookingProjectDetails(null);
       setBookingProjectUnits([]);
       setBookingProjectMessage("");
+      setSelectedBookingTowerId("");
       setBookingForm((prev) => ({
         ...prev,
         projectId: "",
         projectDetails: prev.projectDetails || projectName,
         unit: "",
+        unitId: "",
       }));
       return;
     }
@@ -431,34 +592,46 @@ const UserPreview = () => {
     setBookingProjectDetails(null);
     setBookingProjectUnits([]);
     setBookingProjectMessage("");
+    setSelectedBookingTowerId("");
     setBookingForm((prev) => ({
       ...prev,
       projectId,
       projectDetails: project?.name || "",
       unit: "",
+      unitId: "",
     }));
   };
 
   const handleBookingFilterChange = (filterKey, value) => {
     setBookingFilters((prev) => ({ ...prev, [filterKey]: value }));
-    setBookingForm((prev) => ({ ...prev, unit: "" }));
+    setBookingForm((prev) => ({ ...prev, unit: "", unitId: "" }));
   };
 
   const handleClearBookingFilters = () => {
     setBookingFilters(defaultBookingFilters);
-    setBookingForm((prev) => ({ ...prev, unit: "" }));
+    setSelectedBookingTowerId("");
+    setBookingForm((prev) => ({ ...prev, unit: "", unitId: "" }));
+  };
+
+  const handleBookingTowerChange = (event) => {
+    setSelectedBookingTowerId(event.target.value);
+    setBookingForm((prev) => ({ ...prev, unit: "", unitId: "" }));
   };
 
   const handleBookingUnitSelect = (unit) => {
     const unitName = unit.name || `Unit ${unit.unitIndex || unit.id}`;
 
     setBookingProjectMessage("");
+    setEditableCostRows([]);
+    setEditablePaymentRows([]);
     setBookingForm((prev) => ({
       ...prev,
       unit: unitName,
+      unitId: unit.groupId || "",
       basePrice: unit.basePrice || "",
       baseRate: unit.baseRate || "",
       saleableArea: unit.saleable || prev.saleableArea,
+      carpetArea: unit.carpet || prev.carpetArea,
     }));
   };
 
@@ -494,6 +667,8 @@ const UserPreview = () => {
       });
 
       setBookingProjectUnits(filteredUnits);
+      const firstTower = filteredUnits.find((group) => group.tower?.id || group.tower?.name)?.tower;
+      setSelectedBookingTowerId(firstTower ? String(firstTower.id || firstTower.name) : "");
 
       if (selectedProjectDetails?.name) {
         setBookingForm((prev) => ({
@@ -528,6 +703,12 @@ const UserPreview = () => {
     setBookingProjectDetails(null);
     setBookingProjectUnits([]);
     setBookingFilters(defaultBookingFilters);
+    setSelectedBookingTowerId("");
+    setQuotationTab("unit");
+    setQuotationScheme("default");
+    setQuotationPaymentPlan("80-20");
+    setEditableCostRows([]);
+    setEditablePaymentRows([]);
     setBookingUnitView("listing");
     setShouldCheckAvailability(true);
     setBookingStepIndex(0);
@@ -551,6 +732,12 @@ const UserPreview = () => {
     setBookingMessage("Fill the booking form for this lead.");
     setBookingStepIndex(0);
     setBookingFilters(defaultBookingFilters);
+    setSelectedBookingTowerId("");
+    setQuotationTab("unit");
+    setQuotationScheme("default");
+    setQuotationPaymentPlan("80-20");
+    setEditableCostRows([]);
+    setEditablePaymentRows([]);
     setBookingUnitView("listing");
     setShouldCheckAvailability(true);
     setIsBookingFormOpen(true);
@@ -595,21 +782,143 @@ const UserPreview = () => {
   const quotationBaseRate =
     bookingForm.baseRate || selectedBookingUnit?.baseRate || "7.8K (7,750)";
   const quotationName = `${quotationProjectName} - ${quotationTowerName} - ${quotationUnitName}`;
-  const quotationCostRows = [
+  const baseAgreementValue =
+    toCleanNumber(bookingForm.basePrice || selectedBookingUnit?.basePrice) ||
+    toCleanNumber(selectedBookingUnit?.saleable) * toCleanNumber(selectedBookingUnit?.baseRate);
+  const defaultQuotationCostRows = useMemo(() => [
     { type: "section", serial: "1.", name: "Basic Details" },
-    { serial: "1.a", name: "Base Rate", original: "7,750.0", newValue: "7750.0", highlight: true },
-    { serial: "1.b", name: "Floor Rise", original: "2,000.0", newValue: "2000.0" },
+    { serial: "1.a", name: "Base Rate", originalValue: toCleanNumber(selectedBookingUnit?.baseRate || bookingForm.baseRate || 7750), costType: "Discount", inputField: 0, highlight: true },
+    { serial: "1.b", name: "Floor Rise", originalValue: 2000, costType: "Discount", inputField: 0 },
     { type: "section", serial: "2.", name: "Agreement Value Details" },
-    { serial: "2.a", name: "Base Price", original: "14,625,000.0", newValue: "14625000.0" },
-    { serial: "2.b", name: "Guideline Value", original: "450,000.0", newValue: "450000.0" },
-    { serial: "2.c", name: "Development Invoice", original: "600,000.0", newValue: "600000.0" },
-    { serial: "2.d", name: "Advance Maintainence", original: "290,100,000.0", newValue: "290100000.0" },
-    { serial: "2.e", name: "Agreement Value", original: "305,775,000.0", newValue: "305775000.0", highlight: true },
+    { serial: "2.a", name: "Base Price", originalValue: baseAgreementValue || 14625000, costType: "Discount", inputField: 0 },
+    { serial: "2.b", name: "Guideline Value", originalValue: 450000, costType: "Discount", inputField: 0 },
+    { serial: "2.c", name: "Development Invoice", originalValue: 600000, costType: "Discount", inputField: 0 },
+    { serial: "2.d", name: "Advance Maintainence", originalValue: 290100000, costType: "Discount", inputField: 0 },
+    { serial: "2.e", name: "Agreement Value", originalValue: baseAgreementValue || 305775000, costType: "Discount", inputField: 0, highlight: true },
     { type: "section", serial: "3.", name: "Additional Details" },
-    { serial: "3.a", name: "Legal Documentation Fee", original: "50,000.0", newValue: "50000.0" },
-    { serial: "3.b", name: "Clubhouse Charges", original: "75,000.0", newValue: "75000.0" },
-    { serial: "3.c", name: "Maintenance Deposit", original: "125,000.0", newValue: "125000.0" },
+    { serial: "3.a", name: "Legal Documentation Fee", originalValue: 50000, costType: "Discount", inputField: 0 },
+    { serial: "3.b", name: "Clubhouse Charges", originalValue: 75000, costType: "Discount", inputField: 0 },
+    { serial: "3.c", name: "Maintenance Deposit", originalValue: 125000, costType: "Discount", inputField: 0 },
+  ], [baseAgreementValue, bookingForm.baseRate, selectedBookingUnit?.baseRate]);
+  const quotationCostRows = editableCostRows.length ? editableCostRows : defaultQuotationCostRows;
+  const quotationLineRows = quotationCostRows
+    .filter((row) => row.type !== "section")
+    .map((row) => ({ ...row, newValue: calculateCostNewValue(row) }));
+  const quotationAgreementValue =
+    toCleanNumber(quotationLineRows.find((row) => row.name === "Agreement Value")?.newValue) ||
+    toCleanNumber(bookingForm.basePrice || selectedBookingUnit?.basePrice || 0);
+  const quotationAllInclusiveValue =
+    quotationLineRows
+      .filter((row) => !["Base Rate", "Floor Rise"].includes(row.name))
+      .reduce((total, row) => total + toCleanNumber(row.newValue), 0) ||
+    quotationAgreementValue;
+  const paymentScheduleRows = editablePaymentRows.length
+    ? editablePaymentRows
+    : [
+        { name: "Agreement", towerMilestone: "Agreement", value: 80, taxes: 0, tds: 0 },
+        { name: "Possession", towerMilestone: "Possession", value: 20, taxes: 0, tds: 0 },
+      ];
+  const calculatedPaymentRows = paymentScheduleRows.map((row) => {
+    const value = toCleanNumber(row.value);
+    const amount = (quotationAgreementValue * value) / 100;
+    const taxes = toCleanNumber(row.taxes);
+    const tds = toCleanNumber(row.tds);
+
+    return {
+      ...row,
+      amount,
+      grandTotal: amount + taxes - tds,
+    };
+  });
+  const paymentTotals = calculatedPaymentRows.reduce(
+    (totals, row) => ({
+      value: totals.value + toCleanNumber(row.value),
+      amount: totals.amount + toCleanNumber(row.amount),
+      taxes: totals.taxes + toCleanNumber(row.taxes),
+      tds: totals.tds + toCleanNumber(row.tds),
+      grandTotal: totals.grandTotal + toCleanNumber(row.grandTotal),
+    }),
+    { value: 0, amount: 0, taxes: 0, tds: 0, grandTotal: 0 }
+  );
+  const quotationSchemeLabel =
+    {
+      default: "Default Scheme",
+      "construction-linked": "Construction Linked Scheme",
+      "possession-linked": "Possession Linked Scheme",
+      custom: "Custom Scheme",
+    }[quotationScheme] || "Default Scheme";
+  const quotationPaymentPlanLabel =
+    {
+      "80-20": "80:20 Payment Schedule",
+      "60-40": "60:40 Payment Schedule",
+      100: "100% Agreement Payment",
+    }[quotationPaymentPlan] || "80:20 Payment Schedule";
+  const formatCurrency = (value) =>
+    Number(value || 0).toLocaleString("en-IN", {
+      maximumFractionDigits: 0,
+    });
+  const bookingConfirmationDate =
+    bookingForm.bookedOn || new Date().toISOString().slice(0, 10);
+  const applicantEmail = Array.isArray(lead.emails)
+    ? lead.emails.find((email) => email?.value)?.value
+    : lead.email || lead.primaryEmail || "-";
+  const applicantPhone = Array.isArray(lead.phones)
+    ? lead.phones.find((phone) => phone?.value)?.value
+    : lead.phone || lead.mobile || "-";
+  const bookingUnitDetails = [
+    ["Name", quotationUnitName],
+    ["Status", formatBookingDetail(selectedBookingUnit?.status, "Available")],
+    ["Floor", quotationFloor],
+    ["Project Tower Name", quotationTowerName],
+    ["Bedrooms", formatBookingDetail(selectedBookingUnit?.bedrooms, "-")],
+    ["Bathrooms", formatBookingDetail(selectedBookingUnit?.bathrooms, "-")],
+    ["Carpet", formatBookingDetail(selectedBookingUnit?.carpet, bookingForm.carpetArea || "-")],
+    ["Saleable", quotationSaleable],
+    ["Base Rate", quotationBaseRate],
+    ["Floor Rise", "-"],
+    ["Effective Rate", "-"],
+    ["Total Price", quotationAgreementValue ? `Rs. ${formatCurrency(quotationAgreementValue)}` : "-"],
+    ["Agreement Value", quotationAgreementValue ? `Rs. ${formatCurrency(quotationAgreementValue)}` : "-"],
   ];
+
+  const handleCostRowChange = (serial, field, value) => {
+    setEditableCostRows((current) =>
+      (current.length ? current : defaultQuotationCostRows).map((row) =>
+        row.serial === serial ? { ...row, [field]: value } : row
+      )
+    );
+  };
+
+  const handlePaymentPlanChange = (event) => {
+    const value = event.target.value;
+    setQuotationPaymentPlan(value);
+
+    if (value === "100") {
+      setEditablePaymentRows([{ name: "Agreement", towerMilestone: "Agreement", value: 100, taxes: 0, tds: 0 }]);
+      return;
+    }
+
+    if (value === "60-40") {
+      setEditablePaymentRows([
+        { name: "Agreement", towerMilestone: "Agreement", value: 60, taxes: 0, tds: 0 },
+        { name: "Possession", towerMilestone: "Possession", value: 40, taxes: 0, tds: 0 },
+      ]);
+      return;
+    }
+
+    setEditablePaymentRows([
+      { name: "Agreement", towerMilestone: "Agreement", value: 80, taxes: 0, tds: 0 },
+      { name: "Possession", towerMilestone: "Possession", value: 20, taxes: 0, tds: 0 },
+    ]);
+  };
+
+  const handlePaymentRowChange = (index, field, value) => {
+    setEditablePaymentRows((current) =>
+      (current.length ? current : paymentScheduleRows).map((row, rowIndex) =>
+        rowIndex === index ? { ...row, [field]: value } : row
+      )
+    );
+  };
 
   const handleSaveBooking = async (event) => {
     event.preventDefault();
@@ -631,7 +940,25 @@ const UserPreview = () => {
     if (bookingStepIndex === 1) {
       setBookingProjectMessage("");
       setBookingMessage("");
+      setEditableCostRows(defaultQuotationCostRows);
+      setEditablePaymentRows([
+        { name: "Agreement", towerMilestone: "Agreement", value: 80, taxes: 0, tds: 0 },
+        { name: "Possession", towerMilestone: "Possession", value: 20, taxes: 0, tds: 0 },
+      ]);
       setBookingStepIndex(2);
+      return;
+    }
+
+    if (bookingStepIndex === 2) {
+      setBookingMessage("");
+      setBookingForm((prev) => ({
+        ...prev,
+        bookedOn: prev.bookedOn || bookingConfirmationDate,
+        basePrice: prev.basePrice || quotationAgreementValue || "",
+        saleableArea: prev.saleableArea || selectedBookingUnit?.saleable || "",
+        baseRate: prev.baseRate || selectedBookingUnit?.baseRate || "",
+      }));
+      setBookingStepIndex(3);
       return;
     }
 
@@ -639,6 +966,22 @@ const UserPreview = () => {
     setBookingMessage("");
 
     try {
+      const costSheet = quotationLineRows.map((row) => ({
+        fieldName: row.name,
+        orignalValue: toCleanNumber(row.originalValue),
+        costType: row.costType || "Discount",
+        inputField: toCleanNumber(row.inputField),
+        newValue: toCleanNumber(row.newValue),
+      }));
+      const paymentSchedule = calculatedPaymentRows.map((row) => ({
+        name: row.name || quotationPaymentPlan,
+        towerMilestone: row.towerMilestone || quotationTowerName,
+        value: toCleanNumber(row.value),
+        amount: toCleanNumber(row.amount),
+        taxes: toCleanNumber(row.taxes),
+        tds: toCleanNumber(row.tds),
+        grandTotal: toCleanNumber(row.grandTotal),
+      }));
       const response = await fetch(`${API_URL}/bookings`, {
         method: "POST",
         headers: {
@@ -647,8 +990,12 @@ const UserPreview = () => {
         body: JSON.stringify({
           ...bookingForm,
           leadId: Number(leadId),
-          source: leadSource,
+          unitId: bookingForm.unitId ? Number(bookingForm.unitId) : undefined,
+          source: bookingForm.source || leadSource,
           bookedBy: owner,
+          bookedOn: bookingForm.bookedOn || bookingConfirmationDate,
+          costSheet,
+          paymentSchedule,
         }),
       });
 
@@ -663,7 +1010,22 @@ const UserPreview = () => {
         throw new Error(result?.message || "Unable to create booking");
       }
 
-      setBookings((current) => [result, ...current]);
+      const savedBooking =
+        typeof result === "object" && result
+          ? result
+          : {
+              ...bookingForm,
+              id: Date.now(),
+              leadId,
+              unit: bookingForm.unit,
+              projectDetails: bookingForm.projectDetails,
+              customerName: bookingForm.customerName,
+              bookedOn: bookingForm.bookedOn || bookingConfirmationDate,
+              basePrice: bookingForm.basePrice || quotationAgreementValue,
+              baseRate: bookingForm.baseRate || selectedBookingUnit?.baseRate,
+              saleableArea: bookingForm.saleableArea || selectedBookingUnit?.saleable,
+            };
+      setBookings((current) => [savedBooking, ...current]);
       setIsBookingFormOpen(false);
       setBookingMessage("Booking saved successfully");
     } catch (error) {
@@ -831,6 +1193,82 @@ const UserPreview = () => {
   color: #3b82f6;
   font-size: 14px;
   cursor: pointer;
+}
+
+.lead-preview-edit-button {
+  border: 0;
+  background: transparent;
+  color: #3b82f6;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+}
+
+.lead-preview-edit-form {
+  margin: 18px 0 28px;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 16px;
+}
+
+.lead-preview-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.lead-preview-edit-grid label {
+  display: grid;
+  gap: 6px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.lead-preview-edit-grid input {
+  min-height: 38px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #1e293b;
+  font-size: 14px;
+  padding: 0 10px;
+}
+
+.lead-preview-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.lead-preview-edit-actions button {
+  min-height: 34px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 0 14px;
+}
+
+.lead-preview-edit-save {
+  border: 0;
+  background: #3b82f6;
+  color: #ffffff;
+}
+
+.lead-preview-edit-cancel {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+}
+
+.lead-preview-edit-message {
+  color: #64748b;
+  font-size: 12px;
+  margin-top: 10px;
 }
 
 .lead-preview-whatsapp {
@@ -1667,6 +2105,29 @@ const UserPreview = () => {
   text-decoration: none;
 }
 
+.booking-tower-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #673ab7;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.booking-tower-select span {
+  text-decoration: underline;
+}
+
+.booking-tower-select select {
+  min-height: 32px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  color: #4b5563;
+  font-size: 13px;
+  padding: 0 10px;
+}
+
 .booking-filter-block {
   border-top: 1px solid #dddddd;
   padding: 14px 0 12px;
@@ -2197,6 +2658,176 @@ const UserPreview = () => {
   text-align: right;
 }
 
+.booking-payment-table {
+  min-width: 980px;
+}
+
+.booking-payment-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.1fr) minmax(160px, 1fr) 110px repeat(4, minmax(130px, 0.85fr));
+  min-height: 48px;
+  border-bottom: 1px solid #e1e5eb;
+}
+
+.booking-payment-row span {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border-right: 1px solid #e1e5eb;
+  color: #444444;
+  font-size: 14px;
+}
+
+.booking-payment-row span:last-child {
+  border-right: 0;
+  justify-content: flex-end;
+}
+
+.booking-payment-row.is-head {
+  font-weight: 700;
+}
+
+.booking-payment-row.is-total {
+  background: #eee9f6;
+  font-weight: 700;
+}
+
+.booking-payment-row input,
+.booking-payment-row select {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  color: #555555;
+  font-size: 14px;
+  padding: 0 10px;
+}
+
+.booking-payment-row input[type="number"] {
+  text-align: right;
+}
+
+.booking-payment-text-input {
+  border-color: transparent !important;
+  background: transparent;
+  padding-left: 0 !important;
+}
+
+.booking-confirmation-main {
+  flex: 1;
+  overflow-y: auto;
+  background: #ffffff;
+  padding: 14px 20px 0;
+}
+
+.booking-confirmation-title {
+  margin: 0 0 20px;
+  color: #666666;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.booking-confirmation-card {
+  border: 1px solid #cfd6df;
+  border-radius: 3px;
+  margin-bottom: 16px;
+  background: #ffffff;
+}
+
+.booking-confirmation-card-head {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  background: #673ab7;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 0 8px;
+}
+
+.booking-confirmation-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px 28px;
+  padding: 10px 14px 28px;
+}
+
+.booking-confirmation-field,
+.booking-applicant-grid > div,
+.booking-cost-summary > div {
+  display: grid;
+  gap: 5px;
+}
+
+.booking-confirmation-field span,
+.booking-confirmation-input span,
+.booking-applicant-grid span,
+.booking-cost-summary span {
+  color: #7b8794;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.booking-confirmation-field strong,
+.booking-applicant-grid strong,
+.booking-cost-summary strong {
+  min-height: 18px;
+  color: #4b5563;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.booking-confirmation-input {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.booking-confirmation-input input,
+.booking-confirmation-input select {
+  width: 100%;
+  min-height: 41px;
+  border: 1px solid #cbd5e1;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #4b5563;
+  font-size: 14px;
+  padding: 0 12px;
+}
+
+.booking-applicant-grid,
+.booking-cost-summary,
+.booking-custom-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px 34px;
+  padding: 14px 14px 20px;
+}
+
+.booking-add-coapplicant {
+  width: 100%;
+  min-height: 52px;
+  border: 0;
+  border-top: 1px solid #e1e5eb;
+  background: transparent;
+  color: #5f31bd;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.booking-confirmation-two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 26px 14px 30px;
+}
+
+.booking-confirmation-wide {
+  grid-column: 1 / -1;
+}
+
 .lead-preview-booking-message {
   color: #64748b;
   font-size: 13px;
@@ -2552,7 +3183,14 @@ const UserPreview = () => {
                     <div className="lead-preview-id"># {leadId}</div>
                     <div className="lead-preview-name">
                       <span className="lead-preview-name-text">{leadName}</span>
-                      <FaEdit className="lead-preview-edit" />
+                      <button
+                        type="button"
+                        className="lead-preview-edit-button"
+                        onClick={() => setIsLeadEditOpen(true)}
+                        aria-label="Edit lead details"
+                      >
+                        <FaEdit className="lead-preview-edit" />
+                      </button>
                     </div>
                   </div>
                   <span className="lead-preview-whatsapp">
@@ -2568,6 +3206,55 @@ const UserPreview = () => {
                   <div>Tasks</div>
                 </div>
               </div>
+
+              {isLeadEditOpen && (
+                <form className="lead-preview-edit-form" onSubmit={handleSaveLeadEdit}>
+                  <div className="lead-preview-edit-grid">
+                    <label>
+                      First Name
+                      <input name="firstName" value={leadEditForm.firstName || ""} onChange={handleLeadEditChange} required />
+                    </label>
+                    <label>
+                      Last Name
+                      <input name="lastName" value={leadEditForm.lastName || ""} onChange={handleLeadEditChange} required />
+                    </label>
+                    <label>
+                      Email
+                      <input name="email" type="email" value={leadEditForm.email || ""} onChange={handleLeadEditChange} required />
+                    </label>
+                    <label>
+                      Phone
+                      <input name="phone" inputMode="numeric" maxLength={10} pattern="[0-9]{10}" value={leadEditForm.phone || ""} onChange={handleLeadEditChange} required />
+                    </label>
+                    <label>
+                      Tags
+                      <input name="tags" value={leadEditForm.tags || ""} onChange={handleLeadEditChange} />
+                    </label>
+                    <label>
+                      Interested Project
+                      <input name="interestedProjects" value={leadEditForm.interestedProjects || ""} onChange={handleLeadEditChange} />
+                    </label>
+                    <label>
+                      Channel Partner
+                      <input name="channelPartner" value={leadEditForm.channelPartner || ""} onChange={handleLeadEditChange} />
+                    </label>
+                    <label>
+                      Company Name
+                      <input name="companyName" value={leadEditForm.companyName || ""} onChange={handleLeadEditChange} />
+                    </label>
+                  </div>
+                  <div className="lead-preview-edit-actions">
+                    <button type="submit" className="lead-preview-edit-save" disabled={isSavingLeadEdit}>
+                      {isSavingLeadEdit ? "Saving..." : "Save Changes"}
+                    </button>
+                    <button type="button" className="lead-preview-edit-cancel" onClick={() => setIsLeadEditOpen(false)}>
+                      Cancel
+                    </button>
+                  </div>
+                  {leadEditMessage && <div className="lead-preview-edit-message">{leadEditMessage}</div>}
+                </form>
+              )}
+              {!isLeadEditOpen && leadEditMessage && <div className="lead-preview-edit-message">{leadEditMessage}</div>}
 
               <div className="lead-preview-main">
                 <div>
@@ -2620,7 +3307,17 @@ const UserPreview = () => {
                       <div key={label}>
                         <div className="lead-preview-label">
                           {label}
-                          {label === "TAGS" && <FaEdit className="lead-preview-edit" style={{ marginLeft: 14 }} />}
+                          {label === "TAGS" && (
+                            <button
+                              type="button"
+                              className="lead-preview-edit-button"
+                              onClick={() => setIsLeadEditOpen(true)}
+                              aria-label="Edit tags"
+                              style={{ marginLeft: 14 }}
+                            >
+                              <FaEdit className="lead-preview-edit" />
+                            </button>
+                          )}
                         </div>
                         <div className="lead-preview-value">{value}</div>
                       </div>
@@ -2977,7 +3674,17 @@ const UserPreview = () => {
 
                         <div className="booking-unit-topbar">
                           <h3>Select Unit</h3>
-                          <button type="button" className="booking-change-tower">Change Tower/Cluster</button>
+                          <label className="booking-tower-select">
+                            <span>Change Tower/Cluster</span>
+                            <select value={selectedBookingTowerId} onChange={handleBookingTowerChange}>
+                              <option value="">All Towers</option>
+                              {bookingTowerOptions.map((tower) => (
+                                <option key={tower.id} value={tower.id}>
+                                  {tower.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
                           <label className="booking-checkbox">
                             <input
                               type="checkbox"
@@ -3000,7 +3707,7 @@ const UserPreview = () => {
 
                         {visibleBookingUnits.length > 0 ? (
                           <div className={`booking-unit-results${bookingUnitView === "grid" ? " is-grid" : ""}`}>
-                            {visibleBookingUnits.slice(0, 6).map((unit) => (
+                            {visibleBookingUnits.map((unit) => (
                               <button
                                 type="button"
                                 className={`booking-unit-option${bookingForm.unit === unit.name ? " is-selected" : ""}`}
@@ -3008,7 +3715,8 @@ const UserPreview = () => {
                                 onClick={() => handleBookingUnitSelect(unit)}
                               >
                                 <strong>{unit.name || `Unit ${unit.unitIndex || unit.id}`}</strong>
-                                <span>{unit.tower?.name || activeTowerName} · Rs. {Number(unit.basePrice || 0).toLocaleString("en-IN")}</span>
+                                <span>Floor: {unit.floor || unit.floorPlan?.name || "-"} | Carpet Area: {unit.carpet || "-"} Sq. Ft.</span>
+                                <span>Saleable Area: {unit.saleable || "-"} Sq. Ft. | Rs. {Number(unit.basePrice || 0).toLocaleString("en-IN")}</span>
                               </button>
                             ))}
                           </div>
@@ -3039,7 +3747,7 @@ const UserPreview = () => {
                               onChange={(event) => {
                                 const unit = visibleBookingUnits.find((item) => item.name === event.target.value);
                                 if (unit) handleBookingUnitSelect(unit);
-                                else setBookingForm((prev) => ({ ...prev, unit: "" }));
+                                else setBookingForm((prev) => ({ ...prev, unit: "", unitId: "" }));
                               }}
                               required
                             >
@@ -3065,19 +3773,24 @@ const UserPreview = () => {
                           <strong>{bookingProjectDetails?.name || bookingForm.projectDetails || "Project details"}</strong>
                           <span>{bookingProjectDetails?.projectType || "Residential"} · {visibleBookingUnits.length} of {flattenedBookingUnits.length} units shown</span>
                           {selectedBookingUnit && (
-                            <span>Base price Rs. {Number(selectedBookingUnit.basePrice || 0).toLocaleString("en-IN")}</span>
+                            <>
+                              <span>{selectedBookingUnit.tower?.name || activeTowerName} | Floor {selectedBookingUnit.floor || quotationFloor}</span>
+                              <span>Carpet {selectedBookingUnit.carpet || "-"} Sq. Ft. | Saleable {selectedBookingUnit.saleable || "-"} Sq. Ft.</span>
+                              <span>Base price Rs. {Number(selectedBookingUnit.basePrice || 0).toLocaleString("en-IN")}</span>
+                            </>
                           )}
                         </div>
                       </aside>
                     </div>
-                  ) : (
+                  ) : bookingStepIndex === 2 ? (
                     <div className="booking-quote-main">
                       <div className="booking-quote-tabs" aria-label="Quotation tabs">
-                        <button type="button" className="is-active">Unit Details</button>
-                        <button type="button">Cost Sheet</button>
-                        <button type="button">Payment Schedule</button>
+                        <button type="button" className={quotationTab === "unit" ? "is-active" : ""} onClick={() => setQuotationTab("unit")}>Unit Details</button>
+                        <button type="button" className={quotationTab === "cost" ? "is-active" : ""} onClick={() => setQuotationTab("cost")}>Cost Sheet</button>
+                        <button type="button" className={quotationTab === "payment" ? "is-active" : ""} onClick={() => setQuotationTab("payment")}>Payment Schedule</button>
                       </div>
 
+                      {quotationTab === "unit" && (
                       <section className="booking-quote-unit-strip">
                         <div>
                           <span>Name</span>
@@ -3110,18 +3823,25 @@ const UserPreview = () => {
                           <span>Total Price</span>
                         </div>
                       </section>
+                      )}
 
+                      {quotationTab === "unit" && (
                       <section className="booking-quote-controls">
                         <label>
                           <span>Select Scheme</span>
-                          <select defaultValue="default">
+                          <select value={quotationScheme} onChange={(event) => setQuotationScheme(event.target.value)}>
                             <option value="default">Default Scheme</option>
+                            <option value="construction-linked">Construction Linked Scheme</option>
+                            <option value="possession-linked">Possession Linked Scheme</option>
+                            <option value="custom">Custom Scheme</option>
                           </select>
                         </label>
                         <label>
                           <span>Select Payment Schedule</span>
-                          <select defaultValue="80-20">
+                          <select value={quotationPaymentPlan} onChange={handlePaymentPlanChange}>
                             <option value="80-20">80:20 Payment Schedule</option>
+                            <option value="60-40">60:40 Payment Schedule</option>
+                            <option value="100">100% Agreement Payment</option>
                           </select>
                         </label>
                         <label>
@@ -3133,7 +3853,9 @@ const UserPreview = () => {
                           <input value={quotationName} readOnly />
                         </label>
                       </section>
+                      )}
 
+                      {quotationTab === "unit" && (
                       <section className="booking-quote-inventory">
                         <label>
                           <span>Additional Inventory Configuration</span>
@@ -3149,7 +3871,9 @@ const UserPreview = () => {
                         </label>
                         <button type="button" className="booking-quote-apply">Apply</button>
                       </section>
+                      )}
 
+                      {quotationTab === "cost" && (
                       <section className="booking-quote-cost">
                         <h3>Cost Sheet</h3>
                         <div className="booking-quote-table" role="table" aria-label="Cost sheet">
@@ -3170,28 +3894,265 @@ const UserPreview = () => {
                               <div className={`booking-quote-row is-line${row.highlight ? " is-highlight" : ""}`} role="row" key={`${row.serial}-${row.name}`}>
                                 <span>{row.serial}</span>
                                 <span>{row.name}</span>
-                                <span>Rs. {row.original}</span>
+                                <span>Rs. {formatCurrency(row.originalValue)}</span>
                                 <span>
-                                  <select defaultValue="Discount" aria-label={`${row.name} discount type`}>
-                                    <option>Discount</option>
-                                    <option>AdHoc Cost</option>
+                                  <select
+                                    value={row.costType || "Discount"}
+                                    onChange={(event) => handleCostRowChange(row.serial, "costType", event.target.value)}
+                                    aria-label={`${row.name} discount type`}
+                                  >
+                                    <option value="Discount">Discount</option>
+                                    <option value="AdHoc Cost">AdHoc Cost</option>
                                   </select>
                                 </span>
                                 <span>
                                   <label className="booking-quote-money-field">
                                     <b>Rs.</b>
-                                    <input value="0" readOnly aria-label={`${row.name} input value`} />
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      value={row.inputField ?? 0}
+                                      onChange={(event) => handleCostRowChange(row.serial, "inputField", event.target.value)}
+                                      aria-label={`${row.name} input value`}
+                                    />
                                   </label>
                                 </span>
                                 <span>
                                   <label className="booking-quote-money-field">
                                     <b>Rs.</b>
-                                    <input value={row.newValue} readOnly aria-label={`${row.name} new value`} />
+                                    <input value={formatCurrency(calculateCostNewValue(row))} readOnly aria-label={`${row.name} new value`} />
                                   </label>
                                 </span>
                               </div>
                             )
                           )}
+                        </div>
+                      </section>
+                      )}
+
+                      {quotationTab === "payment" && (
+                        <section className="booking-quote-cost">
+                          <h3>Payment Schedule</h3>
+                          <div className="booking-quote-table booking-payment-table" role="table" aria-label="Payment schedule">
+                            <div className="booking-payment-row is-head" role="row">
+                              <span>Name</span>
+                              <span>Tower Milestone</span>
+                              <span>Value (In Percentage %)</span>
+                              <span>Amount</span>
+                              <span>Taxes</span>
+                              <span>TDS</span>
+                              <span>Grand Total</span>
+                            </div>
+                            {calculatedPaymentRows.map((row, index) => (
+                              <div className="booking-payment-row" role="row" key={`${row.name}-${index}`}>
+                                <span>
+                                  <input
+                                    className="booking-payment-text-input"
+                                    value={row.name}
+                                    onChange={(event) => handlePaymentRowChange(index, "name", event.target.value)}
+                                    aria-label="Payment name"
+                                  />
+                                </span>
+                                <span>
+                                  <select
+                                    value={row.towerMilestone}
+                                    onChange={(event) => handlePaymentRowChange(index, "towerMilestone", event.target.value)}
+                                    aria-label={`${row.name} tower milestone`}
+                                  >
+                                    <option value="Agreement">Agreement</option>
+                                    <option value="Possession">Possession</option>
+                                    <option value={quotationTowerName}>{quotationTowerName}</option>
+                                  </select>
+                                </span>
+                                <span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="100"
+                                    value={row.value}
+                                    onChange={(event) => handlePaymentRowChange(index, "value", event.target.value)}
+                                    aria-label={`${row.name} percentage`}
+                                  />
+                                </span>
+                                <span>Rs. {formatCurrency(row.amount)}</span>
+                                <span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={row.taxes}
+                                    onChange={(event) => handlePaymentRowChange(index, "taxes", event.target.value)}
+                                    aria-label={`${row.name} taxes`}
+                                  />
+                                </span>
+                                <span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={row.tds}
+                                    onChange={(event) => handlePaymentRowChange(index, "tds", event.target.value)}
+                                    aria-label={`${row.name} tds`}
+                                  />
+                                </span>
+                                <span>Rs. {formatCurrency(row.grandTotal)}</span>
+                              </div>
+                            ))}
+                            <div className="booking-payment-row is-total" role="row">
+                              <span>Total Agreement Value</span>
+                              <span>-</span>
+                              <span>{paymentTotals.value.toFixed(2)}%</span>
+                              <span>Rs. {formatCurrency(paymentTotals.amount)}</span>
+                              <span>Rs. {formatCurrency(paymentTotals.taxes)}</span>
+                              <span>Rs. {formatCurrency(paymentTotals.tds)}</span>
+                              <span>Rs. {formatCurrency(paymentTotals.grandTotal)}</span>
+                            </div>
+                          </div>
+                        </section>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="booking-confirmation-main">
+                      <h3 className="booking-confirmation-title">Booking Confirmation</h3>
+
+                      <section className="booking-confirmation-card">
+                        <div className="booking-confirmation-card-head">Unit Details</div>
+                        <div className="booking-confirmation-grid">
+                          {bookingUnitDetails.map(([label, value]) => (
+                            <div className="booking-confirmation-field" key={label}>
+                              <span>{label}</span>
+                              <strong>{value}</strong>
+                            </div>
+                          ))}
+                          <label className="booking-confirmation-input">
+                            <span>Booking Name</span>
+                            <input name="customerName" value={bookingForm.customerName} onChange={handleBookingChange} />
+                          </label>
+                          <label className="booking-confirmation-input">
+                            <span>Booking Date</span>
+                            <input name="bookedOn" type="date" value={bookingForm.bookedOn || bookingConfirmationDate} onChange={handleBookingChange} />
+                          </label>
+                          <label className="booking-confirmation-input">
+                            <span>Select Booking Cancellation Reason</span>
+                            <select name="bookingCancellationReason" value={bookingForm.bookingCancellationReason} onChange={handleBookingChange}>
+                              <option value="">Select Booking Cancellation Reason</option>
+                              <option value="Customer request">Customer request</option>
+                              <option value="Payment issue">Payment issue</option>
+                              <option value="Unit changed">Unit changed</option>
+                            </select>
+                          </label>
+                          <label className="booking-confirmation-input">
+                            <span>Add Booking Cancellation Note</span>
+                            <input name="bookingCancellationNote" value={bookingForm.bookingCancellationNote} onChange={handleBookingChange} placeholder="Add Booking Cancellation Note" />
+                          </label>
+                        </div>
+                      </section>
+
+                      <section className="booking-confirmation-card">
+                        <div className="booking-confirmation-card-head">Applicant Details</div>
+                        <div className="booking-applicant-grid">
+                          <div><span>Name</span><strong>{leadName}</strong></div>
+                          <div><span>Lead Name</span><strong>{leadName}</strong></div>
+                          <div><span>Phone</span><strong>{applicantPhone}</strong></div>
+                          <div><span>DOB</span><strong>{formatBookingDetail(lead.birthday, "-")}</strong></div>
+                          <div><span>PAN Number</span><strong>-</strong></div>
+                          <div><span>Aadhaar Number</span><strong>-</strong></div>
+                          <div><span>Email</span><strong>{applicantEmail}</strong></div>
+                        </div>
+                        <button type="button" className="booking-add-coapplicant">+ Add New Co-Applicant</button>
+                      </section>
+
+                      <section className="booking-confirmation-card">
+                        <div className="booking-confirmation-card-head">Cost Details</div>
+                        <div className="booking-cost-summary">
+                          <div><span>Scheme</span><strong>{quotationSchemeLabel}</strong></div>
+                          <div><span>Payment Schedule</span><strong>{quotationPaymentPlanLabel}</strong></div>
+                          <div><span>Original Agreement Value</span><strong>Rs. {formatCurrency(quotationAgreementValue)}</strong></div>
+                          <div><span>Final Agreement Value</span><strong>Rs. {formatCurrency(quotationAgreementValue)}</strong></div>
+                          <div><span>Original All Inclusive Value</span><strong>Rs. {formatCurrency(quotationAllInclusiveValue)}</strong></div>
+                          <div><span>Final All Inclusive Value</span><strong>Rs. {formatCurrency(quotationAllInclusiveValue)}</strong></div>
+                        </div>
+                      </section>
+
+                      <section className="booking-confirmation-card">
+                        <div className="booking-confirmation-card-head">Hold/Book Unit</div>
+                        <div className="booking-confirmation-two">
+                          <label className="booking-confirmation-input">
+                            <span>Select Booking Stage *</span>
+                            <select name="stage" value={bookingForm.stage} onChange={handleBookingChange}>
+                              <option value="Tentative">Tentative</option>
+                              <option value="Booked">Booked</option>
+                              <option value="Hold">Hold</option>
+                            </select>
+                          </label>
+                          <label className="booking-confirmation-input">
+                            <span>Select Project Unit Status *</span>
+                            <select defaultValue="Booked">
+                              <option>Booked</option>
+                              <option>Hold</option>
+                              <option>Available</option>
+                            </select>
+                          </label>
+                        </div>
+                      </section>
+
+                      <section className="booking-confirmation-card">
+                        <div className="booking-confirmation-card-head">Campaign Info</div>
+                        <div className="booking-confirmation-two">
+                          <label className="booking-confirmation-input">
+                            <span>Campaign</span>
+                            <select name="campaign" value={bookingForm.campaign} onChange={handleBookingChange}>
+                              <option value="walkin">walkin</option>
+                              <option value="channel_partner">channel_partner</option>
+                              <option value="digital">digital</option>
+                            </select>
+                          </label>
+                          <label className="booking-confirmation-input">
+                            <span>Source</span>
+                            <select name="source" value={bookingForm.source} onChange={handleBookingChange}>
+                              <option value="">Select Source</option>
+                              <option value="walkin">walkin</option>
+                              <option value="channel_partner">channel_partner</option>
+                              <option value="digital">digital</option>
+                            </select>
+                          </label>
+                          <label className="booking-confirmation-input booking-confirmation-wide">
+                            <span>Channel Partner</span>
+                            <select name="channelPartner" value={bookingForm.channelPartner} onChange={handleBookingChange}>
+                              <option value="">Select Channel Partner</option>
+                              <option value={cpName}>{cpName}</option>
+                            </select>
+                          </label>
+                        </div>
+                      </section>
+
+                      <section className="booking-confirmation-card">
+                        <div className="booking-confirmation-card-head">Custom Fields</div>
+                        <div className="booking-custom-grid">
+                          {[
+                            ["companyName", "Company Name", "select"],
+                            ["numberOfSeats", "Number Of Seats"],
+                            ["physicalSeats", "Physical Seats"],
+                            ["carpetArea", "Carpet Area"],
+                            ["tenureMonths", "Tenure In Months"],
+                            ["perSeatPrice", "Per Seat Price"],
+                            ["monthlyRevenue", "Monthly Revenue"],
+                            ["noticePeriodMonths", "Notice Period In Months"],
+                            ["lockInPeriod", "Lock In Period"],
+                            ["securityDeposit", "Security Deposit"],
+                            ["leaseStartDate", "Lease Start Date", "date"],
+                            ["leaseEndDate", "Lease End Date", "date"],
+                          ].map(([name, label, type]) => (
+                            <label className="booking-confirmation-input" key={name}>
+                              <span>{label}</span>
+                              {type === "select" ? (
+                                <select name={name} value={bookingForm[name]} onChange={handleBookingChange}>
+                                  <option value="">select</option>
+                                  <option value={lead.companyName || "Company"}>{lead.companyName || "Company"}</option>
+                                </select>
+                              ) : (
+                                <input name={name} type={type || "text"} value={bookingForm[name]} onChange={handleBookingChange} />
+                              )}
+                            </label>
+                          ))}
                         </div>
                       </section>
                     </div>
@@ -3251,7 +4212,9 @@ const UserPreview = () => {
                               ? "Next"
                               : bookingStepIndex === 1
                                 ? "Select Unit"
-                                : "Generate Quote"}
+                                : bookingStepIndex === 2
+                                  ? "Next"
+                                  : "Confirm Booking"}
                       </button>
                     </div>
                   </div>
