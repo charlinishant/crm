@@ -140,13 +140,37 @@ exports.createLead = async (req, res) => {
 exports.getLeads = async (req, res) => {
   try {
     const userId = req.query.userId || null
-    const include = { team: true }
+    
     if (userId) {
       const leads = await prisma.lead.findMany({
         where: {
           teamId: parseInt(userId),
         },
-        include,
+        include:{
+          team:{
+            select:{
+            id:true,
+            isActive:true,
+            username:true,
+            email:true,
+            firstName:true,
+            lastName:true,
+            phone:true,
+            secondaryPhone:true,
+            timeZone:true,
+            linkedUrl:true,
+            description:true,
+            role:true,
+            department:true,
+            defaultRouting:true,
+            defaultRoutingRule:true,
+            autoRoster:true,
+            teamId:true,
+            pushNotification:true,
+            gpsTracking:true
+            }
+          }
+        },
       })
       res.status(200).json(leads)
     } else {

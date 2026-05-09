@@ -110,6 +110,8 @@ model Unit{
   saleable Float?
   loading Float?
   description String @db.Text
+
+  bookings Booking[]
 }   
 
 enum Role{
@@ -262,7 +264,9 @@ model Booking{
   id Int @id @default(autoincrement())
   leadId Int?
   lead Lead? @relation(fields: [leadId], references: [id])
-  unit String?
+  unitCount Int?
+  unitId Int?
+  unit Unit? @relation(fields: [unitId], references: [id])
   customerName String?
   stage String? @default("Tentative")
   projectDetails String?
@@ -274,8 +278,36 @@ model Booking{
   bookedBy String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  costSheet CostSheet[]
+  paymentSchedule PaymentSchedule[]
 }
 
+model CostSheet{
+  id Int @id @default(autoincrement())
+  fieldName String 
+  orignalValue Float?
+  costType String @default("Discount")
+  inputField Float?
+  newValue Float
+
+  bookingId Int @unique
+  booking Booking @relation(fields: [bookingId], references: [id])
+}
+
+model PaymentSchedule{
+  id Int @id @default(autoincrement())
+  name String
+  towerMilestone String
+  value Float?
+  amount Float?
+  taxes Float?
+  tds Float?
+  grandTotal Float
+
+  bookingId Int @unique
+  booking Booking @relation(fields: [bookingId], references: [id])
+}
 model LeadAddress{
   id Int @id @default(autoincrement())
   address String?
@@ -320,21 +352,3 @@ model Team{
   teams Team[] @relation("ParentTeam")
   users User[] @relation("Team") 
 }
-
-
-// model Task{
-//   id Int @id @default(autoincrement())
-//   title String
-//   description String? @db.Text
-//   dueDate DateTime? @db.Date
-//   dueTime String?
-//   assignedTo Int
-//   assign User @relation("User", fields: [assignedTo], references: [id])
-
-//   remark String? @db.Text 
-//   priority String?
-
-//   assignedBy Int
-//   assignBy User @relation("UserAssignBy", fields: [assignedBy], references: [id])
-  
-// }
