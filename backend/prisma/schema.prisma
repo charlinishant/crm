@@ -156,8 +156,8 @@ model User{
   team Team? @relation("Team", fields: [teamId], references: [id])
   
   leads Lead[]
-  tasks Task[] @relation("User")
-  assignedTasks Task[] @relation("UserAssignBy")
+  // tasks Task[] @relation("User")
+  // assignedTasks Task[] @relation("UserAssignBy")
   // Other settings
   pushNotification Boolean? @default(false)
   gpsTracking Boolean? @default(false)
@@ -322,19 +322,19 @@ model Team{
 }
 
 
-model Task{
-  id Int @id @default(autoincrement())
-  title String
-  description String? @db.Text
-  dueDate DateTime? @db.Date
-  dueTime String?
-  assignedTo Int
-  assign User @relation("User", fields: [assignedTo], references: [id])
+// model Task{
+//   id Int @id @default(autoincrement())
+//   title String
+//   description String? @db.Text
+//   dueDate DateTime? @db.Date
+//   dueTime String?
+//   assignedTo Int
+//   assign User @relation("User", fields: [assignedTo], references: [id])
 
-  remark String? @db.Text 
-  priority String?
+//   remark String? @db.Text 
+//   priority String?
 
-  assignedBy Int
-  assignBy User @relation("UserAssignBy", fields: [assignedBy], references: [id])
+//   assignedBy Int
+//   assignBy User @relation("UserAssignBy", fields: [assignedBy], references: [id])
   
-}
+// }
