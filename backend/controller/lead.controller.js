@@ -174,7 +174,34 @@ exports.getLeads = async (req, res) => {
       })
       res.status(200).json(leads)
     } else {
-      const Leads = await prisma.lead.findMany({ include })
+      const Leads = await prisma.lead.findMany({
+        where:{},
+        include:{
+          team:{
+            select:{
+            id:true,
+            isActive:true,
+            username:true,
+            email:true,
+            firstName:true,
+            lastName:true,
+            phone:true,
+            secondaryPhone:true,
+            timeZone:true,
+            linkedUrl:true,
+            description:true,
+            role:true,
+            department:true,
+            defaultRouting:true,
+            defaultRoutingRule:true,
+            autoRoster:true,
+            teamId:true,
+            pushNotification:true,
+            gpsTracking:true
+            }
+          }
+        }
+      })
       res.status(200).json(Leads)
     }
   } catch (err) {
