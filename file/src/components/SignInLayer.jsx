@@ -49,9 +49,15 @@ const SignInLayer = () => {
       const result = await res.json();
 
       if(res.ok){
+        const profilePhotos = JSON.parse(localStorage.getItem("userProfilePhotos") || "{}");
+        const emailKey = result.data?.email?.trim().toLowerCase();
+        const loggedInUser = {
+          ...result.data,
+          profilePhoto: profilePhotos[emailKey] || result.data?.profilePhoto || "",
+        };
         localStorage.setItem("authToken", result.token);
-        localStorage.setItem("authUser", JSON.stringify(result.data));
-        const role = result.data?.role;
+        localStorage.setItem("authUser", JSON.stringify(loggedInUser));
+        const role = loggedInUser?.role;
         if (role === "SALES" || role === "PRE_SALES" || role === "POST_SALES") {
           navigate("/user/sales");
         } else {

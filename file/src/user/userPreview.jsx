@@ -1668,7 +1668,7 @@ const UserPreview = () => {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
-  padding: 32px 56px 22px;
+  padding: 28px 64px 20px;
   border-bottom: 1px solid #cbd5e1;
 }
 
@@ -1729,26 +1729,28 @@ const UserPreview = () => {
 .booking-modal-main {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 60px minmax(0, 1fr);
-  align-items: start;
-  gap: 16px;
-  padding: 20px 56px 12px;
+  grid-template-columns: minmax(320px, 1fr) 72px minmax(320px, 1fr);
+  align-items: stretch;
+  gap: 24px;
+  padding: 28px 64px 18px;
   overflow-y: auto;
 }
 
 .booking-choice {
-  min-height: 360px;
+  min-height: 430px;
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
+  justify-content: flex-start;
 }
 
 .booking-illustration {
-  width: min(100%, 430px);
-  height: 220px;
+  width: min(100%, 380px);
+  height: 230px;
+  margin: 0 auto 16px;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .booking-illustration-city::before,
@@ -1761,23 +1763,23 @@ const UserPreview = () => {
 
 .booking-illustration-city .booking-building {
   position: absolute;
-  bottom: 34px;
-  left: 47%;
-  width: 54px;
-  height: 190px;
+  bottom: 18px;
+  left: 48%;
+  width: 48px;
+  height: 172px;
   background: #d1d5db;
   box-shadow:
-    -84px 34px 0 -2px #334854,
-    -39px 70px 0 -3px #263742,
-    62px 72px 0 -5px #3c4f59;
+    -76px 32px 0 -2px #334854,
+    -36px 66px 0 -4px #263742,
+    58px 66px 0 -6px #3c4f59;
 }
 
 .booking-illustration-city .booking-house {
   position: absolute;
-  right: 72px;
-  bottom: 34px;
-  width: 116px;
-  height: 62px;
+  right: 54px;
+  bottom: 18px;
+  width: 108px;
+  height: 58px;
   background: #6d42c4;
   box-shadow: -30px 20px 0 #4d2da0;
 }
@@ -1795,10 +1797,10 @@ const UserPreview = () => {
 
 .booking-person-search {
   position: absolute;
-  left: 58px;
-  bottom: 34px;
-  width: 86px;
-  height: 142px;
+  left: 56px;
+  bottom: 18px;
+  width: 82px;
+  height: 136px;
   border-radius: 44px 44px 20px 20px;
   background: #405461;
 }
@@ -1817,11 +1819,11 @@ const UserPreview = () => {
 
 .booking-magnifier {
   position: absolute;
-  left: 148px;
-  top: 136px;
-  width: 45px;
-  height: 45px;
-  border: 5px solid #22313a;
+  left: 145px;
+  top: 142px;
+  width: 42px;
+  height: 42px;
+  border: 5px solid rgba(34, 49, 58, 0.92);
   border-radius: 50%;
   transform: rotate(25deg);
 }
@@ -1839,10 +1841,10 @@ const UserPreview = () => {
 
 .booking-illustration-phone .booking-phone {
   position: absolute;
-  left: 50%;
-  bottom: 50px;
-  width: 122px;
-  height: 254px;
+  left: 46%;
+  bottom: 44px;
+  width: 118px;
+  height: 190px;
   border: 7px solid #455c67;
   border-radius: 20px;
   transform: translateX(-50%);
@@ -1863,9 +1865,9 @@ const UserPreview = () => {
 .booking-phone-house {
   position: absolute;
   left: 25px;
-  top: 74px;
-  width: 64px;
-  height: 36px;
+  top: 54px;
+  width: 60px;
+  height: 34px;
   background: #f4f2ff;
   border: 1px solid #d7d2ed;
 }
@@ -1883,16 +1885,16 @@ const UserPreview = () => {
 .booking-phone-button {
   position: absolute;
   left: 22px;
-  top: 160px;
-  width: 72px;
-  height: 20px;
+  top: 124px;
+  width: 70px;
+  height: 18px;
   border-radius: 10px;
   background: #5d32b6;
 }
 
 .booking-person-unit {
   position: absolute;
-  right: 36px;
+  right: 30px;
   bottom: 8px;
   width: 74px;
   height: 184px;
@@ -1912,7 +1914,7 @@ const UserPreview = () => {
 }
 
 .booking-choice-title {
-  margin: 4px 0 8px;
+  margin: 0 0 8px;
   color: #17202a;
   font-size: 22px;
   font-weight: 600;
@@ -1921,9 +1923,9 @@ const UserPreview = () => {
 
 .booking-choice-copy {
   margin: 0;
-  max-width: 660px;
+  max-width: 560px;
   color: #17202a;
-  font-size: 18px;
+  font-size: 17px;
   line-height: 1.45;
 }
 
@@ -1932,20 +1934,20 @@ const UserPreview = () => {
   color: #17202a;
   font-size: 18px;
   font-weight: 500;
-  padding-top: 190px;
+  padding-top: 236px;
 }
 
 .booking-choice-field {
-  width: min(100%, 520px);
-  margin-top: auto;
+  width: min(100%, 560px);
+  margin-top: 22px;
   text-align: left;
 }
 
 .booking-choice-field label {
   display: block;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
   color: #59616b;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   text-transform: uppercase;
 }
@@ -1962,9 +1964,9 @@ const UserPreview = () => {
 .booking-choice-field input,
 .booking-choice-field select {
   width: 100%;
-  min-height: 42px;
+  min-height: 44px;
   border: 1px solid #cbd5e1;
-  border-radius: 4px;
+  border-radius: 6px;
   color: #1e293b;
   font-size: 15px;
   padding: 0 12px;
@@ -1973,7 +1975,8 @@ const UserPreview = () => {
 
 .booking-choice-note {
   color: #334155;
-  font-size: 15px;
+  font-size: 14px;
+  margin-top: 8px;
 }
 
 .booking-choice-note span {

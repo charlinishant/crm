@@ -8,14 +8,15 @@ const PaymentHistoryOne = () => {
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [openMenu, setOpenMenu] = useState(null);
   const [menuPosition, setMenuPosition] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const navigate = useNavigate();
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
-  const getUserName = (user) =>
+  const getUserName = useCallback((user) =>
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
     user?.username ||
     user?.email ||
-    (user?.id ? `User #${user.id}` : "");
+    (user?.id ? `User #${user.id}` : ""), []);
 
   const fetchLeadData = useCallback(async () => {
     try {
@@ -51,29 +52,29 @@ const PaymentHistoryOne = () => {
     fetchUsers();
   }, [API_URL]);
 
-  const getLeadName = (lead) => {
+  const getLeadName = useCallback((lead) => {
     const fullName = `${lead.firstName || ""} ${lead.lastName || ""}`.trim();
     return lead.name || fullName || "-";
-  };
+  }, []);
 
-  const getLeadId = (lead) => {
+  const getLeadId = useCallback((lead) => {
     const leadId = lead.id || lead._id || lead.lead_id;
     return leadId ? `# ${leadId}` : "-";
-  };
+  }, []);
 
-  const getLeadOwner = (lead) => {
+  const getLeadOwner = useCallback((lead) => {
     return lead.owner || lead.sales || getUserName(lead.team) || "Unassigned";
-  };
+  }, [getUserName]);
 
-  const getLastSource = (lead) => {
+  const getLastSource = useCallback((lead) => {
     return lead.source || lead.channelPartner || lead.tags || "-";
-  };
+  }, []);
 
-  const getStage = (lead) => {
+  const getStage = useCallback((lead) => {
     return lead.lead_status || lead.status || lead.stage || "New";
-  };
+  }, []);
 
-  const getReceivedOn = (lead) => {
+  const getReceivedOn = useCallback((lead) => {
     const value = lead.createdAt || lead.created_at || lead.received_on;
     if (!value) return "-";
 
@@ -91,15 +92,37 @@ const PaymentHistoryOne = () => {
         minute: "2-digit",
       }),
     };
-  };
+  }, []);
 
-  const getRequirement = (lead) => {
+  const getRequirement = useCallback((lead) => {
     return lead.requirementComment || lead.configration || lead.configuration || lead.propertyType || lead.type || "-";
-  };
+  }, []);
 
-  const getTags = (lead) => {
+  const getTags = useCallback((lead) => {
     return lead.tags || lead.source || "-";
-  };
+  }, []);
+
+  const getSearchText = useCallback((lead) => {
+    return [
+      getLeadId(lead),
+      getLeadName(lead),
+      getLeadOwner(lead),
+      getLastSource(lead),
+      getStage(lead),
+      getRequirement(lead),
+      getTags(lead),
+      lead.email,
+      lead.phone,
+    ]
+      .map((value) => String(value || "").toLowerCase())
+      .join(" ");
+  }, [getLeadId, getLeadName, getLeadOwner, getLastSource, getStage, getRequirement, getTags]);
+
+  const filteredLeadData = leadData.filter((lead) => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return true;
+    return getSearchText(lead).includes(query);
+  });
 
   const renderReceivedOn = (lead) => {
     const receivedOn = getReceivedOn(lead);
@@ -130,28 +153,124 @@ const PaymentHistoryOne = () => {
     navigate(leadId ? `/details?leadId=${leadId}` : "/details", { state: { lead } });
   };
 
-  const formatValue = (value) => {
-    if (value === undefined || value === null || value === "") return "-";
-    if (typeof value === "boolean") return value ? "Yes" : "No";
-    if (Array.isArray(value)) {
-      if (value.length === 0) return "-";
-      return value
-        .map((item) => {
-          if (typeof item !== "object" || item === null) return String(item);
-          return Object.entries(item)
-            .filter(([key]) => !["id", "leadId"].includes(key))
-            .map(([key, itemValue]) => `${key}: ${formatValue(itemValue)}`)
-            .join(", ");
-        })
-        .join(" | ");
+  const formatValue = useCallback((value) => {
+    const formatNestedValue = (itemValue) => {
+      if (itemValue === undefined || itemValue === null || itemValue === "") return "-";
+      if (typeof itemValue === "boolean") return itemValue ? "Yes" : "No";
+      if (Array.isArray(itemValue)) {
+        if (itemValue.length === 0) return "-";
+        return itemValue
+          .map((item) => {
+            if (typeof item !== "object" || item === null) return String(item);
+            return Object.entries(item)
+              .filter(([key]) => !["id", "leadId"].includes(key))
+              .map(([key, nestedValue]) => `${key}: ${formatNestedValue(nestedValue)}`)
+              .join(", ");
+          })
+          .join(" | ");
+      }
+      if (typeof itemValue === "object") {
+        return Object.entries(itemValue)
+          .map(([key, nestedValue]) => `${key}: ${formatNestedValue(nestedValue)}`)
+          .join(", ");
+      }
+      return String(itemValue);
+    };
+
+    return formatNestedValue(value);
+  }, []);
+
+  const escapeCsvValue = useCallback((value) => {
+    const text = formatValue(value);
+    return `"${text.replace(/"/g, '""')}"`;
+  }, [formatValue]);
+
+  const downloadLeadsCsv = useCallback((leads, fileName) => {
+    if (!leads.length) {
+      alert("No leads found to export.");
+      return;
     }
-    if (typeof value === "object") {
-      return Object.entries(value)
-        .map(([key, itemValue]) => `${key}: ${formatValue(itemValue)}`)
-        .join(", ");
-    }
-    return String(value);
-  };
+
+    const columns = [
+      ["id", "Lead ID"],
+      ["name", "Name"],
+      ["owner", "Owner"],
+      ["source", "Last Source"],
+      ["stage", "Stage"],
+      ["receivedOn", "Received On"],
+      ["requirement", "Requirement"],
+      ["tags", "Tags"],
+    ];
+
+    const rows = leads.map((lead) => ({
+      id: getLeadId(lead),
+      name: getLeadName(lead),
+      owner: getLeadOwner(lead),
+      source: getLastSource(lead),
+      stage: getStage(lead),
+      receivedOn:
+        typeof getReceivedOn(lead) === "string"
+          ? getReceivedOn(lead)
+          : `${getReceivedOn(lead).date} at ${getReceivedOn(lead).time}`,
+      requirement: getRequirement(lead),
+      tags: getTags(lead),
+    }));
+
+    const csv = [
+      columns.map(([, label]) => escapeCsvValue(label)).join(","),
+      ...rows.map((row) =>
+        columns.map(([key]) => escapeCsvValue(row[key])).join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [
+    escapeCsvValue,
+    getLeadId,
+    getLeadName,
+    getLeadOwner,
+    getLastSource,
+    getStage,
+    getReceivedOn,
+    getRequirement,
+    getTags,
+  ]);
+
+  useEffect(() => {
+    const handleToolbarAction = (event) => {
+      const action = event.detail || {};
+
+      if (action.type === "search") {
+        setSearchQuery(action.query || "");
+        return;
+      }
+
+      if (action.type === "refresh") {
+        fetchLeadData();
+        return;
+      }
+
+      if (action.type === "export") {
+        downloadLeadsCsv(filteredLeadData, "filtered-leads.csv");
+        return;
+      }
+
+      if (action.type === "exportAll") {
+        downloadLeadsCsv(leadData, "all-leads.csv");
+      }
+    };
+
+    window.addEventListener("leadToolbarAction", handleToolbarAction);
+    return () => window.removeEventListener("leadToolbarAction", handleToolbarAction);
+  }, [downloadLeadsCsv, fetchLeadData, filteredLeadData, leadData]);
 
   const formatLabel = (key) => {
     return key
@@ -574,14 +693,14 @@ const PaymentHistoryOne = () => {
           </thead>
 
           <tbody>
-            {leadData.length === 0 ? (
+            {filteredLeadData.length === 0 ? (
               <tr>
                 <td colSpan="9" className="empty-state">
-                  No Data Available
+                  {searchQuery ? "No matching leads found" : "No Data Available"}
                 </td>
               </tr>
             ) : (
-              leadData.map((lead, i) => (
+              filteredLeadData.map((lead, i) => (
                 <tr key={i}>
                   <td>{getLeadId(lead)}</td>
                   <td>

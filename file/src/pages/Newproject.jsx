@@ -1,6 +1,45 @@
-import React, { useState, useRef } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
+
+const INDIAN_STATES = [
+  "Andhra Pradesh",
+  "Arunachal Pradesh",
+  "Assam",
+  "Bihar",
+  "Chhattisgarh",
+  "Goa",
+  "Gujarat",
+  "Haryana",
+  "Himachal Pradesh",
+  "Jharkhand",
+  "Karnataka",
+  "Kerala",
+  "Madhya Pradesh",
+  "Maharashtra",
+  "Manipur",
+  "Meghalaya",
+  "Mizoram",
+  "Nagaland",
+  "Odisha",
+  "Punjab",
+  "Rajasthan",
+  "Sikkim",
+  "Tamil Nadu",
+  "Telangana",
+  "Tripura",
+  "Uttar Pradesh",
+  "Uttarakhand",
+  "West Bengal",
+  "Andaman and Nicobar Islands",
+  "Chandigarh",
+  "Dadra and Nagar Haveli and Daman and Diu",
+  "Delhi",
+  "Jammu and Kashmir",
+  "Ladakh",
+  "Lakshadweep",
+  "Puducherry",
+];
 
 const NEWPROJECT = () => {
   const navigate = useNavigate();
@@ -28,15 +67,44 @@ const NEWPROJECT = () => {
     inventory: false,
     integratedPortals: "",
   });
+  const [users, setUsers] = useState([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
   const editorRef = useRef(null);
 
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        setIsLoadingUsers(true);
+        const response = await fetch(`${API_URL}/users?limit=1000`);
+        if (!response.ok) throw new Error(`Users API failed: ${response.status}`);
+
+        const result = await response.json();
+        const userList = Array.isArray(result) ? result : result?.data || result?.users || [];
+        setUsers(userList);
+      } catch (error) {
+        console.error("Unable to load users:", error);
+        setUsers([]);
+      } finally {
+        setIsLoadingUsers(false);
+      }
+    };
+
+    fetchUsers();
+  }, [API_URL]);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
   };
+
+  const getUserName = (user) =>
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+    user?.username ||
+    user?.email ||
+    (user?.id ? `User #${user.id}` : "");
 
   const handleFormat = (command, value = null) => {
     document.execCommand(command, false, value);
@@ -246,7 +314,14 @@ const NEWPROJECT = () => {
 
                 <div className="np-field">
                   <label>SALES</label>
-                  <input name="salesId" value={formData.salesId} onChange={handleChange} />
+                  <select name="salesId" value={formData.salesId || ""} onChange={handleChange} disabled={isLoadingUsers}>
+                    <option value="">{isLoadingUsers ? "Loading users..." : "Select User"}</option>
+                    {users.map((user) => (
+                      <option key={user.id || user.email} value={user.id}>
+                        {getUserName(user)}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -307,7 +382,14 @@ const NEWPROJECT = () => {
                   <div className="np-row">
                     <div className="np-field">
                       <label>STATE</label>
-                      <input name="state" value={formData.state} onChange={handleChange} />
+                      <select name="state" value={formData.state} onChange={handleChange}>
+                        <option value="">Select State</option>
+                        {INDIAN_STATES.map((state) => (
+                          <option key={state} value={state}>
+                            {state}
+                          </option>
+                        ))}
+                      </select>
                     </div>
 
                     <div className="np-field">

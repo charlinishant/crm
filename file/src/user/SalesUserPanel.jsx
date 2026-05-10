@@ -8,11 +8,14 @@ import {
   Home,
   LayoutDashboard,
   LogOut,
+  MessageSquare,
   Phone,
   Search,
   Users,
 } from "lucide-react";
 import "./SalesUserPanel.css";
+import UserAddlead from "./userAddlead";
+import UserConversationPanel from "./UserConversationPanel";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
@@ -70,6 +73,14 @@ const getName = (user) =>
   user?.username ||
   user?.email ||
   "Sales User";
+
+const getProfilePhoto = (user) => {
+  if (user?.profilePhoto) return user.profilePhoto;
+  if (!user?.email) return "";
+
+  const profilePhotos = JSON.parse(localStorage.getItem("userProfilePhotos") || "{}");
+  return profilePhotos[user.email.trim().toLowerCase()] || "";
+};
 
 const getLeadName = (lead) =>
   [lead?.firstName, lead?.lastName].filter(Boolean).join(" ") ||
@@ -179,6 +190,10 @@ const SalesUserPanel = () => {
   const initialScreen =
     window.location.pathname.endsWith("/leads")
       ? "leads"
+      : window.location.pathname.endsWith("/conversation")
+        ? "conversation"
+        : window.location.pathname.endsWith("/add-lead")
+          ? "addLead"
       : new URLSearchParams(window.location.search).get("screen") || "home";
   const [panel, setPanel] = useState(fallbackPanel);
   const [loading, setLoading] = useState(true);
@@ -207,11 +222,24 @@ const SalesUserPanel = () => {
         });
         const result = await response.json();
 
+        if (response.status === 401) {
+          localStorage.removeItem("authToken");
+          localStorage.removeItem("authUser");
+          window.location.href = "/sign-in";
+          return;
+        }
+
         if (!response.ok) {
           throw new Error(result?.message || "Unable to load user panel");
         }
 
-        setPanel(result);
+        setPanel({
+          ...result,
+          user: {
+            ...result.user,
+            profilePhoto: result.user?.profilePhoto || savedUser?.profilePhoto || getProfilePhoto(result.user),
+          },
+        });
       } catch (err) {
         setPanel((current) => ({ ...current, user: savedUser || current.user }));
         setError(err.message);
@@ -224,6 +252,7 @@ const SalesUserPanel = () => {
   }, []);
 
   const userName = getName(panel.user);
+  const userProfilePhoto = getProfilePhoto(panel.user);
   const filteredLeads = useMemo(() => {
     let leads = panel.leads;
 
@@ -402,7 +431,7 @@ const SalesUserPanel = () => {
     const leadId = getLeadId(lead);
     setOpenActionLeadId(null);
     window.sessionStorage.setItem("selectedLeadDetails", JSON.stringify(lead));
-    navigate(leadId ? `/details?leadId=${leadId}` : "/details", { state: { lead } });
+    navigate(leadId ? `/user-details?leadId=${leadId}` : "/user-details", { state: { lead } });
   };
 
   const toggleLeadActionMenu = (event, lead) => {
@@ -423,6 +452,7 @@ const SalesUserPanel = () => {
     { key: "leads", label: "My Leads", icon: Users, count: panel.stats.assignedLeads },
     { key: "followups", label: "Follow-ups", icon: CalendarDays, count: panel.stats.followupsDue },
     { key: "bookings", label: "Bookings", icon: LayoutDashboard, count: panel.stats.bookings },
+    { key: "conversation", label: "Conversation", icon: MessageSquare, count: panel.leads.length },
     { key: "tasks", label: "Tasks", icon: LayoutDashboard, count: panel.stats.tasks },
   ];
 
@@ -464,7 +494,11 @@ const SalesUserPanel = () => {
             <Bell size={17} />
           </button>
           <div className="sales-role">
-            <div className="sales-avatar">{initials(userName)}</div>
+            {userProfilePhoto ? (
+              <img className="sales-avatar" src={userProfilePhoto} alt={userName} />
+            ) : (
+              <div className="sales-avatar">{initials(userName)}</div>
+            )}
             <div>
               <div className="sales-role-name">{userName}</div>
               <div className="sales-role-title">{panel.user?.role || "SALES"}</div>
@@ -487,7 +521,10 @@ const SalesUserPanel = () => {
               <button
                 type="button"
                 className="primary"
-                onClick={() => navigate("/add-lead")}
+                onClick={() => {
+                  setActiveScreen("addLead");
+                  navigate("/user/sales/add-lead");
+                }}
               >
                 Add lead
               </button>
@@ -553,7 +590,13 @@ const SalesUserPanel = () => {
             </section>
           )}
 
-          {activeScreen === "tasks" ? (
+          {activeScreen === "addLead" ? (
+            <div className="sales-user-add-lead">
+              <UserAddlead />
+            </div>
+          ) : activeScreen === "conversation" ? (
+            <UserConversationPanel leads={panel.leads} user={panel.user} loading={loading} />
+          ) : activeScreen === "tasks" ? (
             <section className="sales-card sales-tasks-card">
               <div className="sales-card-head">
                 <div>

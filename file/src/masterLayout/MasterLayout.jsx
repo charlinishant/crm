@@ -17,6 +17,7 @@ const MasterLayout = ({ children }) => {
     ? savedUser.role.charAt(0).toUpperCase() +
       savedUser.role.slice(1).toLowerCase()
     : "User";
+  const profilePhoto = savedUser?.profilePhoto || "assets/images/user.png";
 
   const handleLogout = () => {
     localStorage.removeItem("authToken");
@@ -2036,7 +2037,7 @@ const MasterLayout = ({ children }) => {
                     data-bs-toggle='dropdown'
                   >
                     <img
-                      src='assets/images/user.png'
+                      src={profilePhoto}
                       alt='image_user'
                       className='w-40-px h-40-px object-fit-cover rounded-circle'
                     />

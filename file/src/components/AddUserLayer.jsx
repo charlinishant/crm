@@ -186,6 +186,14 @@ const AddUserLayer = () => {
     const [error, setError] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
+    const saveProfilePhoto = (email, photo) => {
+        if (!email || !photo) return;
+
+        const photos = JSON.parse(localStorage.getItem('userProfilePhotos') || '{}');
+        photos[email.trim().toLowerCase()] = photo;
+        localStorage.setItem('userProfilePhotos', JSON.stringify(photos));
+    };
+
     const handleImageChange = (e) => {
         const file = e.target.files[0];
         if (file) {
@@ -222,6 +230,7 @@ const AddUserLayer = () => {
                 throw new Error(result?.message || result || 'Unable to create user');
             }
 
+            saveProfilePhoto(formData.email, imagePreviewUrl);
             setMessage('User created successfully. They can now sign in with this email and password.');
             setFormData({
                 firstName: '',
@@ -234,6 +243,7 @@ const AddUserLayer = () => {
                 role: 'SALES',
                 description: '',
             });
+            setImagePreviewUrl('');
         } catch (err) {
             setError(err.message || 'Something went wrong');
         } finally {
@@ -423,6 +433,7 @@ const AddUserLayer = () => {
                                             role: 'SALES',
                                             description: '',
                                         });
+                                        setImagePreviewUrl('');
                                     }}
                                 >
                                     Cancel

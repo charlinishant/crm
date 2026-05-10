@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ADDLEAD from"./pages/Addlead"
 // import HomePageOne from "./pages/HomePageOne";
@@ -124,15 +125,68 @@ import Units from "./pages/Units";
 import AddUnits from "./pages/addunits";
 import SalesUserPanel from "./user/SalesUserPanel";
 import UserPreview from "./user/userPreview";
+import UserDetails from "./user/userDetails";
 
 const publicPaths = new Set(["/", "/sign-in", "/sign-up", "/forgot-password"]);
 
+const clearSession = () => {
+  localStorage.removeItem("authToken");
+  localStorage.removeItem("authUser");
+};
+
+const isTokenExpired = (token) => {
+  if (!token) return true;
+
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    if (!payload?.exp) return false;
+
+    return payload.exp * 1000 <= Date.now();
+  } catch (error) {
+    return true;
+  }
+};
+
 const ProtectedAppRoutes = () => {
   const location = useLocation();
+  const [sessionExpired, setSessionExpired] = useState(false);
   const token = localStorage.getItem("authToken");
 
+  useEffect(() => {
+    if (publicPaths.has(location.pathname)) {
+      setSessionExpired(false);
+      return undefined;
+    }
+
+    const checkSession = () => {
+      const currentToken = localStorage.getItem("authToken");
+      if (isTokenExpired(currentToken)) {
+        clearSession();
+        setSessionExpired(true);
+      }
+    };
+
+    checkSession();
+    const intervalId = window.setInterval(checkSession, 30000);
+    window.addEventListener("focus", checkSession);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", checkSession);
+    };
+  }, [location.pathname]);
+
+  if (sessionExpired && !publicPaths.has(location.pathname)) {
+    return <Navigate to="/sign-in" replace state={{ sessionExpired: true }} />;
+  }
+
   if (!token && !publicPaths.has(location.pathname)) {
-    return <Navigate to="/" replace state={{ from: location.pathname }} />;
+    return <Navigate to="/sign-in" replace state={{ from: location.pathname }} />;
+  }
+
+  if (token && isTokenExpired(token) && !publicPaths.has(location.pathname)) {
+    clearSession();
+    return <Navigate to="/sign-in" replace state={{ sessionExpired: true }} />;
   }
 
   return (
@@ -145,6 +199,8 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/index-11' element={<HomePageEleven />} />
         <Route exact path='/user/sales' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/leads' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/add-lead' element={<SalesUserPanel />} />
+        <Route exact path='/user-add-lead' element={<Navigate to="/user/sales/add-lead" replace />} />
         <Route exact path='/index-2' element={<HomePageTwo />} />
          <Route exact path='/index-3' element={<HomePageThree />} />
          <Route exact path='/index-4' element={<HomePageFour />} />
@@ -258,6 +314,7 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/Followups' element={< FollowupsPage />} />
         <Route exact path='/SiteVists' element={< SiteVistsPage/>} />
          <Route exact path='/WhatApp' element={< WhatAppPage />} />
+         <Route exact path='/user-details' element={< UserDetails/>} />
          <Route exact path='/BlukClickToCalls' element={< BlukClickPage />} />
         <Route exact path='*' element={<ErrorPage />} />
       </Routes>

@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import MasterLayout from "../masterLayout/MasterLayout";
 import "./addLead.css";
 
-// ✅ AddSection defined OUTSIDE ADDLEAD
+
 const AddSection = ({ label, renderFields, defaultItem }) => {
   const [items, setItems] = useState([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -301,7 +300,7 @@ const ADDLEAD = () => {
     ).then(res=>{
         if(res.status === 201){
           console.log("Created");
-          navigate("/marketplace")
+          navigate("/user/sales/leads")
         }
         else{
           console.log(res);
@@ -314,7 +313,7 @@ const ADDLEAD = () => {
   };
 
   return (
-    <MasterLayout>
+    <>
       <div className="lead-page">
         <div className="lead-container">
           <p className="lead-title">Add New Leads</p>
@@ -995,7 +994,7 @@ const ADDLEAD = () => {
           </form>
         </div>
       </div>
-    </MasterLayout>
+    </>
   );
 };
 
