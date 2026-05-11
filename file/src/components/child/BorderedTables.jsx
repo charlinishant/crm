@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom';
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
@@ -9,6 +10,7 @@ const getUserName = (user) =>
     (user?.id ? `User #${user.id}` : "");
 
 const BorderedTables = () => {
+    const navigate = useNavigate()
     const fileInputRef = useRef(null)
     const [attachments, setAttachments] = useState([])
     const [users, setUsers] = useState([])
@@ -16,13 +18,15 @@ const BorderedTables = () => {
     const [isSaving, setIsSaving] = useState(false)
     const [message, setMessage] = useState("")
     const [formData, setFormData] = useState({
-        title: "",
-        description: "",
-        dueDate: "",
-        dueTime: "2:00 PM",
-        assigneeId: "",
-        remark: "",
-        priority: "Medium",
+        "title":"",
+        "description":"",
+        "remark":"",
+        "type":"",
+        "status":"",
+        "priority":"",
+        "dueDate":null,
+        "dueTime":"2 PM",
+        "assignId":null,
     })
 
     useEffect(() => {
@@ -87,16 +91,13 @@ const BorderedTables = () => {
             title: formData.title.trim(),
             description: formData.description.trim(),
             remark: formData.remark.trim(),
-            type: "Follow up",
-            assigneeId: Number(formData.assigneeId),
-            assigneeName: getUserName(selectedUser),
-            assignedById: authUser?.id || null,
-            assignedByName: assignedBy,
             status: "Open",
             priority: formData.priority,
             dueDate: formData.dueDate || null,
             dueTime: formData.dueTime,
             attachments: attachments.map((file) => file.name),
+            assignId: Number(formData.assigneeId),
+            assignedById: authUser?.id || null,
         }
 
         setIsSaving(true)
@@ -129,7 +130,7 @@ const BorderedTables = () => {
                 description: "",
                 dueDate: "",
                 dueTime: "2:00 PM",
-                assigneeId: users[0]?.id ? String(users[0].id) : "",
+                assignId: users[0]?.id ? String(users[0].id) : "",
                 remark: "",
                 priority: "Medium",
             })
@@ -137,6 +138,7 @@ const BorderedTables = () => {
             if (fileInputRef.current) {
                 fileInputRef.current.value = ""
             }
+            navigate("/all-tasks")
         } catch (error) {
             console.error("Unable to save task:", error)
             setMessage(error.message || "Unable to save task.")

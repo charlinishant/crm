@@ -158,8 +158,8 @@ model User{
   team Team? @relation("Team", fields: [teamId], references: [id])
   
   leads Lead[]
-  // tasks Task[] @relation("User")
-  // assignedTasks Task[] @relation("UserAssignBy")
+  tasks Task[] @relation("AssignedTo")
+  assignedTasks Task[] @relation("AssignedBy")
   // Other settings
   pushNotification Boolean? @default(false)
   gpsTracking Boolean? @default(false)
@@ -351,4 +351,23 @@ model Team{
   parent Team? @relation("ParentTeam", fields: [parentId], references: [id])
   teams Team[] @relation("ParentTeam")
   users User[] @relation("Team") 
+}
+
+model Task{
+  id Int @id @default(autoincrement())
+  title String
+  description String? @db.Text
+  remark String? @db.Text
+  type String? @default("Folllow up")
+  status String? @default("Open")
+  priority String? @default("Medium")
+  dueDate DateTime
+  dueTime String
+  assignId  Int
+  assign User @relation("AssignedTo", fields: [assignId], references: [id])
+  assignedById  Int
+  assignedBy User @relation("AssignedBy", fields: [assignedById], references: [id])
+  attachments Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

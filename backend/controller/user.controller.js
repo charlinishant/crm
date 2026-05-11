@@ -187,34 +187,40 @@ exports.getAccessPanel = async (req, res)=>{
             orderBy:{createdAt:"desc"}
         })
 
-        // await prisma.$executeRawUnsafe(`
-        //     CREATE TABLE IF NOT EXISTS Task (
-        //       id INT NOT NULL AUTO_INCREMENT,
-        //       title VARCHAR(255) NOT NULL,
-        //       description TEXT NULL,
-        //       remark TEXT NULL,
-        //       type VARCHAR(80) NULL DEFAULT 'Follow up',
-        //       status VARCHAR(40) NOT NULL DEFAULT 'Open',
-        //       priority VARCHAR(40) NOT NULL DEFAULT 'Medium',
-        //       dueDate DATETIME NULL,
-        //       dueTime VARCHAR(40) NULL,
-        //       assigneeId INT NULL,
-        //       assigneeName VARCHAR(255) NULL,
-        //       assignedById INT NULL,
-        //       assignedByName VARCHAR(255) NULL,
-        //       attachments JSON NULL,
-        //       createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        //       updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        //       PRIMARY KEY (id),
-        //       INDEX Task_assigneeId_idx (assigneeId),
-        //       INDEX Task_status_idx (status)
-        //     )
-        // `)
-
-        // const tasks = await prisma.$queryRawUnsafe(
-        //     "SELECT * FROM Task WHERE assigneeId = ? ORDER BY createdAt DESC LIMIT 25",
-        //     user.id
-        // )
+        
+        const tasks = await prisma.task.findMany({
+            where:{assignId:req.authUser.id},
+            select:{
+                id:true,
+                title:true,
+                description:true,
+                remark:true,
+                type:true,
+                status:true,
+                priority:true,
+                dueDate:true,
+                dueTime:true,
+                assign:{
+                    select:{
+                        id:true,
+                        username:true,
+                        firstName:true,
+                        lastName:true
+                    }
+                },
+                assignedBy:{
+                    select:{
+                        id:true,
+                        username:true,
+                        firstName:true,
+                        lastName:true
+                    }
+                },
+                attachments:true,
+                createdAt:true,
+                updatedAt:true,
+            }
+        })
 
         const displayUser = {
             id:user.id,
@@ -238,24 +244,8 @@ exports.getAccessPanel = async (req, res)=>{
                 // tasks:tasks.length
             },
             leads:leads,
-            bookings:bookings
-            // tasks:tasks.map(task => ({
-            //     id:task.id,
-            //     title:task.title,
-            //     description:task.description,
-            //     subtitle:task.remark || task.type || "",
-            //     type:task.type || "Follow up",
-            //     status:task.status || "Open",
-            //     priority:task.priority || "Medium",
-            //     dueDate:task.dueDate,
-            //     dueOn:task.dueDate,
-            //     dueTime:task.dueTime,
-            //     assigneeId:task.assigneeId,
-            //     assignedTo:task.assigneeName,
-            //     assignedBy:task.assignedByName,
-            //     createdAt:task.createdAt,
-            //     createdOn:task.createdAt
-            // }))
+            bookings:bookings,
+            tasks:tasks
         })
     } catch (error) {
         console.log(error)
