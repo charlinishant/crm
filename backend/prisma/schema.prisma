@@ -199,7 +199,7 @@ enum Status{
 }
 model Lead{
   id Int @id @default(autoincrement())
-
+  is_active Boolean @default(true)
   // basic profile
   salutation String?
   firstName String?

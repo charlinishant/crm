@@ -271,11 +271,12 @@ exports.deleteLead = async (req, res) => {
     const lead = await prisma.lead.findUnique({ where: { id: Number(id) } })
     if (!lead) return res.status(404).json("Lead not found")
 
-    const result = await prisma.$transaction([
-      prisma.leadAddress.deleteMany({ where: { leadId: lead.id } }),
-      prisma.personalAddress.deleteMany({ where: { leadId: lead.id } }),
-      prisma.lead.delete({ where: { id: lead.id } }),
-    ])
+    // const result = await prisma.$transaction([
+    //   prisma.leadAddress.deleteMany({ where: { leadId: lead.id } }),
+    //   prisma.personalAddress.deleteMany({ where: { leadId: lead.id } }),
+    //   prisma.lead.delete({ where: { id: lead.id } }),
+    // ])
+    const result = await prisma.lead.update({where:{id:lead.id}, data:{is_active:false}})
     res.status(200).json(result)
   } catch (err) {
     console.log(err)
