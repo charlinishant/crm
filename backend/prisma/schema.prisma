@@ -199,8 +199,12 @@ enum Status{
 }
 model Lead{
   id Int @id @default(autoincrement())
+<<<<<<< HEAD
   deletedAt DateTime?
 
+=======
+  is_active Boolean @default(true)
+>>>>>>> 4796729960b6890a0268ece2cec7d74de9a9f0bb
   // basic profile
   salutation String?
   firstName String?

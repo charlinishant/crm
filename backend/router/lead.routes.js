@@ -1,14 +1,23 @@
 const {Router} = require("express")
 const multer = require("multer")
 
+<<<<<<< HEAD
 const {createLead, getLeads, getTrashLeads, getLeadById, updateLead, deleteLead, restoreLead, permanentlyDeleteLead, importExcel, sampleExcel} = require("../controller/lead.controller")
+=======
+const {createLead, getLeads, getLeadById, updateLead, deleteLead, importExcel, sampleExcel} = require("../controller/lead.controller")
+const authenticate = require("../middleware/auth.middleware")
+>>>>>>> 4796729960b6890a0268ece2cec7d74de9a9f0bb
 
 const router = Router()
+
+router.use(authenticate)
 
 const upload = multer({
     storage: multer.memoryStorage()
 })  
-router.post("/", createLead)
+
+
+router.post("/",  createLead)
 router.get("/", getLeads)
 router.get("/trash", getTrashLeads)
 router.get('/sample-excel', sampleExcel)
