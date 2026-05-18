@@ -76,16 +76,16 @@
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   align-items: center;
-  background-color: var(--bg-color);
+  background-color: #487fff;
   padding: 14px 16px;
   font-weight: 600;
   font-size: 12px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid #2f6ff0;
 }
 
 .table-header-cell {
   text-align: left;
-  color: #e5e7eb;
+  color: #ffffff;
 }
 
 .empty-state-body {

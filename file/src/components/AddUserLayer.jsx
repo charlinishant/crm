@@ -1,5 +1,6 @@
 import { Icon } from '@iconify/react/dist/iconify.js';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const userFormStyles = `
 .add-user-panel .user-card {
@@ -168,23 +169,78 @@ const userFormStyles = `
 }
 `;
 
+const emptyUserFormData = {
+    firstName: '',
+    lastName: '',
+    username: '',
+    email: '',
+    phone: '',
+    password: '',
+    department: 'SALES',
+    role: 'SALES',
+    description: '',
+};
+
 const AddUserLayer = () => {
 
+    const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const editUserId = searchParams.get('id');
+    const isEditMode = Boolean(editUserId);
     const [imagePreviewUrl, setImagePreviewUrl] = useState('');
-    const [formData, setFormData] = useState({
-        firstName: '',
-        lastName: '',
-        username: '',
-        email: '',
-        phone: '',
-        password: '',
-        department: 'SALES',
-        role: 'SALES',
-        description: '',
-    });
+    const [formData, setFormData] = useState(emptyUserFormData);
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isLoadingUser, setIsLoadingUser] = useState(false);
+
+    useEffect(() => {
+        if (!isEditMode) {
+            setFormData(emptyUserFormData);
+            setImagePreviewUrl('');
+            setMessage('');
+            setError('');
+            return;
+        }
+
+        const loadUser = async () => {
+            setIsLoadingUser(true);
+            setMessage('');
+            setError('');
+
+            try {
+                const response = await fetch(`${API_URL}/users/${editUserId}`);
+                const result = await response.json();
+
+                if (!response.ok || !result || result === 'User not found') {
+                    throw new Error(result?.message || result || 'Unable to load user details');
+                }
+
+                const emailKey = result.email?.trim().toLowerCase();
+                const profilePhotos = JSON.parse(localStorage.getItem('userProfilePhotos') || '{}');
+
+                setFormData({
+                    firstName: result.firstName || '',
+                    lastName: result.lastName || '',
+                    username: result.username || '',
+                    email: result.email || '',
+                    phone: result.phone || '',
+                    password: '',
+                    department: result.department || 'SALES',
+                    role: result.role || 'SALES',
+                    description: result.description || '',
+                });
+                setImagePreviewUrl(profilePhotos[emailKey] || result.profilePhoto || '');
+            } catch (err) {
+                setError(err.message || 'Unable to load user details');
+            } finally {
+                setIsLoadingUser(false);
+            }
+        };
+
+        loadUser();
+    }, [API_URL, editUserId, isEditMode]);
 
     const saveProfilePhoto = (email, photo) => {
         if (!email || !photo) return;
@@ -217,12 +273,18 @@ const AddUserLayer = () => {
         setIsSubmitting(true);
 
         try {
-            const response = await fetch(`${process.env.REACT_APP_API_URL}/users`, {
-                method: 'POST',
+            const payload = { ...formData };
+
+            if (isEditMode && !payload.password) {
+                delete payload.password;
+            }
+
+            const response = await fetch(`${API_URL}/users${isEditMode ? `/${editUserId}` : ''}`, {
+                method: isEditMode ? 'PATCH' : 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(formData),
+                body: JSON.stringify(payload),
             });
             const result = await response.json();
 
@@ -230,20 +292,13 @@ const AddUserLayer = () => {
                 throw new Error(result?.message || result || 'Unable to create user');
             }
 
-            saveProfilePhoto(formData.email, imagePreviewUrl);
-            setMessage('User created successfully. They can now sign in with this email and password.');
-            setFormData({
-                firstName: '',
-                lastName: '',
-                username: '',
-                email: '',
-                phone: '',
-                password: '',
-                department: 'SALES',
-                role: 'SALES',
-                description: '',
-            });
+            saveProfilePhoto(payload.email, imagePreviewUrl);
+            setMessage(isEditMode ? 'User updated successfully.' : 'User created successfully. They can now sign in with this email and password.');
+            setFormData(emptyUserFormData);
             setImagePreviewUrl('');
+            if (isEditMode) {
+                navigate('/all-users');
+            }
         } catch (err) {
             setError(err.message || 'Something went wrong');
         } finally {
@@ -257,8 +312,8 @@ const AddUserLayer = () => {
             <div className="add-user-panel">
                 <div className="user-card">
                     <div className="user-card-header">
-                        <h5>Create User</h5>
-                        <p>Add admin, sales, pre-sales, or post-sales users.</p>
+                        <h5>{isEditMode ? 'Update User' : 'Create User'}</h5>
+                        <p>{isEditMode ? 'Edit system user details.' : 'Add admin, sales, pre-sales, or post-sales users.'}</p>
                     </div>
                     <div className="user-card-body">
                         <div className="avatar-section">
@@ -293,6 +348,9 @@ const AddUserLayer = () => {
                             </div>
                         )}
 
+                        {isLoadingUser ? (
+                            <div className="p-4 text-center">Loading user details...</div>
+                        ) : (
                         <form className="form-grid" onSubmit={handleSubmit}>
                             <div className="form-group">
                                 <label htmlFor="firstName">
@@ -368,7 +426,7 @@ const AddUserLayer = () => {
                                     onChange={handleChange}
                                     placeholder="Enter login password"
                                     minLength="8"
-                                    required
+                                    required={!isEditMode}
                                 />
                             </div>
                             <div className="form-group">
@@ -422,27 +480,21 @@ const AddUserLayer = () => {
                                     onClick={() => {
                                         setMessage('');
                                         setError('');
-                                        setFormData({
-                                            firstName: '',
-                                            lastName: '',
-                                            username: '',
-                                            email: '',
-                                            phone: '',
-                                            password: '',
-                                            department: 'SALES',
-                                            role: 'SALES',
-                                            description: '',
-                                        });
+                                        setFormData(emptyUserFormData);
                                         setImagePreviewUrl('');
+                                        if (isEditMode) {
+                                            navigate('/all-users');
+                                        }
                                     }}
                                 >
                                     Cancel
                                 </button>
                                 <button type="submit" disabled={isSubmitting} className="btn-primary">
-                                    {isSubmitting ? 'Saving...' : 'Save'}
+                                    {isSubmitting ? 'Saving...' : isEditMode ? 'Update' : 'Save'}
                                 </button>
                             </div>
                         </form>
+                        )}
                     </div>
                 </div>
             </div>

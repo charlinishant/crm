@@ -126,6 +126,7 @@ import AddUnits from "./pages/addunits";
 import SalesUserPanel from "./user/SalesUserPanel";
 import UserPreview from "./user/userPreview";
 import UserDetails from "./user/userDetails";
+import TrashPage from "./pages/TrashPage";
 
 const publicPaths = new Set(["/", "/sign-in", "/sign-up", "/forgot-password"]);
 
@@ -258,6 +259,7 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/list' element={<ListPage />} />
         <Route exact path='/marketplace-details' element={<MarketplaceDetailsPage />} />
         <Route exact path='/marketplace' element={<MarketplacePage />} />
+        <Route exact path='/trash' element={<TrashPage />} />
         <Route exact path='/notification-alert' element={<NotificationAlertPage />} />
          <Route exact path='/add-units' element={<AddUnits />} />
         <Route exact path='/units' element={<Units />} />

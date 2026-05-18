@@ -5,6 +5,50 @@ const { create } = require("domain")
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const phoneRegex = /^\d{10}$/
+const validLeadStatuses = new Set([
+  "Booked",
+  "Fresh_Lead",
+  "Lost",
+  "NP",
+  "Prospect",
+  "Registered",
+  "Unqualified",
+])
+const importStatusMap = {
+  booked: "Booked",
+  fresh_lead: "Fresh_Lead",
+  "fresh lead": "Fresh_Lead",
+  fresh: "Fresh_Lead",
+  interested: "Prospect",
+  follow_up: "Prospect",
+  "follow up": "Prospect",
+  followup: "Prospect",
+  site_visit: "Registered",
+  "site visit": "Registered",
+  lost: "Lost",
+  np: "NP",
+  prospect: "Prospect",
+  registered: "Registered",
+  unqualified: "Unqualified",
+}
+
+const normalizeImportStatus = (value) => {
+  const rawValue = String(value || "").trim()
+  if (!rawValue) return "Fresh_Lead"
+  if (validLeadStatuses.has(rawValue)) return rawValue
+
+  return importStatusMap[rawValue.toLowerCase()] || "Fresh_Lead"
+}
+
+const toNullableString = (value) => {
+  if (value === undefined || value === null || value === "") return null
+  return String(value).trim()
+}
+
+const toNullableJsonString = (value) => {
+  const normalizedValue = toNullableString(value)
+  return normalizedValue ? [normalizedValue] : null
+}
 
 exports.createLead = async (req, res) => {
   try {
@@ -158,10 +202,14 @@ exports.createLead = async (req, res) => {
 exports.getLeads = async (req, res) => {
   try {
     const userId = req.query.userId || null
+    const activeLeadWhere = {
+      deletedAt: null,
+    }
     
     if (userId) {
       const leads = await prisma.lead.findMany({
         where: {
+          ...activeLeadWhere,
           teamId: parseInt(userId),
         },
         include:{
@@ -193,7 +241,7 @@ exports.getLeads = async (req, res) => {
       res.status(200).json(leads)
     } else {
       const Leads = await prisma.lead.findMany({
-        where:{},
+        where: activeLeadWhere,
         include:{
           team:{
             select:{
@@ -225,6 +273,51 @@ exports.getLeads = async (req, res) => {
   } catch (err) {
   console.log(err)
   res.status(500).json("something went wrong")
+  }
+}
+
+exports.getTrashLeads = async (req, res) => {
+  try {
+    const leads = await prisma.lead.findMany({
+      where: {
+        deletedAt: {
+          not: null,
+        },
+      },
+      include:{
+        team:{
+          select:{
+          id:true,
+          isActive:true,
+          username:true,
+          email:true,
+          firstName:true,
+          lastName:true,
+          phone:true,
+          secondaryPhone:true,
+          timeZone:true,
+          linkedUrl:true,
+          description:true,
+          role:true,
+          department:true,
+          defaultRouting:true,
+          defaultRoutingRule:true,
+          autoRoster:true,
+          teamId:true,
+          pushNotification:true,
+          gpsTracking:true
+          }
+        }
+      },
+      orderBy: {
+        deletedAt: "desc",
+      },
+    })
+
+    res.status(200).json(leads)
+  } catch (err) {
+    console.log(err)
+    res.status(500).json("something went wrong")
   }
 }
 
@@ -271,6 +364,40 @@ exports.deleteLead = async (req, res) => {
     const lead = await prisma.lead.findUnique({ where: { id: Number(id) } })
     if (!lead) return res.status(404).json("Lead not found")
 
+    const result = await prisma.lead.update({
+      where: { id: lead.id },
+      data: { deletedAt: new Date() },
+    })
+    res.status(200).json(result)
+  } catch (err) {
+    console.log(err)
+    res.status(500).json("something went wrong")
+  }
+}
+
+exports.restoreLead = async (req, res) => {
+  try {
+    const id = req.params.id
+    const lead = await prisma.lead.findUnique({ where: { id: Number(id) } })
+    if (!lead) return res.status(404).json("Lead not found")
+
+    const result = await prisma.lead.update({
+      where: { id: lead.id },
+      data: { deletedAt: null },
+    })
+    res.status(200).json(result)
+  } catch (err) {
+    console.log(err)
+    res.status(500).json("something went wrong")
+  }
+}
+
+exports.permanentlyDeleteLead = async (req, res) => {
+  try {
+    const id = req.params.id
+    const lead = await prisma.lead.findUnique({ where: { id: Number(id) } })
+    if (!lead) return res.status(404).json("Lead not found")
+
     const result = await prisma.$transaction([
       prisma.leadAddress.deleteMany({ where: { leadId: lead.id } }),
       prisma.personalAddress.deleteMany({ where: { leadId: lead.id } }),
@@ -298,7 +425,9 @@ exports.importExcel = async (req, res) => {
       select: { id: true, name: true },
     })
     const usersFromDb = await prisma.user.findMany({
-      select: { id: true, firstName: true, lastName: true, username: true, email: true },
+      where: { isActive: true },
+      orderBy: { id: "asc" },
+      select: { id: true, firstName: true, lastName: true, username: true, email: true, role: true },
     })
 
     const projectMap = {}
@@ -313,11 +442,28 @@ exports.importExcel = async (req, res) => {
       })
     })
 
-    const mapData = data.map(row => {
+    const roundRobinUsers = usersFromDb.filter(user => user.role !== "ADMIN")
+    const assignableUsers = roundRobinUsers.length ? roundRobinUsers : usersFromDb
+    const assignmentCounts = {}
+    const userNameMap = {}
+
+    usersFromDb.forEach(user => {
+      const fullName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim()
+      userNameMap[user.id] = fullName || user.username || user.email || `User #${user.id}`
+    })
+
+    const mapData = data.map((row, index) => {
       const projectName = row["Interested projects"]
       const projectId = projectMap[projectName] || null
       const teamValue = row["Team"] ? String(row["Team"]).trim().toLowerCase() : ""
-      const teamId = userMap[teamValue] || null
+      const teamId = assignableUsers.length
+        ? assignableUsers[index % assignableUsers.length].id
+        : userMap[teamValue] || null
+
+      if (teamId) {
+        const userName = userNameMap[teamId] || `User #${teamId}`
+        assignmentCounts[userName] = (assignmentCounts[userName] || 0) + 1
+      }
 
       return {
         salutation: row["Salutation"] || null,
@@ -329,7 +475,7 @@ exports.importExcel = async (req, res) => {
         phones: [
           { type: row["Phone Type"] || null, value: row["Phone"] || null },
         ],
-        status: row["Status"] || null,
+        status: normalizeImportStatus(row["Status"]),
         timeZone: row["Timezone"] || null,
         tags: row["Tags"] || null,
         interestedProjects: projectId,
@@ -377,11 +523,11 @@ exports.importExcel = async (req, res) => {
           country: row["Personal country"] || null,
           zip: row["Personal zip"] || null,
         },
-        url: row["Url"] || null,
-        education: row["Education"] || null,
-        companyTitle: row["Company title"] || null,
-        income: row["Income"] || null,
-        purpose: row["Purpose"] || null,
+        url: toNullableJsonString(row["Url"]),
+        education: toNullableJsonString(row["Education"]),
+        companyTitle: toNullableJsonString(row["Company title"]),
+        income: toNullableJsonString(row["Income"]),
+        purpose: toNullableJsonString(row["Purpose"]),
         nri: ["yes", "y", "true"].includes(String(row["NRI"] || "").toLowerCase()),
         budgetMin: parseInt(row["Budget min"]) || null,
         budgetMax: parseInt(row["Budget max"]) || null,
@@ -391,7 +537,7 @@ exports.importExcel = async (req, res) => {
         fundingSource: row["Funding source"] || null,
         propertyType: row["Property type"] || null,
         configration: row["Configration"] || null,
-        budget: row["Budget"] || null,
+        budget: toNullableString(row["Budget"]),
         bathroomPreferences: row["Bathroom preferences"] || null,
         furnishing: row["Furnishing"] || null,
         facing: row["Facing"] || null,
@@ -400,26 +546,39 @@ exports.importExcel = async (req, res) => {
     })
 
     const result = []
-    for (const row of mapData) {
-      const lead = await prisma.lead.create({
-        data: {
-          ...row,
-          gender: row.gender ? String(row.gender).toUpperCase() : null,
-          leadAddress: {
-            create: row.leadAddress,
+    for (let index = 0; index < mapData.length; index += 1) {
+      const row = mapData[index]
+      try {
+        const lead = await prisma.lead.create({
+          data: {
+            ...row,
+            gender: row.gender ? String(row.gender).toUpperCase() : null,
+            leadAddress: {
+              create: row.leadAddress,
+            },
+            personalAddress: {
+              create: row.personalAddress,
+            },
           },
-          personalAddress: {
-            create: row.personalAddress,
-          },
-        },
-      })
-      result.push(lead)
+        })
+        result.push(lead)
+      } catch (error) {
+        console.log(`Lead import failed at Excel row ${index + 2}`, error)
+        return res.status(400).json({
+          message: `Import failed at Excel row ${index + 2}: ${error.message || "Invalid lead data"}`,
+        })
+      }
     }
 
     // const leads = await prisma.lead.createMany({ data: mapData })
     console.log(result)
 
-    res.status(201).json("lead inserted successfully")
+    res.status(201).json({
+      message: "lead inserted successfully",
+      importedCount: result.length,
+      assignedUserCount: assignableUsers.length,
+      assignmentCounts,
+    })
   } catch (error) {
     console.log(error)
 

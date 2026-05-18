@@ -5,42 +5,6 @@ import MasterLayout from "../masterLayout/MasterLayout";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
-const fallbackTasks = [
-  {
-    id: 1,
-    title: "200 Call",
-    subtitle: "Self task",
-    assignedTo: "Tejas Sales",
-    assignedBy: "Tejas Mehta",
-    status: "Open",
-    priority: "Medium",
-    createdOn: "May 1, 2026",
-    dueOn: "-",
-  },
-  {
-    id: 2,
-    title: "Site Visit",
-    subtitle: "#8449",
-    assignedTo: "Tejas Sales",
-    assignedBy: "Tejas Sales",
-    status: "Open",
-    priority: "Medium",
-    createdOn: "Mar 17, 2026",
-    dueOn: "Mar 18, 2026",
-  },
-  {
-    id: 3,
-    title: "Loi Completion",
-    subtitle: "#10177",
-    assignedTo: "Tejas Sales",
-    assignedBy: "Tejas Sales",
-    status: "Open",
-    priority: "Medium",
-    createdOn: "Feb 27, 2026",
-    dueOn: "-",
-  },
-];
-
 const formatDate = (value) => {
   if (!value) return "-";
   const date = new Date(value);
@@ -56,26 +20,40 @@ const formatDate = (value) => {
   });
 };
 
-const normalizeTask = (task, index) => ({
-  id: task.id || task._id || index,
-  title: task.title || task.name || "Untitled Task",
-  subtitle: task.subtitle || task.description || task.type || "",
-  assignedTo: task.assignedTo || task.assignee || task.assigneeName || task.assigned_to || "-",
-  assignedBy: task.assignedBy || task.assignedByName || task.createdBy || task.created_by || "-",
-  status: task.status || "Open",
-  priority: task.priority || "Medium",
-  createdOn: formatDate(task.createdOn || task.createdAt || task.created_on),
-  dueOn: formatDate(task.dueOn || task.dueDate || task.due_on),
-});
-
 const getUserName = (user) =>
   [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
   user?.username ||
   user?.email ||
   (user?.id ? `User #${user.id}` : "");
 
+const getTaskUserLabel = (...values) => {
+  for (const value of values) {
+    if (!value) continue;
+    if (typeof value === "object") {
+      const name = getUserName(value);
+      if (name) return name;
+      continue;
+    }
+    return value;
+  }
+
+  return "-";
+};
+
+const normalizeTask = (task, index) => ({
+  id: task.id || task._id || index,
+  title: task.title || task.name || "Untitled Task",
+  subtitle: task.subtitle || task.description || task.type || "",
+  assignedTo: getTaskUserLabel(task.assignedTo, task.assignee, task.assigneeName, task.assigned_to, task.assign),
+  assignedBy: getTaskUserLabel(task.assignedByName, task.createdBy, task.created_by, task.assignedBy),
+  status: task.status || "Open",
+  priority: task.priority || "Medium",
+  createdOn: formatDate(task.createdOn || task.createdAt || task.created_on),
+  dueOn: formatDate(task.dueOn || task.dueDate || task.due_on),
+});
+
 const Alltask = () => {
-  const [tasks, setTasks] = useState(fallbackTasks);
+  const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
   const [statusFilter, setStatusFilter] = useState("All");
   const [assigneeFilter, setAssigneeFilter] = useState("All");
@@ -100,14 +78,12 @@ const Alltask = () => {
         const taskList = Array.isArray(data) ? data : data.tasks || data.data || [];
 
         if (isMounted) {
-          const savedTasks = JSON.parse(window.localStorage.getItem("savedTasks") || "[]");
-          setTasks([...savedTasks, ...taskList].map(normalizeTask));
+          setTasks(taskList.map(normalizeTask));
         }
       } catch (error) {
         if (isMounted) {
-          const savedTasks = JSON.parse(window.localStorage.getItem("savedTasks") || "[]");
-          setTasks([...savedTasks, ...fallbackTasks].map(normalizeTask));
-          setFetchError("Showing sample tasks until the task API is available.");
+          setTasks([]);
+          setFetchError("Unable to load saved tasks from the database.");
         }
       } finally {
         if (isMounted) {
@@ -255,7 +231,13 @@ const Alltask = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredTasks.map((task) => (
+              {filteredTasks.length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="all-task-empty">
+                    {isLoading ? "Loading tasks..." : "No saved tasks found."}
+                  </td>
+                </tr>
+              ) : filteredTasks.map((task) => (
                 <tr key={task.id}>
                   <td>
                     <div className="all-task-title">{task.title}</div>
@@ -290,207 +272,6 @@ const Alltask = () => {
           </table>
         </div>
       </div>
-
-      <style>{`
-        .all-task-page {
-          background: #fff;
-          border-top: 1px solid #dfe4ea;
-          margin: -24px -24px 0;
-          min-height: calc(100vh - 160px);
-        }
-
-        .all-task-toolbar {
-          align-items: flex-start;
-          display: flex;
-          justify-content: space-between;
-          padding: 18px 18px 18px 14px;
-        }
-
-        .all-task-filter {
-          appearance: auto;
-          background: #fff;
-          border: 1px solid #cdd5df;
-          border-radius: 4px;
-          color: #3f4650;
-          font-size: 18px;
-          height: 55px;
-          padding: 0 10px;
-          width: 436px;
-        }
-
-        .all-task-user-filter {
-          margin-left: 12px;
-          width: 320px;
-        }
-
-        .all-task-total,
-        .all-task-error {
-          color: #818b98;
-          font-size: 14px;
-          line-height: 1;
-          margin: 14px 0 0;
-          text-transform: uppercase;
-        }
-
-        .all-task-error {
-          color: #b42318;
-          text-transform: none;
-        }
-
-        .all-task-actions {
-          display: flex;
-          gap: 0;
-        }
-
-        .all-task-add {
-          align-items: center;
-          background: #673ab7;
-          border: 1px solid #673ab7;
-          border-radius: 5px 0 0 5px;
-          color: #fff;
-          display: inline-flex;
-          font-size: 18px;
-          font-weight: 600;
-          height: 45px;
-          justify-content: center;
-          padding: 0 20px;
-        }
-
-        .all-task-add:hover {
-          color: #fff;
-        }
-
-        .all-task-filter-btn {
-          align-items: center;
-          background: #fff;
-          border: 1px solid #cdd5df;
-          border-left: 0;
-          border-radius: 0 5px 5px 0;
-          color: #000;
-          display: inline-flex;
-          font-size: 25px;
-          height: 45px;
-          justify-content: center;
-          width: 51px;
-        }
-
-        .all-task-table-wrap {
-          overflow-x: auto;
-        }
-
-        .all-task-table {
-          border-collapse: collapse;
-          color: #394150;
-          min-width: 1100px;
-          table-layout: fixed;
-          width: 100%;
-        }
-
-        .all-task-table thead {
-          background: #e9edf2;
-        }
-
-        .all-task-table th {
-          color: #4f5d6d;
-          font-size: 14px;
-          font-weight: 400;
-          height: 50px;
-          padding: 0 8px;
-          text-align: left;
-        }
-
-        .all-task-table th:nth-child(1) {
-          width: 32%;
-        }
-
-        .all-task-table th:nth-child(2) {
-          width: 14%;
-        }
-
-        .all-task-table th:nth-child(3),
-        .all-task-table th:nth-child(4),
-        .all-task-table th:nth-child(5),
-        .all-task-table th:nth-child(6) {
-          width: 10%;
-        }
-
-        .all-task-table th:nth-child(7) {
-          text-align: right;
-          width: 7%;
-        }
-
-        .all-task-table td {
-          border-bottom: 1px solid #e2e8f0;
-          font-size: 18px;
-          height: 62px;
-          padding: 6px 8px;
-          vertical-align: middle;
-        }
-
-        .all-task-title {
-          color: #3f4650;
-          font-size: 18px;
-          line-height: 1.25;
-        }
-
-        .all-task-subtitle {
-          color: #818b98;
-          font-size: 16px;
-          line-height: 1.45;
-          margin-top: 3px;
-        }
-
-        .all-task-action-cell {
-          text-align: right;
-        }
-
-        .all-task-menu {
-          align-items: center;
-          background: transparent;
-          border: 0;
-          color: #000;
-          display: inline-flex;
-          font-size: 27px;
-          height: 32px;
-          justify-content: center;
-          padding: 0;
-          width: 32px;
-        }
-
-        .all-task-status-select {
-          appearance: auto;
-          background: #fff;
-          border: 1px solid #cdd5df;
-          border-radius: 4px;
-          color: #3f4650;
-          font-size: 15px;
-          min-height: 34px;
-          padding: 0 8px;
-          width: 130px;
-        }
-
-        @media (max-width: 767px) {
-          .all-task-page {
-            margin: -16px -16px 0;
-          }
-
-          .all-task-toolbar {
-            gap: 14px;
-            padding: 14px;
-            flex-direction: column;
-          }
-
-          .all-task-filter {
-            width: min(436px, calc(100vw - 28px));
-          }
-
-          .all-task-user-filter {
-            margin-left: 0;
-            margin-top: 10px;
-            width: min(436px, calc(100vw - 28px));
-          }
-        }
-      `}</style>
     </MasterLayout>
   );
 };

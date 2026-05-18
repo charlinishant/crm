@@ -399,6 +399,7 @@ const MasterLayout = ({ children }) => {
                     All Leads
                   </NavLink>
                 </li>
+                
                 <li>
                   <NavLink
                     to='/index-2'
@@ -408,6 +409,17 @@ const MasterLayout = ({ children }) => {
                   >
                     <i className='ri-circle-fill circle-icon text-warning-main w-auto' />{" "}
                     Smart Import
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to='/trash'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-danger-main w-auto' />{" "}
+                    Trash Lead
                   </NavLink>
                 </li>
                 {/* <li>
@@ -2122,11 +2134,11 @@ const MasterLayout = ({ children }) => {
         <footer className='d-footer'>
           <div className='row align-items-center justify-content-between'>
             <div className='col-auto'>
-              <p className='mb-0'>© 2024 WowDash. All Rights Reserved.</p>
+              <p className='mb-0'></p>
             </div>
             <div className='col-auto'>
               <p className='mb-0'>
-                Made by <span className='text-primary-600'>wowtheme7</span>
+              <span className='text-primary-600'></span>
               </p>
             </div>
           </div>

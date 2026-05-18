@@ -111,11 +111,11 @@
 .table-columns {
   display: flex;
   align-items: center;
-  background-color: #e9ecef;
+  background-color: #487fff;
   padding: 12px 16px;
   border-radius: 2px;
   font-size: 11px;
-  color: #6c757d;
+  color: #ffffff;
   font-weight: 600;
   letter-spacing: 0.5px;
 }
@@ -143,7 +143,7 @@
   display: flex;
   flex-direction: column;
   font-size: 8px;
-  color: #6c757d;
+  color: rgba(255, 255, 255, 0.82);
   line-height: 5px;
   cursor: pointer;
 }

@@ -121,7 +121,7 @@ exports.getUser  = async (req, res)=>{
 
 exports.updateUser = async (req, res)=>{
     try {
-        const data = req.body
+        const data = {...req.body}
         const id = req.params.id
         if(!id)
             res.status(400).json("ID is required")    
@@ -129,6 +129,27 @@ exports.updateUser = async (req, res)=>{
         const user = await prisma.user.findUnique({where:{id:parseInt(id)}})
         if(!user)
             res.status(400).json("User not found")    
+
+        const nullableFields = ["username", "phone", "secondaryPhone", "linkedUrl", "description", "timeZone"]
+
+        nullableFields.forEach((field) => {
+            if(typeof data[field] === "string"){
+                data[field] = data[field].trim()
+            }
+            if(data[field] === ""){
+                data[field] = null
+            }
+        })
+
+        if(typeof data.email === "string"){
+            data.email = data.email.trim().toLowerCase()
+        }
+
+        if(data.password){
+            data.password = await bcrypt.hash(data.password, 10)
+        } else {
+            delete data.password
+        }
 
         const userUpdate = await  prisma.user.update({
             where:{id:parseInt(user.id)},
@@ -164,8 +185,9 @@ exports.deleteUser = async (req, res)=>{
 
 exports.getAccessPanel = async (req, res)=>{
     try {
+        const authUserId = Number(req.authUser.id)
         const user = await prisma.user.findUnique({
-            where:{id:Number(req.authUser.id)},
+            where:{id:authUserId},
             include:{team:true}
         })
 
@@ -173,54 +195,118 @@ exports.getAccessPanel = async (req, res)=>{
             return res.status(404).json({message:"User not found"})
         }
 
-        const leads = await prisma.lead.findMany({
-            where:{
-                teamId:user.id
-            },
-            take:25,
-            orderBy:{id:"desc"},
-            include:{bookings:true}
-        })
-
-        const bookings = await prisma.booking.findMany({
-            take:10,
-            orderBy:{createdAt:"desc"}
-        })
-
-        
-        const tasks = await prisma.task.findMany({
-            where:{assignId:req.authUser.id},
-            select:{
-                id:true,
-                title:true,
-                description:true,
-                remark:true,
-                type:true,
-                status:true,
-                priority:true,
-                dueDate:true,
-                dueTime:true,
-                assign:{
-                    select:{
-                        id:true,
-                        username:true,
-                        firstName:true,
-                        lastName:true
-                    }
-                },
-                assignedBy:{
-                    select:{
-                        id:true,
-                        username:true,
-                        firstName:true,
-                        lastName:true
-                    }
-                },
-                attachments:true,
-                createdAt:true,
-                updatedAt:true,
+        const getAssignedLeads = async () => {
+            const baseQuery = {
+                where:{teamId:user.id},
+                take:100,
+                orderBy:{id:"desc"},
+                select:{
+                    id:true,
+                    salutation:true,
+                    firstName:true,
+                    lastName:true,
+                    emails:true,
+                    phones:true,
+                    status:true,
+                    timeZone:true,
+                    tags:true,
+                    interestedProjects:true,
+                    teamId:true,
+                    channelPartner:true,
+                    conductSiteVisit:true,
+                    conductSiteDate:true,
+                    companyName:true,
+                    type:true,
+                    carpetArea:true,
+                    seats:true,
+                    tenure:true,
+                    gender:true,
+                    occupations:true,
+                    age:true,
+                    birthday:true,
+                    maritalStatus:true,
+                    anniversary:true,
+                    industry:true,
+                    propertyType:true,
+                    configration:true,
+                    budget:true,
+                    locationPreferences:true,
+                    bookings:true
+                }
             }
-        })
+
+            try {
+                return await prisma.lead.findMany({
+                    ...baseQuery,
+                    where:{
+                        ...baseQuery.where,
+                        deletedAt:null
+                    },
+                })
+            } catch (error) {
+                if(error.code !== "P2022"){
+                    throw error
+                }
+
+                return prisma.lead.findMany(baseQuery)
+            }
+        }
+
+        const leads = await getAssignedLeads()
+
+        let bookings = []
+        try {
+            bookings = await prisma.booking.findMany({
+                where:{
+                    leadId:{
+                        in:leads.map(lead => lead.id)
+                    }
+                },
+                take:10,
+                orderBy:{createdAt:"desc"}
+            })
+        } catch (error) {
+            console.log("Unable to load user bookings", error)
+        }
+
+        let tasks = []
+        try {
+            tasks = await prisma.task.findMany({
+                where:{assigneeId:authUserId},
+                select:{
+                    id:true,
+                    title:true,
+                    description:true,
+                    remark:true,
+                    type:true,
+                    status:true,
+                    priority:true,
+                    dueDate:true,
+                    dueTime:true,
+                    assign:{
+                        select:{
+                            id:true,
+                            username:true,
+                            firstName:true,
+                            lastName:true
+                        }
+                    },
+                    assignedBy:{
+                        select:{
+                            id:true,
+                            username:true,
+                            firstName:true,
+                            lastName:true
+                        }
+                    },
+                    attachments:true,
+                    createdAt:true,
+                    updatedAt:true,
+                }
+            })
+        } catch (error) {
+            console.log("Unable to load user tasks", error)
+        }
 
         const displayUser = {
             id:user.id,
@@ -240,8 +326,8 @@ exports.getAccessPanel = async (req, res)=>{
                 assignedLeads:leads.length,
                 followupsDue:leads.filter(lead => lead.status === "Fresh_Lead" || lead.status === "Prospect").length,
                 siteVisits:leads.filter(lead => lead.conductSiteVisit).length,
-                bookings:bookings.length
-                // tasks:tasks.length
+                bookings:bookings.length,
+                tasks:tasks.length
             },
             leads:leads,
             bookings:bookings,

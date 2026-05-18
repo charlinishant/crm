@@ -199,6 +199,7 @@ enum Status{
 }
 model Lead{
   id Int @id @default(autoincrement())
+  deletedAt DateTime?
 
   // basic profile
   salutation String?
@@ -361,12 +362,14 @@ model Task{
   type String? @default("Folllow up")
   status String? @default("Open")
   priority String? @default("Medium")
-  dueDate DateTime
-  dueTime String
-  assignId  Int
-  assign User @relation("AssignedTo", fields: [assignId], references: [id])
-  assignedById  Int
-  assignedBy User @relation("AssignedBy", fields: [assignedById], references: [id])
+  dueDate DateTime?
+  dueTime String?
+  assigneeId Int?
+  assigneeName String?
+  assign User? @relation("AssignedTo", fields: [assigneeId], references: [id])
+  assignedById  Int?
+  assignedByName String?
+  assignedBy User? @relation("AssignedBy", fields: [assignedById], references: [id])
   attachments Json?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

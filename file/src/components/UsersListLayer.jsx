@@ -1,11 +1,11 @@
-import { Icon } from '@iconify/react/dist/iconify.js';
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from "react-router-dom";
 import { useUsers } from "../hook/useUsers.js";
 
 const UsersListLayer = () => {
 
     const { users, loading, error } = useUsers();
+    const navigate = useNavigate();
 
     if (loading) return <div className="p-5 text-center">Data is Fetching...</div>;
     if (error) return <div className="p-5 text-danger text-center">{error}</div>;
@@ -13,7 +13,6 @@ const UsersListLayer = () => {
     return (
         <div className="users-list-wrapper">
             <div className="list-header">
-                <h3>System Users</h3>
                 <p>Total Registered Users: {users.length}</p>
             </div>
 
@@ -47,7 +46,13 @@ const UsersListLayer = () => {
                                     </td>
                                     <td>{user.department}</td>
                                     <td>
-                                        <button className="">Edit</button>
+                                        <button
+                                            type="button"
+                                            className="btn btn-sm btn-primary"
+                                            onClick={() => navigate(`/add-user?id=${user.id}`)}
+                                        >
+                                            Edit
+                                        </button>
                                     </td>
                                 </tr>
                             ))

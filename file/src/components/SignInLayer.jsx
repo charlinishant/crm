@@ -1,6 +1,6 @@
 import React, {useState} from "react";
 import { Icon } from "@iconify/react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 const SignInLayer = () => {
   const navigate = useNavigate();
@@ -13,10 +13,17 @@ const SignInLayer = () => {
     message: ""
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleChange = e =>{
     const {name, value} = e.target
     setFormData({...formData, [name]:value})
+    if (errorModal.show) {
+      setErrorModal({
+        show: false,
+        message: ""
+      });
+    }
   }
 
   const showErrorModal = (message) => {
@@ -26,16 +33,13 @@ const SignInLayer = () => {
     });
   };
 
-  const closeErrorModal = () => {
+  const handleLogin = async(e) => {
+    e.preventDefault();
+    setIsSubmitting(true);
     setErrorModal({
       show: false,
       message: ""
     });
-  };
-
-  const handleLogin = async(e) => {
-    e.preventDefault();
-    setIsSubmitting(true);
 
     try {
       const res = await fetch(`${process.env.REACT_APP_API_URL}/auth/login`, {
@@ -67,9 +71,9 @@ const SignInLayer = () => {
       }
 
       if (result?.message === "Invalid password") {
-        showErrorModal("Password is wrong. Please check your credentials.");
+        showErrorModal("Username or password is wrong. Please check your credentials.");
       } else {
-        showErrorModal(result?.message || "Please check your credentials and try again.");
+        showErrorModal(result?.message || "Username or password is wrong. Please check your credentials.");
       }
     } catch (err) {
       showErrorModal("Something went wrong. Please try again.");
@@ -81,54 +85,97 @@ const SignInLayer = () => {
   return (
     <section
       style={{
-        minHeight: "100vh",
-        display: "flex",
         alignItems: "center",
+        background: "#2f7df2",
+        display: "flex",
         justifyContent: "center",
-        background: "#f5f7fa",
+        minHeight: "100vh",
+        padding: "24px",
       }}
     >
+      <style>
+        {`
+          .signin-blue-input::placeholder {
+            color: rgba(255, 255, 255, 0.76);
+            opacity: 1;
+          }
+
+          .signin-blue-input:focus {
+            border-bottom-color: rgba(255, 255, 255, 0.9) !important;
+          }
+        `}
+      </style>
       <div
         style={{
           width: "100%",
-          maxWidth: "400px",
-          background: "#fff",
-          padding: "30px",
-          borderRadius: "12px",
-          border: "1px solid #e5e7eb",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.05)",
+          maxWidth: "475px",
+          background: "rgba(255, 255, 255, 0.12)",
+          padding: "clamp(36px, 7vw, 56px) clamp(24px, 7vw, 50px) clamp(34px, 7vw, 50px)",
+          borderRadius: "24px",
+          boxShadow: "0 22px 45px rgba(15, 70, 145, 0.22)",
+          border: "1px solid white",
         }}
       >
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: "20px" }}>
-          <h2>Sign In</h2>
-          <p style={{ fontSize: "14px", color: "#666" }}>
-            Enter your details to continue
+        <div style={{ textAlign: "center", marginBottom: "42px" }}>
+          <h2
+            style={{
+              color: "#fff",
+              fontSize: "34px",
+              fontWeight: 800,
+              lineHeight: 1.1,
+              margin: "0 0 10px",
+            }}
+          >
+            Welcome
+          </h2>
+          <p style={{ color: "rgba(255, 255, 255, 0.84)", fontSize: "18px", margin: 0 }}>
+            Sign in to continue
           </p>
         </div>
 
         {/* Form */}
         <form onSubmit={handleLogin}>
-          {/* Email */}
-          <div style={{ marginBottom: "15px", position: "relative" }}>
-            <Icon
-              icon="mage:email"
+          {errorModal.show && (
+            <div
+              role="alert"
               style={{
-                position: "absolute",
-                top: "50%",
-                left: "10px",
-                transform: "translateY(-50%)",
+                alignItems: "center",
+                background: "rgba(254, 226, 226, 0.96)",
+                border: "1px solid rgba(248, 113, 113, 0.75)",
+                borderRadius: "10px",
+                color: "#b91c1c",
+                display: "flex",
+                fontSize: "14px",
+                fontWeight: 600,
+                gap: "8px",
+                lineHeight: 1.4,
+                marginBottom: "22px",
+                padding: "10px 12px",
               }}
-            />
+            >
+              <Icon icon="mdi:alert-circle-outline" style={{ flexShrink: 0, fontSize: "18px" }} />
+              <span>{errorModal.message}</span>
+            </div>
+          )}
+
+          {/* Email */}
+          <div style={{ marginBottom: "30px", position: "relative" }}>
             <input
+              className="signin-blue-input"
               type="email"
               placeholder="Email"
               required
               style={{
+                background: "transparent",
+                border: "none",
+                borderBottom: "2px solid rgba(255, 255, 255, 0.48)",
+                borderRadius: 0,
+                color: "#fff",
+                fontSize: "18px",
+                outline: "none",
+                padding: "0 0 12px",
                 width: "100%",
-                padding: "12px 12px 12px 35px",
-                borderRadius: "8px",
-                border: "1px solid #ddd",
               }}
               name="email"
               value={formData.email}
@@ -137,49 +184,68 @@ const SignInLayer = () => {
           </div>
 
           {/* Password */}
-          <div style={{ marginBottom: "15px", position: "relative" }}>
-            <Icon
-              icon="solar:lock-password-outline"
-              style={{
-                position: "absolute",
-                top: "50%",
-                left: "10px",
-                transform: "translateY(-50%)",
-              }}
-            />
+          <div style={{ marginBottom: "18px", position: "relative" }}>
             <input
-              type="password"
+              className="signin-blue-input"
+              type={showPassword ? "text" : "password"}
               placeholder="Password"
               required
               style={{
+                background: "transparent",
+                border: "none",
+                borderBottom: "2px solid rgba(255, 255, 255, 0.48)",
+                borderRadius: 0,
+                color: "#fff",
+                fontSize: "18px",
+                outline: "none",
+                padding: "0 40px 12px 0",
                 width: "100%",
-                padding: "12px 12px 12px 35px",
-                borderRadius: "8px",
-                border: "1px solid #ddd",
               }}
               name="password"
               value={formData.password}
               onChange={handleChange}
             />
+            <Icon
+              icon={showPassword ? "mdi:eye-off-outline" : "mdi:eye-outline"}
+              onClick={() => setShowPassword((current) => !current)}
+              style={{
+                color: "rgba(255, 255, 255, 0.78)",
+                cursor: "pointer",
+                fontSize: "18px",
+                position: "absolute",
+                right: 0,
+                top: "3px",
+              }}
+            />
           </div>
 
-          {/* Remember + Forgot */}
-          <div
+          {/* Show Password */}
+          {/* <div
             style={{
               display: "flex",
-              justifyContent: "space-between",
-              marginBottom: "15px",
+              justifyContent: "flex-start",
+              marginBottom: "28px",
               fontSize: "14px",
+              color: "#fff",
             }}
           >
-            <label>
-              <input type="checkbox" /> Remember
+            <label
+              style={{
+                alignItems: "center",
+                cursor: "pointer",
+                display: "inline-flex",
+                gap: "8px",
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={showPassword}
+                onChange={(e) => setShowPassword(e.target.checked)}
+                style={{ accentColor: "#fff", cursor: "pointer" }}
+              />
+              Show Password
             </label>
-
-            <Link to="#" style={{ color: "#007bff" }}>
-              Forgot?
-            </Link>
-          </div>
+          </div> */}
 
           {/* Button */}
           <button
@@ -187,13 +253,15 @@ const SignInLayer = () => {
             disabled={isSubmitting}
             style={{
               width: "100%",
-              padding: "12px",
-              background: isSubmitting ? "#6ea8fe" : "#007bff",
-              color: "#fff",
+              padding: "15px",
+              background: "#f8fafc",
+              color: "#1268ea",
               border: "none",
-              borderRadius: "8px",
+              borderRadius: "999px",
               cursor: isSubmitting ? "not-allowed" : "pointer",
-              fontWeight: "bold",
+              fontSize: "16px",
+              fontWeight: 800,
+              opacity: isSubmitting ? 0.72 : 1,
               textAlign: "center",
             }}
           >
@@ -202,98 +270,28 @@ const SignInLayer = () => {
         </form>
 
         {/* Footer */}
-        <div style={{ textAlign: "center", marginTop: "20px", fontSize: "14px" }}>
-          Don’t have an account?{" "}
-          <Link to="/sign-up" style={{ color: "#007bff" }}>
-            Sign Up
-          </Link>
-        </div>
-      </div>
-
-      {errorModal.show && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="signin-error-title"
+        {/* <div
           style={{
             alignItems: "center",
-            background: "rgba(15, 23, 42, 0.45)",
-            bottom: 0,
             display: "flex",
-            justifyContent: "center",
-            left: 0,
-            padding: "16px",
-            position: "fixed",
-            right: 0,
-            top: 0,
-            zIndex: 1050,
+            fontSize: "14px",
+            justifyContent: "space-between",
+            marginTop: "28px",
           }}
         >
-          <div
-            style={{
-              background: "#fff",
-              borderRadius: "10px",
-              boxShadow: "0 20px 50px rgba(15, 23, 42, 0.2)",
-              maxWidth: "380px",
-              padding: "24px",
-              textAlign: "center",
-              width: "100%",
-            }}
+          <Link
+            to="/forgot-password"
+            style={{ color: "#fff", fontSize: "14px", textDecoration: "none" }}
           >
-            <div
-              style={{
-                alignItems: "center",
-                background: "#fee2e2",
-                borderRadius: "50%",
-                color: "#dc2626",
-                display: "inline-flex",
-                fontSize: "32px",
-                height: "58px",
-                justifyContent: "center",
-                marginBottom: "14px",
-                width: "58px",
-              }}
-            >
-              <Icon icon="mdi:alert-circle-outline" />
-            </div>
-            <h3
-              id="signin-error-title"
-              style={{
-                color: "#111827",
-                fontSize: "20px",
-                margin: "0 0 8px",
-              }}
-            >
-              Login Failed
-            </h3>
-            <p
-              style={{
-                color: "#4b5563",
-                fontSize: "15px",
-                lineHeight: 1.5,
-                margin: "0 0 20px",
-              }}
-            >
-              {errorModal.message}
-            </p>
-            <button
-              type="button"
-              onClick={closeErrorModal}
-              style={{
-                background: "#007bff",
-                border: "none",
-                borderRadius: "8px",
-                color: "#fff",
-                cursor: "pointer",
-                fontWeight: "bold",
-                padding: "10px 24px",
-              }}
-            >
-              OK
-            </button>
-          </div>
-        </div>
-      )}
+            Forgot your password?
+          </Link>
+          {" "}
+          <Link to="/sign-up" style={{ color: "#fff", fontSize: "14px", textDecoration: "none" }}>
+            Sign Up
+          </Link>
+        </div> */}
+      </div>
+
     </section>
   );
 };

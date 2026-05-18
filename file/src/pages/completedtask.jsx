@@ -5,64 +5,6 @@ import MasterLayout from "../masterLayout/MasterLayout";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
-const fallbackTasks = [
-  {
-    id: 1,
-    title: "Need To Connect With The Customer",
-    subtitle: "#8466",
-    assignedTo: "Tejas Sales",
-    assignedBy: "Tejas Sales",
-    status: "Completed",
-    priority: "Medium",
-    createdOn: "Dec 10, 2025",
-    dueOn: "Dec 11, 2025",
-  },
-  {
-    id: 2,
-    title: "You Have To Pick Client 10pm 2mrw",
-    subtitle: "Self task",
-    assignedTo: "Tejas Sales",
-    assignedBy: "Tejas Mehta",
-    status: "Completed",
-    priority: "Medium",
-    createdOn: "Sep 16, 2025",
-    dueOn: "-",
-  },
-  {
-    id: 3,
-    title: "100 Call",
-    subtitle: "Self task",
-    assignedTo: "Tejas Sales",
-    assignedBy: "Tejas Mehta",
-    status: "Completed",
-    priority: "Medium",
-    createdOn: "Jul 16, 2025",
-    dueOn: "-",
-  },
-  {
-    id: 4,
-    title: "Call Rahul For Sv",
-    subtitle: "#8495",
-    assignedTo: "Tejas Sales",
-    assignedBy: "Tejas Sales",
-    status: "Completed",
-    priority: "Medium",
-    createdOn: "Jul 14, 2025",
-    dueOn: "-",
-  },
-  {
-    id: 5,
-    title: "Ankur Task",
-    subtitle: "",
-    assignedTo: "Tejas Sales",
-    assignedBy: "Tejas Sales",
-    status: "Completed",
-    priority: "Medium",
-    createdOn: "Jun 30, 2025",
-    dueOn: "-",
-  },
-];
-
 const formatDate = (value) => {
   if (!value) return "-";
   const date = new Date(value);
@@ -78,12 +20,32 @@ const formatDate = (value) => {
   });
 };
 
+const getUserName = (user) =>
+  [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+  user?.username ||
+  user?.email ||
+  (user?.id ? `User #${user.id}` : "");
+
+const getTaskUserLabel = (...values) => {
+  for (const value of values) {
+    if (!value) continue;
+    if (typeof value === "object") {
+      const name = getUserName(value);
+      if (name) return name;
+      continue;
+    }
+    return value;
+  }
+
+  return "-";
+};
+
 const normalizeTask = (task, index) => ({
   id: task.id || task._id || index,
   title: task.title || task.name || "Untitled Task",
   subtitle: task.subtitle || task.description || task.type || "",
-  assignedTo: task.assignedTo || task.assignee || task.assigned_to || "-",
-  assignedBy: task.assignedBy || task.createdBy || task.created_by || "-",
+  assignedTo: getTaskUserLabel(task.assignedTo, task.assignee, task.assigneeName, task.assigned_to, task.assign),
+  assignedBy: getTaskUserLabel(task.assignedByName, task.createdBy, task.created_by, task.assignedBy),
   status: task.status || "Completed",
   priority: task.priority || "Medium",
   createdOn: formatDate(task.createdOn || task.createdAt || task.created_on),
@@ -91,7 +53,8 @@ const normalizeTask = (task, index) => ({
 });
 
 const CompletedTask = () => {
-  const [tasks, setTasks] = useState(fallbackTasks);
+  const [tasks, setTasks] = useState([]);
+  const [fetchError, setFetchError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -99,6 +62,7 @@ const CompletedTask = () => {
 
     const fetchTasks = async () => {
       setIsLoading(true);
+      setFetchError("");
 
       try {
         const response = await fetch(`${API_URL}/tasks?status=Completed`);
@@ -111,21 +75,14 @@ const CompletedTask = () => {
         const taskList = Array.isArray(data) ? data : data.tasks || data.data || [];
 
         if (isMounted) {
-          const savedTasks = JSON.parse(window.localStorage.getItem("savedTasks") || "[]");
           setTasks(
-            [...savedTasks, ...taskList]
-              .map(normalizeTask)
-              .filter((task) => task.status === "Completed")
+            taskList.map(normalizeTask).filter((task) => task.status === "Completed")
           );
         }
       } catch (error) {
         if (isMounted) {
-          const savedTasks = JSON.parse(window.localStorage.getItem("savedTasks") || "[]");
-          setTasks(
-            [...savedTasks, ...fallbackTasks]
-              .map(normalizeTask)
-              .filter((task) => task.status === "Completed")
-          );
+          setTasks([]);
+          setFetchError("Unable to load saved completed tasks from the database.");
         }
       } finally {
         if (isMounted) {
@@ -155,6 +112,7 @@ const CompletedTask = () => {
             <p className="completed-task-total">
               {isLoading ? "LOADING TASKS..." : `TOTAL TASKS : ${tasks.length}`}
             </p>
+            {fetchError && <p className="completed-task-error">{fetchError}</p>}
           </div>
 
           <div className="completed-task-actions">
@@ -185,7 +143,13 @@ const CompletedTask = () => {
               </tr>
             </thead>
             <tbody>
-              {tasks.map((task) => (
+              {tasks.length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="completed-task-empty">
+                    {isLoading ? "Loading tasks..." : "No saved completed tasks found."}
+                  </td>
+                </tr>
+              ) : tasks.map((task) => (
                 <tr key={task.id}>
                   <td>
                     <div className="completed-task-title">{task.title}</div>
@@ -216,177 +180,6 @@ const CompletedTask = () => {
           </table>
         </div>
       </div>
-
-      <style>{`
-        .completed-task-page {
-          background: #fff;
-          border-top: 1px solid #dfe4ea;
-          margin: -24px -24px 0;
-          min-height: calc(100vh - 160px);
-        }
-
-        .completed-task-toolbar {
-          align-items: flex-start;
-          display: flex;
-          justify-content: space-between;
-          padding: 12px 18px 18px 15px;
-        }
-
-        .completed-task-filter {
-          appearance: auto;
-          background: #fff;
-          border: 1px solid #cdd5df;
-          border-radius: 4px;
-          color: #3f4650;
-          font-size: 18px;
-          height: 55px;
-          padding: 0 10px;
-          width: 436px;
-        }
-
-        .completed-task-total {
-          color: #818b98;
-          font-size: 14px;
-          line-height: 1;
-          margin: 14px 0 0;
-          text-transform: uppercase;
-        }
-
-        .completed-task-actions {
-          display: flex;
-        }
-
-        .completed-task-add {
-          align-items: center;
-          background: #673ab7;
-          border: 1px solid #673ab7;
-          border-radius: 5px 0 0 5px;
-          color: #fff;
-          display: inline-flex;
-          font-size: 18px;
-          font-weight: 600;
-          height: 45px;
-          justify-content: center;
-          padding: 0 20px;
-        }
-
-        .completed-task-add:hover {
-          color: #fff;
-        }
-
-        .completed-task-filter-btn {
-          align-items: center;
-          background: #fff;
-          border: 1px solid #cdd5df;
-          border-left: 0;
-          border-radius: 0 5px 5px 0;
-          color: #000;
-          display: inline-flex;
-          font-size: 25px;
-          height: 45px;
-          justify-content: center;
-          width: 51px;
-        }
-
-        .completed-task-table-wrap {
-          overflow-x: auto;
-        }
-
-        .completed-task-table {
-          border-collapse: collapse;
-          color: #394150;
-          min-width: 1100px;
-          table-layout: fixed;
-          width: 100%;
-        }
-
-        .completed-task-table thead {
-          background: #e9edf2;
-        }
-
-        .completed-task-table th {
-          color: #4f5d6d;
-          font-size: 14px;
-          font-weight: 400;
-          height: 50px;
-          padding: 0 8px;
-          text-align: left;
-        }
-
-        .completed-task-table th:nth-child(1) {
-          width: 32%;
-        }
-
-        .completed-task-table th:nth-child(2) {
-          width: 13%;
-        }
-
-        .completed-task-table th:nth-child(3),
-        .completed-task-table th:nth-child(4),
-        .completed-task-table th:nth-child(5),
-        .completed-task-table th:nth-child(6) {
-          width: 10%;
-        }
-
-        .completed-task-table th:nth-child(7) {
-          text-align: right;
-          width: 7%;
-        }
-
-        .completed-task-table td {
-          border-bottom: 1px solid #e2e8f0;
-          font-size: 18px;
-          height: 62px;
-          padding: 6px 8px;
-          vertical-align: middle;
-        }
-
-        .completed-task-title {
-          color: #3f4650;
-          font-size: 18px;
-          line-height: 1.25;
-        }
-
-        .completed-task-subtitle {
-          color: #818b98;
-          font-size: 16px;
-          line-height: 1.45;
-          margin-top: 3px;
-        }
-
-        .completed-task-action-cell {
-          text-align: right;
-        }
-
-        .completed-task-menu {
-          align-items: center;
-          background: transparent;
-          border: 0;
-          color: #000;
-          display: inline-flex;
-          font-size: 27px;
-          height: 32px;
-          justify-content: center;
-          padding: 0;
-          width: 32px;
-        }
-
-        @media (max-width: 767px) {
-          .completed-task-page {
-            margin: -16px -16px 0;
-          }
-
-          .completed-task-toolbar {
-            flex-direction: column;
-            gap: 14px;
-            padding: 14px;
-          }
-
-          .completed-task-filter {
-            width: min(436px, calc(100vw - 28px));
-          }
-        }
-      `}</style>
     </MasterLayout>
   );
 };

@@ -26,7 +26,7 @@ const BorderedTables = () => {
         "priority":"",
         "dueDate":null,
         "dueTime":"2 PM",
-        "assignId":null,
+        "assigneeId":"",
     })
 
     useEffect(() => {
@@ -84,7 +84,6 @@ const BorderedTables = () => {
         }
 
         const authUser = JSON.parse(window.localStorage.getItem("authUser") || "null")
-        const assignedBy = getUserName(authUser) || "Admin"
         const selectedUser = users.find((user) => String(user.id) === String(formData.assigneeId))
 
         const newTask = {
@@ -96,7 +95,7 @@ const BorderedTables = () => {
             dueDate: formData.dueDate || null,
             dueTime: formData.dueTime,
             attachments: attachments.map((file) => file.name),
-            assignId: Number(formData.assigneeId),
+            assigneeId: Number(formData.assigneeId),
             assignedById: authUser?.id || null,
         }
 
@@ -130,7 +129,7 @@ const BorderedTables = () => {
                 description: "",
                 dueDate: "",
                 dueTime: "2:00 PM",
-                assignId: users[0]?.id ? String(users[0].id) : "",
+                assigneeId: users[0]?.id ? String(users[0].id) : "",
                 remark: "",
                 priority: "Medium",
             })
@@ -289,203 +288,6 @@ const BorderedTables = () => {
                 </div>
             </div>
 
-            <style>{`
-                .new-task-panel {
-                    background: #fff;
-                    border: 1px solid #d7dde4;
-                    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
-                    max-width: 925px;
-                    overflow: hidden;
-                }
-
-                .new-task-header {
-                    align-items: center;
-                    background: #487fff;
-                    display: flex;
-                    height: 61px;
-                    justify-content: flex-start;
-                    padding: 0 10px;
-                }
-
-                .new-task-title {
-                    color: #fff;
-                    font-size: 25px;
-                    font-weight: 400;
-                    line-height: 1;
-                    margin: 0;
-                }
-
-                .new-task-form {
-                    padding: 18px 34px 46px 9px;
-                }
-
-                .new-task-field {
-                    margin-bottom: 36px;
-                }
-
-                .new-task-field label {
-                    color: #7d8792;
-                    display: block;
-                    font-size: 14px;
-                    font-weight: 400;
-                    line-height: 1;
-                    margin-bottom: 8px;
-                    text-transform: uppercase;
-                }
-
-                .new-task-field label span {
-                    color: #ff3b30;
-                }
-
-                .new-task-field input,
-                .new-task-field select,
-                .new-task-field textarea {
-                    background-color: #fff;
-                    border: 1px solid #cbd3dc;
-                    border-radius: 4px;
-                    color: #3d4651;
-                    font-size: 18px;
-                    outline: none;
-                    padding: 0 15px;
-                    width: 100%;
-                }
-
-                .new-task-field input,
-                .new-task-field select {
-                    height: 54px;
-                }
-
-                .new-task-field textarea {
-                    min-height: 148px;
-                    padding-bottom: 12px;
-                    padding-top: 12px;
-                    resize: vertical;
-                }
-
-                .new-task-field input:focus,
-                .new-task-field select:focus,
-                .new-task-field textarea:focus {
-                    border-color: #9aa8b8;
-                    box-shadow: 0 0 0 3px rgba(102, 102, 102, 0.1);
-                }
-
-                .new-task-date-row {
-                    display: grid;
-                    gap: 38px;
-                    grid-template-columns: 1fr 1fr;
-                }
-
-                .new-task-date-row input {
-                    background-color: #e9edf2;
-                }
-
-                .new-task-date-row input::placeholder {
-                    color: #8a939e;
-                    opacity: 1;
-                }
-
-                .new-task-field select {
-                    appearance: auto;
-                    background-color: #fff;
-                }
-
-                .new-task-upload {
-                    background: #fff;
-                    border: 1px solid #6b2ee6;
-                    border-radius: 4px;
-                    color: #4f22bd;
-                    font-size: 14px;
-                    height: 30px;
-                    line-height: 1;
-                    padding: 0 20px;
-                }
-
-                .new-task-file-input {
-                    display: none;
-                }
-
-                .new-task-attachments {
-                    display: flex;
-                    flex-wrap: wrap;
-                    gap: 8px;
-                    margin-top: 12px;
-                }
-
-                .new-task-attachment {
-                    align-items: center;
-                    background: #f2f5ff;
-                    border: 1px solid #d7e0ff;
-                    border-radius: 4px;
-                    color: #3d4651;
-                    display: inline-flex;
-                    font-size: 13px;
-                    gap: 8px;
-                    max-width: 100%;
-                    min-height: 30px;
-                    padding: 4px 8px 4px 10px;
-                }
-
-                .new-task-attachment span {
-                    overflow: hidden;
-                    text-overflow: ellipsis;
-                    white-space: nowrap;
-                }
-
-                .new-task-attachment button {
-                    align-items: center;
-                    background: transparent;
-                    border: 0;
-                    color: #6b2ee6;
-                    display: inline-flex;
-                    font-size: 18px;
-                    height: 20px;
-                    justify-content: center;
-                    line-height: 1;
-                    padding: 0;
-                    width: 20px;
-                }
-
-                .new-task-footer {
-                    align-items: center;
-                    background: #666;
-                    display: flex;
-                    height: 61px;
-                    justify-content: flex-end;
-                    gap: 14px;
-                    padding: 0 18px;
-                }
-
-                .new-task-message {
-                    color: #fff;
-                    font-size: 14px;
-                }
-
-                .new-task-save {
-                    background: #6b2ee6;
-                    border: 0;
-                    border-radius: 4px;
-                    color: #fff;
-                    font-size: 14px;
-                    height: 30px;
-                    line-height: 1;
-                    padding: 0 20px;
-                }
-
-                @media (max-width: 767px) {
-                    .new-task-panel {
-                        max-width: none;
-                    }
-
-                    .new-task-form {
-                        padding: 16px;
-                    }
-
-                    .new-task-date-row {
-                        gap: 16px;
-                        grid-template-columns: 1fr;
-                    }
-                }
-            `}</style>
         </div>
     )
 }

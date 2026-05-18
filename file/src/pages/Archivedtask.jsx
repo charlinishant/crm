@@ -20,12 +20,32 @@ const formatDate = (value) => {
   });
 };
 
+const getUserName = (user) =>
+  [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+  user?.username ||
+  user?.email ||
+  (user?.id ? `User #${user.id}` : "");
+
+const getTaskUserLabel = (...values) => {
+  for (const value of values) {
+    if (!value) continue;
+    if (typeof value === "object") {
+      const name = getUserName(value);
+      if (name) return name;
+      continue;
+    }
+    return value;
+  }
+
+  return "-";
+};
+
 const normalizeTask = (task, index) => ({
   id: task.id || task._id || index,
   title: task.title || task.name || "Untitled Task",
   subtitle: task.subtitle || task.description || task.type || "",
-  assignedTo: task.assignedTo || task.assignee || task.assigned_to || "-",
-  assignedBy: task.assignedBy || task.createdBy || task.created_by || "-",
+  assignedTo: getTaskUserLabel(task.assignedTo, task.assignee, task.assigneeName, task.assigned_to, task.assign),
+  assignedBy: getTaskUserLabel(task.assignedByName, task.createdBy, task.created_by, task.assignedBy),
   status: task.status || "Archived",
   priority: task.priority || "Medium",
   createdOn: formatDate(task.createdOn || task.createdAt || task.created_on),
@@ -35,12 +55,14 @@ const normalizeTask = (task, index) => ({
 const Archivedtask = () => {
   const [tasks, setTasks] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [fetchError, setFetchError] = useState("");
 
   useEffect(() => {
     let isMounted = true;
 
     const fetchTasks = async () => {
       setIsLoading(true);
+      setFetchError("");
 
       try {
         const response = await fetch(`${API_URL}/tasks?status=Archived`);
@@ -51,23 +73,16 @@ const Archivedtask = () => {
 
         const data = await response.json();
         const taskList = Array.isArray(data) ? data : data.tasks || data.data || [];
-        const savedTasks = JSON.parse(window.localStorage.getItem("savedTasks") || "[]");
 
         if (isMounted) {
           setTasks(
-            [...savedTasks, ...taskList]
-              .map(normalizeTask)
-              .filter((task) => task.status === "Archived")
+            taskList.map(normalizeTask).filter((task) => task.status === "Archived")
           );
         }
       } catch (error) {
         if (isMounted) {
-          const savedTasks = JSON.parse(window.localStorage.getItem("savedTasks") || "[]");
-          setTasks(
-            savedTasks
-              .map(normalizeTask)
-              .filter((task) => task.status === "Archived")
-          );
+          setTasks([]);
+          setFetchError("Unable to load saved archived tasks from the database.");
         }
       } finally {
         if (isMounted) {
@@ -97,6 +112,7 @@ const Archivedtask = () => {
             <p className="archived-task-total">
               {isLoading ? "LOADING TASKS..." : `TOTAL TASKS : ${tasks.length}`}
             </p>
+            {fetchError && <p className="archived-task-error">{fetchError}</p>}
           </div>
 
           <div className="archived-task-actions">
@@ -127,7 +143,13 @@ const Archivedtask = () => {
               </tr>
             </thead>
             <tbody>
-              {tasks.map((task) => (
+              {tasks.length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="archived-task-empty">
+                    {isLoading ? "Loading tasks..." : "No saved archived tasks found."}
+                  </td>
+                </tr>
+              ) : tasks.map((task) => (
                 <tr key={task.id}>
                   <td>
                     <div className="archived-task-title">{task.title}</div>
@@ -150,204 +172,8 @@ const Archivedtask = () => {
               ))}
             </tbody>
           </table>
-          {tasks.length === 0 && (
-            <div className="archived-task-empty">
-              We couldn't find anything relevant for you.
-            </div>
-          )}
         </div>
       </div>
-
-      <style>{`
-        .archived-task-page {
-          background: #fff;
-          border-top: 1px solid #dfe4ea;
-          margin: -24px -24px 0;
-          min-height: calc(100vh - 160px);
-        }
-
-        .archived-task-toolbar {
-          align-items: flex-start;
-          display: flex;
-          justify-content: space-between;
-          padding: 10px 18px 18px 14px;
-        }
-
-        .archived-task-filter {
-          appearance: auto;
-          background: #fff;
-          border: 1px solid #cdd5df;
-          border-radius: 4px;
-          color: #3f4650;
-          font-size: 18px;
-          height: 55px;
-          padding: 0 10px;
-          width: 441px;
-        }
-
-        .archived-task-total {
-          color: #818b98;
-          font-size: 14px;
-          line-height: 1;
-          margin: 14px 0 0;
-          text-transform: uppercase;
-        }
-
-        .archived-task-actions {
-          display: flex;
-        }
-
-        .archived-task-add {
-          align-items: center;
-          background: #673ab7;
-          border: 1px solid #673ab7;
-          border-radius: 5px 0 0 5px;
-          color: #fff;
-          display: inline-flex;
-          font-size: 18px;
-          font-weight: 600;
-          height: 46px;
-          justify-content: center;
-          padding: 0 20px;
-        }
-
-        .archived-task-add:hover {
-          color: #fff;
-        }
-
-        .archived-task-filter-btn {
-          align-items: center;
-          background: #fff;
-          border: 1px solid #cdd5df;
-          border-left: 0;
-          border-radius: 0 5px 5px 0;
-          color: #000;
-          display: inline-flex;
-          font-size: 25px;
-          height: 46px;
-          justify-content: center;
-          width: 51px;
-        }
-
-        .archived-task-table-wrap {
-          overflow-x: auto;
-        }
-
-        .archived-task-table {
-          border-collapse: collapse;
-          color: #394150;
-          min-width: 1100px;
-          table-layout: fixed;
-          width: 100%;
-        }
-
-        .archived-task-table thead {
-          background: #e9edf2;
-        }
-
-        .archived-task-table th {
-          color: #4f5d6d;
-          font-size: 14px;
-          font-weight: 400;
-          height: 50px;
-          padding: 0 8px;
-          text-align: left;
-        }
-
-        .archived-task-table th:nth-child(1) {
-          width: 10%;
-        }
-
-        .archived-task-table th:nth-child(2) {
-          width: 19%;
-        }
-
-        .archived-task-table th:nth-child(3),
-        .archived-task-table th:nth-child(4),
-        .archived-task-table th:nth-child(5),
-        .archived-task-table th:nth-child(6) {
-          width: 15%;
-        }
-
-        .archived-task-table th:nth-child(7) {
-          text-align: right;
-          width: 8%;
-        }
-
-        .archived-task-empty {
-          align-items: center;
-          border: 1px solid #cdd5df;
-          border-radius: 4px;
-          color: #8b949f;
-          display: flex;
-          font-size: 18px;
-          height: 66px;
-          justify-content: center;
-          margin: 19px 28px 0 24px;
-          min-width: 760px;
-        }
-
-        .archived-task-table td {
-          border-bottom: 1px solid #e2e8f0;
-          font-size: 18px;
-          height: 62px;
-          padding: 6px 8px;
-          vertical-align: middle;
-        }
-
-        .archived-task-title {
-          color: #3f4650;
-          font-size: 18px;
-          line-height: 1.25;
-        }
-
-        .archived-task-subtitle {
-          color: #818b98;
-          font-size: 16px;
-          line-height: 1.45;
-          margin-top: 3px;
-        }
-
-        .archived-task-action-cell {
-          text-align: right;
-        }
-
-        .archived-task-menu {
-          align-items: center;
-          background: transparent;
-          border: 0;
-          color: #000;
-          display: inline-flex;
-          font-size: 27px;
-          height: 32px;
-          justify-content: center;
-          padding: 0;
-          width: 32px;
-        }
-
-        @media (max-width: 767px) {
-          .archived-task-page {
-            margin: -16px -16px 0;
-          }
-
-          .archived-task-toolbar {
-            flex-direction: column;
-            gap: 14px;
-            padding: 14px;
-          }
-
-          .archived-task-filter {
-            width: min(441px, calc(100vw - 28px));
-          }
-
-          .archived-task-empty {
-            margin: 16px 14px 0;
-            min-width: 0;
-            padding: 0 16px;
-            text-align: center;
-          }
-        }
-      `}</style>
     </MasterLayout>
   );
 };

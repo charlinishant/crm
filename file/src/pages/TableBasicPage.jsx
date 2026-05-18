@@ -11,7 +11,7 @@ const TableBasicPage = () => {
       <MasterLayout>
 
         {/* Breadcrumb */}
-        <Breadcrumb title="Basic Table" />
+        <Breadcrumb title="Task" />
 
         {/* TableBasicLayer */}
         <TableBasicLayer />

@@ -8,6 +8,7 @@ const SmartImport = () => {
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const [selectedFileName, setSelectedFileName] = useState("");
   const [message, setMessage] = useState("");
+  const [importSummary, setImportSummary] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
 
   const handleBrowse = () => {
@@ -18,6 +19,7 @@ const SmartImport = () => {
     const file = event.target.files?.[0];
     setSelectedFileName(file?.name || "");
     setMessage("");
+    setImportSummary(null);
   };
 
   const handleDownloadSample = () => {
@@ -38,6 +40,7 @@ const SmartImport = () => {
     try {
       setIsUploading(true);
       setMessage("");
+      setImportSummary(null);
 
       const response = await fetch(`${API_URL}/leads/import`, {
         method: "POST",
@@ -55,8 +58,9 @@ const SmartImport = () => {
         throw new Error(result?.message || result || "Lead import failed");
       }
 
-      setMessage("Leads imported successfully. Opening All Leads...");
-      setTimeout(() => navigate("/marketplace"), 700);
+      setImportSummary(result && typeof result === "object" ? result : null);
+      setMessage("Leads imported successfully and assigned equally.");
+      setTimeout(() => navigate("/marketplace"), 1200);
     } catch (error) {
       console.error("Lead import failed:", error);
       setMessage(error.message || "Lead import failed.");
@@ -67,8 +71,6 @@ const SmartImport = () => {
 
   return (
     <div className="smart-import-container">
-      <p className="title">Smart Import</p>
-
       <div className="card smart-import-card">
         <div className="file-upload">
           <input
@@ -89,7 +91,7 @@ const SmartImport = () => {
             onClick={handleUpload}
             disabled={isUploading}
           >
-            {isUploading ? "Uploading..." : "Upload"}
+            {isUploading ? "Uploading..." : "Import"}
           </button>
         </div>
 
@@ -97,16 +99,35 @@ const SmartImport = () => {
           <div className="selected-file">Selected file: {selectedFileName}</div>
         )}
 
-        <button type="button" className="download-btn" onClick={handleDownloadSample}>
-          Download Sample Excel
-        </button>
+        <div className="smart-import-actions">
+          <button type="button" className="download-btn" onClick={handleDownloadSample}>
+            Download Sample Excel
+          </button>
+        </div>
 
         {message && <div className="import-message">{message}</div>}
+
+        {importSummary?.assignmentCounts && (
+          <div className="assignment-summary">
+            <div className="assignment-summary__head">
+              <span>Assignment Summary</span>
+              <strong>{importSummary.importedCount || 0} leads</strong>
+            </div>
+            <div className="assignment-summary__grid">
+              {Object.entries(importSummary.assignmentCounts).map(([userName, count]) => (
+                <div className="assignment-summary__item" key={userName}>
+                  <span>{userName}</span>
+                  <strong>{count}</strong>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="magic-fields">
           <p>Excel import flow:</p>
           <div className="fields-box">
-            Download the sample Excel, fill lead data, set Team to a user name/email/id, then upload it here.
+            Download the sample Excel, fill lead data, then upload it here. Imported leads are assigned equally to all active users automatically.
           </div>
         </div>
       </div>

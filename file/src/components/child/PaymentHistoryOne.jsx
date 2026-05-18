@@ -2,15 +2,18 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaEllipsisV } from "react-icons/fa";
 
-const PaymentHistoryOne = () => {
+const PaymentHistoryOne = ({ trashMode = false }) => {
   const [leadData, setLeadData] = useState([]);
   const [users, setUsers] = useState([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [openMenu, setOpenMenu] = useState(null);
   const [menuPosition, setMenuPosition] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const navigate = useNavigate();
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+  const listUrl = trashMode ? `${API_URL}/leads/trash` : `${API_URL}/leads/`;
+  const recordsPerPage = 10;
 
   const getUserName = useCallback((user) =>
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
@@ -20,13 +23,13 @@ const PaymentHistoryOne = () => {
 
   const fetchLeadData = useCallback(async () => {
     try {
-      const response = await fetch(`${API_URL}/leads/`);
+      const response = await fetch(listUrl);
       const result = await response.json();
       setLeadData(Array.isArray(result) ? result : result?.data || []);
     } catch (error) {
       console.error("Error fetching leads:", error);
     }
-  }, [API_URL]);
+  }, [listUrl]);
 
   useEffect(() => {
     fetchLeadData();
@@ -123,6 +126,21 @@ const PaymentHistoryOne = () => {
     if (!query) return true;
     return getSearchText(lead).includes(query);
   });
+  const totalPages = Math.max(1, Math.ceil(filteredLeadData.length / recordsPerPage));
+  const activePage = Math.min(currentPage, totalPages);
+  const pageStartIndex = (activePage - 1) * recordsPerPage;
+  const paginatedLeadData = filteredLeadData.slice(pageStartIndex, pageStartIndex + recordsPerPage);
+  const pageEndIndex = Math.min(pageStartIndex + paginatedLeadData.length, filteredLeadData.length);
+
+  useEffect(() => {
+    setCurrentPage(1);
+    setOpenMenu(null);
+    setMenuPosition(null);
+  }, [leadData, searchQuery, trashMode]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const renderReceivedOn = (lead) => {
     const receivedOn = getReceivedOn(lead);
@@ -250,6 +268,7 @@ const PaymentHistoryOne = () => {
 
       if (action.type === "search") {
         setSearchQuery(action.query || "");
+        setCurrentPage(1);
         return;
       }
 
@@ -442,6 +461,74 @@ const PaymentHistoryOne = () => {
     printWindow.document.close();
   };
 
+  const handleDelete = async (lead) => {
+    const leadId = lead.id || lead._id || lead.lead_id;
+    if (!leadId) return;
+    if (!window.confirm("Move this lead to trash?")) return;
+
+    setOpenMenu(null);
+    setMenuPosition(null);
+
+    try {
+      const response = await fetch(`${API_URL}/leads/${leadId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) throw new Error("Unable to delete lead");
+      setLeadData((current) =>
+        current.filter((item) => (item.id || item._id || item.lead_id) !== leadId)
+      );
+    } catch (error) {
+      console.error("Unable to delete lead:", error);
+      alert(error.message || "Unable to delete lead");
+    }
+  };
+
+  const handleRestore = async (lead) => {
+    const leadId = lead.id || lead._id || lead.lead_id;
+    if (!leadId) return;
+
+    setOpenMenu(null);
+    setMenuPosition(null);
+
+    try {
+      const response = await fetch(`${API_URL}/leads/${leadId}/restore`, {
+        method: "PATCH",
+      });
+
+      if (!response.ok) throw new Error("Unable to restore lead");
+      setLeadData((current) =>
+        current.filter((item) => (item.id || item._id || item.lead_id) !== leadId)
+      );
+    } catch (error) {
+      console.error("Unable to restore lead:", error);
+      alert(error.message || "Unable to restore lead");
+    }
+  };
+
+  const handlePermanentDelete = async (lead) => {
+    const leadId = lead.id || lead._id || lead.lead_id;
+    if (!leadId) return;
+    if (!window.confirm("Permanently delete this lead? This cannot be undone.")) return;
+
+    setOpenMenu(null);
+    setMenuPosition(null);
+
+    try {
+      const response = await fetch(`${API_URL}/leads/${leadId}/permanent`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) throw new Error("Unable to permanently delete lead");
+      setLeadData((current) =>
+        current.filter((item) => (item.id || item._id || item.lead_id) !== leadId)
+      );
+    } catch (error) {
+      console.error("Unable to permanently delete lead:", error);
+      alert(error.message || "Unable to permanently delete lead");
+    }
+  };
+
   const handleActionToggle = (event, index) => {
     if (openMenu === index) {
       setOpenMenu(null);
@@ -493,9 +580,6 @@ const PaymentHistoryOne = () => {
   return (
     <>
       <style>{`
-        /* ============================================
-           TABLE SECTION
-        ============================================ */
         .table-section {
           padding: 20px;
           background: #ffffff;
@@ -511,35 +595,28 @@ const PaymentHistoryOne = () => {
           margin-bottom: 15px;
         }
 
-        /* ============================================
-           TABLE BASE
-        ============================================ */
         .table-section table {
           width: 100%;
           border-collapse: collapse;
           font-size: 14px;
         }
 
-        /* ============================================
-           HEADER
-        ============================================ */
         .table-section table thead tr {
-          background: #e9edf2;
+          background: #487fff;
         }
 
         .table-section table thead th {
+          background: #487fff !important;
           padding: 14px 15px;
           text-align: left;
-          color: #405064;
-          font-weight: 500;
+          color: #ffffff !important;
+          font-weight: 600;
           font-size: 12px;
           white-space: nowrap;
           text-transform: uppercase;
+          border-bottom: 1px solid #2f6ff0;
         }
 
-        /* ============================================
-           BODY ROWS
-        ============================================ */
         .table-section table tbody tr {
           border-bottom: 1px solid #e2e8f0;
           transition: background 0.2s;
@@ -639,9 +716,73 @@ const PaymentHistoryOne = () => {
           border-top: 1px solid #e2e8f0;
         }
 
-        /* ============================================
-           ZEBRA STRIPING
-        ============================================ */
+        .lead-pagination {
+          align-items: center;
+          border-top: 1px solid #e2e8f0;
+          display: flex;
+          justify-content: space-between;
+          gap: 14px;
+          margin-top: 8px;
+          padding-top: 16px;
+        }
+
+        .lead-pagination-info {
+          color: #64748b;
+          font-size: 13px;
+        }
+
+        .lead-pagination-info strong {
+          color: #334155;
+          font-weight: 600;
+        }
+
+        .lead-pagination-actions {
+          align-items: center;
+          display: flex;
+          gap: 8px;
+        }
+
+        .lead-pagination-btn {
+          align-items: center;
+          background: #ffffff;
+          border: 1px solid #cbd5e1;
+          border-radius: 6px;
+          color: #334155;
+          cursor: pointer;
+          display: inline-flex;
+          font-size: 14px;
+          font-weight: 500;
+          height: 36px;
+          justify-content: center;
+          min-width: 88px;
+          padding: 0 14px;
+        }
+
+        .lead-pagination-btn:hover:not(:disabled) {
+          background: #f8fafc;
+          border-color: #94a3b8;
+        }
+
+        .lead-pagination-btn:disabled {
+          cursor: not-allowed;
+          opacity: 0.55;
+        }
+
+        .lead-pagination-page {
+          align-items: center;
+          background: #eff6ff;
+          border: 1px solid #bfdbfe;
+          border-radius: 6px;
+          color: #1d4ed8;
+          display: inline-flex;
+          font-size: 13px;
+          font-weight: 600;
+          height: 36px;
+          justify-content: center;
+          min-width: 78px;
+          padding: 0 12px;
+        }
+
         .table-section table tbody tr:nth-child(even) {
           background: #f8fafc;
         }
@@ -650,9 +791,6 @@ const PaymentHistoryOne = () => {
           background: #f1f5f9;
         }
 
-        /* ============================================
-           EMPTY STATE
-        ============================================ */
         .table-section .empty-state {
           text-align: center;
           color: #94a3b8;
@@ -660,9 +798,6 @@ const PaymentHistoryOne = () => {
           font-size: 14px;
         }
 
-        /* ============================================
-           RESPONSIVE
-        ============================================ */
         @media (max-width: 768px) {
           .table-section {
             overflow-x: auto;
@@ -671,11 +806,24 @@ const PaymentHistoryOne = () => {
           .table-section table {
             min-width: 600px;
           }
+
+          .lead-pagination {
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .lead-pagination-actions {
+            justify-content: space-between;
+          }
+
+          .lead-pagination-btn {
+            flex: 1;
+          }
         }
       `}</style>
 
       <div className="table-section">
-        <p>Lead Data</p>
+        <p>{trashMode ? "Trash" : "Lead Data"}</p>
 
         <table>
           <thead>
@@ -696,11 +844,11 @@ const PaymentHistoryOne = () => {
             {filteredLeadData.length === 0 ? (
               <tr>
                 <td colSpan="9" className="empty-state">
-                  {searchQuery ? "No matching leads found" : "No Data Available"}
+                  {searchQuery ? "No matching leads found" : trashMode ? "Trash is empty" : "No Data Available"}
                 </td>
               </tr>
             ) : (
-              filteredLeadData.map((lead, i) => (
+              paginatedLeadData.map((lead, i) => (
                 <tr key={i}>
                   <td>{getLeadId(lead)}</td>
                   <td>
@@ -712,21 +860,25 @@ const PaymentHistoryOne = () => {
                   <td>{renderReceivedOn(lead)}</td>
                   <td>{getRequirement(lead)}</td>
                   <td>
-                    <select
-                      className="lead-team-select"
-                      value={lead.teamId || ""}
-                      onChange={(event) => handleTeamChange(lead, event.target.value)}
-                      disabled={isLoadingUsers}
-                    >
-                      <option value="">
-                        {isLoadingUsers ? "Loading users..." : "Unassigned"}
-                      </option>
-                      {users.map((user) => (
-                        <option key={user.id || user.email} value={user.id}>
-                          {getUserName(user)}
+                    {trashMode ? (
+                      getLeadOwner(lead)
+                    ) : (
+                      <select
+                        className="lead-team-select"
+                        value={lead.teamId || ""}
+                        onChange={(event) => handleTeamChange(lead, event.target.value)}
+                        disabled={isLoadingUsers}
+                      >
+                        <option value="">
+                          {isLoadingUsers ? "Loading users..." : "Unassigned"}
                         </option>
-                      ))}
-                    </select>
+                        {users.map((user) => (
+                          <option key={user.id || user.email} value={user.id}>
+                            {getUserName(user)}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </td>
                   <td className="lead-tags-cell" title={getTags(lead)}>{getTags(lead)}</td>
                   <td className="lead-action-cell">
@@ -747,24 +899,55 @@ const PaymentHistoryOne = () => {
                           top: `${menuPosition.top}px`,
                         }}
                       >
-                        <button
-                          type="button"
-                          onClick={() => handlePreview(lead)}
-                        >
-                          Preview
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDetails(lead)}
-                        >
-                          Details
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handlePrint(lead)}
-                        >
-                          Print
-                        </button>
+                        {trashMode ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleRestore(lead)}
+                            >
+                              Restore
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handlePreview(lead)}
+                            >
+                              Preview
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handlePermanentDelete(lead)}
+                            >
+                              Delete Forever
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {/* <button
+                              type="button"
+                              onClick={() => handlePreview(lead)}
+                            >
+                              Preview
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDetails(lead)}
+                            >
+                              Details
+                            </button> */}
+                            <button
+                              type="button"
+                              onClick={() => handlePrint(lead)}
+                            >
+                              Print
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(lead)}
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
                   </td>
@@ -773,6 +956,44 @@ const PaymentHistoryOne = () => {
             )}
           </tbody>
         </table>
+
+        {filteredLeadData.length > 0 && (
+          <div className="lead-pagination">
+            <div className="lead-pagination-info">
+              Showing <strong>{pageStartIndex + 1}</strong> to <strong>{pageEndIndex}</strong> of{" "}
+              <strong>{filteredLeadData.length}</strong> leads
+            </div>
+            <div className="lead-pagination-actions">
+              <button
+                type="button"
+                className="lead-pagination-btn"
+                onClick={() => {
+                  setOpenMenu(null);
+                  setMenuPosition(null);
+                  setCurrentPage((page) => Math.max(1, page - 1));
+                }}
+                disabled={activePage === 1}
+              >
+                Previous
+              </button>
+              <span className="lead-pagination-page">
+                {activePage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                className="lead-pagination-btn"
+                onClick={() => {
+                  setOpenMenu(null);
+                  setMenuPosition(null);
+                  setCurrentPage((page) => Math.min(totalPages, page + 1));
+                }}
+                disabled={activePage === totalPages}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

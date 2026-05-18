@@ -168,11 +168,11 @@
 .table-header-row {
   display: flex;
   align-items: center;
-  background-color: #e9ecef;
+  background-color: #487fff;
   padding: 10px 14px;
   font-size: 11px;
   font-weight: 600;
-  color: #6c757d;
+  color: #ffffff;
   letter-spacing: 0.5px;
 }
 
@@ -196,7 +196,7 @@
   display: flex;
   flex-direction: column;
   font-size: 8px;
-  color: #6c757d;
+  color: rgba(255, 255, 255, 0.82);
   cursor: pointer;
 }
 
