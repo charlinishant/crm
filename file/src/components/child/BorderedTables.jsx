@@ -25,7 +25,7 @@ const BorderedTables = () => {
         "status":"",
         "priority":"",
         "dueDate":null,
-        "dueTime":"2 PM",
+        "dueTime":"",
         "assigneeId":"",
     })
 
@@ -39,10 +39,6 @@ const BorderedTables = () => {
                 const result = await response.json()
                 const userList = Array.isArray(result) ? result : result?.data || result?.users || []
                 setUsers(userList)
-                setFormData((current) => ({
-                    ...current,
-                    assigneeId: current.assigneeId || (userList[0]?.id ? String(userList[0].id) : ""),
-                }))
             } catch (error) {
                 console.error("Unable to load users:", error)
                 setUsers([])
@@ -128,8 +124,8 @@ const BorderedTables = () => {
                 title: "",
                 description: "",
                 dueDate: "",
-                dueTime: "2:00 PM",
-                assigneeId: users[0]?.id ? String(users[0].id) : "",
+                dueTime: "",
+                assigneeId: "",
                 remark: "",
                 priority: "Medium",
             })

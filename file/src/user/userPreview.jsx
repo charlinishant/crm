@@ -19,7 +19,7 @@ import {
 const fallbackLead = {
   id: 10702,
   name: "chetan agrawal",
-  lead_status: "Booked",
+  lead_status: "New",
   source: "channel_partner",
   city: "India",
   budget: "-",
@@ -74,13 +74,12 @@ const getLeadValue = (lead, keys, fallback = "-") => {
 };
 
 const leadStatusOptions = [
+  { value: "New", label: "New" },
+  { value: "Qualified", label: "Qualified" },
+  { value: "In_sourcing", label: "In_sourcing" },
+  { value: "In_closing", label: "In_closing" },
   { value: "Booked", label: "Booked" },
-  { value: "Fresh_Lead", label: "Fresh Lead" },
-  { value: "Lost", label: "Lost" },
-  { value: "NP", label: "NP" },
-  { value: "Prospect", label: "Prospect" },
-  { value: "Registered", label: "Registered" },
-  { value: "Unqualified", label: "Unqualified" },
+  { value: "Nurture", label: "Nurture" },
 ];
 
 const bookingSteps = [
@@ -113,13 +112,13 @@ const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const phonePattern = /^\d{10}$/;
 
 const normalizeStatus = (value) => {
-  if (!value) return "Booked";
+  if (!value) return "New";
   const match = leadStatusOptions.find(
     (option) =>
       option.value === value ||
       option.label.toLowerCase() === String(value).toLowerCase()
   );
-  return match?.value || "Booked";
+  return match?.value || "New";
 };
 
 const getStatusLabel = (value) => {
@@ -155,7 +154,7 @@ const UserPreview = () => {
       getLeadValue(
         location.state?.lead || readStoredLead() || fallbackLead,
         ["status", "lead_status", "stage"],
-        "Booked"
+        "New"
       )
     )
   );
@@ -237,7 +236,7 @@ const UserPreview = () => {
   }, [API_URL, leadIdFromUrl, location.state]);
 
   useEffect(() => {
-    setSelectedStatus(normalizeStatus(getLeadValue(lead, ["status", "lead_status", "stage"], "Booked")));
+    setSelectedStatus(normalizeStatus(getLeadValue(lead, ["status", "lead_status", "stage"], "New")));
     const primaryEmail = Array.isArray(lead.emails)
       ? lead.emails.find((email) => email?.value)?.value || ""
       : lead.email || "";
@@ -263,7 +262,7 @@ const UserPreview = () => {
     `${lead.firstName || ""} ${lead.lastName || ""}`.trim() || "chetan agrawal"
   );
   const leadId = getLeadValue(lead, ["id", "_id", "lead_id"], "10702");
-  const leadStatus = normalizeStatus(getLeadValue(lead, ["status", "lead_status", "stage"], "Booked"));
+  const leadStatus = normalizeStatus(getLeadValue(lead, ["status", "lead_status", "stage"], "New"));
   const leadSource = getLeadValue(lead, ["source", "lead_source"], "channel_partner");
   const leadSubSource = getLeadValue(lead, ["sub_source", "subSource", "channel_partner"], "Zeeshan Khan (Our N...");
   const projectName = getLeadValue(lead, ["project_name", "projectName", "interestedProjects"], "Binghatti Hills");

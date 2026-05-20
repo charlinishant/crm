@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { FaEllipsisV } from "react-icons/fa";
 
 const PaymentHistoryOne = ({ trashMode = false }) => {
@@ -11,6 +11,7 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const navigate = useNavigate();
+  const location = useLocation();
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const listUrl = trashMode ? `${API_URL}/leads/trash` : `${API_URL}/leads/`;
   const recordsPerPage = 10;
@@ -34,6 +35,12 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
   useEffect(() => {
     fetchLeadData();
   }, [fetchLeadData]);
+
+  useEffect(() => {
+    if (location.state?.refreshLeads) {
+      fetchLeadData();
+    }
+  }, [fetchLeadData, location.state?.refreshLeads]);
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -74,7 +81,8 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
   }, []);
 
   const getStage = useCallback((lead) => {
-    return lead.lead_status || lead.status || lead.stage || "New";
+    const stage = lead.lead_status || lead.status || lead.stage || "New";
+    return String(stage).replace(/_/g, " ");
   }, []);
 
   const getReceivedOn = useCallback((lead) => {
@@ -169,6 +177,14 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
     setOpenMenu(null);
     setMenuPosition(null);
     navigate(leadId ? `/details?leadId=${leadId}` : "/details", { state: { lead } });
+  };
+
+  const handleEdit = (lead) => {
+    window.sessionStorage.setItem("selectedLeadEdit", JSON.stringify(lead));
+    const leadId = lead.id || lead._id || lead.lead_id || "";
+    setOpenMenu(null);
+    setMenuPosition(null);
+    navigate(leadId ? `/add-lead?editLeadId=${leadId}` : "/add-lead", { state: { lead } });
   };
 
   const formatValue = useCallback((value) => {
@@ -922,7 +938,7 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
                           </>
                         ) : (
                           <>
-                            {/* <button
+                            <button
                               type="button"
                               onClick={() => handlePreview(lead)}
                             >
@@ -933,13 +949,19 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
                               onClick={() => handleDetails(lead)}
                             >
                               Details
-                            </button> */}
+                            </button>
                             <button
+                              type="button"
+                              onClick={() => handleEdit(lead)}
+                            >
+                              Edit
+                            </button>
+                            {/* <button
                               type="button"
                               onClick={() => handlePrint(lead)}
                             >
                               Print
-                            </button>
+                            </button> */}
                             <button
                               type="button"
                               onClick={() => handleDelete(lead)}

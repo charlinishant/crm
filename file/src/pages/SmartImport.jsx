@@ -1,15 +1,44 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./smartImport.css";
+
+const getUserName = (user) =>
+  [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+  user?.username ||
+  user?.email ||
+  (user?.id ? `User #${user.id}` : "");
 
 const SmartImport = () => {
   const fileRef = useRef(null);
   const navigate = useNavigate();
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const [selectedFileName, setSelectedFileName] = useState("");
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [users, setUsers] = useState([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [message, setMessage] = useState("");
   const [importSummary, setImportSummary] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        setIsLoadingUsers(true);
+        const response = await fetch(`${API_URL}/users?limit=100`);
+        if (!response.ok) throw new Error("Unable to load users");
+        const result = await response.json();
+        const userList = Array.isArray(result) ? result : result?.data || result?.users || [];
+        setUsers(userList.filter((user) => user.isActive !== false));
+      } catch (error) {
+        console.error("Unable to load users:", error);
+        setUsers([]);
+      } finally {
+        setIsLoadingUsers(false);
+      }
+    };
+
+    fetchUsers();
+  }, [API_URL]);
 
   const handleBrowse = () => {
     fileRef.current?.click();
@@ -36,6 +65,9 @@ const SmartImport = () => {
 
     const formData = new FormData();
     formData.append("file", file);
+    if (selectedUserId) {
+      formData.append("teamId", selectedUserId);
+    }
 
     try {
       setIsUploading(true);
@@ -59,8 +91,8 @@ const SmartImport = () => {
       }
 
       setImportSummary(result && typeof result === "object" ? result : null);
-      setMessage("Leads imported successfully and assigned equally.");
-      setTimeout(() => navigate("/marketplace"), 1200);
+      setMessage(result?.message || "Leads imported successfully.");
+      setTimeout(() => navigate("/index-11", { state: { refreshLeads: Date.now() } }), 1200);
     } catch (error) {
       console.error("Lead import failed:", error);
       setMessage(error.message || "Lead import failed.");
@@ -99,6 +131,26 @@ const SmartImport = () => {
           <div className="selected-file">Selected file: {selectedFileName}</div>
         )}
 
+        <div className="smart-import-field">
+          <label htmlFor="leadImportAssignee">Assign imported leads to</label>
+          <select
+            id="leadImportAssignee"
+            value={selectedUserId}
+            onChange={(event) => setSelectedUserId(event.target.value)}
+            disabled={isLoadingUsers}
+          >
+            <option value="">
+              {isLoadingUsers ? "Loading users..." : "Auto assign / use Excel Team"}
+            </option>
+            {users.map((user) => (
+              <option key={user.id || user.email} value={user.id}>
+                {getUserName(user)}
+                {user.role ? ` (${user.role})` : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="smart-import-actions">
           <button type="button" className="download-btn" onClick={handleDownloadSample}>
             Download Sample Excel
@@ -113,6 +165,11 @@ const SmartImport = () => {
               <span>Assignment Summary</span>
               <strong>{importSummary.importedCount || 0} leads</strong>
             </div>
+            {importSummary.skippedDuplicateCount > 0 && (
+              <div className="import-duplicates">
+                {importSummary.skippedDuplicateCount} duplicate rows skipped
+              </div>
+            )}
             <div className="assignment-summary__grid">
               {Object.entries(importSummary.assignmentCounts).map(([userName, count]) => (
                 <div className="assignment-summary__item" key={userName}>
@@ -127,7 +184,7 @@ const SmartImport = () => {
         <div className="magic-fields">
           <p>Excel import flow:</p>
           <div className="fields-box">
-            Download the sample Excel, fill lead data, then upload it here. Imported leads are assigned equally to all active users automatically.
+            Download the sample Excel, fill lead data, choose a user if every row should go to the same assignee, then upload it here. Without a selected user, the Team column is used first and remaining rows are auto assigned.
           </div>
         </div>
       </div>

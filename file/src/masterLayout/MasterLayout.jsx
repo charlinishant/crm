@@ -1049,7 +1049,7 @@ const MasterLayout = ({ children }) => {
             <li className='dropdown'>
               <Link to='#'>
                 <Icon icon='flowbite:users-group-outline'className='menu-icon'/>
-                <span>Manage Documents</span>
+                <span>Manage User</span>
               </Link>
               <ul className='sidebar-submenu'>
                 <li>

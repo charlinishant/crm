@@ -6,38 +6,59 @@ const { create } = require("domain")
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const phoneRegex = /^\d{10}$/
 const validLeadStatuses = new Set([
+  "New",
+  "Qualified",
+  "In_sourcing",
+  "In_closing",
   "Booked",
-  "Fresh_Lead",
-  "Lost",
-  "NP",
-  "Prospect",
-  "Registered",
-  "Unqualified",
+  "Nurture",
 ])
+const leadTeamSelect = {
+  id: true,
+  isActive: true,
+  username: true,
+  email: true,
+  firstName: true,
+  lastName: true,
+  phone: true,
+  secondaryPhone: true,
+  timeZone: true,
+  linkedUrl: true,
+  description: true,
+  role: true,
+  department: true,
+  defaultRouting: true,
+  defaultRoutingRule: true,
+  autoRoster: true,
+  teamId: true,
+  pushNotification: true,
+  gpsTracking: true,
+}
 const importStatusMap = {
+  new: "New",
+  qualified: "Qualified",
+  in_sourcing: "In_sourcing",
+  "in sourcing": "In_sourcing",
+  in_closing: "In_closing",
+  "in closing": "In_closing",
   booked: "Booked",
-  fresh_lead: "Fresh_Lead",
-  "fresh lead": "Fresh_Lead",
-  fresh: "Fresh_Lead",
-  interested: "Prospect",
-  follow_up: "Prospect",
-  "follow up": "Prospect",
-  followup: "Prospect",
-  site_visit: "Registered",
-  "site visit": "Registered",
-  lost: "Lost",
-  np: "NP",
-  prospect: "Prospect",
-  registered: "Registered",
-  unqualified: "Unqualified",
+  nurture: "Nurture",
 }
 
 const normalizeImportStatus = (value) => {
   const rawValue = String(value || "").trim()
-  if (!rawValue) return "Fresh_Lead"
+  if (!rawValue) return "New"
   if (validLeadStatuses.has(rawValue)) return rawValue
 
-  return importStatusMap[rawValue.toLowerCase()] || "Fresh_Lead"
+  return importStatusMap[rawValue.toLowerCase()] || "New"
+}
+
+const normalizeLeadStatusValue = (value) => {
+  const rawValue = String(value || "").trim()
+  if (!rawValue) return undefined
+  if (validLeadStatuses.has(rawValue)) return rawValue
+
+  return importStatusMap[rawValue.toLowerCase()] || "New"
 }
 
 const toNullableString = (value) => {
@@ -48,6 +69,101 @@ const toNullableString = (value) => {
 const toNullableJsonString = (value) => {
   const normalizedValue = toNullableString(value)
   return normalizedValue ? [normalizedValue] : null
+}
+
+const toRequiredString = (value) => String(value || "").trim()
+const toNullableInt = (value) => {
+  if (value === undefined || value === null || value === "") return null
+  const number = parseInt(value)
+  return Number.isNaN(number) ? null : number
+}
+const toImportInt = (value, defaultValue = null) => {
+  const number = parseInt(value)
+  return Number.isNaN(number) ? defaultValue : number
+}
+const toImportFloat = (value, defaultValue = null) => {
+  const number = parseFloat(value)
+  return Number.isNaN(number) ? defaultValue : number
+}
+
+const normalizeEmailValue = (value) => String(value || "").trim().toLowerCase()
+const normalizePhoneValue = (value) => String(value || "").replace(/\D/g, "")
+const toRequiredPhone = (value) => normalizePhoneValue(value)
+
+const extractJsonValues = (items) => {
+  if (!Array.isArray(items)) return []
+
+  return items
+    .map(item => {
+      if (item && typeof item === "object") return item.value
+      return item
+    })
+    .filter(value => value !== undefined && value !== null && value !== "")
+}
+
+const getLeadDuplicateKeys = (lead) => {
+  const emails = extractJsonValues(lead.emails)
+    .map(normalizeEmailValue)
+    .filter(Boolean)
+  const phones = extractJsonValues(lead.phones)
+    .map(normalizePhoneValue)
+    .filter(Boolean)
+
+  return {
+    emails,
+    phones,
+    keys: [
+      ...emails.map(value => `email:${value}`),
+      ...phones.map(value => `phone:${value}`),
+    ],
+  }
+}
+
+const addLeadKeysToSet = (keySet, lead) => {
+  getLeadDuplicateKeys(lead).keys.forEach(key => keySet.add(key))
+}
+
+const hasDuplicateLeadKey = (keySet, lead) =>
+  getLeadDuplicateKeys(lead).keys.some(key => keySet.has(key))
+
+const filterDuplicateLeads = (leads) => {
+  const seenKeys = new Set()
+
+  return leads.filter(lead => {
+    const duplicateKeys = getLeadDuplicateKeys(lead).keys
+
+    if (!duplicateKeys.length) return true
+    if (duplicateKeys.some(key => seenKeys.has(key))) return false
+
+    duplicateKeys.forEach(key => seenKeys.add(key))
+    return true
+  })
+}
+
+const normalizeAddressList = (value) => {
+  if (!Array.isArray(value)) return []
+
+  return value.map(({ address, street, city, state, country, zip }) => ({
+    address: toNullableString(address),
+    street: toNullableString(street),
+    city: toNullableString(city),
+    state: toNullableString(state),
+    country: toNullableString(country),
+    zip: toNullableString(zip),
+  }))
+}
+
+const findDuplicateLead = async (leadData) => {
+  const existingLeads = await prisma.lead.findMany({
+    where: { 
+      is_delete: false  // Match the filter used in getLeads
+    },
+    select: { id: true, emails: true, phones: true },
+  })
+  const existingKeys = new Set()
+  existingLeads.forEach(lead => addLeadKeysToSet(existingKeys, lead))
+
+  return hasDuplicateLeadKey(existingKeys, leadData)
 }
 
 exports.createLead = async (req, res) => {
@@ -117,8 +233,20 @@ exports.createLead = async (req, res) => {
       return res.status(400).json({ message: "Phone number must be exactly 10 digits" })
     }
 
+    const duplicateLeadExists = await findDuplicateLead({
+      emails: validEmails,
+      phones: validPhones,
+    })
+
+    if (duplicateLeadExists) {
+      return res.status(409).json({ message: "Duplicate lead already exists with the same email or phone number" })
+    }
+
     gender = gender ? gender.toUpperCase() : null
-    teamId = teamId!= null ? parseInt(teamId):null
+    teamId = toNullableInt(teamId)
+    status = status ? normalizeLeadStatusValue(status) : "New"  // Set default status
+    const leadAddressList = normalizeAddressList(leadAddress)
+    const personalAddressList = normalizeAddressList(personalAddress)
     const lead = await prisma.lead.create({
       data: {
         salutation,
@@ -135,14 +263,7 @@ exports.createLead = async (req, res) => {
         conductSiteVisit,
         conductSiteDate,
         leadAddress: {
-          create: leadAddress.map(addr => ({
-            address: addr.address,
-            street: addr.street,
-            city: addr.city,
-            state: addr.state,
-            country: addr.country,
-            zip: addr.zip,
-          })),
+          create: leadAddressList,
         },
         companyName,
         type,
@@ -158,14 +279,7 @@ exports.createLead = async (req, res) => {
           anniversary && anniversary !== "" ? new Date(anniversary) : null,
         industry,
         personalAddress: {
-          create: personalAddress.map(addr => ({
-            address: addr.address,
-            street: addr.street,
-            city: addr.city,
-            state: addr.state,
-            country: addr.country,
-            zip: addr.zip,
-          })),
+          create: personalAddressList,
         },
         url,
         education,
@@ -238,7 +352,7 @@ exports.getLeads = async (req, res) => {
           }
         },
       })
-      res.status(200).json(leads)
+      res.status(200).json(filterDuplicateLeads(leads))
     } else {
       const Leads = await prisma.lead.findMany({
         where: {...activeLeadWhere},
@@ -268,7 +382,7 @@ exports.getLeads = async (req, res) => {
           }
         }
       })
-      res.status(200).json(Leads)
+      res.status(200).json(filterDuplicateLeads(Leads))
     }
   } catch (err) {
   console.log(err)
@@ -324,13 +438,16 @@ exports.getLeadById = async (req, res) => {
     const id = req.params.id
     const lead = await prisma.lead.findUnique({
       where: { id: Number(id) },
-      include: { leadAddress: true, personalAddress: true },
+      include: {
+        leadAddress: true,
+        personalAddress: true,
+        team: {
+          select: leadTeamSelect,
+        },
+      },
     })
     if (!lead) return res.status(404).json("Lead not found")
 
-    if (lead.status == "Fresh_Lead") {
-      lead.status = "Fresh Lead"
-    }
     res.status(200).json(lead)
   } catch (err) {
     console.log(err)
@@ -341,13 +458,56 @@ exports.getLeadById = async (req, res) => {
 exports.updateLead = async (req, res) => {
   try {
     const id = req.params.id
-    const data = req.body
+    const data = { ...req.body }
+    delete data.id
+    delete data._id
+    delete data.createdAt
+    delete data.updatedAt
+    delete data.team
+    delete data.bookings
+    delete data.transactionType
+    delete data.requirementComment
+    delete data.basiComment
+    delete data.deletedAt
+    delete data.is_delete
+
+    if (data.status !== undefined) {
+      data.status = normalizeLeadStatusValue(data.status)
+    }
+    if (data.teamId !== undefined) {
+      data.teamId = toNullableInt(data.teamId)
+    }
+    if (data.gender) {
+      data.gender = String(data.gender).toUpperCase()
+    }
+    if (data.birthday === "") data.birthday = null
+    if (data.anniversary === "") data.anniversary = null
+    if (data.conductSiteDate === "") data.conductSiteDate = null
+    if (Array.isArray(data.leadAddress)) {
+      data.leadAddress = {
+        deleteMany: {},
+        create: normalizeAddressList(data.leadAddress),
+      }
+    }
+    if (Array.isArray(data.personalAddress)) {
+      data.personalAddress = {
+        deleteMany: {},
+        create: normalizeAddressList(data.personalAddress),
+      }
+    }
     const lead = await prisma.lead.findUnique({ where: { id: Number(id) } })
     if (!lead) return res.status(404).json("Lead not found")
 
     const result = await prisma.lead.update({
       where: { id: lead.id },
       data: data,
+      include: {
+        leadAddress: true,
+        personalAddress: true,
+        team: {
+          select: leadTeamSelect,
+        },
+      },
     })
     res.status(200).json(result)
   } catch (err) {
@@ -381,7 +541,7 @@ exports.restoreLead = async (req, res) => {
 
     const result = await prisma.lead.update({
       where: { id: lead.id },
-      data: { deletedAt: nul, is_delete:false },
+      data: { deletedAt: null, is_delete:false },
     })
     res.status(200).json(result)
   } catch (err) {
@@ -410,6 +570,11 @@ exports.permanentlyDeleteLead = async (req, res) => {
 
 exports.importExcel = async (req, res) => {
   try {
+    if (!req.file) {
+      return res.status(400).json({ message: "Please upload an Excel file" })
+    }
+
+    const selectedTeamId = toNullableInt(req.body.teamId)
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" })
     const sheet = workbook.Sheets[workbook.SheetNames[0]]
     const data = XLSX.utils.sheet_to_json(sheet)
@@ -451,27 +616,34 @@ exports.importExcel = async (req, res) => {
     })
 
     const mapData = data.map((row, index) => {
+      const firstName = toRequiredString(row["First name"])
+      const lastName = toRequiredString(row["Last name"])
+      const phone = toRequiredPhone(row["Phone"])
+
+      if (!firstName || !lastName || !phone) {
+        throw new Error(`Excel row ${index + 2}: First name, last name, and phone are required`)
+      }
+
+      if (!phoneRegex.test(phone)) {
+        throw new Error(`Excel row ${index + 2}: Phone number must be exactly 10 digits`)
+      }
+
       const projectName = row["Interested projects"]
       const projectId = projectMap[projectName] || null
       const teamValue = row["Team"] ? String(row["Team"]).trim().toLowerCase() : ""
-      const teamId = assignableUsers.length
-        ? assignableUsers[index % assignableUsers.length].id
-        : userMap[teamValue] || null
-
-      if (teamId) {
-        const userName = userNameMap[teamId] || `User #${teamId}`
-        assignmentCounts[userName] = (assignmentCounts[userName] || 0) + 1
-      }
+      const teamId = selectedTeamId ||
+        userMap[teamValue] ||
+        (assignableUsers.length ? assignableUsers[index % assignableUsers.length].id : null)
 
       return {
         salutation: row["Salutation"] || null,
-        firstName: row["First name"] || null,
-        lastName: row["Last name"] || null,
+        firstName,
+        lastName,
         emails: [
           { type: row["Email Type"] || null, value: row["Email"] || null },
         ],
         phones: [
-          { type: row["Phone Type"] || null, value: row["Phone"] || null },
+          { type: row["Phone Type"] || null, value: phone },
         ],
         status: normalizeImportStatus(row["Status"]),
         timeZone: row["Timezone"] || null,
@@ -495,11 +667,11 @@ exports.importExcel = async (req, res) => {
         companyName: row["Company name"] || null,
         type: row["Type"] || null,
         carpetArea: row["Carpet area"] || null,
-        seats: parseInt(row["Seats"]) || 0,
-        tenure: parseFloat(row["Tenure"]) || null,
+        seats: toImportInt(row["Seats"], 0),
+        tenure: toImportFloat(row["Tenure"], 0),
         gender: row["Gender"] || null,
         occupations: row["Occupations"] || null,
-        age: parseInt(row["Age"]) || null,
+        age: toImportInt(row["Age"]),
         birthday:
           row["Birthday"] && row["Birthday"] !== ""
             ? new Date(row["Birthday"])
@@ -512,7 +684,7 @@ exports.importExcel = async (req, res) => {
           row["Anniversary"] && row["Anniversary"] !== ""
             ? new Date(row["Anniversary"])
             : null,
-        industry: row["Industry"] || null,
+        industry: row["Industry"] || "",
         personalAddress: {
           address: row["Personal address"] || null,
           street: row["Personal street"] || null,
@@ -527,8 +699,8 @@ exports.importExcel = async (req, res) => {
         income: toNullableJsonString(row["Income"]),
         purpose: toNullableJsonString(row["Purpose"]),
         nri: ["yes", "y", "true"].includes(String(row["NRI"] || "").toLowerCase()),
-        budgetMin: parseInt(row["Budget min"]) || null,
-        budgetMax: parseInt(row["Budget max"]) || null,
+        budgetMin: toImportInt(row["Budget min"]),
+        budgetMax: toImportInt(row["Budget max"]),
         possessionMin: row["Possession min"] || null,
         possessionMax: row["Possession Max"] || null,
         area: row["Area"] || null,
@@ -543,23 +715,45 @@ exports.importExcel = async (req, res) => {
       }
     })
 
+    const existingLeads = await prisma.lead.findMany({
+      where: { is_delete: false },
+      select: { id: true, emails: true, phones: true },
+    })
+    const existingKeys = new Set()
+    existingLeads.forEach(lead => addLeadKeysToSet(existingKeys, lead))
+
     const result = []
+    const skippedDuplicates = []
     for (let index = 0; index < mapData.length; index += 1) {
       const row = mapData[index]
+
+      if (hasDuplicateLeadKey(existingKeys, row)) {
+        skippedDuplicates.push(index + 2)
+        continue
+      }
+
       try {
         const lead = await prisma.lead.create({
           data: {
             ...row,
             gender: row.gender ? String(row.gender).toUpperCase() : null,
+            is_delete: false,
+            is_active: true,
             leadAddress: {
-              create: row.leadAddress,
+              create: [row.leadAddress],
             },
             personalAddress: {
-              create: row.personalAddress,
+              create: [row.personalAddress],
             },
           },
         })
         result.push(lead)
+        addLeadKeysToSet(existingKeys, row)
+
+        if (row.teamId) {
+          const userName = userNameMap[row.teamId] || `User #${row.teamId}`
+          assignmentCounts[userName] = (assignmentCounts[userName] || 0) + 1
+        }
       } catch (error) {
         console.log(`Lead import failed at Excel row ${index + 2}`, error)
         return res.status(400).json({
@@ -572,13 +766,21 @@ exports.importExcel = async (req, res) => {
     console.log(result)
 
     res.status(201).json({
-      message: "lead inserted successfully",
+      message: skippedDuplicates.length
+        ? `Lead import completed. ${result.length} imported, ${skippedDuplicates.length} duplicate rows skipped.`
+        : "lead inserted successfully",
       importedCount: result.length,
+      skippedDuplicateCount: skippedDuplicates.length,
+      skippedDuplicateRows: skippedDuplicates,
       assignedUserCount: assignableUsers.length,
       assignmentCounts,
     })
   } catch (error) {
     console.log(error)
+
+    if (String(error.message || "").startsWith("Excel row ")) {
+      return res.status(400).json({ message: error.message })
+    }
 
     return res.status(500).json("Something went wrong")
   }
@@ -594,7 +796,7 @@ exports.sampleExcel = (req, res) => {
       Email: "john@gmail.com",
       "Phone Type": "Mobile",
       Phone: "9876543210",
-      Status: "Fresh_Lead",
+      Status: "New",
       Timezone: "UTC",
       Tags: "Hot Lead",
       "Interested projects": "Project A",

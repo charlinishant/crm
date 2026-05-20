@@ -92,7 +92,10 @@ const ButtonLead = () => {
 
          <button
           style={styles.primaryBtn}
-          onClick={() => navigate("/add-lead")}
+          onClick={() => {
+            window.sessionStorage.removeItem("selectedLeadEdit");
+            navigate("/add-lead", { state: { mode: "create" } });
+          }}
         >
           <FaPlus /> Add Lead
         </button>

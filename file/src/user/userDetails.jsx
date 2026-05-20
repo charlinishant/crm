@@ -29,7 +29,7 @@ import MasterLayout from "../masterLayout/MasterLayout";
 const fallbackLead = {
   id: 10702,
   name: "chetan agrawal",
-  lead_status: "Booked",
+  lead_status: "New",
   source: "channel_partner",
   city: "India",
   owner: "Tejas Sales",
@@ -81,23 +81,22 @@ const getContactValue = (value, keys = ["value", "email", "phone", "number"]) =>
 const cleanPhone = (value) => String(value || "").replace(/\D/g, "");
 
 const leadStatusOptions = [
+  { value: "New", label: "New" },
+  { value: "Qualified", label: "Qualified" },
+  { value: "In_sourcing", label: "In_sourcing" },
+  { value: "In_closing", label: "In_closing" },
   { value: "Booked", label: "Booked" },
-  { value: "Fresh_Lead", label: "Fresh Lead" },
-  { value: "Lost", label: "Lost" },
-  { value: "NP", label: "NP" },
-  { value: "Prospect", label: "Prospect" },
-  { value: "Registered", label: "Registered" },
-  { value: "Unqualified", label: "Unqualified" },
+  { value: "Nurture", label: "Nurture" },
 ];
 
 const normalizeStatus = (value) => {
-  if (!value) return "Booked";
+  if (!value) return "New";
   const match = leadStatusOptions.find(
     (option) =>
       option.value === value ||
       option.label.toLowerCase() === String(value).toLowerCase()
   );
-  return match?.value || "Booked";
+  return match?.value || "New";
 };
 
 const getStatusLabel = (value) => {
@@ -128,7 +127,7 @@ const Details = () => {
       getValue(
         location.state?.lead || getStoredLead() || fallbackLead,
         ["status", "lead_status", "stage"],
-        "Booked"
+        "New"
       )
     )
   );
@@ -184,7 +183,7 @@ const Details = () => {
   }, [API_URL, leadIdFromUrl, location.state]);
 
   useEffect(() => {
-    setSelectedStatus(normalizeStatus(getValue(lead, ["status", "lead_status", "stage"], "Booked")));
+    setSelectedStatus(normalizeStatus(getValue(lead, ["status", "lead_status", "stage"], "New")));
   }, [lead]);
 
   const leadName = getValue(
@@ -193,7 +192,7 @@ const Details = () => {
     `${lead.firstName || ""} ${lead.lastName || ""}`.trim() || "chetan agrawal"
   );
   const leadId = getValue(lead, ["id", "_id", "lead_id"], "10702");
-  const leadStatus = normalizeStatus(getValue(lead, ["status", "lead_status", "stage"], "Booked"));
+  const leadStatus = normalizeStatus(getValue(lead, ["status", "lead_status", "stage"], "New"));
   const projectName = getValue(lead, ["project_name", "projectName", "interestedProjects"], "Binghatti Hills");
   const owner = getValue(lead, ["owner", "assigned_to", "sales"], "Tejas Sales");
   const country = getValue(lead, ["country", "lead_country", "city"], "India");

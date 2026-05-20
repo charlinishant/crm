@@ -12,7 +12,7 @@ const BrokerageinvoicesPage = () => {
       <MasterLayout>
 
         {/* Breadcrumb */}
-        <Breadcrumb title="Components / Colors" />
+        <Breadcrumb title="Brokerage Invoices" />
 
         {/* ColorsLayer */}
       <BrokerageInvoices/>

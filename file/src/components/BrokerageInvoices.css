@@ -66,14 +66,14 @@
     overflow-x: auto;
 }
 
-table {
+.invoice-wrapper-card table {
     width: 100%;
     border-collapse: collapse;
     text-align: left;
     font-size: 13px;
 }
 
-th {
+.invoice-wrapper-card th {
     background-color: #f8fafc;
     font-weight: 600;
     text-transform: uppercase;
@@ -84,7 +84,7 @@ th {
     letter-spacing: 0.02em;
 }
 
-td {
+.invoice-wrapper-card td {
     padding: 16px 24px;
     border-bottom: 1px solid #f1f5f9;
     vertical-align: middle;
@@ -92,7 +92,7 @@ td {
     white-space: nowrap;
 }
 
-tr:hover {
+.invoice-wrapper-card tr:hover {
     background-color: #f8fafc;
 }
 
@@ -134,4 +134,11 @@ tr:hover {
     color: #64748b;
     cursor: pointer;
     padding: 4px 8px;
+}
+
+.brokerage-empty-state {
+    color: #64748b;
+    font-size: 14px;
+    padding: 34px 24px;
+    text-align: center;
 }
