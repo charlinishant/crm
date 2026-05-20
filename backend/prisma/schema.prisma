@@ -189,22 +189,19 @@ enum AddressType{
 }
 
 enum Status{
+  New
+  Qualified
+  In_sourcing
+  In_closing
   Booked
-  Fresh_Lead
-  Lost
-  NP
-  Prospect
-  Registered
-  Unqualified
+  Nurture
 }
 model Lead{
   id Int @id @default(autoincrement())
-<<<<<<< HEAD
-  deletedAt DateTime?
+  deletedAt DateTime? 
 
-=======
   is_active Boolean @default(true)
->>>>>>> 4796729960b6890a0268ece2cec7d74de9a9f0bb
+  is_delete Boolean @default(false)
   // basic profile
   salutation String?
   firstName String?

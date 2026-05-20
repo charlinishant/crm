@@ -203,7 +203,7 @@ exports.getLeads = async (req, res) => {
   try {
     const userId = req.query.userId || null
     const activeLeadWhere = {
-      deletedAt: null,
+      is_delete: false
     }
     
     if (userId) {
@@ -241,7 +241,7 @@ exports.getLeads = async (req, res) => {
       res.status(200).json(leads)
     } else {
       const Leads = await prisma.lead.findMany({
-        where: activeLeadWhere,
+        where: {...activeLeadWhere},
         include:{
           team:{
             select:{
@@ -280,9 +280,7 @@ exports.getTrashLeads = async (req, res) => {
   try {
     const leads = await prisma.lead.findMany({
       where: {
-        deletedAt: {
-          not: null,
-        },
+       is_delete:true
       },
       include:{
         team:{
@@ -364,10 +362,9 @@ exports.deleteLead = async (req, res) => {
     const lead = await prisma.lead.findUnique({ where: { id: Number(id) } })
     if (!lead) return res.status(404).json("Lead not found")
 
-<<<<<<< HEAD
     const result = await prisma.lead.update({
       where: { id: lead.id },
-      data: { deletedAt: new Date() },
+      data: { deletedAt: new Date(), is_delete:true },
     })
     res.status(200).json(result)
   } catch (err) {
@@ -384,7 +381,7 @@ exports.restoreLead = async (req, res) => {
 
     const result = await prisma.lead.update({
       where: { id: lead.id },
-      data: { deletedAt: null },
+      data: { deletedAt: nul, is_delete:false },
     })
     res.status(200).json(result)
   } catch (err) {
@@ -404,14 +401,6 @@ exports.permanentlyDeleteLead = async (req, res) => {
       prisma.personalAddress.deleteMany({ where: { leadId: lead.id } }),
       prisma.lead.delete({ where: { id: lead.id } }),
     ])
-=======
-    // const result = await prisma.$transaction([
-    //   prisma.leadAddress.deleteMany({ where: { leadId: lead.id } }),
-    //   prisma.personalAddress.deleteMany({ where: { leadId: lead.id } }),
-    //   prisma.lead.delete({ where: { id: lead.id } }),
-    // ])
-    const result = await prisma.lead.update({where:{id:lead.id}, data:{is_active:false}})
->>>>>>> 4796729960b6890a0268ece2cec7d74de9a9f0bb
     res.status(200).json(result)
   } catch (err) {
     console.log(err)
