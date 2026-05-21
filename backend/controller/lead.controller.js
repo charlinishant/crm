@@ -647,7 +647,7 @@ exports.importExcel = async (req, res) => {
         ],
         status: normalizeImportStatus(row["Status"]),
         timeZone: row["Timezone"] || null,
-        tags: row["Tags"] || null,
+        tags: "Hot Lead" || null,
         interestedProjects: projectId,
         teamId,
         channelPartner: row["Channel partner"] || null,

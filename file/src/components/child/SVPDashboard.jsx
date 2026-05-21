@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "./svpDashboard.css";
 
 const SVPDashboard = () => {
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const recordsPerPage = 10;
+  const navigate = useNavigate();
   const [visitedLeads, setVisitedLeads] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -79,6 +81,12 @@ const SVPDashboard = () => {
     setCurrentPage((page) => Math.min(page, totalPages));
   }, [totalPages]);
 
+  const handleEdit = (lead) => {
+    window.sessionStorage.setItem("selectedLeadEdit", JSON.stringify(lead));
+    const leadId = lead.id || lead._id || lead.lead_id || "";
+    navigate(leadId ? `/add-lead?editLeadId=${leadId}` : "/add-lead", { state: { lead } });
+  };
+
   return (
     <div className="svp-container">
       <div className="svp-header">
@@ -142,7 +150,13 @@ const SVPDashboard = () => {
                   <td>{lead.interestedProjects || lead.project || "-"}</td>
                   <td>{lead.conductSiteVisit || lead.requirementComment || "-"}</td>
                   <td>
-                    <button className="edit-btn">Edit</button>
+                    <button
+                      type="button"
+                      className="edit-btn"
+                      onClick={() => handleEdit(lead)}
+                    >
+                      Edit
+                    </button>
                   </td>
                 </tr>
               ))

@@ -593,6 +593,41 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
     }
   };
 
+  const handleTagsChange = (lead, nextTags) => {
+    const leadId = lead.id || lead._id || lead.lead_id;
+
+    setLeadData((current) =>
+      current.map((item) =>
+        (item.id || item._id || item.lead_id) === leadId
+          ? { ...item, tags: nextTags }
+          : item
+      )
+    );
+  };
+
+  const handleTagsSave = async (lead, nextTags) => {
+    const leadId = lead.id || lead._id || lead.lead_id;
+    if (!leadId) return;
+
+    try {
+      const response = await fetch(`${API_URL}/leads/${leadId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ tags: nextTags }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || "Unable to update tags");
+      await fetchLeadData();
+    } catch (error) {
+      console.error("Unable to update tags:", error);
+      await fetchLeadData();
+      alert(error.message || "Unable to update tags");
+    }
+  };
+
   return (
     <>
       <style>{`
@@ -665,9 +700,24 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
 
         .lead-tags-cell {
           max-width: 360px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+          min-width: 180px;
+        }
+
+        .lead-tags-input {
+          width: 100%;
+          min-width: 160px;
+          height: 36px;
+          border: 1px solid #cbd5e1;
+          border-radius: 6px;
+          background: #ffffff;
+          color: #334155;
+          padding: 0 10px;
+        }
+
+        .lead-tags-input:focus {
+          border-color: #487fff;
+          box-shadow: 0 0 0 3px rgba(72, 127, 255, 0.12);
+          outline: none;
         }
 
         .lead-team-select {
@@ -896,7 +946,20 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
                       </select>
                     )}
                   </td>
-                  <td className="lead-tags-cell" title={getTags(lead)}>{getTags(lead)}</td>
+                  <td className="lead-tags-cell" title={lead.tags || ""}>
+                    <input
+                      type="text"
+                      className="lead-tags-input"
+                      value={lead.tags || ""}
+                      onChange={(event) => handleTagsChange(lead, event.target.value)}
+                      onBlur={(event) => handleTagsSave(lead, event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") event.currentTarget.blur();
+                      }}
+                      placeholder="Tags"
+                      disabled={trashMode}
+                    />
+                  </td>
                   <td className="lead-action-cell">
                     <button
                       type="button"

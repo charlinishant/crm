@@ -429,7 +429,7 @@ const AddUserLayer = () => {
                                     required={!isEditMode}
                                 />
                             </div>
-                            <div className="form-group">
+                            {/* <div className="form-group">
                                 <label htmlFor="depart">
                                     Department <span className="text-danger-600">*</span>
                                 </label>
@@ -443,7 +443,7 @@ const AddUserLayer = () => {
                                     <option value="SALES">Sales</option>
                                     <option value="POST_SALES">Post Sales</option>
                                 </select>
-                            </div>
+                            </div> */}
                             <div className="form-group">
                                 <label htmlFor="desig">
                                     Designation <span className="text-danger-600">*</span>

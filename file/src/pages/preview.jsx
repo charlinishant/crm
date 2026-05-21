@@ -1290,13 +1290,13 @@ const Preview = () => {
                     <span>Bookings ({bookings.length})</span>
                   </div>
                   <div className="lead-preview-booking-head-actions">
-                    <button
+                    {/* <button
                       type="button"
                       className="lead-preview-create-booking"
                       onClick={handleOpenBookingForm}
                     >
                       Create Booking
-                    </button>
+                    </button> */}
                   </div>
                 </div>
                 <div className="lead-preview-booking-body">

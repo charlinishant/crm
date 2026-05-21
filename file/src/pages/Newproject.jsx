@@ -50,7 +50,8 @@ const NEWPROJECT = () => {
     description: "",
     reraProjectId: "",
     salesId: null,
-    projectType: "residential",
+    salesIds: [],
+    projectType: "",
     possession: false,
     searchAddress: "",
     address: "",
@@ -100,6 +101,19 @@ const NEWPROJECT = () => {
     setFormData({ ...formData, [name]: value });
   };
 
+  const handleSalesChange = (e) => {
+    const selectedSalesIds = Array.from(e.target.selectedOptions)
+      .map((option) => option.value)
+      .filter(Boolean)
+      .slice(0, 3);
+
+    setFormData({
+      ...formData,
+      salesId: selectedSalesIds[0] || null,
+      salesIds: selectedSalesIds,
+    });
+  };
+
   const getUserName = (user) =>
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
     user?.username ||
@@ -118,6 +132,23 @@ const NEWPROJECT = () => {
     return normalized === "true" || normalized === "yes" || normalized === "1";
   };
 
+  const mapQuery =
+    formData.latitude && formData.longitude
+      ? `${formData.latitude},${formData.longitude}`
+      : [
+        formData.searchAddress,
+        formData.address,
+        formData.street,
+        formData.locality,
+        formData.city,
+        formData.state,
+        formData.country,
+        formData.zip,
+      ]
+        .filter(Boolean)
+        .join(", ");
+  const mapSrc = `https://www.google.com/maps?q=${encodeURIComponent(mapQuery || "India")}&output=embed`;
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSaving(true);
@@ -128,7 +159,7 @@ const NEWPROJECT = () => {
       name: formData.name,
       description,
       reraProjectId: formData.reraProjectId ? Number(formData.reraProjectId) : null,
-      salesId: formData.salesId ? Number(formData.salesId) : null,
+      salesId: formData.salesIds.length ? Number(formData.salesIds[0]) : null,
       projectType: formData.projectType,
       possession: parseBoolean(formData.possession),
       address: formData.address,
@@ -227,6 +258,16 @@ const NEWPROJECT = () => {
             border-radius: 6px;
           }
 
+          .np-field select[multiple] {
+            min-height: 118px;
+          }
+
+          .np-help-text {
+            color: #64748b;
+            font-size: 12px;
+            margin-top: 6px;
+          }
+
           .np-row {
             display: flex;
             gap: 20px;
@@ -314,22 +355,26 @@ const NEWPROJECT = () => {
 
                 <div className="np-field">
                   <label>SALES</label>
-                  <select name="salesId" value={formData.salesId || ""} onChange={handleChange} disabled={isLoadingUsers}>
-                    <option value="">{isLoadingUsers ? "Loading users..." : "Select User"}</option>
+                  <select
+                    name="salesIds"
+                    value={formData.salesIds}
+                    onChange={handleSalesChange}
+                    disabled={isLoadingUsers}
+                    multiple
+                  >
+                    {isLoadingUsers && <option value="">Loading users...</option>}
                     {users.map((user) => (
                       <option key={user.id || user.email} value={user.id}>
                         {getUserName(user)}
                       </option>
                     ))}
                   </select>
+                  <span className="np-help-text">Select up to 3 users.</span>
                 </div>
               </div>
 
               {/* PRE SALES */}
-              <div className="np-field">
-                <label>PRE SALES</label>
-                <input name="preSales" value={formData.preSales} onChange={handleChange} />
-              </div>
+              {/*  */}
 
               {/* POSSESSION + TYPE */}
               <div className="np-row">
@@ -341,6 +386,7 @@ const NEWPROJECT = () => {
                 <div className="np-field">
                   <label>PROJECT TYPE</label>
                   <select name="projectType" value={formData.projectType} onChange={handleChange}>
+                    <option value="" disabled>Select</option>
                     <option value="residential">Residential</option>
                     <option value="commercial">Commercial</option>
                   </select>
@@ -429,7 +475,7 @@ const NEWPROJECT = () => {
                     title="map"
                     width="100%"
                     height="300"
-                    src="https://www.google.com/maps?q=Pune&output=embed"
+                    src={mapSrc}
                   ></iframe>
                 </div>
 
