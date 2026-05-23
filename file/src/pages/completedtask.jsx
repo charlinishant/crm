@@ -116,7 +116,7 @@ const CompletedTask = () => {
           </div>
 
           <div className="completed-task-actions">
-            <Link to="/table-basic" className="completed-task-add">
+            <Link to="/new-task" className="completed-task-add">
               Add Task
             </Link>
             <button

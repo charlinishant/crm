@@ -552,7 +552,7 @@ const ADDLEAD = () => {
         console.log("✅ Lead saved successfully!");
         window.sessionStorage.removeItem("selectedLeadEdit");
         alert(`Lead ${editLeadId ? "updated" : "created"} successfully!`);
-        navigate("/index-11", { state: { refreshLeads: Date.now() } });
+        navigate("/dashboard", { state: { refreshLeads: Date.now() } });
       } else {
         const errorMessage = responseData?.message || 
                            responseData?.error || 
@@ -1258,7 +1258,7 @@ const ADDLEAD = () => {
 
             <div className="lead-buttons">
               <button type="submit" className="lead-save" >{editLeadId ? "Update" : "Save"}</button>
-              <button type="button" className="lead-cancel" onClick={() => navigate("/index-11")}>Cancel</button>
+              <button type="button" className="lead-cancel" onClick={() => navigate("/dashboard")}>Cancel</button>
             </div>
 
           </form>

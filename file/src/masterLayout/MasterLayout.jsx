@@ -143,7 +143,7 @@ const MasterLayout = ({ children }) => {
         <div className='sidebar-menu-area'>
           <ul className='sidebar-menu' id='sidebar-menu'>
             <li className='dropdown'>
-              <Link to='/index-11'>
+              <Link to='/dashboard'>
                 <Icon
                   icon='solar:home-smile-angle-outline'
                   className='menu-icon'
@@ -165,7 +165,7 @@ const MasterLayout = ({ children }) => {
 
                  <li>
                   <NavLink
-                    to='/index-11'
+                    to='/dashboard'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -179,7 +179,7 @@ const MasterLayout = ({ children }) => {
                 
                 <li>
                   <NavLink
-                    to='/index-3'
+                    to='/svp-dashboard'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -190,7 +190,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/index-4'
+                    to='/reports'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -390,7 +390,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/marketplace'
+                    to='/leads'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -402,7 +402,7 @@ const MasterLayout = ({ children }) => {
                 
                 <li>
                   <NavLink
-                    to='/index-2'
+                    to='/import-leads'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -472,7 +472,7 @@ const MasterLayout = ({ children }) => {
               <ul className='sidebar-submenu'>
                 <li>
                   <NavLink
-                    to='/typography'
+                    to='/bookings'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -483,7 +483,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/colors'
+                    to='/brokrage-invoices'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -713,7 +713,7 @@ const MasterLayout = ({ children }) => {
               <ul className='sidebar-submenu'>
                 <li>
                   <NavLink
-                    to='/form'
+                    to='/calls'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -724,7 +724,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/form-layout'
+                    to='/emails'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -856,7 +856,7 @@ const MasterLayout = ({ children }) => {
               <ul className='sidebar-submenu'>
                 <li>
                   <NavLink
-                    to='/table-basic'
+                    to='/new-task'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -932,7 +932,7 @@ const MasterLayout = ({ children }) => {
                 </li> */}
                 <li>
                   <NavLink
-                    to='/column-chart'
+                    to='/projects'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -943,7 +943,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/pie-chart'
+                    to='/towers'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -976,7 +976,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 {/* <li>
                   <NavLink
-                    to='/pie-chart'
+                    to='/towers'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -987,7 +987,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/pie-chart'
+                    to='/towers'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -998,7 +998,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/pie-chart'
+                    to='/towers'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -1010,7 +1010,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/pie-chart'
+                    to='/towers'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
@@ -1021,7 +1021,7 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/pie-chart'
+                    to='/towers'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }

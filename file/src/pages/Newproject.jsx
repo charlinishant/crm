@@ -204,7 +204,7 @@ const NEWPROJECT = () => {
         "savedProjects",
         JSON.stringify([...savedProjects, projectToStore])
       );
-      navigate("/column-chart");
+      navigate("/projects");
     } catch (error) {
       console.error("Unable to save project to database:", error);
       setSaveError("Project could not be saved to the database. Please make sure the backend and MySQL are running.");
@@ -489,7 +489,7 @@ const NEWPROJECT = () => {
                 <button type="submit" className="np-btn-save" disabled={isSaving}>
                   {isSaving ? "Saving..." : "Save"}
                 </button>
-                <button type="button" className="np-btn-cancel" onClick={() => navigate("/column-chart")}>Cancel</button>
+                <button type="button" className="np-btn-cancel" onClick={() => navigate("/projects")}>Cancel</button>
               </div>
 
             </form>

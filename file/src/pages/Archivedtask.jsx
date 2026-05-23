@@ -116,7 +116,7 @@ const Archivedtask = () => {
           </div>
 
           <div className="archived-task-actions">
-            <Link to="/table-basic" className="archived-task-add">
+            <Link to="/new-task" className="archived-task-add">
               Add Task
             </Link>
             <button

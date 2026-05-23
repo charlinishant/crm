@@ -92,7 +92,7 @@ const SmartImport = () => {
 
       setImportSummary(result && typeof result === "object" ? result : null);
       setMessage(result?.message || "Leads imported successfully.");
-      setTimeout(() => navigate("/index-11", { state: { refreshLeads: Date.now() } }), 1200);
+      setTimeout(() => navigate("/dashboard", { state: { refreshLeads: Date.now() } }), 1200);
     } catch (error) {
       console.error("Lead import failed:", error);
       setMessage(error.message || "Lead import failed.");

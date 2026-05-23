@@ -85,7 +85,7 @@ const Newtower = ({ onClose }) => {
       if (onClose) onClose();
 
       // ✅ Navigate
-      navigate("/pie-chart", { replace: true });
+      navigate("/towers", { replace: true });
 
     } catch (err) {
       console.error(err);
