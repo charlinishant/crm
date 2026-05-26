@@ -378,10 +378,10 @@ const NEWPROJECT = () => {
 
               {/* POSSESSION + TYPE */}
               <div className="np-row">
-                <div className="np-field">
+                {/* <div className="np-field">
                   <label>POSSESSION</label>
                   <input name="possession" value={formData.possession} onChange={handleChange} />
-                </div>
+                </div> */}
 
                 <div className="np-field">
                   <label>PROJECT TYPE</label>

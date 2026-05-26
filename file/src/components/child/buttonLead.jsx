@@ -86,9 +86,9 @@ const ButtonLead = () => {
           <FaFileCsv /> Export All
         </button>
 
-        <button type="button" style={styles.outlineBtn} onClick={() => setIsCalendarOpen(true)}>
+        {/* <button type="button" style={styles.outlineBtn} onClick={() => setIsCalendarOpen(true)}>
           <FaCalendarAlt /> Calendar
-        </button>
+        </button> */}
 
          <button
           style={styles.primaryBtn}

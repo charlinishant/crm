@@ -1264,7 +1264,7 @@ const Preview = () => {
             </div>
 
             <div className="lead-preview-lower">
-              <div className="lead-preview-panel">
+              {/* <div className="lead-preview-panel">
                 <div className="lead-preview-panel-head">
                   <div className="lead-preview-panel-title">
                     <FaListAlt className="lead-preview-panel-icon" />
@@ -1281,7 +1281,7 @@ const Preview = () => {
                   </div>
                 </div>
                 <div className="lead-preview-panel-empty" />
-              </div>
+              </div> */}
 
               <div className="lead-preview-panel" ref={bookingSectionRef}>
                 <div className="lead-preview-panel-head">
