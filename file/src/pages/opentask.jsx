@@ -116,7 +116,7 @@ const OpenTask = () => {
           </div>
 
           <div className="open-task-actions">
-            <Link to="/table-basic" className="open-task-add">
+            <Link to="/new-task" className="open-task-add">
               Add Task
             </Link>
             <button type="button" className="open-task-filter-btn" aria-label="Filter tasks">

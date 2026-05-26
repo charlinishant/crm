@@ -65,7 +65,7 @@ const SignInLayer = () => {
         if (role === "SALES" || role === "PRE_SALES" || role === "POST_SALES") {
           navigate("/user/sales");
         } else {
-          navigate("/index-11");
+          navigate("/dashboard");
         }
         return;
       }

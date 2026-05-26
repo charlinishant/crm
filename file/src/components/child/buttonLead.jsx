@@ -74,7 +74,7 @@ const ButtonLead = () => {
 
       {/* RIGHT SIDE */}
       <div style={styles.right}>
-        <button type="button" style={styles.outlineBtn} onClick={() => navigate("/index-2")}>
+        <button type="button" style={styles.outlineBtn} onClick={() => navigate("/import-leads")}>
           <FaFileCsv /> Import
         </button>
 

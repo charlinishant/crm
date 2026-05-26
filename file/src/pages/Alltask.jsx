@@ -208,7 +208,7 @@ const Alltask = () => {
           </div>
 
           <div className="all-task-actions">
-            <Link to="/table-basic" className="all-task-add">
+            <Link to="/new-task" className="all-task-add">
               Add Task
             </Link>
             <button type="button" className="all-task-filter-btn" aria-label="Filter tasks">

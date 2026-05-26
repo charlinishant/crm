@@ -197,18 +197,18 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/preview' element={<Preview />} />
         <Route exact path='/user-preview' element={<UserPreview />} />
         <Route exact path='/details' element={<Details />} />
-        <Route exact path='/index-11' element={<HomePageEleven />} />
+        <Route exact path='/dashboard' element={<HomePageEleven />} />
         <Route exact path='/user/sales' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/leads' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/add-lead' element={<SalesUserPanel />} />
         <Route exact path='/user-add-lead' element={<Navigate to="/user/sales/add-lead" replace />} />
-        <Route exact path='/index-2' element={<HomePageTwo />} />
-         <Route exact path='/index-3' element={<HomePageThree />} />
-         <Route exact path='/index-4' element={<HomePageFour />} />
+        <Route exact path='/import-leads' element={<HomePageTwo />} />
+         <Route exact path='/svp-dashboard' element={<HomePageThree />} />
+         <Route exact path='/reports' element={<HomePageFour />} />
         <Route exact path='/index-5' element={<HomePageFive />} />
         <Route exact path='/index-6' element={<HomePageSix />} />
         <Route exact path='/index-7' element={<HomePageSeven />} />
-        <Route exact path='/column-chart' element={<ColumnChartPage />} />
+        <Route exact path='/projects' element={<ColumnChartPage />} />
         <Route exact path='/new-project' element={<NEWPROJECT />} />
         <Route exact path='/add-user' element={<AddUserPage />} />
         <Route exact path='/alert' element={<AlertPage />} />
@@ -225,16 +225,16 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/chat-profile' element={<ChatProfilePage />} />
         <Route exact path='/code-generator' element={<CodeGeneratorPage />} />
         <Route exact path='/code-generator-new' element={<CodeGeneratorNewPage />} />
-        <Route exact path='/colors' element={<ColorsPage />} />
+        <Route exact path='/brokrage-invoices' element={<ColorsPage />} />
         <Route exact path='/company' element={<CompanyPage />} />
         <Route exact path='/currencies' element={<CurrenciesPage />} />
         <Route exact path='/dropdown' element={<DropdownPage />} />
         <Route exact path='/email' element={<EmailPage />} />
         <Route exact path='/faq' element={<FaqPage />} />
         <Route exact path='/forgot-password' element={<ForgotPasswordPage />} />
-        <Route exact path='/form-layout' element={<FormLayoutPage />} />
+        <Route exact path='/emails' element={<FormLayoutPage />} />
         <Route exact path='/SmsPage' element={<SmsPage />} />
-        <Route exact path='/form' element={<FormPage />} />
+        <Route exact path='/calls' element={<FormPage />} />
         <Route exact path='/gallery' element={<GalleryPage />} />
         <Route exact path='/gallery-grid' element={<GalleryGridPage />} />
         <Route exact path='/gallery-masonry' element={<GalleryMasonryPage />} />
@@ -258,7 +258,7 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/line-chart' element={<LineChartPage />} />
         <Route exact path='/list' element={<ListPage />} />
         <Route exact path='/marketplace-details' element={<MarketplaceDetailsPage />} />
-        <Route exact path='/marketplace' element={<MarketplacePage />} />
+        <Route exact path='/leads' element={<MarketplacePage />} />
         <Route exact path='/trash' element={<TrashPage />} />
         <Route exact path='/notification-alert' element={<NotificationAlertPage />} />
          <Route exact path='/add-units' element={<AddUnits />} />
@@ -270,7 +270,7 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/notification' element={<NotificationPage />} />
         <Route exact path='/pagination' element={<PaginationPage />} />
         <Route exact path='/payment-gateway' element={<PaymentGatewayPage />} />
-        <Route exact path='/pie-chart' element={<PieChartPage />} />
+        <Route exact path='/towers' element={<PieChartPage />} />
         <Route exact path='/portfolio' element={<PortfolioPage />} />
         <Route exact path='/pricing' element={<PricingPage />} />
         <Route exact path='/progress' element={<ProgressPage />} />
@@ -281,7 +281,7 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/star-rating' element={<StarRatingPage />} />
         <Route exact path='/starred' element={<StarredPage />} />
         <Route exact path='/switch' element={<SwitchPage />} />
-        <Route exact path='/table-basic' element={<TableBasicPage />} />
+        <Route exact path='/new-task' element={<TableBasicPage />} />
         <Route exact path='/table-data' element={<TableDataPage />} />
         <Route exact path='/open-tasks' element={<OpenTask />} />
         <Route exact path='/completed-tasks' element={<CompletedTask />} />
@@ -294,7 +294,7 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/text-generator' element={<TextGeneratorPage />} />
         <Route exact path='/theme' element={<ThemePage />} />
         <Route exact path='/tooltip' element={<TooltipPage />} />
-        <Route exact path='/typography' element={<TypographyPage />} />
+        <Route exact path='/bookings' element={<TypographyPage />} />
         <Route exact path='/users-grid' element={<UsersGridPage />} />
         <Route exact path='/all-users' element={<UsersListPage />} />
         <Route exact path='/view-details' element={<ViewDetailsPage />} />
@@ -336,16 +336,16 @@ function App() {
         <Route exact path='/preview' element={<Preview />} />
         <Route exact path='/user-preview' element={<UserPreview />} />
         <Route exact path='/details' element={<Details />} />
-        <Route exact path='/index-11' element={<HomePageEleven />} />
+        <Route exact path='/dashboard' element={<HomePageEleven />} />
         <Route exact path='/user/sales' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/leads' element={<SalesUserPanel />} />
-        <Route exact path='/index-2' element={<HomePageTwo />} />
-         <Route exact path='/index-3' element={<HomePageThree />} />
-         <Route exact path='/index-4' element={<HomePageFour />} />
+        <Route exact path='/import-leads' element={<HomePageTwo />} />
+         <Route exact path='/svp-dashboard' element={<HomePageThree />} />
+         <Route exact path='/reports' element={<HomePageFour />} />
         <Route exact path='/index-5' element={<HomePageFive />} />
         <Route exact path='/index-6' element={<HomePageSix />} />
         <Route exact path='/index-7' element={<HomePageSeven />} />
-        <Route exact path='/column-chart' element={<ColumnChartPage />} />
+        <Route exact path='/projects' element={<ColumnChartPage />} />
         <Route exact path='/new-project' element={<NEWPROJECT />} />
         {/*
        
@@ -381,7 +381,7 @@ function App() {
           path='/code-generator-new'
           element={<CodeGeneratorNewPage />}
         />
-        <Route exact path='/colors' element={<ColorsPage />} />
+        <Route exact path='/brokrage-invoices' element={<ColorsPage />} />
         
         <Route exact path='/company' element={<CompanyPage />} />
         <Route exact path='/currencies' element={<CurrenciesPage />} />
@@ -389,9 +389,9 @@ function App() {
         <Route exact path='/email' element={<EmailPage />} />
         <Route exact path='/faq' element={<FaqPage />} />
         <Route exact path='/forgot-password' element={<ForgotPasswordPage />} />
-        <Route exact path='/form-layout' element={<FormLayoutPage />} />
+        <Route exact path='/emails' element={<FormLayoutPage />} />
         <Route exact path='/SmsPage' element={<SmsPage />} />
-        <Route exact path='/form' element={<FormPage />} />
+        <Route exact path='/calls' element={<FormPage />} />
 
         <Route exact path='/gallery' element={<GalleryPage />} />
         <Route exact path='/gallery-grid' element={<GalleryGridPage />} />
@@ -424,7 +424,7 @@ function App() {
           path='/marketplace-details'
           element={<MarketplaceDetailsPage />}
         />
-        <Route exact path='/marketplace' element={<MarketplacePage />} />
+        <Route exact path='/leads' element={<MarketplacePage />} />
         <Route
           exact
           path='/notification-alert'
@@ -440,7 +440,7 @@ function App() {
         <Route exact path='/notification' element={<NotificationPage />} />
         <Route exact path='/pagination' element={<PaginationPage />} />
         <Route exact path='/payment-gateway' element={<PaymentGatewayPage />} />
-        <Route exact path='/pie-chart' element={<PieChartPage />} />
+        <Route exact path='/towers' element={<PieChartPage />} />
         <Route exact path='/portfolio' element={<PortfolioPage />} />
         <Route exact path='/pricing' element={<PricingPage />} />
         <Route exact path='/progress' element={<ProgressPage />} />
@@ -451,7 +451,7 @@ function App() {
         <Route exact path='/star-rating' element={<StarRatingPage />} />
         <Route exact path='/starred' element={<StarredPage />} />
         <Route exact path='/switch' element={<SwitchPage />} />
-        <Route exact path='/table-basic' element={<TableBasicPage />} />
+        <Route exact path='/new-task' element={<TableBasicPage />} />
         <Route exact path='/table-data' element={<TableDataPage />} />
         <Route exact path='/open-tasks' element={<OpenTask />} />
         <Route exact path='/completed-tasks' element={<CompletedTask />} />
@@ -470,7 +470,7 @@ function App() {
         <Route exact path='/text-generator' element={<TextGeneratorPage />} />
         <Route exact path='/theme' element={<ThemePage />} />
         <Route exact path='/tooltip' element={<TooltipPage />} />
-        <Route exact path='/typography' element={<TypographyPage />} />
+        <Route exact path='/bookings' element={<TypographyPage />} />
         <Route exact path='/users-grid' element={<UsersGridPage />} />
         <Route exact path='/all-users' element={<UsersListPage />} />
         <Route exact path='/view-details' element={<ViewDetailsPage />} />
