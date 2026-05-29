@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Filter, MoreVertical, Layers, Building, Trash2 } from 'lucide-react';
+import { Plus, Filter, MoreVertical, Layers, Building, Trash2, Pencil, X } from 'lucide-react';
 import './Projecttower.css';
 
 const initialTowerData = [
@@ -43,6 +43,10 @@ export default function Projecttower() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [editingTowerId, setEditingTowerId] = useState(null);
+  const [activeMenuId, setActiveMenuId] = useState(null);
+
+  const isEditing = editingTowerId !== null;
 
   useEffect(() => {
     const fetchOptions = async () => {
@@ -111,6 +115,31 @@ export default function Projecttower() {
     setTowers(mapped.length ? mapped : readStoredTowers());
   };
 
+  const resetForm = () => {
+    setName('');
+    setProjectId('');
+    setFloorPlans('');
+    setTotalFloors('');
+    setEditingTowerId(null);
+    setActiveMenuId(null);
+  };
+
+  const handleEdit = (tower) => {
+    const matchedProject = projects.find((project) => {
+      return (
+        String(project.id) === String(tower.projectId) ||
+        project.name === tower.project
+      );
+    });
+
+    setName(tower.name || '');
+    setProjectId(tower.projectId || matchedProject?.id || '');
+    setFloorPlans(tower.floorPlans || '');
+    setTotalFloors(tower.totalFloors || '');
+    setEditingTowerId(tower.id);
+    setActiveMenuId(null);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!name || !projectId) return;
@@ -121,17 +150,22 @@ export default function Projecttower() {
     const selectedProject = projects.find((item) => String(item.id) === String(projectId));
 
     try {
-      const response = await fetch(`${API_URL}/tower`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: name.trim(),
-          projectId: Number(projectId),
-          totalFloor: Number(totalFloors) || 0,
-        }),
-      });
+      const payload = {
+        name: name.trim(),
+        projectId: Number(projectId),
+        totalFloor: Number(totalFloors) || 0,
+      };
+
+      const response = await fetch(
+        isEditing ? `${API_URL}/tower/${editingTowerId}` : `${API_URL}/tower`,
+        {
+          method: isEditing ? "PATCH" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        }
+      );
 
       let result = {};
       try {
@@ -141,11 +175,11 @@ export default function Projecttower() {
       }
 
       if (!response.ok) {
-        throw new Error(result?.message || "Failed to create tower");
+        throw new Error(result?.message || `Failed to ${isEditing ? "update" : "create"} tower`);
       }
 
-      const newTower = {
-        id: result.id || Date.now(),
+      const savedTower = {
+        id: isEditing ? editingTowerId : result.id || Date.now(),
         name: name.trim(),
         project: selectedProject?.name || "-",
         projectId: Number(projectId),
@@ -154,13 +188,17 @@ export default function Projecttower() {
         source: "backend",
       };
 
-      setTowers((current) => [newTower, ...current]);
-      await fetchTowers();
+      setTowers((current) => {
+        if (isEditing) {
+          return current.map((tower) => (
+            tower.id === editingTowerId ? { ...tower, ...savedTower } : tower
+          ));
+        }
 
-      setName('');
-      setProjectId('');
-      setFloorPlans('');
-      setTotalFloors('');
+        return [savedTower, ...current];
+      });
+      await fetchTowers();
+      resetForm();
     } catch (error) {
       console.error("Unable to save tower:", error);
       setError(error.message || "Unable to save tower");
@@ -217,12 +255,32 @@ export default function Projecttower() {
                   </div>
                   
                   <div className="card-actions">
-                    <button className="btn-action" onClick={() => handleDelete(tower.id)} title="Delete Tower">
+                    <button
+                      className="btn-action"
+                      type="button"
+                      onClick={() => handleDelete(tower.id)}
+                      title="Delete Tower"
+                    >
                       <Trash2 size={16} />
                     </button>
-                    <button className="btn-action">
-                      <MoreVertical size={16} />
-                    </button>
+                    <div className="tower-menu-wrapper">
+                      <button
+                        className="btn-action"
+                        type="button"
+                        onClick={() => setActiveMenuId((current) => current === tower.id ? null : tower.id)}
+                        title="Tower Options"
+                      >
+                        <MoreVertical size={16} />
+                      </button>
+                      {activeMenuId === tower.id && (
+                        <div className="tower-action-menu">
+                          <button type="button" onClick={() => handleEdit(tower)}>
+                            <Pencil size={14} />
+                            <span>Edit</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -250,8 +308,8 @@ export default function Projecttower() {
         {/* Right Side: Form Fields Section */}
         <div className="form-column">
           <div className="card-header">
-            <h3>Add New Tower</h3>
-            <p>Create a new tower and map it to a project.</p>
+            <h3>{isEditing ? "Edit Tower" : "Add New Tower"}</h3>
+            <p>{isEditing ? "Update tower details and save them to the database." : "Create a new tower and map it to a project."}</p>
           </div>
           
           <form onSubmit={handleSubmit}>
@@ -307,8 +365,14 @@ export default function Projecttower() {
 
             <div className="form-footer">
               <button type="submit" className="btn-primary" disabled={saving || loading}>
-                <Plus size={16} /> {saving ? "Saving..." : "Save Tower"}
+                {isEditing ? <Pencil size={16} /> : <Plus size={16} />}
+                {saving ? "Saving..." : isEditing ? "Update Tower" : "Save Tower"}
               </button>
+              {isEditing && (
+                <button type="button" className="btn-secondary" onClick={resetForm} disabled={saving}>
+                  <X size={16} /> Cancel Edit
+                </button>
+              )}
             </div>
           </form>
         </div>

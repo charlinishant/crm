@@ -1,9 +1,174 @@
 const prisma = require("../lib/prisma")
 
+const toNumberOrNull = (value) => {
+    if (value === "" || value === null || value === undefined) return null
+    const number = Number(value)
+    return Number.isNaN(number) ? null : number
+}
+
+const toIntOrNull = (value) => {
+    const number = toNumberOrNull(value)
+    return number === null ? null : Math.trunc(number)
+}
+
+const toBoolean = (value) => {
+    if (typeof value === "boolean") return value
+    if (value === "true" || value === "1" || value === 1) return true
+    return false
+}
+
+const toArray = (value) => {
+    if (Array.isArray(value)) return value
+    if (!value) return []
+    return String(value)
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean)
+}
+
+const getAreaForBasis = (data, basis) => {
+    if (basis === "On Saleable") return data.saleable
+    if (basis === "On Built-up") return data.builtupArea
+    return data.carpet
+}
+
+const validateFloorPlan = (data) => {
+    if (
+        data.applicableFloorFrom !== null &&
+        data.applicableFloorTo !== null &&
+        data.applicableFloorFrom > data.applicableFloorTo
+    ) {
+        return "Applicable Floor From must be less than or equal to Applicable Floor To"
+    }
+
+    if (data.loading !== null && (data.loading < 0 || data.loading > 100)) {
+        return "Loading % must be between 0 and 100"
+    }
+
+    if (data.gstPercent !== null && data.gstPercent > 18) {
+        return "GST % cannot exceed 18"
+    }
+
+    if (data.stampDutyPercent !== null && data.stampDutyPercent > 10) {
+        return "Stamp Duty % cannot exceed 10"
+    }
+
+    if (
+        data.carpet !== null &&
+        data.builtupArea !== null &&
+        data.saleable !== null &&
+        !(data.carpet < data.builtupArea && data.builtupArea < data.saleable)
+    ) {
+        return "RERA Carpet must be less than Built-up Area and Built-up Area must be less than Saleable Area"
+    }
+
+    if (
+        data.status === "Active" &&
+        (!Array.isArray(data.floorPlanImages) || data.floorPlanImages.length === 0)
+    ) {
+        return "Floor Plan Image is required when status is Active"
+    }
+
+    return null
+}
+
+const normalizeFloorPlanPayload = (body) => {
+    const autoCalc = body.autoCalc === undefined ? true : toBoolean(body.autoCalc)
+    const data = {
+        name: String(body.name || "").trim(),
+        projectId: toIntOrNull(body.projectId),
+        towerId: toIntOrNull(body.towerId),
+        configurationLabel: body.configurationLabel || null,
+        status: body.status || "Active",
+        unitStream: body.unitStream || "Sale Unit",
+        reraReference: body.reraReference || null,
+        type: body.type || null,
+        category: body.category || null,
+        bedrooms: toIntOrNull(body.bedrooms),
+        bathrooms: toNumberOrNull(body.bathrooms),
+        balconies: toIntOrNull(body.balconies),
+        kitchenType: body.kitchenType || null,
+        additionalRooms: toArray(body.additionalRooms),
+        applicableFloorFrom: toIntOrNull(body.applicableFloorFrom),
+        applicableFloorTo: toIntOrNull(body.applicableFloorTo),
+        unitNumbers: body.unitNumbers || null,
+        totalUnitsOfPlan: toIntOrNull(body.totalUnitsOfPlan),
+        facing: body.facing || null,
+        cornerUnit: toBoolean(body.cornerUnit),
+        view: toArray(body.view),
+        autoCalc,
+        measure: body.measure || "sqft",
+        carpet: toNumberOrNull(body.carpet),
+        builtupArea: toNumberOrNull(body.builtupArea),
+        loading: toNumberOrNull(body.loading),
+        loadingBasis: body.loadingBasis || "On Carpet",
+        balconyArea: toNumberOrNull(body.balconyArea),
+        enclosedBalconyUtility: toNumberOrNull(body.enclosedBalconyUtility),
+        terraceArea: toNumberOrNull(body.terraceArea),
+        flowerBedPocketTerrace: toNumberOrNull(body.flowerBedPocketTerrace),
+        serviceSlabAcLedge: toNumberOrNull(body.serviceSlabAcLedge),
+        refugeAreaShare: toNumberOrNull(body.refugeAreaShare),
+        carParkingSlots: toIntOrNull(body.carParkingSlots),
+        parkingType: body.parkingType || null,
+        twoWheelerSlots: toIntOrNull(body.twoWheelerSlots),
+        basementStoreroom: toNumberOrNull(body.basementStoreroom),
+        rateBasis: body.rateBasis || "On Carpet",
+        baseRate: toNumberOrNull(body.baseRate),
+        floorRisePerSqft: toNumberOrNull(body.floorRisePerSqft),
+        baseFloorForFloorRise: toIntOrNull(body.baseFloorForFloorRise),
+        cornerPlcPercent: toNumberOrNull(body.cornerPlcPercent),
+        viewPlcPercent: toNumberOrNull(body.viewPlcPercent),
+        facingPlcPercent: toNumberOrNull(body.facingPlcPercent),
+        clubMembership: toNumberOrNull(body.clubMembership),
+        infrastructureDevelopmentCharges: toNumberOrNull(body.infrastructureDevelopmentCharges),
+        infrastructureDevelopmentChargeBasis: body.infrastructureDevelopmentChargeBasis || null,
+        legalDocumentation: toNumberOrNull(body.legalDocumentation),
+        gstPercent: toNumberOrNull(body.gstPercent) ?? 5,
+        stampDutyPercent: toNumberOrNull(body.stampDutyPercent) ?? 6,
+        registrationPercent: toNumberOrNull(body.registrationPercent) ?? 1,
+        advanceMaintenanceMonths: toIntOrNull(body.advanceMaintenanceMonths),
+        maintenanceRatePerSqftPerMonth: toNumberOrNull(body.maintenanceRatePerSqftPerMonth),
+        sinkingFundCorpus: toNumberOrNull(body.sinkingFundCorpus),
+        societyFormationCharges: toNumberOrNull(body.societyFormationCharges),
+        floorPlanImages: toArray(body.floorPlanImages),
+        brochurePageReference: body.brochurePageReference || null,
+        walkthrough3dLink: body.walkthrough3dLink || null,
+        paymentPlan: body.paymentPlan || null,
+        allotmentLetterTemplate: body.allotmentLetterTemplate || null,
+        agreementTemplate: body.agreementTemplate || null,
+    }
+
+    if (autoCalc && data.loading !== null) {
+        const basisArea = data.loadingBasis === "On Built-up" ? data.builtupArea : data.carpet
+        if (basisArea !== null) {
+            data.saleable = Number((basisArea * (1 + data.loading / 100)).toFixed(2))
+        } else {
+            data.saleable = toNumberOrNull(body.saleable)
+        }
+    } else {
+        data.saleable = toNumberOrNull(body.saleable)
+    }
+
+    const rateArea = getAreaForBasis(data, data.rateBasis)
+    if (autoCalc && data.baseRate !== null && rateArea !== null) {
+        data.basePrice = Number((data.baseRate * rateArea).toFixed(2))
+    } else {
+        data.basePrice = toNumberOrNull(body.basePrice)
+    }
+
+    data.coverArea = data.builtupArea
+
+    return data
+}
+
 
 exports.createFloor = async (req, res)=>{
     try {
-        const data = req.body
+        const data = normalizeFloorPlanPayload(req.body)
+        const validationError = validateFloorPlan(data)
+        if (validationError) {
+            return res.status(400).json({ message: validationError })
+        }
 
         const record = await prisma.floorPlan.create({data:data})
 
@@ -59,13 +224,22 @@ exports.getFloor  = async (req, res)=>{
                             name:true
                         }
                     },
+                    configurationLabel:true,
+                    status:true,
+                    unitStream:true,
                     type:true,
                     category:true,
                     bedrooms:true,
                     bathrooms:true,
+                    balconies:true,
                     carpet:true,
+                    builtupArea:true,
                     saleable:true,
+                    loading:true,
+                    loadingBasis:true,
                     measure:true,
+                    baseRate:true,
+                    basePrice:true,
                 }
             })
 
@@ -86,7 +260,11 @@ exports.getFloor  = async (req, res)=>{
 
 exports.updateFloor = async (req, res)=>{
     try {
-        const data = req.body
+        const data = normalizeFloorPlanPayload(req.body)
+        const validationError = validateFloorPlan(data)
+        if (validationError) {
+            return res.status(400).json({ message: validationError })
+        }
         const id = req.params.id
         if(!id)
             res.status(400).json("ID is required")    

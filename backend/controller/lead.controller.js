@@ -77,6 +77,19 @@ const toNullableInt = (value) => {
   const number = parseInt(value)
   return Number.isNaN(number) ? null : number
 }
+const toInt = (value, defaultValue = 0) => {
+  const number = parseInt(value)
+  return Number.isNaN(number) ? defaultValue : number
+}
+const toFloat = (value, defaultValue = 0) => {
+  const number = parseFloat(value)
+  return Number.isNaN(number) ? defaultValue : number
+}
+const toNullableDate = (value) => {
+  if (!value) return null
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
 const toImportInt = (value, defaultValue = null) => {
   const number = parseInt(value)
   return Number.isNaN(number) ? defaultValue : number
@@ -247,6 +260,11 @@ exports.createLead = async (req, res) => {
     status = status ? normalizeLeadStatusValue(status) : "New"  // Set default status
     const leadAddressList = normalizeAddressList(leadAddress)
     const personalAddressList = normalizeAddressList(personalAddress)
+    const normalizedNri = typeof nri === "boolean" ? nri : String(nri).toLowerCase() === "true"
+    const normalizedMaritalStatus = typeof maritalStatus === "boolean"
+      ? maritalStatus
+      : String(maritalStatus).toLowerCase() === "true"
+
     const lead = await prisma.lead.create({
       data: {
         salutation,
@@ -261,23 +279,23 @@ exports.createLead = async (req, res) => {
         teamId,
         channelPartner,
         conductSiteVisit,
-        conductSiteDate,
+        conductSiteDate: toNullableDate(conductSiteDate),
         leadAddress: {
           create: leadAddressList,
         },
         companyName,
         type,
         carpetArea,
-        seats,
-        tenure,
+        seats: toInt(seats, 0),
+        tenure: toFloat(tenure, 0),
         gender,
         occupations,
-        age,
-        birthday: birthday && birthday !== "" ? new Date(birthday) : null,
-        maritalStatus,
+        age: toNullableInt(age),
+        birthday: toNullableDate(birthday),
+        maritalStatus: normalizedMaritalStatus,
         anniversary:
-          anniversary && anniversary !== "" ? new Date(anniversary) : null,
-        industry,
+          toNullableDate(anniversary),
+        industry: industry || "",
         personalAddress: {
           create: personalAddressList,
         },
@@ -286,9 +304,9 @@ exports.createLead = async (req, res) => {
         companyTitle,
         income,
         purpose,
-        nri,
-        budgetMin,
-        budgetMax,
+        nri: normalizedNri,
+        budgetMin: toNullableInt(budgetMin),
+        budgetMax: toNullableInt(budgetMax),
         possessionMin,
         possessionMax,
         area,
@@ -309,7 +327,7 @@ exports.createLead = async (req, res) => {
     res.status(201).json(lead)
   } catch (err) {
     console.log(err)
-    res.status(500).json("something went wrong")
+    res.status(500).json({message: err.message || "Something went wrong"})
   }
 }
 

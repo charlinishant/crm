@@ -552,7 +552,7 @@ const ADDLEAD = () => {
         console.log("✅ Lead saved successfully!");
         window.sessionStorage.removeItem("selectedLeadEdit");
         alert(`Lead ${editLeadId ? "updated" : "created"} successfully!`);
-        navigate("/dashboard", { state: { refreshLeads: Date.now() } });
+        navigate("/leads", { state: { refreshLeads: Date.now() } });
       } else {
         const errorMessage = responseData?.message || 
                            responseData?.error || 

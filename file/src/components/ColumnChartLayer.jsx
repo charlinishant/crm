@@ -245,7 +245,6 @@ const ProjectRow = ({ proj }) => {
       <td>{proj.sales}</td>
       <td>{formatted}</td>
       <td>{proj.integratedPortals}</td>
-      <td></td>
       <td className="actions-cell">
         <button onClick={() => setOpen(!open)}>⋮</button>
 

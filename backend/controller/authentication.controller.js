@@ -49,10 +49,24 @@ exports.login = async (req, res)=>{
             return res.status(404).json({"message":"User not found"})
         }
 
-        const isMatch = await bcrypt.compare(password,  user.password)
+        if(!user.password){
+            return res.status(400).json({"message":"Password is not set for this user"})
+        }
+
+        const isBcryptPassword = String(user.password).startsWith("$2")
+        const isMatch = isBcryptPassword
+            ? await bcrypt.compare(password,  user.password)
+            : password === user.password
         
         if(!isMatch){
             return res.status(404).json({"message":"Invalid password"})
+        }
+
+        if(!isBcryptPassword){
+            await prisma.user.update({
+                where:{id:user.id},
+                data:{password:await bcrypt.hash(password, 10)}
+            })
         }
         const token = jwt.sign({id:user.id, email:user.email, role:user.role}, 
                                 process.env.JWT_SECRET,

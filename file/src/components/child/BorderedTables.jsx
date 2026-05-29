@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom';
+import '../../pages/addLead.css';
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
@@ -73,7 +74,8 @@ const BorderedTables = () => {
         }
     }
 
-    const handleSave = async () => {
+    const handleSave = async (event) => {
+        event?.preventDefault()
         if (!formData.title.trim() || !formData.assigneeId) {
             setMessage("Please add title and assignee.")
             return
@@ -144,13 +146,25 @@ const BorderedTables = () => {
 
     return (
         <div className="col-12">
-            <div className="new-task-panel">
-                <div className="new-task-header">
-                    <h5 className="new-task-title">New Task</h5>
-                </div>
+            <div className="lead-page task-lead-page">
+                <div className="lead-container">
+                    <p className="lead-title">New Task</p>
 
-                <form className="new-task-form">
-                    <div className="new-task-field">
+                    <div className="lead-tabs">
+                        <button type="button" className="active">Task Details</button>
+                    </div>
+
+                    {message && <div className="unit-alert">{message}</div>}
+
+                    <form className="lead-form" onSubmit={handleSave}>
+                        <div className="section-wrapper">
+                            <div className="section-header">
+                                <span className="section-header-label">Basic Details</span>
+                            </div>
+
+                            <div className="section-card">
+                                <div className="lead-grid">
+                                    <div className="lead-group">
                         <label htmlFor="taskTitle">
                             TITLE <span>*</span>
                         </label>
@@ -161,38 +175,29 @@ const BorderedTables = () => {
                             value={formData.title}
                             onChange={handleChange}
                         />
-                    </div>
+                                    </div>
 
-                    <div className="new-task-field">
-                        <label htmlFor="taskDescription">DESCRIPTION</label>
-                        <textarea
-                            id="taskDescription"
-                            name="description"
-                            rows="5"
-                            value={formData.description}
-                            onChange={handleChange}
-                        />
-                    </div>
+                                    <div className="lead-group">
+                                        <label>DUE DATE</label>
+                                        <input
+                                            type="date"
+                                            name="dueDate"
+                                            value={formData.dueDate || ""}
+                                            onChange={handleChange}
+                                        />
+                                    </div>
 
-                    <div className="new-task-field">
-                        <label>DUE ON</label>
-                        <div className="new-task-date-row">
-                            <input
-                                type="date"
-                                name="dueDate"
-                                value={formData.dueDate}
-                                onChange={handleChange}
-                            />
-                            <input
-                                type="text"
-                                name="dueTime"
-                                value={formData.dueTime}
-                                onChange={handleChange}
-                            />
-                        </div>
-                    </div>
+                                    <div className="lead-group">
+                                        <label>DUE TIME</label>
+                                        <input
+                                            type="time"
+                                            name="dueTime"
+                                            value={formData.dueTime}
+                                            onChange={handleChange}
+                                        />
+                                    </div>
 
-                    <div className="new-task-field">
+                                    <div className="lead-group">
                         <label htmlFor="taskAssignee">
                             ASSIGNEE <span>*</span>
                         </label>
@@ -213,20 +218,9 @@ const BorderedTables = () => {
                                 </option>
                             ))}
                         </select>
-                    </div>
+                                    </div>
 
-                    <div className="new-task-field">
-                        <label htmlFor="taskRemark">REMARK</label>
-                        <textarea
-                            id="taskRemark"
-                            name="remark"
-                            rows="5"
-                            value={formData.remark}
-                            onChange={handleChange}
-                        />
-                    </div>
-
-                    <div className="new-task-field">
+                                    <div className="lead-group">
                         <label htmlFor="taskPriority">
                             PRIORITY <span>*</span>
                         </label>
@@ -240,28 +234,67 @@ const BorderedTables = () => {
                             <option value="High">High</option>
                             <option value="Low">Low</option>
                         </select>
-                    </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="section-wrapper">
+                            <div className="section-header">
+                                <span className="section-header-label">Notes</span>
+                            </div>
+
+                            <div className="section-card">
+                                <div className="lead-group lead-full">
+                                    <label htmlFor="taskDescription">DESCRIPTION</label>
+                                    <textarea
+                                        id="taskDescription"
+                                        name="description"
+                                        rows="5"
+                                        value={formData.description}
+                                        onChange={handleChange}
+                                        className="lead-comment task-comment"
+                                    />
+                                </div>
+
+                                <div className="lead-group lead-full">
+                                    <label htmlFor="taskRemark">REMARK</label>
+                                    <textarea
+                                        id="taskRemark"
+                                        name="remark"
+                                        rows="5"
+                                        value={formData.remark}
+                                        onChange={handleChange}
+                                        className="lead-comment task-comment"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="section-wrapper">
+                            <div className="section-header">
+                                <span className="section-header-label">Attachments</span>
+                                <button
+                                    type="button"
+                                    className="section-add-btn"
+                                    onClick={handleUploadClick}
+                                >
+                                    Upload attachments
+                                </button>
+                            </div>
 
                     <input
                         ref={fileInputRef}
                         type="file"
-                        className="new-task-file-input"
+                                className="task-file-input"
                         multiple
                         onChange={handleAttachmentChange}
                     />
 
-                    <button
-                        type="button"
-                        className="new-task-upload"
-                        onClick={handleUploadClick}
-                    >
-                        Upload attachments
-                    </button>
-
                     {attachments.length > 0 && (
-                        <div className="new-task-attachments">
+                                <div className="section-card task-attachments">
                             {attachments.map((file) => (
-                                <div className="new-task-attachment" key={file.name}>
+                                        <div className="task-attachment" key={file.name}>
                                     <span>{file.name}</span>
                                     <button
                                         type="button"
@@ -274,13 +307,17 @@ const BorderedTables = () => {
                             ))}
                         </div>
                     )}
-                </form>
+                        </div>
 
-                <div className="new-task-footer">
-                    {message && <span className="new-task-message">{message}</span>}
-                    <button type="button" className="new-task-save" onClick={handleSave} disabled={isSaving}>
-                        {isSaving ? "Saving..." : "Save"}
-                    </button>
+                        <div className="lead-buttons">
+                            <button type="submit" className="lead-save" disabled={isSaving}>
+                                {isSaving ? "Saving..." : "Save"}
+                            </button>
+                            <button type="button" className="lead-cancel" onClick={() => navigate("/all-tasks")}>
+                                Cancel
+                            </button>
+                        </div>
+                    </form>
                 </div>
             </div>
 

@@ -20,6 +20,14 @@ exports.createUser = async (req, res)=>{
             data.email = data.email.trim().toLowerCase()
         }
 
+        if(!data.email){
+            return res.status(400).json({message:"Email is required"})
+        }
+
+        if(!data.password || String(data.password).length < 8){
+            return res.status(400).json({message:"Password must be at least 8 characters"})
+        }
+
         const duplicateChecks = []
         if(data.email){
             duplicateChecks.push({email:data.email})

@@ -254,6 +254,205 @@
   background: #cbd5e1;
 }
 
+.unit-alert {
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #b91c1c;
+  padding: 12px 14px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.unit-card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.unit-input-group {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.unit-input-group:focus-within {
+  border-color: #2563eb;
+}
+
+.unit-input-group input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.unit-input-group input:focus {
+  border-color: transparent;
+}
+
+.unit-input-group span {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  background: #f1f5f9;
+  border-left: 1px solid #cbd5e1;
+  color: #475569;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.unit-comment {
+  margin-top: 0;
+}
+
+.floorplan-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 20px;
+  align-items: start;
+}
+
+.floorplan-main {
+  min-width: 0;
+}
+
+.floorplan-summary {
+  position: sticky;
+  top: 24px;
+}
+
+.floorplan-summary h6 {
+  color: #2563eb;
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+.floorplan-summary .d-flex {
+  color: #334155;
+  font-size: 13px;
+}
+
+.floorplan-summary strong {
+  text-align: right;
+}
+
+.floorplan-warning {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  color: #9a3412;
+  padding: 12px 14px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+
+.floorplan-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 15px;
+  margin-bottom: 15px;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.floorplan-checkbox,
+.floorplan-checkbox-inline {
+  justify-content: center;
+}
+
+.floorplan-checkbox label,
+.floorplan-checkbox-inline label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.floorplan-checkbox input,
+.floorplan-checkbox-inline input {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  accent-color: #2563eb;
+}
+
+.floorplan-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.floorplan-buttons .lead-save,
+.floorplan-buttons .lead-cancel {
+  margin-right: 0;
+}
+
+.floorplan-buttons .lead-save {
+  order: 3;
+}
+
+.task-lead-page {
+  padding-top: 0;
+}
+
+.task-comment {
+  margin-top: 0;
+  min-height: 120px;
+}
+
+.task-file-input {
+  display: none;
+}
+
+.task-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.task-attachment {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  color: #334155;
+  font-size: 13px;
+}
+
+.task-attachment button {
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: #fee2e2;
+  color: #b91c1c;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.task-attachment button:hover {
+  background: #fecaca;
+}
+
 /* ============================================
    🔹 PERSONAL DETAILS - TOP GRIDS
    ============================================ */

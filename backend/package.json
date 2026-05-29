@@ -4,7 +4,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "check:db": "node scripts/check-local-db.js"
   },
   "author": "",
   "license": "ISC",

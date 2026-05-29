@@ -9,7 +9,6 @@ generator client {
 
 datasource db {
   provider = "mysql"
-  
 }
 
 model Project{
@@ -57,23 +56,80 @@ model FloorPlan{
   project Project? @relation("Project",  fields: [projectId], references: [id])
   towerId Int?
   tower Tower? @relation("Tower",  fields: [towerId], references: [id])
+  configurationLabel String?
+  status String? @default("Active")
+  unitStream String? @default("Sale Unit")
+  reraReference String?
   type String?
   category String?
   bedrooms Int?
-  bathrooms Int?
+  bathrooms Float?
+  balconies Int?
+  kitchenType String?
+  additionalRooms Json?
+
+  // Position and inventory
+  applicableFloorFrom Int?
+  applicableFloorTo Int?
+  unitNumbers String? @db.Text
+  totalUnitsOfPlan Int?
+  facing String?
+  cornerUnit Boolean? @default(false)
+  view Json?
 
   // Area
+  autoCalc Boolean? @default(true)
   measure String?
   carpet Float?
   saleable Float?
   loading Float?
   coverArea Float?
+  builtupArea Float?
+  loadingBasis String? @default("On Carpet")
+  balconyArea Float?
+  enclosedBalconyUtility Float?
   terraceArea Float?
+  flowerBedPocketTerrace Float?
+  serviceSlabAcLedge Float?
+  refugeAreaShare Float?
+
+  // Parking and extras
+  carParkingSlots Int?
+  parkingType String?
+  twoWheelerSlots Int?
+  basementStoreroom Float?
 
   //costing
+  rateBasis String? @default("On Carpet")
   baseRate Float?
 
   basePrice Float?
+  floorRisePerSqft Float?
+  baseFloorForFloorRise Int?
+  cornerPlcPercent Float?
+  viewPlcPercent Float?
+  facingPlcPercent Float?
+
+  // Other charges
+  clubMembership Float?
+  infrastructureDevelopmentCharges Float?
+  infrastructureDevelopmentChargeBasis String?
+  legalDocumentation Float?
+  gstPercent Float? @default(5)
+  stampDutyPercent Float? @default(6)
+  registrationPercent Float? @default(1)
+  advanceMaintenanceMonths Int?
+  maintenanceRatePerSqftPerMonth Float?
+  sinkingFundCorpus Float?
+  societyFormationCharges Float?
+
+  // Documents and linked entities
+  floorPlanImages Json?
+  brochurePageReference String?
+  walkthrough3dLink String?
+  paymentPlan String?
+  allotmentLetterTemplate String?
+  agreementTemplate String?
 
   units Unit[] @relation("Floor")
 }

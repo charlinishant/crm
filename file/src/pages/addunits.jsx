@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
+import "./addLead.css";
 
 const emptyUnit = {
   name: "",
@@ -8,7 +9,7 @@ const emptyUnit = {
   unitIndex: "",
   baseRate: "",
   basePrice: "",
-  propertyPurpose: "Sale",
+  propertyPurpose: "Sales",
 };
 
 const AddUnits = () => {
@@ -207,162 +208,188 @@ const AddUnits = () => {
 
   return (
     <MasterLayout>
-      <form onSubmit={handleSubmit} style={{ padding: "20px", background: "#f4f7fb" }}>
-        {error && <div style={errorBox}>{error}</div>}
+      <div className="lead-page">
+        <div className="lead-container">
+          <p className="lead-title">Add Units</p>
 
-        <div style={card}>
-          <div style={grid3}>
-            <SelectField
-              label="PROJECT *"
-              name="projectId"
-              value={formData.projectId}
-              onChange={handleChange}
-              required
-              disabled={loadingOptions}
-            >
-              <option value="">{loadingOptions ? "Loading projects..." : "Select a Project"}</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </SelectField>
-            <SelectField
-              label="PROJECT TOWER *"
-              name="towerId"
-              value={formData.towerId}
-              onChange={handleChange}
-              required
-              disabled={!formData.projectId}
-            >
-              <option value="">{formData.projectId ? "Select a Project Tower" : "Select project first"}</option>
-              {towers.map((tower) => (
-                <option key={tower.id} value={tower.id}>
-                  {tower.name}
-                </option>
-              ))}
-            </SelectField>
-            <SelectField
-              label="UNIT CONFIGURATION *"
-              name="floorId"
-              value={formData.floorId}
-              onChange={handleChange}
-              required
-              disabled={!formData.projectId}
-            >
-              <option value="">{formData.projectId ? "Select a Floor Plan" : "Select project first"}</option>
-              {floorPlans.map((plan) => (
-                <option key={plan.id} value={plan.id}>
-                  {plan.name}
-                </option>
-              ))}
-            </SelectField>
+          <div className="lead-tabs">
+            <button type="button" className="active">Unit Details</button>
           </div>
 
-          {unitList.map((unit, index) => (
-            <div key={index} style={unitRow}>
-              <div style={grid6}>
-                <FormField label="NAME *" name="name" value={unit.name} onChange={(event) => handleUnitChange(index, event)} placeholder="Unit Name" required />
-                <FormField label="FLOOR *" name="floor" type="number" value={unit.floor} onChange={(event) => handleUnitChange(index, event)} placeholder="0" required />
-                <FormField label="UNIT INDEX *" name="unitIndex" type="number" value={unit.unitIndex} onChange={(event) => handleUnitChange(index, event)} placeholder="0" required />
-                <FormField label="BASE RATE *" name="baseRate" type="number" value={unit.baseRate} onChange={(event) => handleUnitChange(index, event)} required />
-                <FormField label="BASE PRICE *" name="basePrice" type="number" value={unit.basePrice} onChange={(event) => handleUnitChange(index, event)} required />
-                <FormField label="PROPERTY PURPOSE *" name="propertyPurpose" value={unit.propertyPurpose} onChange={(event) => handleUnitChange(index, event)} placeholder="Sale" required />
+          {error && <div className="unit-alert">{error}</div>}
+
+          <form onSubmit={handleSubmit} className="lead-form">
+            <Section title="Project Mapping">
+              <div className="lead-grid">
+                <SelectField
+                  label="PROJECT *"
+                  name="projectId"
+                  value={formData.projectId}
+                  onChange={handleChange}
+                  required
+                  disabled={loadingOptions}
+                >
+                  <option value="">{loadingOptions ? "Loading projects..." : "Select a Project"}</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </SelectField>
+                <SelectField
+                  label="PROJECT TOWER *"
+                  name="towerId"
+                  value={formData.towerId}
+                  onChange={handleChange}
+                  required
+                  disabled={!formData.projectId}
+                >
+                  <option value="">{formData.projectId ? "Select a Project Tower" : "Select project first"}</option>
+                  {towers.map((tower) => (
+                    <option key={tower.id} value={tower.id}>
+                      {tower.name}
+                    </option>
+                  ))}
+                </SelectField>
+                <SelectField
+                  label="UNIT CONFIGURATION *"
+                  name="floorId"
+                  value={formData.floorId}
+                  onChange={handleChange}
+                  required
+                  disabled={!formData.projectId}
+                >
+                  <option value="">{formData.projectId ? "Select a Floor Plan" : "Select project first"}</option>
+                  {floorPlans.map((plan) => (
+                    <option key={plan.id} value={plan.id}>
+                      {plan.name}
+                    </option>
+                  ))}
+                </SelectField>
               </div>
-              {unitList.length > 1 && (
-                <button type="button" style={dangerBtn} onClick={() => removeUnit(index)}>
-                  Remove
+            </Section>
+
+            <Section
+              title="Units"
+              action={
+                <button type="button" className="section-add-btn" onClick={addAnotherUnit}>
+                  + Add Another Unit
                 </button>
-              )}
+              }
+            >
+              {unitList.map((unit, index) => (
+                <div key={index} className="section-card">
+                  <div className="unit-card-title">
+                    <span>Unit {index + 1}</span>
+                    {unitList.length > 1 && (
+                      <button type="button" className="lead-remove" onClick={() => removeUnit(index)}>
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <div className="lead-grid">
+                    <FormField label="NAME *" name="name" value={unit.name} onChange={(event) => handleUnitChange(index, event)} placeholder="Unit Name" required />
+                    <FormField label="FLOOR *" name="floor" type="number" value={unit.floor} onChange={(event) => handleUnitChange(index, event)} placeholder="0" required />
+                    <FormField label="UNIT INDEX *" name="unitIndex" type="number" value={unit.unitIndex} onChange={(event) => handleUnitChange(index, event)} placeholder="0" required />
+                    <FormField label="BASE RATE *" name="baseRate" type="number" value={unit.baseRate} onChange={(event) => handleUnitChange(index, event)} required />
+                    <FormField label="BASE PRICE *" name="basePrice" type="number" value={unit.basePrice} onChange={(event) => handleUnitChange(index, event)} required />
+                    <SelectField
+                      label="PROPERTY PURPOSE *"
+                      name="propertyPurpose"
+                      value={unit.propertyPurpose}
+                      onChange={(event) => handleUnitChange(index, event)}
+                      required
+                    >
+                      <option value="">Select Purpose</option>
+                      <option value="Sales">Sales</option>
+                      <option value="Rent">Rent</option>
+                    </SelectField>
+                  </div>
+                </div>
+              ))}
+            </Section>
+
+            <Section title="Details">
+              <div className="lead-grid">
+                <FormField label="TYPE" name="type" value={formData.type} onChange={handleChange} />
+                <FormField label="CATEGORY" name="category" value={formData.category} onChange={handleChange} />
+                <FormField label="BEDROOMS" name="bedrooms" type="number" value={formData.bedrooms} onChange={handleChange} placeholder="0" />
+                <FormField label="BATHROOMS" name="bathrooms" type="number" value={formData.bathrooms} onChange={handleChange} placeholder="0" />
+              </div>
+            </Section>
+
+            <Section title="Areas">
+              <div className="lead-grid">
+                <SelectField label="MEASURE *" name="measure" value={formData.measure} onChange={handleChange} required>
+                  <option value="sqft">Sq. Ft.</option>
+                  <option value="sqm">Sq. M.</option>
+                </SelectField>
+                <InputWithSuffix label="CARPET" name="carpet" value={formData.carpet} onChange={handleChange} suffix={formData.measure === "sqm" ? "Sq. m." : "Sq. ft."} />
+                <InputWithSuffix label="SALEABLE" name="saleable" value={formData.saleable} onChange={handleChange} suffix={formData.measure === "sqm" ? "Sq. m." : "Sq. ft."} />
+                <InputWithSuffix label="LOADING" name="loading" value={formData.loading} onChange={handleChange} suffix="%" />
+              </div>
+            </Section>
+
+            <Section title="Description">
+              <div className="lead-group lead-full">
+                <textarea
+                  name="description"
+                  value={formData.description}
+                  onChange={handleChange}
+                  placeholder="Enter description..."
+                  className="lead-comment unit-comment"
+                />
+              </div>
+            </Section>
+
+            <div className="lead-buttons">
+              <button type="submit" className="lead-save" disabled={saving}>
+                {saving ? "Saving..." : "Save"}
+              </button>
+              <button type="button" className="lead-cancel" onClick={() => navigate("/units")}>
+                Cancel
+              </button>
             </div>
-          ))}
-
-          <button type="button" style={secondaryBtn} onClick={addAnotherUnit}>
-            + Add Another Unit
-          </button>
+          </form>
         </div>
-
-        <div style={card}>
-          <h3 style={sectionTitle}>Details</h3>
-
-          <div style={grid2}>
-            <FormField label="TYPE" name="type" value={formData.type} onChange={handleChange} />
-            <FormField label="CATEGORY" name="category" value={formData.category} onChange={handleChange} />
-          </div>
-
-          <div style={grid2}>
-            <FormField label="BEDROOMS" name="bedrooms" type="number" value={formData.bedrooms} onChange={handleChange} placeholder="0" />
-            <FormField label="BATHROOMS" name="bathrooms" type="number" value={formData.bathrooms} onChange={handleChange} placeholder="0" />
-          </div>
-        </div>
-
-        <div style={card}>
-          <h3 style={sectionTitle}>Areas</h3>
-
-          <div style={grid3}>
-            <SelectField label="MEASURE *" name="measure" value={formData.measure} onChange={handleChange} required>
-              <option value="sqft">Sq. Ft.</option>
-              <option value="sqm">Sq. M.</option>
-            </SelectField>
-            <InputWithSuffix label="CARPET" name="carpet" value={formData.carpet} onChange={handleChange} suffix={formData.measure === "sqm" ? "Sq. m." : "Sq. ft."} />
-            <InputWithSuffix label="SALEABLE" name="saleable" value={formData.saleable} onChange={handleChange} suffix={formData.measure === "sqm" ? "Sq. m." : "Sq. ft."} />
-          </div>
-
-          <div style={{ width: "33%" }}>
-            <InputWithSuffix label="LOADING" name="loading" value={formData.loading} onChange={handleChange} suffix="%" />
-          </div>
-        </div>
-
-        <div style={card}>
-          <h3 style={sectionTitle}>Description</h3>
-
-          <textarea
-            name="description"
-            value={formData.description}
-            onChange={handleChange}
-            placeholder="Enter description..."
-            style={textarea}
-          />
-        </div>
-
-        <div style={{ display: "flex", justifyContent: "flex-start", gap: "12px" }}>
-          <button type="submit" style={primaryBtn} disabled={saving}>
-            {saving ? "Saving..." : "Save"}
-          </button>
-          <button type="button" style={secondaryBtn} onClick={() => navigate("/units")}>
-            Cancel
-          </button>
-        </div>
-      </form>
+      </div>
     </MasterLayout>
   );
 };
 
 export default AddUnits;
 
+const Section = ({ title, action, children }) => (
+  <div className="section-wrapper">
+    <div className="section-header">
+      <span className="section-header-label">{title}</span>
+      {action}
+    </div>
+    {children}
+  </div>
+);
+
 const FormField = ({ label, name, value, onChange, placeholder, type = "text", required = false }) => (
-  <div style={{ display: "flex", flexDirection: "column" }}>
-    <label style={labelStyle}>{label}</label>
+  <div className="lead-group">
+    <label>{label}</label>
     <input
       name={name}
       type={type}
       value={value}
       onChange={onChange}
       placeholder={placeholder}
-      style={inputStyle}
       required={required}
     />
   </div>
 );
 
 const SelectField = ({ label, name, value, onChange, children, required = false, disabled = false }) => (
-  <div style={{ display: "flex", flexDirection: "column" }}>
-    <label style={labelStyle}>{label}</label>
+  <div className="lead-group">
+    <label>{label}</label>
     <select
       name={name}
       value={value}
       onChange={onChange}
-      style={inputStyle}
       required={required}
       disabled={disabled}
     >
@@ -372,143 +399,17 @@ const SelectField = ({ label, name, value, onChange, children, required = false,
 );
 
 const InputWithSuffix = ({ label, name, value, onChange, suffix }) => (
-  <div style={{ display: "flex", flexDirection: "column" }}>
-    <label style={labelStyle}>{label}</label>
-    <div style={inputGroup}>
+  <div className="lead-group">
+    <label>{label}</label>
+    <div className="unit-input-group">
       <input
         name={name}
         type="number"
         value={value}
         onChange={onChange}
         placeholder="0.0"
-        style={inputNoBorder}
       />
-      <span style={suffixStyle}>{suffix}</span>
+      <span>{suffix}</span>
     </div>
   </div>
 );
-
-const errorBox = {
-  background: "#f8d7da",
-  color: "#842029",
-  padding: "12px 16px",
-  borderRadius: "6px",
-  marginBottom: "20px",
-  border: "1px solid #f5c2c7",
-};
-
-const card = {
-  background: "#fff",
-  padding: "20px",
-  borderRadius: "10px",
-  marginBottom: "20px",
-  border: "1px solid #e3e8ef",
-};
-
-const sectionTitle = {
-  marginBottom: "15px",
-  color: "#2c3e50",
-};
-
-const unitRow = {
-  borderBottom: "1px solid #eef2f7",
-  marginBottom: "15px",
-  paddingBottom: "15px",
-};
-
-const grid3 = {
-  display: "grid",
-  gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-  gap: "15px",
-  marginBottom: "15px",
-};
-
-const grid6 = {
-  display: "grid",
-  gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
-  gap: "15px",
-  marginBottom: "15px",
-};
-
-const grid2 = {
-  display: "grid",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  gap: "15px",
-  marginBottom: "15px",
-};
-
-const labelStyle = {
-  fontSize: "12px",
-  marginBottom: "5px",
-  color: "#5c6b7a",
-  fontWeight: "500",
-};
-
-const inputStyle = {
-  padding: "10px",
-  borderRadius: "6px",
-  border: "1px solid #cfd8e3",
-  outline: "none",
-  fontSize: "14px",
-  width: "100%",
-};
-
-const inputGroup = {
-  display: "flex",
-  border: "1px solid #cfd8e3",
-  borderRadius: "6px",
-  overflow: "hidden",
-};
-
-const inputNoBorder = {
-  flex: 1,
-  padding: "10px",
-  border: "none",
-  outline: "none",
-  minWidth: 0,
-};
-
-const suffixStyle = {
-  background: "#eef2f7",
-  padding: "10px",
-  borderLeft: "1px solid #cfd8e3",
-  fontSize: "13px",
-};
-
-const secondaryBtn = {
-  background: "#fff",
-  border: "1px solid #4a6cf7",
-  color: "#4a6cf7",
-  padding: "8px 14px",
-  borderRadius: "6px",
-  cursor: "pointer",
-};
-
-const dangerBtn = {
-  background: "#fff",
-  border: "1px solid #dc3545",
-  color: "#dc3545",
-  padding: "7px 12px",
-  borderRadius: "6px",
-  cursor: "pointer",
-};
-
-const primaryBtn = {
-  background: "#5b3cc4",
-  color: "#fff",
-  border: "none",
-  padding: "10px 20px",
-  borderRadius: "6px",
-  cursor: "pointer",
-  fontWeight: "500",
-};
-
-const textarea = {
-  width: "100%",
-  height: "150px",
-  borderRadius: "6px",
-  border: "1px solid #cfd8e3",
-  padding: "10px",
-  outline: "none",
-  resize: "none",
-};

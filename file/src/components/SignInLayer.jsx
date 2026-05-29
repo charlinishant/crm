@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 const SignInLayer = () => {
   const navigate = useNavigate();
+  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const [formData, setFormData] = useState({
     email:"",
     password:""
@@ -42,7 +43,7 @@ const SignInLayer = () => {
     });
 
     try {
-      const res = await fetch(`${process.env.REACT_APP_API_URL}/auth/login`, {
+      const res = await fetch(`${API_URL}/auth/login`, {
         method:"POST",
         headers:{
           "Content-Type": "application/json"

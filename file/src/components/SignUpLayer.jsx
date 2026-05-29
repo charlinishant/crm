@@ -3,6 +3,7 @@ import React, { useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 
 const SignUpLayer = () => {
+  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const navigate = useNavigate()
 
   const [formData, setFormData] = useState({
@@ -23,7 +24,7 @@ const SignUpLayer = () => {
       ...formData,
       role: "SALESPERSON",
     }
-    await fetch(`${process.env.REACT_APP_API_URL}/auth/register`,
+    await fetch(`${API_URL}/auth/register`,
       {
         method:"POST",
         headers:{
