@@ -256,7 +256,9 @@ exports.createLead = async (req, res) => {
     }
 
     gender = gender ? gender.toUpperCase() : null
-    teamId = toNullableInt(teamId)
+    const authRole = String(req.authUser?.role || "").toUpperCase()
+    const forceOwnLead = ["SALES", "PRE_SALES", "POST_SALES"].includes(authRole)
+    teamId = forceOwnLead ? toNullableInt(req.authUser?.id) : toNullableInt(teamId)
     status = status ? normalizeLeadStatusValue(status) : "New"  // Set default status
     const leadAddressList = normalizeAddressList(leadAddress)
     const personalAddressList = normalizeAddressList(personalAddress)
@@ -476,45 +478,90 @@ exports.getLeadById = async (req, res) => {
 exports.updateLead = async (req, res) => {
   try {
     const id = req.params.id
-    const data = { ...req.body }
-    delete data.id
-    delete data._id
-    delete data.createdAt
-    delete data.updatedAt
-    delete data.team
-    delete data.bookings
-    delete data.transactionType
-    delete data.requirementComment
-    delete data.basiComment
-    delete data.deletedAt
-    delete data.is_delete
-
-    if (data.status !== undefined) {
-      data.status = normalizeLeadStatusValue(data.status)
-    }
-    if (data.teamId !== undefined) {
-      data.teamId = toNullableInt(data.teamId)
-    }
-    if (data.gender) {
-      data.gender = String(data.gender).toUpperCase()
-    }
-    if (data.birthday === "") data.birthday = null
-    if (data.anniversary === "") data.anniversary = null
-    if (data.conductSiteDate === "") data.conductSiteDate = null
-    if (Array.isArray(data.leadAddress)) {
-      data.leadAddress = {
-        deleteMany: {},
-        create: normalizeAddressList(data.leadAddress),
-      }
-    }
-    if (Array.isArray(data.personalAddress)) {
-      data.personalAddress = {
-        deleteMany: {},
-        create: normalizeAddressList(data.personalAddress),
-      }
-    }
     const lead = await prisma.lead.findUnique({ where: { id: Number(id) } })
     if (!lead) return res.status(404).json("Lead not found")
+
+    const source = { ...req.body }
+    const data = {}
+
+    const stringFields = [
+      "salutation",
+      "firstName",
+      "lastName",
+      "timeZone",
+      "tags",
+      "interestedProjects",
+      "channelPartner",
+      "conductSiteVisit",
+      "companyName",
+      "type",
+      "carpetArea",
+      "occupations",
+      "industry",
+      "url",
+      "education",
+      "companyTitle",
+      "income",
+      "purpose",
+      "possessionMin",
+      "possessionMax",
+      "area",
+      "fundingSource",
+      "propertyType",
+      "configration",
+      "budget",
+      "bathroomPreferences",
+      "furnishing",
+      "facing",
+      "locationPreferences",
+    ]
+
+    stringFields.forEach((field) => {
+      if (source[field] !== undefined) {
+        data[field] = source[field] === null ? null : source[field]
+      }
+    })
+
+    if (source.emails !== undefined) data.emails = Array.isArray(source.emails) ? source.emails : []
+    if (source.phones !== undefined) data.phones = Array.isArray(source.phones) ? source.phones : []
+    if (source.status !== undefined) data.status = normalizeLeadStatusValue(source.status)
+    if (source.teamId !== undefined) data.teamId = toNullableInt(source.teamId)
+    if (source.seats !== undefined) data.seats = toInt(source.seats, 0)
+    if (source.tenure !== undefined) data.tenure = toFloat(source.tenure, 0)
+    if (source.age !== undefined) data.age = toNullableInt(source.age)
+    if (source.budgetMin !== undefined) data.budgetMin = toNullableInt(source.budgetMin)
+    if (source.budgetMax !== undefined) data.budgetMax = toNullableInt(source.budgetMax)
+    if (source.leadReassigned !== undefined) data.leadReassigned = source.leadReassigned === true || String(source.leadReassigned).toLowerCase() === "true"
+    if (source.maritalStatus !== undefined) data.maritalStatus = source.maritalStatus === true || String(source.maritalStatus).toLowerCase() === "true"
+    if (source.nri !== undefined) data.nri = source.nri === true || String(source.nri).toLowerCase() === "true"
+    if (source.gender !== undefined) data.gender = source.gender ? String(source.gender).toUpperCase() : null
+    if (source.birthday !== undefined) data.birthday = toNullableDate(source.birthday)
+    if (source.anniversary !== undefined) data.anniversary = toNullableDate(source.anniversary)
+    if (source.conductSiteDate !== undefined) data.conductSiteDate = toNullableDate(source.conductSiteDate)
+
+    if (source.leadAddress !== undefined) {
+      const leadAddress = Array.isArray(source.leadAddress)
+        ? source.leadAddress
+        : Array.isArray(source.leadAddress?.create)
+          ? source.leadAddress.create
+          : []
+      data.leadAddress = {
+        deleteMany: {},
+        create: normalizeAddressList(leadAddress),
+      }
+    }
+
+    if (source.personalAddress !== undefined) {
+      const personalAddress = Array.isArray(source.personalAddress)
+        ? source.personalAddress
+        : Array.isArray(source.personalAddress?.create)
+          ? source.personalAddress.create
+          : []
+      data.personalAddress = {
+        deleteMany: {},
+        create: normalizeAddressList(personalAddress),
+      }
+    }
 
     const result = await prisma.lead.update({
       where: { id: lead.id },
@@ -530,7 +577,7 @@ exports.updateLead = async (req, res) => {
     res.status(200).json(result)
   } catch (err) {
     console.log(err)
-    res.status(500).json("something went wrong")
+    res.status(500).json({ message: err.message || "Unable to update lead" })
   }
 }
 

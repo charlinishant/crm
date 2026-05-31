@@ -1,7 +1,6 @@
 import React from "react";
 import MasterLayout from "../masterLayout/MasterLayout";
-import Breadcrumb from "../components/Breadcrumb";
-import  WhatsApp from "../components/WhatsApp"
+import UserWhatsAppPage from "../user/UserWhatsAppPage";
 
 
 const WhatAppPage = () => {
@@ -10,12 +9,7 @@ const WhatAppPage = () => {
 
       {/* MasterLayout */}
       <MasterLayout>
-
-        {/* Breadcrumb */}
-        <Breadcrumb title="WhatsApp" />
-
-        
-    <WhatsApp/>
+        <UserWhatsAppPage />
       </MasterLayout>
 
     </>

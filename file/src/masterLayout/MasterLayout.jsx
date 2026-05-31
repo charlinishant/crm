@@ -774,7 +774,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-danger-main w-auto' />{" "}
-                    Whatsapps
+                    WhatsApp
                   </NavLink>
                 </li>
                 <li>

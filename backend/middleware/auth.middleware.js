@@ -16,4 +16,22 @@ const authenticate = (req, res, next) => {
   }
 }
 
+const optionalAuthenticate = (req, res, next) => {
+  const authHeader = req.headers.authorization || ""
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null
+
+  if (!token) {
+    return next()
+  }
+
+  try {
+    req.authUser = jwt.verify(token, process.env.JWT_SECRET)
+  } catch (error) {
+    req.authUser = null
+  }
+
+  next()
+}
+
 module.exports = authenticate
+module.exports.optionalAuthenticate = optionalAuthenticate

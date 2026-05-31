@@ -53,11 +53,14 @@ const INDIA_STATES = [
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_REGEX = /^\d{10}$/;
 
-const ADDLEAD = () => {
+const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
   const [activeTab, setActiveTab] = useState("basic");
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   
   const navigate = useNavigate()
+  const localUser = JSON.parse(localStorage.getItem("authUser") || "null");
+  const savedUser = currentUser?.id ? currentUser : localUser;
+  const savedUserId = savedUser?.id ? String(savedUser.id) : "";
 
   const [formData, setFormData] = useState({
       salutation:"",
@@ -65,7 +68,7 @@ const ADDLEAD = () => {
       lastName:"",
       emails:[{ type: "Office", value: "" }],
       phones:[{ type: "Work", value: "" }],
-      status:"Fresh_Lead",
+      status:"New",
       timeZone:"",
       tags:"",
       interestedProjects:"",
@@ -134,6 +137,15 @@ const ADDLEAD = () => {
     user?.username ||
     user?.email ||
     `User #${user?.id}`;
+
+  useEffect(() => {
+    if (!savedUserId) return;
+
+    setFormData((current) => ({
+      ...current,
+      teamId: savedUserId,
+    }));
+  }, [savedUserId]);
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -280,6 +292,7 @@ const ADDLEAD = () => {
 
     const payload = {
       ...formData,
+      teamId: savedUserId || formData.teamId,
       budgetMin: Number(formData.budgetMin) || 0,
       budgetMax: Number(formData.budgetMax) || 0,
       seats: Number(formData.seats) || 0,
@@ -289,26 +302,32 @@ const ADDLEAD = () => {
 
     console.log(payload);
 
-    await fetch(`${API_URL}/leads`,
-      {
+    const token = localStorage.getItem("authToken");
+
+    try {
+      const response = await fetch(`${API_URL}/leads`, {
         method:"POST",
         headers:{
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body:JSON.stringify(payload),
+      });
+
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(result?.message || result || "Unable to add lead");
       }
-    ).then(res=>{
-        if(res.status === 201){
-          console.log("Created");
-          navigate("/user/sales/leads")
-        }
-        else{
-          console.log(res);
-          alert("somwthing went wrong")
-        }
-        
-    })
-    .catch(err=>alert("somwthing went wrong"))
+
+      if (typeof onLeadCreated === "function") {
+        await onLeadCreated(result);
+      }
+
+      navigate("/user/sales/leads", { state: { refreshLeads: Date.now() } });
+    } catch (err) {
+      alert(err.message || "Unable to add lead");
+    }
 
   };
 
@@ -469,13 +488,18 @@ const ADDLEAD = () => {
                   <label>TEAMS</label>
                   <select
                     name="teamId"
-                    value={formData.teamId}
+                    value={savedUserId || formData.teamId}
                     onChange={handleChange}
-                    disabled={loadingUsers}
+                    disabled={Boolean(savedUserId) || loadingUsers}
                   >
                     <option value="">
                       {loadingUsers ? "Loading users..." : "Select user"}
                     </option>
+                    {savedUserId && (
+                      <option value={savedUserId}>
+                        {getUserName(savedUser)}{savedUser?.role ? ` (${savedUser.role})` : ""}
+                      </option>
+                    )}
                     {users.map((user) => (
                       <option key={user.id || user.email} value={user.id}>
                         {getUserName(user)}

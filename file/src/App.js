@@ -200,6 +200,10 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/dashboard' element={<HomePageEleven />} />
         <Route exact path='/user/sales' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/leads' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/calls' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/conversation' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/whatsapp' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/details' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/add-lead' element={<SalesUserPanel />} />
         <Route exact path='/user-add-lead' element={<Navigate to="/user/sales/add-lead" replace />} />
         <Route exact path='/import-leads' element={<HomePageTwo />} />
@@ -339,6 +343,9 @@ function App() {
         <Route exact path='/dashboard' element={<HomePageEleven />} />
         <Route exact path='/user/sales' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/leads' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/calls' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/conversation' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/whatsapp' element={<SalesUserPanel />} />
         <Route exact path='/import-leads' element={<HomePageTwo />} />
          <Route exact path='/svp-dashboard' element={<HomePageThree />} />
          <Route exact path='/reports' element={<HomePageFour />} />

@@ -15,6 +15,8 @@ const floorRouter = require("./router/floorplan.routes")
 const unitRouter = require("./router/unit.routes")
 const bookingRouter = require("./router/booking.routes")
 const taskRouter = require("./router/task.routes")
+const callRouter = require("./router/call.routes")
+const whatsappRouter = require("./router/whatsapp.routes")
 
 const leadRouter = require("./router/lead.routes")
 
@@ -33,6 +35,9 @@ app.use("/floor", floorRouter)
 app.use("/unit", unitRouter)
 app.use("/bookings", bookingRouter)
 app.use("/tasks", taskRouter)
+app.use("/calls", callRouter)
+app.use("/api/calls", callRouter)
+app.use("/api/whatsapp", whatsappRouter)
 // app.use('/all-users', userRouter)
 
 const PORT = process.env.PORT || 5000

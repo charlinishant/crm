@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   CalendarDays,
   Mail,
@@ -22,7 +23,7 @@ const getLeadName = (lead) =>
   `Lead #${lead?.id || "-"}`;
 
 const getLeadPhone = (lead) => {
-  if (!lead?.phones) return "-";
+  if (!lead?.phones) return lead?.phone || lead?.mobile || lead?.whatsappNumber || "-";
   if (Array.isArray(lead.phones)) {
     const first = lead.phones[0];
     if (!first) return "-";
@@ -30,6 +31,12 @@ const getLeadPhone = (lead) => {
   }
   if (typeof lead.phones === "object") return lead.phones.value || "-";
   return lead.phones || "-";
+};
+
+const maskPhone = (phone) => {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (!digits) return "-";
+  return `${digits.slice(0, 4)}****`;
 };
 
 const getLeadEmail = (lead) => {
@@ -55,9 +62,20 @@ const formatDate = (value) => {
   });
 };
 
-const getActionPhone = (lead) => getLeadPhone(lead).replace(/[^\d+]/g, "");
+const buildWhatsAppMessage = (lead) => {
+  const name = getLeadName(lead).split(" ")[0] || "there";
+  const project = lead?.interestedProjects || lead?.propertyType || "our project";
+  return `Hi ${name}, thank you for your interest in ${project}. Please let me know a suitable time to connect.`;
+};
 
-const UserConversationPanel = ({ leads = [], user, loading = false }) => {
+const UserConversationPanel = ({
+  leads = [],
+  user,
+  loading = false,
+  onOpenCallLead = null,
+  onOpenWhatsAppLead = null,
+}) => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("calls");
 
   const records = useMemo(() => {
@@ -68,6 +86,7 @@ const UserConversationPanel = ({ leads = [], user, loading = false }) => {
       "Sales User";
 
     return leads.map((lead) => ({
+      rawId: lead.id || lead._id || lead.lead_id || "",
       id: lead.id ? `#${lead.id}` : "-",
       lead,
       name: getLeadName(lead),
@@ -82,6 +101,7 @@ const UserConversationPanel = ({ leads = [], user, loading = false }) => {
         lead.requirementComment ||
         lead.locationPreferences ||
         `Follow up about ${lead.interestedProjects || lead.propertyType || "property requirement"}.`,
+      whatsappMessage: buildWhatsAppMessage(lead),
     }));
   }, [leads, user]);
 
@@ -100,6 +120,30 @@ const UserConversationPanel = ({ leads = [], user, loading = false }) => {
       {status}
     </mark>
   );
+
+  const openCallLead = (lead) => {
+    if (!lead) return;
+
+    if (typeof onOpenCallLead === "function") {
+      onOpenCallLead(lead);
+      return;
+    }
+
+    const leadId = lead.id || lead._id || lead.lead_id || "";
+    navigate(`/user/sales/calls${leadId ? `?leadId=${leadId}` : ""}`);
+  };
+
+  const openWhatsAppLead = (lead) => {
+    if (!lead) return;
+
+    if (typeof onOpenWhatsAppLead === "function") {
+      onOpenWhatsAppLead(lead);
+      return;
+    }
+
+    const leadId = lead.id || lead._id || lead.lead_id || "";
+    navigate(`/user/sales/whatsapp${leadId ? `?leadId=${leadId}` : ""}`, { state: { lead } });
+  };
 
   return (
     <section className="sales-card sales-conversation-card">
@@ -169,9 +213,15 @@ const UserConversationPanel = ({ leads = [], user, loading = false }) => {
               </span>
               <span>
                 <strong>
-                  {isEmail ? record.email : activeTab === "siteVisits" ? record.project : record.phone}
+                  {isEmail
+                    ? record.email
+                    : activeTab === "siteVisits"
+                      ? record.project
+                      : isWhatsapp
+                        ? maskPhone(record.phone)
+                        : record.phone}
                 </strong>
-                <small>{record.message}</small>
+                {!isWhatsapp && <small>{record.message}</small>}
               </span>
               <span>{renderStatus(status)}</span>
               <span>{record.owner}</span>
@@ -180,15 +230,20 @@ const UserConversationPanel = ({ leads = [], user, loading = false }) => {
                 {isEmail && record.email !== "-" ? (
                   <a href={`mailto:${record.email}`}>Email</a>
                 ) : isWhatsapp && record.phone !== "-" ? (
-                  <a
-                    href={`https://wa.me/${getActionPhone(record.lead).replace(/^\+/, "")}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Open
-                  </a>
+                  <>
+                    <button
+                      type="button"
+                      title={`Connect WhatsApp for ${record.name}`}
+                      onClick={() => openWhatsAppLead(record.lead)}
+                    >
+                      Connect
+                    </button>
+                    
+                  </>
                 ) : isCall && record.phone !== "-" ? (
-                  <a href={`tel:${getActionPhone(record.lead)}`}>Call</a>
+                  <button type="button" onClick={() => openCallLead(record.lead)}>
+                    Call
+                  </button>
                 ) : (
                   <button type="button" aria-label="More conversation actions">
                     <MoreVertical size={15} />

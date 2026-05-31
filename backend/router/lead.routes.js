@@ -2,7 +2,7 @@ const {Router} = require("express")
 const multer = require("multer")
 
 const {createLead, getLeads, getTrashLeads, getLeadById, updateLead, deleteLead, restoreLead, permanentlyDeleteLead, importExcel, sampleExcel} = require("../controller/lead.controller")
-const authenticate = require("../middleware/auth.middleware")
+const { optionalAuthenticate } = require("../middleware/auth.middleware")
 
 const router = Router()
 
@@ -13,7 +13,7 @@ const upload = multer({
 })  
 
 
-router.post("/",  createLead)
+router.post("/", optionalAuthenticate, createLead)
 router.get("/", getLeads)
 router.get("/trash", getTrashLeads)
 router.get('/sample-excel', sampleExcel)

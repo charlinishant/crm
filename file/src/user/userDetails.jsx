@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   FaBold,
   FaCalendarAlt,
@@ -24,7 +24,7 @@ import {
   FaUndo,
   FaWhatsapp,
 } from "react-icons/fa";
-import MasterLayout from "../masterLayout/MasterLayout";
+import CallHistory from "./CallHistory";
 
 const fallbackLead = {
   id: 10702,
@@ -119,6 +119,7 @@ const formatDate = (value, fallback) => {
 };
 
 const Details = () => {
+  const navigate = useNavigate();
   const location = useLocation();
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const [lead, setLead] = useState(location.state?.lead || getStoredLead() || fallbackLead);
@@ -137,6 +138,9 @@ const Details = () => {
   const [savedNotes, setSavedNotes] = useState([]);
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [noteError, setNoteError] = useState("");
+  const [isStartingCall, setIsStartingCall] = useState(false);
+  const [callMessage, setCallMessage] = useState("");
+  const [callRefreshKey, setCallRefreshKey] = useState(0);
   const noteRef = useRef(null);
   const leadIdFromUrl = useMemo(
     () => new URLSearchParams(location.search).get("leadId"),
@@ -373,6 +377,181 @@ const Details = () => {
     }
   };
 
+  const handleStartCall = async () => {
+    try {
+      setIsStartingCall(true);
+      setCallMessage("");
+      const savedUser = JSON.parse(localStorage.getItem("authUser") || "null");
+      const token = localStorage.getItem("authToken");
+      let agentPhone = String(savedUser?.phone || "").replace(/\D/g, "");
+
+      if (!primaryPhone) {
+        setCallMessage("Lead phone number is missing.");
+        return;
+      }
+
+      if (!agentPhone) {
+        agentPhone = window.prompt("Enter your agent phone number for IVR bridge call", "")?.replace(/\D/g, "") || "";
+      }
+
+      if (!agentPhone) {
+        setCallMessage("Agent phone number is required to start a cloud call.");
+        return;
+      }
+
+      const response = await fetch(`${API_URL}/api/calls/start`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          leadId: Number(leadId),
+          agentId: savedUser?.id,
+          phone: cleanPhone(primaryPhone),
+          agentPhone,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(result?.message || "Unable to start call");
+      }
+
+      setCallMessage(`Call started: ${result.callId || result.callLog?.callId || "initiated"}`);
+      setCallRefreshKey((current) => current + 1);
+    } catch (error) {
+      setCallMessage(error.message || "Unable to start call");
+    } finally {
+      setIsStartingCall(false);
+    }
+  };
+
+  const openWhatsAppPage = () => {
+    if (!leadId) return;
+
+    // Details WhatsApp link: keep the selected lead available for the CRM WhatsApp page.
+    window.sessionStorage.setItem("selectedLeadDetails", JSON.stringify(lead));
+    navigate(`/user/sales/whatsapp?leadId=${leadId}`, { state: { lead } });
+  };
+
+  const renderActionPanel = () => {
+    if (activeAction === "note") {
+      return (
+        <div className="details-action-panel">
+          <div className="details-action-card">
+            <div className="details-editor">
+              <div className="details-toolbar">
+                <button className="details-tool" title="Bold">
+                  <FaBold />
+                </button>
+                <button className="details-tool" title="Italic">
+                  <FaItalic />
+                </button>
+                <button className="details-tool" title="Underline">
+                  <FaUnderline />
+                </button>
+                <button className="details-tool" title="Bullet List">
+                  <FaListUl />
+                </button>
+                <button className="details-tool" title="Numbered List">
+                  <FaListOl />
+                </button>
+                <button className="details-tool" title="Quote">
+                  <FaQuoteLeft />
+                </button>
+                <button className="details-tool" title="Link">
+                  <FaLink />
+                </button>
+                <div style={{ width: "1px", height: "24px", background: "#d7dde8" }} />
+                <button className="details-tool" title="Undo">
+                  <FaUndo />
+                </button>
+                <button className="details-tool" title="Redo">
+                  <FaRedo />
+                </button>
+                <button className="details-tool" title="Clear Formatting">
+                  <FaEraser />
+                </button>
+              </div>
+
+              <div
+                className="details-note-area"
+                contentEditable
+                ref={noteRef}
+                onFocus={(e) => {
+                  if (e.target.innerText.trim() === "Add note for lead") {
+                    e.target.innerText = "";
+                  }
+                }}
+                onBlur={(e) => {
+                  if (e.target.innerText.trim() === "") {
+                    e.target.innerText = "Add note for lead";
+                  }
+                }}
+              >
+                Add note for lead
+              </div>
+
+              <div className="details-note-resize">...</div>
+            </div>
+
+            <div className="details-note-limit">Maximum 2000 characters are allowed.</div>
+            {noteError && <div className="details-note-error">{noteError}</div>}
+
+            <div className="details-save-row">
+              <button
+                className="details-save"
+                disabled={isSavingNote}
+                onClick={handleSaveNote}
+              >
+                {isSavingNote ? "Saving..." : "Save Note"}
+              </button>
+              <button className="details-mic" title="Voice Input">
+                <FaMicrophone />
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (activeAction === "call") {
+      return (
+        <div className="details-action-panel">
+          <div className="details-action-card">
+            <div className="details-action-title">Call {leadName}</div>
+            <div className="details-action-grid">
+              <div className="details-action-muted">
+                Start a cloud telephony bridge call. The provider calls the agent first, then connects the lead and records the call.
+              </div>
+            </div>
+            <div className="details-save-row">
+              <button
+                className="details-save"
+                disabled={isStartingCall}
+                onClick={handleStartCall}
+              >
+                {isStartingCall ? "Connecting..." : `Call Now ${primaryPhone || ""}`}
+              </button>
+              <button
+                className="details-mic"
+                title="Open call queue"
+                onClick={() => navigate(`/user/sales/calls?leadId=${leadId}`)}
+              >
+                <FaPhoneAlt />
+              </button>
+            </div>
+            {callMessage && <div className="details-status-message">{callMessage}</div>}
+          </div>
+          <CallHistory leadId={leadId} refreshKey={callRefreshKey} />
+        </div>
+      );
+    }
+
+    return null;
+  };
+
   return (
     <>
       <>
@@ -482,6 +661,7 @@ const Details = () => {
           }
 
           .details-whatsapp {
+            border: 0;
             width: 38px;
             height: 38px;
             border-radius: 10px;
@@ -493,6 +673,7 @@ const Details = () => {
             font-size: 20px;
             margin-top: 12px;
             box-shadow: 0 2px 4px rgba(37, 211, 102, 0.25);
+            cursor: pointer;
             transition: transform 0.2s;
           }
           
@@ -1163,6 +1344,417 @@ const Details = () => {
             font-size: 12px;
           }
 
+          /* Details UI refresh: Agiln-style CRM layout matching the uploaded reference, with existing logic preserved. */
+          .details-page {
+            background: #f5f7fb;
+            color: #344054;
+            font-size: 13px;
+            padding: 6px 14px 24px;
+          }
+
+          .details-grid {
+            align-items: start;
+            gap: 28px;
+            grid-template-columns: minmax(420px, 0.72fr) minmax(620px, 1fr);
+            max-width: 1820px;
+          }
+
+          .details-card,
+          .details-overview,
+          .details-feed-card {
+            border: 1px solid #cfd7e3;
+            border-radius: 3px;
+            box-shadow: none;
+            overflow: hidden;
+          }
+
+          .details-left-head {
+            align-items: start;
+            background: #ffffff;
+            gap: 18px;
+            grid-template-columns: minmax(0, 1fr) 86px 86px;
+            min-height: 52px;
+            padding: 8px 14px;
+          }
+
+          .details-person {
+            align-items: center;
+            gap: 10px;
+          }
+
+          .details-flag {
+            height: 17px;
+            margin-top: 0;
+            width: 28px;
+          }
+
+          .details-lead-id {
+            font-size: 11px;
+            letter-spacing: 0;
+            margin-bottom: 1px;
+            text-transform: none;
+          }
+
+          .details-lead-name {
+            color: #3f4f65;
+            font-size: 15px;
+            font-weight: 500;
+          }
+
+          .details-edit {
+            color: #111827;
+            font-size: 12px;
+          }
+
+          .details-whatsapp {
+            border-radius: 999px;
+            box-shadow: none;
+            font-size: 16px;
+            height: 26px;
+            margin: 4px 0 0 38px;
+            width: 26px;
+          }
+
+          .details-count {
+            background: transparent;
+            color: #344054;
+            min-width: 0;
+            padding: 0;
+          }
+
+          .details-count div {
+            font-size: 10px;
+            margin-top: 1px;
+          }
+
+          .details-badge {
+            background: #3caf55;
+            font-size: 11px;
+            height: 22px;
+            margin: 0;
+            width: 22px;
+          }
+
+          .details-left-main {
+            gap: 24px;
+            grid-template-columns: 210px minmax(0, 1fr);
+            padding: 16px 16px 26px;
+          }
+
+          .details-score {
+            background: conic-gradient(#47a954 0 42%, #f3f6f9 42% 100%);
+            height: 96px;
+            width: 96px;
+          }
+
+          .details-score-text {
+            color: #b4beca;
+            font-size: 15px;
+            font-weight: 500;
+          }
+
+          .details-score-number {
+            background: #5f6670;
+            font-size: 12px;
+            height: 34px;
+            right: -6px;
+            width: 34px;
+          }
+
+          .details-stage {
+            gap: 18px 34px;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+          }
+
+          .details-label {
+            color: #8b95a5;
+            font-size: 10px;
+            font-weight: 500;
+            letter-spacing: 0;
+            margin-bottom: 6px;
+          }
+
+          .details-value,
+          .details-inline-input {
+            color: #344054;
+            font-size: 12px;
+            font-weight: 400;
+          }
+
+          .details-select {
+            border-color: #6f38d9;
+            border-radius: 2px;
+            color: #5a24c7;
+            font-size: 11px;
+            height: 25px;
+            max-width: 118px;
+            padding: 0 8px;
+          }
+
+          .details-status-save {
+            background: #0d6efd;
+            border-radius: 3px;
+            font-size: 11px;
+            min-height: 25px;
+            padding: 0 10px;
+          }
+
+          .details-info-grid {
+            border-top: 0;
+            gap: 26px 44px;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            margin-top: 24px;
+            padding-top: 18px;
+          }
+
+          .details-requirements-block {
+            border-top: 1px solid #e1e6ef;
+            background: #ffffff;
+          }
+
+          .details-section-head {
+            border-bottom: 1px solid #e1e6ef;
+            min-height: 56px;
+            padding: 0 14px;
+          }
+
+          .details-section-title,
+          .details-overview-title {
+            color: #40516a;
+            font-size: 18px;
+            font-weight: 500;
+          }
+
+          .details-match-btn {
+            border-color: #6f38d9;
+            border-radius: 3px;
+            color: #5a24c7;
+            font-size: 11px;
+            height: 24px;
+            min-width: 235px;
+          }
+
+          .details-requirement-grid {
+            gap: 30px 44px;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            padding: 18px 14px 26px;
+          }
+
+          .details-partner-area {
+            border-top: 1px solid #edf0f5;
+            padding: 16px 14px 20px;
+          }
+
+          .details-right-pane {
+            display: grid;
+            gap: 28px;
+            min-width: 0;
+          }
+
+          .details-work-card {
+            background: #ffffff;
+          }
+
+          .details-actions {
+            background: #ffffff;
+            border-bottom: 1px solid #d8dfe9;
+            gap: 14px;
+            min-height: 42px;
+            padding: 0 8px;
+          }
+
+          .details-action {
+            background: transparent;
+            border: 0;
+            border-radius: 0;
+            color: #000000;
+            font-size: 13px;
+            font-weight: 500;
+            min-height: 40px;
+            padding: 0 0 1px;
+            position: relative;
+          }
+
+          .details-action svg {
+            color: #000000;
+            font-size: 13px;
+          }
+
+          .details-action:hover,
+          .details-action.active {
+            background: transparent;
+            border-color: transparent;
+            color: #000000;
+          }
+
+          .details-action.active::after {
+            background: #6f38d9;
+            bottom: -1px;
+            content: "";
+            height: 2px;
+            left: 0;
+            position: absolute;
+            right: 0;
+          }
+
+          .details-action-panel {
+            padding: 14px;
+          }
+
+          .details-action-card {
+            border: 0;
+            border-radius: 0;
+            padding: 0;
+          }
+
+          .details-editor {
+            border-color: #cfd7e3;
+            border-radius: 3px;
+          }
+
+          .details-toolbar {
+            background: #ffffff;
+            gap: 5px;
+            min-height: 46px;
+            padding: 7px 8px;
+          }
+
+          .details-tool,
+          .details-tool-wide {
+            border-color: #c9d2df;
+            border-radius: 2px;
+            color: #40516a;
+            height: 30px;
+            min-width: 36px;
+          }
+
+          .details-note-area {
+            min-height: 142px;
+            padding: 10px;
+          }
+
+          .details-note-resize {
+            background: #ffffff;
+            height: 10px;
+          }
+
+          .details-note-limit {
+            color: #6b7280;
+            font-size: 11px;
+            margin-top: 2px;
+            text-align: right;
+          }
+
+          .details-save-row {
+            gap: 4px;
+            margin-top: 24px;
+          }
+
+          .details-save,
+          .details-mic {
+            border-radius: 3px;
+            height: 33px;
+          }
+
+          .details-save {
+            background: #673ab7;
+            font-size: 12px;
+            min-width: 91px;
+          }
+
+          .details-mic {
+            background: #673ab7;
+            color: #ffffff;
+            width: 38px;
+          }
+
+          .details-overview {
+            margin-top: 0;
+          }
+
+          .details-overview-title {
+            border-bottom: 1px solid #d8dfe9;
+            padding: 14px;
+          }
+
+          .details-overview-table th,
+          .details-overview-table td {
+            border-color: #d8dfe9;
+            color: #344054;
+            font-size: 12px;
+            font-weight: 400;
+            padding: 10px 12px;
+          }
+
+          .details-overview-table td {
+            color: #155b93;
+          }
+
+          .details-feed-card {
+            background: transparent;
+            border: 0;
+            border-radius: 0;
+          }
+
+          .details-feed-tabs {
+            background: transparent;
+            border-bottom: 1px solid #d8dfe9;
+            gap: 24px;
+            padding: 0;
+          }
+
+          .details-feed-tabs button {
+            color: #000000;
+            font-size: 12px;
+            font-weight: 500;
+            padding: 13px 0 10px;
+          }
+
+          .details-feed-tabs button.active::after {
+            background: #6f38d9;
+            height: 2px;
+          }
+
+          .details-timeline {
+            padding: 48px 0 24px 30px;
+          }
+
+          .details-timeline::before {
+            background: #d8dfe9;
+            left: 0;
+            top: 18px;
+          }
+
+          .details-feed-item {
+            border-color: #cfd7e3;
+            border-radius: 3px;
+            margin-top: 0;
+            padding: 18px 14px 14px;
+          }
+
+          .details-feed-item::before {
+            border-color: #cfd7e3;
+            height: 10px;
+            left: -36px;
+            top: 28px;
+            width: 10px;
+          }
+
+          .details-feed-text {
+            color: #344054;
+            font-size: 13px;
+          }
+
+          .details-feed-actions {
+            color: #111827;
+            font-size: 16px;
+          }
+
+          .details-feed-meta {
+            color: #8b95a5;
+            font-size: 11px;
+          }
+
           @media (max-width: 1200px) {
             .details-grid,
             .details-left-main,
@@ -1211,9 +1803,14 @@ const Details = () => {
                       </div>
                     </div>
                   </div>
-                  <span className="details-whatsapp">
+                  <button
+                    type="button"
+                    className="details-whatsapp"
+                    title={whatsappPhone ? `Open WhatsApp for ${primaryPhone}` : "Open WhatsApp conversation"}
+                    onClick={openWhatsAppPage}
+                  >
                     <FaWhatsapp />
-                  </span>
+                  </button>
                 </div>
 
                 <div className="details-count">
@@ -1279,142 +1876,12 @@ const Details = () => {
                 </div>
               </div>
 
-              <div className="details-actions">
-                {actionItems.map((item) => (
-                  <button
-                    key={item.key}
-                    className={`details-action ${activeAction === item.key ? "active" : ""}`}
-                    title={item.title}
-                    onClick={() => setActiveAction(item.key)}
-                  >
-                    {item.icon}
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-
-              {activeAction === "note" && (
-                <div className="details-action-panel">
-                  <div className="details-action-card">
-                    <div className="details-action-title">Add a note for {leadName}</div>
-                    <div className="details-action-grid">
-                      <div className="details-action-muted">
-                        Enter details about the lead's discussion, requirements, or any further action required.
-                      </div>
-                    </div>
-                    
-                    <div className="details-editor">
-                      <div className="details-toolbar">
-                        <button className="details-tool" title="Bold">
-                          <FaBold />
-                        </button>
-                        <button className="details-tool" title="Italic">
-                          <FaItalic />
-                        </button>
-                        <button className="details-tool" title="Underline">
-                          <FaUnderline />
-                        </button>
-                        <button className="details-tool" title="Bullet List">
-                          <FaListUl />
-                        </button>
-                        <button className="details-tool" title="Numbered List">
-                          <FaListOl />
-                        </button>
-                        <button className="details-tool" title="Quote">
-                          <FaQuoteLeft />
-                        </button>
-                        <button className="details-tool" title="Link">
-                          <FaLink />
-                        </button>
-                        <div style={{ width: "1px", height: "24px", background: "#cbd5e1" }} />
-                        <button className="details-tool" title="Undo">
-                          <FaUndo />
-                        </button>
-                        <button className="details-tool" title="Redo">
-                          <FaRedo />
-                        </button>
-                        <button className="details-tool" title="Clear Formatting">
-                          <FaEraser />
-                        </button>
-                      </div>
-
-                      <div
-                        className="details-note-area"
-                        contentEditable
-                        ref={noteRef}
-                        onFocus={(e) => {
-                          if (e.target.innerText.trim() === "Add note for lead") {
-                            e.target.innerText = "";
-                          }
-                        }}
-                        onBlur={(e) => {
-                          if (e.target.innerText.trim() === "") {
-                            e.target.innerText = "Add note for lead";
-                          }
-                        }}
-                      >
-                        Add note for lead
-                      </div>
-
-                      <div className="details-note-resize">...</div>
-                    </div>
-
-                    {noteError && <div className="details-note-error">{noteError}</div>}
-
-                    <div className="details-save-row">
-                      <button className="details-mic" title="Voice Input">
-                        <FaMicrophone />
-                      </button>
-                      <button
-                        className="details-save"
-                        disabled={isSavingNote}
-                        onClick={handleSaveNote}
-                      >
-                        {isSavingNote ? "Saving..." : "Save Note"}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="details-feed-card">
-                    <div className="details-feed-tabs">
-                      <button className="active">All Notes ({savedNotes.length})</button>
-                      <button>Saved Filters</button>
-                    </div>
-                    
-                    <div className="details-timeline">
-                      {savedNotes.length === 0 ? (
-                        <div className="details-empty-notes">No notes created yet.</div>
-                      ) : (
-                        savedNotes.map((note) => (
-                          <div key={note.id || note._id} className="details-feed-item">
-                            <div className="details-feed-row">
-                              <div className="details-feed-text">
-                                {note.note}
-                              </div>
-                              <div className="details-feed-actions">
-                                <FaEllipsisV />
-                              </div>
-                            </div>
-                            <div className="details-feed-meta">
-                              <div>Created by: {note.owner}</div>
-                              <div>{formatNoteDate(note.createdAt || new Date())}</div>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </section>
-
-            <section>
-              <div className="details-card">
-                <div className="details-overview-title">Lead & Property Requirements</div>
+              {/* Details UI refresh: keep lead facts and requirements together in the left pane. */}
+              <div className="details-requirements-block">
                 <div className="details-section-head">
-                  <div className="details-section-title">Requirements</div>
+                  <div className="details-section-title">Requirement</div>
                   <button className="details-match-btn">
-                    <FaStar style={{ color: "#7c3aed" }} /> Match with Inventory
+                    <FaSearch /> Show Matching Properties
                   </button>
                 </div>
                 
@@ -1426,10 +1893,7 @@ const Details = () => {
                     </div>
                   ))}
                 </div>
-              </div>
 
-              <div className="details-card" style={{ marginTop: "24px" }}>
-                <div className="details-overview-title">Partner Information</div>
                 <div className="details-partner-area">
                   <div className="details-label">CHANNEL PARTNER NAME</div>
                   <div className="details-value" style={{ fontWeight: 600, color: "#3b82f6" }}>
@@ -1437,27 +1901,111 @@ const Details = () => {
                   </div>
                 </div>
               </div>
+            </section>
+
+            <section className="details-right-pane">
+              {/* Details UI refresh: actions and activity now sit in the right pane like the reference CRM screen. */}
+              <div className="details-card details-work-card">
+                <div className="details-actions">
+                  {actionItems.map((item) => (
+                    <button
+                      key={item.key}
+                      className={`details-action ${activeAction === item.key ? "active" : ""}`}
+                      title={item.title}
+                      onClick={() => {
+                        if (item.key === "whatsapp") {
+                          openWhatsAppPage();
+                          return;
+                        }
+
+                        setActiveAction(item.key);
+                      }}
+                    >
+                      {item.icon}
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+
+                {renderActionPanel()}
+              </div>
 
               <div className="details-overview">
-                <div className="details-overview-title">Overview Dashboard</div>
+                <div className="details-overview-title">Lead Activities Overview</div>
                 <table className="details-overview-table">
                   <thead>
                     <tr>
-                      <th>Status</th>
-                      <th>Count</th>
+                      <th>Conducted Site Visits</th>
+                      <th>Outgoing Not Answered Calls</th>
+                      <th>Outgoing Answered Calls</th>
+                      <th>Incoming Not Answered Calls</th>
+                      <th>Incoming Answered Calls</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
-                      <td>Booked</td>
                       <td>1</td>
-                    </tr>
-                    <tr>
-                      <td>Pending Tasks</td>
+                      <td>0</td>
+                      <td>0</td>
+                      <td>0</td>
                       <td>0</td>
                     </tr>
                   </tbody>
                 </table>
+              </div>
+
+              <div className="details-feed-card">
+                <div className="details-feed-tabs">
+                  <button className="active">Activity</button>
+                  <button>Starred</button>
+                  <button>Notes</button>
+                  <button>Calls</button>
+                  <button>Site visit</button>
+                  <button>Feed</button>
+                  <button>Followups</button>
+                  <button>Emails</button>
+                  <button>SMS</button>
+                  <button>Whatsapp</button>
+                  <button>History</button>
+                </div>
+                
+                <div className="details-timeline">
+                  {savedNotes.length === 0 ? (
+                    <div className="details-feed-item">
+                      <div className="details-feed-row">
+                        <div className="details-feed-text">
+                          Thank You For The Visit
+                        </div>
+                        <div className="details-feed-actions">
+                          <FaStar />
+                          <FaEllipsisV />
+                        </div>
+                      </div>
+                      <div className="details-feed-meta">
+                        <div>{receivedOn} | Generated via Workflow | Lead</div>
+                        <div>outgoing | delivered</div>
+                      </div>
+                    </div>
+                  ) : (
+                    savedNotes.map((note) => (
+                      <div key={note.id || note._id} className="details-feed-item">
+                        <div className="details-feed-row">
+                          <div className="details-feed-text">
+                            {note.note}
+                          </div>
+                          <div className="details-feed-actions">
+                            <FaStar />
+                            <FaEllipsisV />
+                          </div>
+                        </div>
+                        <div className="details-feed-meta">
+                          <div>Created by: {note.owner}</div>
+                          <div>{formatNoteDate(note.createdAt || new Date())}</div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
             </section>
           </div>

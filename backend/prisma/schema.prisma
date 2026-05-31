@@ -214,6 +214,7 @@ model User{
   team Team? @relation("Team", fields: [teamId], references: [id])
   
   leads Lead[]
+  callLogs CallLog[] @relation("AgentCallLogs")
   tasks Task[] @relation("AssignedTo")
   assignedTasks Task[] @relation("AssignedBy")
   // Other settings
@@ -315,7 +316,34 @@ model Lead{
 
 
   bookings Booking[]
+  callLogs CallLog[]
 
+}
+
+model CallLog {
+  id           Int      @id @default(autoincrement())
+  leadId       Int
+  lead         Lead     @relation(fields: [leadId], references: [id])
+  agentId      Int?
+  agent        User?    @relation("AgentCallLogs", fields: [agentId], references: [id])
+  phone        String
+  agentPhone   String?
+  provider     String
+  callId       String?  @unique
+  status       String
+  duration     Int?
+  recordingUrl String?
+  disposition  String?
+  startedAt    DateTime?
+  endedAt      DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([leadId])
+  @@index([agentId])
+  @@index([status])
+  @@index([disposition])
+  @@index([createdAt])
 }
 
 model Booking{

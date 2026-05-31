@@ -205,7 +205,7 @@ exports.getAccessPanel = async (req, res)=>{
 
         const getAssignedLeads = async () => {
             const baseQuery = {
-                where:{teamId:user.id},
+                where:{teamId:user.id, is_delete:false},
                 take:100,
                 orderBy:{id:"desc"},
                 select:{
