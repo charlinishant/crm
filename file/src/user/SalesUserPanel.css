@@ -2234,6 +2234,11 @@ img.sales-avatar {
   overflow: hidden;
 }
 
+.dashboard-main-body .user-whatsapp-page:not(.embedded) {
+  height: calc(100vh - 160px);
+  min-height: 0;
+}
+
 .user-whatsapp-page.embedded .user-whatsapp-topbar {
   display: none;
 }
@@ -2424,6 +2429,11 @@ img.sales-avatar {
   width: 100%;
 }
 
+.user-whatsapp-page.compact-list .conversation-item {
+  align-content: center;
+  min-height: 82px;
+}
+
 .conversation-item-main,
 .chat-head-profile {
   align-items: center;
@@ -2502,6 +2512,17 @@ img.sales-avatar {
   color: #334155;
   font-size: 13px;
   font-weight: 600;
+}
+
+.conversation-owner {
+  color: #64748b;
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .conversation-preview {
@@ -2682,6 +2703,15 @@ img.sales-avatar {
   line-height: 1.55;
   margin: 0;
   white-space: pre-wrap;
+}
+
+.message-provider-meta {
+  color: #5f7892;
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  margin-top: 6px;
+  word-break: break-word;
 }
 
 .message-bubble time {

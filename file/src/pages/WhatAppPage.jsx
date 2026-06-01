@@ -9,7 +9,7 @@ const WhatAppPage = () => {
 
       {/* MasterLayout */}
       <MasterLayout>
-        <UserWhatsAppPage />
+        <UserWhatsAppPage adminMode />
       </MasterLayout>
 
     </>

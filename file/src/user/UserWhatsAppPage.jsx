@@ -75,6 +75,22 @@ const formatDateTime = (value) => {
   });
 };
 
+const formatTwilioResponse = (result) => {
+  const code = result?.providerHttpStatusCode;
+  const text = String(result?.providerHttpStatusText || "").toUpperCase();
+  const deliveryStatus = result?.providerStatus || result?.providerResponse?.status || "";
+  const sid = result?.providerMessageId || result?.providerResponse?.sid || "";
+  const statusLabel = [code, text].filter(Boolean).join(" - ");
+
+  return {
+    code,
+    text,
+    deliveryStatus,
+    sid,
+    label: [statusLabel, deliveryStatus].filter(Boolean).join(" | "),
+  };
+};
+
 const buildMessage = (lead) => {
   const firstName = getLeadName(lead).split(" ")[0] || "there";
   const project = lead?.interestedProjects || lead?.propertyType || "our project";
@@ -103,10 +119,12 @@ const UserWhatsAppPage = ({
   user: providedUser = null,
   loading: providedLoading = false,
   embedded = false,
+  adminMode = false,
 }) => {
   const savedUser = useMemo(() => JSON.parse(localStorage.getItem("authUser") || "null"), []);
   const activeUser = useMemo(() => providedUser || savedUser || {}, [providedUser, savedUser]);
-  const isAdminAccess = adminRoles.has(String(activeUser?.role || "").toUpperCase());
+  const isAdminAccess = adminMode || adminRoles.has(String(activeUser?.role || "").toUpperCase());
+  const compactConversationList = adminMode;
   const shouldFetchLeads = !Array.isArray(providedLeads);
 
   const [leads, setLeads] = useState(Array.isArray(providedLeads) ? providedLeads : []);
@@ -118,6 +136,7 @@ const UserWhatsAppPage = ({
     new URLSearchParams(window.location.search).get("leadId") || ""
   );
   const [drafts, setDrafts] = useState({});
+  const [sentMessages, setSentMessages] = useState({});
   const [sendStatus, setSendStatus] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -214,8 +233,9 @@ const UserWhatsAppPage = ({
 
   const selectedConversation = conversations.find((item) => item.id === selectedLeadId) || conversations[0] || null;
   const currentDraft = selectedConversation ? drafts[selectedConversation.id] ?? selectedConversation.message : "";
-  const visibleMessages = selectedConversation?.history?.length
-    ? selectedConversation.history
+  const selectedSentMessages = selectedConversation ? sentMessages[selectedConversation.id] || [] : [];
+  const visibleMessages = selectedConversation?.history?.length || selectedSentMessages.length
+    ? [...(selectedConversation?.history || []), ...selectedSentMessages]
     : selectedConversation
       ? [{
           id: `${selectedConversation.id}-draft-preview`,
@@ -261,7 +281,29 @@ const UserWhatsAppPage = ({
         throw new Error(result?.message || "Unable to send WhatsApp message");
       }
 
-      setSendStatus("Message sent through WhatsApp API.");
+      const twilioResponse = formatTwilioResponse(result);
+      setSendStatus(
+        twilioResponse.label
+          ? `Twilio response: ${twilioResponse.label}`
+          : "Message sent through Twilio WhatsApp API."
+      );
+      setSentMessages((current) => ({
+        ...current,
+        [selectedConversation.id]: [
+          ...(current[selectedConversation.id] || []),
+          {
+            id: result?.providerMessageId || `${selectedConversation.id}-${Date.now()}`,
+            author: selectedConversation.owner,
+            body: currentDraft.trim(),
+            createdAt: new Date().toISOString(),
+            direction: "outgoing",
+            status: twilioResponse.deliveryStatus || "sent",
+            providerCode: twilioResponse.code,
+            providerCodeText: twilioResponse.text,
+            providerMessageId: twilioResponse.sid,
+          },
+        ],
+      }));
       setLeads((current) =>
         current.map((lead) =>
           String(getLeadId(lead)) === String(selectedConversation.id)
@@ -277,7 +319,7 @@ const UserWhatsAppPage = ({
   };
 
   return (
-    <section className={`user-whatsapp-page ${embedded ? "embedded" : ""}`}>
+    <section className={`user-whatsapp-page ${embedded ? "embedded" : ""} ${compactConversationList ? "compact-list" : ""}`}>
       <div className="user-whatsapp-topbar">
         <div className="user-whatsapp-search">
           <Search size={17} />
@@ -299,7 +341,7 @@ const UserWhatsAppPage = ({
       </div>
 
       <div className="user-whatsapp-header">
-        <h1>All Conversations</h1>
+        <h1>{isAdminAccess ? "All User Conversations" : "All Conversations"}</h1>
         <div className="user-whatsapp-tools">
           <button type="button" className="icon-only" onClick={loadLeads} aria-label="Refresh conversations">
             <RefreshCw size={16} />
@@ -362,8 +404,8 @@ const UserWhatsAppPage = ({
                       <span className="conversation-phone">{maskPhone(item.phone)}</span>
                     </span>
                   </span>
-                  <span className="conversation-preview">{item.message}</span>
-                  <time>{formatDateTime(item.date)}</time>
+                  {!compactConversationList && <span className="conversation-preview">{item.message}</span>}
+                  {!compactConversationList && <time>{formatDateTime(item.date)}</time>}
                 </button>
               );
             })}
@@ -384,7 +426,7 @@ const UserWhatsAppPage = ({
                 </div>
                 <div className="chat-head-actions">
                   <button type="button" className="connect">
-                    API Connected
+                    Twilio Connected
                   </button>
                   <button type="button" aria-label="Close conversation">
                     <X size={18} />
@@ -406,6 +448,13 @@ const UserWhatsAppPage = ({
                     >
                       <span>{message.author}</span>
                       <p>{message.body}</p>
+                      {(message.providerCode || message.status || message.providerMessageId) && (
+                        <small className="message-provider-meta">
+                          {[message.providerCode && `${message.providerCode} ${message.providerCodeText || ""}`.trim(), message.status, message.providerMessageId]
+                            .filter(Boolean)
+                            .join(" | ")}
+                        </small>
+                      )}
                       <time>{formatDateTime(message.createdAt)} <CheckCheck size={14} /></time>
                     </article>
                   ))}
