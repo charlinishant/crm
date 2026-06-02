@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Icon } from "@iconify/react/dist/iconify.js";
 import { Link } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
+import "./Alltask.css";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
@@ -172,35 +173,37 @@ const Alltask = () => {
       <div className="all-task-page">
         <div className="all-task-toolbar">
           <div>
-            <select
-              className="all-task-filter"
-              value={statusFilter}
-              onChange={(event) => setStatusFilter(event.target.value)}
-            >
-              <option value="All">All</option>
-              <option value="Open">Open</option>
-              <option value="Completed">Completed</option>
-              <option value="Archived">Archived</option>
-            </select>
-            <select
-              className="all-task-filter all-task-user-filter"
-              value={assigneeFilter}
-              onChange={(event) => setAssigneeFilter(event.target.value)}
-            >
-              <option value="All">All Users</option>
-              {users.map((user) => {
-                const userName = getUserName(user);
+            <div className="all-task-filter-row">
+              <select
+                className="all-task-filter"
+                value={statusFilter}
+                onChange={(event) => setStatusFilter(event.target.value)}
+              >
+                <option value="All">All</option>
+                <option value="Open">Open</option>
+                <option value="Completed">Completed</option>
+                <option value="Archived">Archived</option>
+              </select>
+              <select
+                className="all-task-filter all-task-user-filter"
+                value={assigneeFilter}
+                onChange={(event) => setAssigneeFilter(event.target.value)}
+              >
+                <option value="All">All Users</option>
+                {users.map((user) => {
+                  const userName = getUserName(user);
 
-                if (!userName) return null;
+                  if (!userName) return null;
 
-                return (
-                  <option key={user.id || user.email} value={userName}>
-                    {userName}
-                    {user.role ? ` (${user.role})` : ""}
-                  </option>
-                );
-              })}
-            </select>
+                  return (
+                    <option key={user.id || user.email} value={userName}>
+                      {userName}
+                      {user.role ? ` (${user.role})` : ""}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
             <p className="all-task-total">
               {isLoading ? "LOADING TASKS..." : `TOTAL TASKS : ${filteredTasks.length} / ${totalTasks}`}
             </p>
@@ -211,9 +214,9 @@ const Alltask = () => {
             <Link to="/new-task" className="all-task-add">
               Add Task
             </Link>
-            <button type="button" className="all-task-filter-btn" aria-label="Filter tasks">
+            {/* <button type="button" className="all-task-filter-btn" aria-label="Filter tasks">
               <Icon icon="mdi:filter" />
-            </button>
+            </button> */}
           </div>
         </div>
 
@@ -221,13 +224,13 @@ const Alltask = () => {
           <table className="all-task-table">
             <thead>
               <tr>
-                <th>TITLE</th>
-                <th>ASSIGNED TO</th>
-                <th>STATUS</th>
-                <th>PRIORITY</th>
-                <th>CREATED ON</th>
-                <th>DUE ON</th>
-                <th>ACTIONS</th>
+                <th>Title</th>
+                <th>Assigned To</th>
+                <th>Status</th>
+                <th>Priority</th>
+                <th>Created On</th>
+                <th>Due On</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -241,7 +244,7 @@ const Alltask = () => {
                 <tr key={task.id}>
                   <td>
                     <div className="all-task-title">{task.title}</div>
-                    {task.subtitle && <div className="all-task-subtitle">{task.subtitle}</div>}
+                    {/* {task.subtitle && <div className="all-task-subtitle">{task.subtitle}</div>} */}
                   </td>
                   <td>
                     <div className="all-task-title">{task.assignedTo}</div>

@@ -1,8 +1,8 @@
 const {Router} = require("express")
 const multer = require("multer")
 
-const {createLead, getLeads, getTrashLeads, getLeadById, updateLead, deleteLead, restoreLead, permanentlyDeleteLead, importExcel, sampleExcel} = require("../controller/lead.controller")
 const { optionalAuthenticate } = require("../middleware/auth.middleware")
+const {createLead, getLeads, getTrashLeads, getLeadById, updateLead, deleteLead, restoreLead, permanentlyDeleteLead, importExcel, sampleExcel} = require("../controller/lead.controller")
 
 const router = Router()
 

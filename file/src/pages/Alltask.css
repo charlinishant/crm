@@ -1,0 +1,56 @@
+.all-task-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.all-task-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+
+.all-task-filter-row .all-task-filter {
+  width: 230px;
+  max-width: 230px;
+  margin: 0;
+}
+
+.all-task-filter-row .all-task-user-filter {
+  width: 230px;
+  max-width: 230px;
+}
+
+.all-task-total {
+  margin-top: 16px;
+}
+
+.all-task-table thead th {
+  text-align: left;
+  text-transform: capitalize;
+  font-size: 15px;
+  padding: 12px 8px;
+}
+
+@media (max-width: 640px) {
+  .all-task-toolbar {
+    flex-direction: column;
+  }
+
+  .all-task-filter-row {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .all-task-filter-row .all-task-filter,
+  .all-task-filter-row .all-task-user-filter {
+    width: 100%;
+    max-width: none;
+  }
+
+  .all-task-actions {
+    width: 100%;
+  }
+}

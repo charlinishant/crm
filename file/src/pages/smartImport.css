@@ -5,6 +5,7 @@
   min-height: 100vh;
   font-family: "Segoe UI", sans-serif;
   color: #1e293b;
+  width: 100%;
 }
 
 /* Card Box */
@@ -13,7 +14,7 @@
   padding: 25px;
   border-radius: 10px;
   border: 1px solid #e2e8f0;
-  max-width: 720px;
+  /* max-width: 720px; */
   box-shadow: 0 4px 10px rgba(15, 23, 42, 0.05);
 }
 
@@ -35,6 +36,7 @@
   background: #ffffff;
   color: #334155;
   cursor: pointer;
+
 }
 
 /* Buttons Base */
@@ -114,10 +116,9 @@
 }
 
 .smart-import-field label {
-  color: #334155;
-  font-size: 13px;
+  color: #1e40af;
+  font-size: 15px;
   font-weight: 600;
-  text-transform: uppercase;
 }
 
 .smart-import-field select {
@@ -220,6 +221,9 @@
   font-weight: 500;
   color: #1e40af;
 }
+#leadImportAssignee {
+  width: 230px;
+}
 
 /* Fields Box */
 .fields-box {
@@ -231,7 +235,7 @@
   font-size: 14px;
 }
 
-@media (max-width: 576px) {
+@media (max-width: 868px) {
   .smart-import-container {
     padding: 18px;
   }

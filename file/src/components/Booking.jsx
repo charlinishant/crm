@@ -1,14 +1,17 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import './Booking.css';
+import { MoreVertical } from 'lucide-react';
 
 const Booking = () => {
     const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+    const RECORDS_PER_PAGE = 10;
     const [searchQuery, setSearchQuery] = useState('');
     const [bookingFilter, setBookingFilter] = useState('All Bookings');
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
     const [updatingBookingId, setUpdatingBookingId] = useState(null);
     const [statusMessage, setStatusMessage] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
 
     const formatMoney = (value) => {
         if (value === undefined || value === null || value === "") return "Rs. 0";
@@ -125,7 +128,34 @@ const Booking = () => {
         });
     }, [searchQuery, bookingFilter, rows]);
 
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, bookingFilter]);
+
+    const totalPages = Math.max(1, Math.ceil(filteredBookings.length / RECORDS_PER_PAGE));
+
+    useEffect(() => {
+        setCurrentPage((page) => Math.min(page, totalPages));
+    }, [totalPages]);
+
+    const currentBookings = filteredBookings.slice(
+        (currentPage - 1) * RECORDS_PER_PAGE,
+        currentPage * RECORDS_PER_PAGE
+    );
+    const showingFrom = filteredBookings.length === 0 ? 0 : (currentPage - 1) * RECORDS_PER_PAGE + 1;
+    const showingTo = Math.min(currentPage * RECORDS_PER_PAGE, filteredBookings.length);
+
+    const goToPreviousPage = () => {
+        setCurrentPage((page) => Math.max(1, page - 1));
+    };
+
+    const goToNextPage = () => {
+        setCurrentPage((page) => Math.min(totalPages, page + 1));
+    };
+
     return (
+
+
         <div className="floor-dashboard">
             <div className="floor-card">
                 <div className="floor-header d-flex justify-content-between align-items-center">
@@ -171,45 +201,26 @@ const Booking = () => {
                     <table className="floor-table">
                         <thead>
                             <tr>
-                                <th className="checkbox-col">
-                                    <input type="checkbox" />
-                                </th>
-                                <th>ID</th>
-                                <th>LEAD ID</th>
-                                <th>BOOKING NAME</th>
-                                <th>APPLICANT NAME</th>
-                                <th>PROJECT UNIT</th>
-                                <th>STAGE</th>
-                                <th>SOURCE</th>
-                                <th>BOOKED BY</th>
-                                <th>BOOKED ON</th>
-                                <th className="text-right">AGREEMENT</th>
-                                <th className="text-right">TOTAL DEMANDED</th>
-                                <th className="text-right">ACTUAL DEMANDED</th>
-                                <th className="text-right">OVERDUE</th>
-                                <th className="text-right">RECEIPTS</th>
-                                <th className="text-right">CREDIT NOTES</th>
-                                <th className="text-right">ACTIONS</th>
+                                <th style={{ borderStartStartRadius: '8px', borderEndStartRadius: '8px' }}>Lead Id</th>
+                                <th>Booking Name</th>
+                                <th>Applicant Name</th>
+                                <th>Project Unit</th>
+                                <th>Stage</th>
+                                <th>Source</th>
+                                <th>Booked By</th>
+                                <th>Booked On</th>
+                                <th className="text-right">Agreement</th>
+                                <th className="text-right">Total Demanded</th>
+                                <th className="text-right">Actual Demanded</th>
+                                <th className="text-right">Overdue</th>
+                                <th className="text-right">Receipts</th>
+                                <th className="text-right">Credit Notes</th>
+                                <th style={{ borderStartEndRadius: '8px', borderEndEndRadius: '8px' }} className="text-right">Actions</th>
                             </tr>
                         </thead>
 
                         <tbody>
-                            {/* <tr className="summary-row">
-                                <td></td>
-                                <td></td>
-                                <td></td>
-                                <td></td>
-                                <td></td>
-                                <td></td>
-                                <td></td>
-                                <td></td>
-                                <td></td>
-                                <td></td>
-                                <td></td>
-                                <td></td>
-                                <td></td>
-                            </tr> */}
-
+                           
                             {filteredBookings.length === 0 ? (
                                 <tr>
                                     <td colSpan="17" className="text-center py-4">
@@ -217,29 +228,26 @@ const Booking = () => {
                                     </td>
                                 </tr>
                             ) : (
-                                filteredBookings.map((item) => (
+                                currentBookings.map((item) => (
                                     <tr key={item.id}>
-                                        <td className="checkbox-col">
-                                            <input type="checkbox" />
-                                        </td>
-                                        <td># {item.id}</td>
+                                        {/* <td>{item.id}</td> */}
                                         <td className="text-muted">{item.leadId}</td>
                                         <td>
                                             <strong>{item.bookingName}</strong>
                                             <br />
-                                            <span className="text-muted">{item.bookingSales}</span>
+                                            {/* <span className="text-muted">{item.bookingSales}</span> */}
                                         </td>
                                         <td>
                                             <strong>{item.applicantName}</strong>
                                             <br />
-                                            <span className="text-muted">{item.applicantSales}</span>
+                                            {/* <span className="text-muted">{item.applicantSales}</span> */}
                                         </td>
                                         <td>
                                             {item.projectUnit}
                                             {item.projectSales && (
                                                 <>
                                                     <br />
-                                                    <span className="text-muted">{item.projectSales}</span>
+                                                    {/* <span className="text-muted">{item.projectSales}</span> */}
                                                 </>
                                             )}
                                         </td>
@@ -265,12 +273,46 @@ const Booking = () => {
                                         <td className="text-right">{item.overdue}</td>
                                         <td className="text-right">{item.receipts}</td>
                                         <td className="text-right">{item.creditNotes}</td>
-                                        <td className="text-right">...</td>
+                                        <td className="text-right">
+                                            <button
+                                                type="button"
+                                                className="booking-action-button"
+                                                aria-label={`Open actions for booking ${item.id}`}
+                                            >
+                                                <MoreVertical size={16} strokeWidth={2.2} />
+                                            </button>
+                                        </td>
                                     </tr>
                                 ))
                             )}
                         </tbody>
                     </table>
+                </div>
+                <div className="booking-pagination">
+                    <span className="booking-pagination-info">
+                        Showing {showingFrom}-{showingTo} of {filteredBookings.length}
+                    </span>
+                    <div className="booking-pagination-actions">
+                        <button
+                            type="button"
+                            className="booking-page-button"
+                            onClick={goToPreviousPage}
+                            disabled={currentPage === 1}
+                        >
+                            Previous
+                        </button>
+                        <span className="booking-page-count">
+                            Page {currentPage} of {totalPages}
+                        </span>
+                        <button
+                            type="button"
+                            className="booking-page-button"
+                            onClick={goToNextPage}
+                            disabled={currentPage === totalPages}
+                        >
+                            Next
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

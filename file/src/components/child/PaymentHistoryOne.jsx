@@ -69,7 +69,7 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
 
   const getLeadId = useCallback((lead) => {
     const leadId = lead.id || lead._id || lead.lead_id;
-    return leadId ? `# ${leadId}` : "-";
+    return leadId ? ` ${leadId}` : "-";
   }, []);
 
   const getLeadOwner = useCallback((lead) => {
@@ -652,20 +652,17 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
           font-size: 14px;
         }
 
-        .table-section table thead tr {
-          background: #487fff;
-        }
+     
+        
+        
 
         .table-section table thead th {
           background: #487fff !important;
           padding: 14px 15px;
           text-align: left;
-          color: #ffffff !important;
-          font-weight: 600;
-          font-size: 12px;
-          white-space: nowrap;
-          text-transform: uppercase;
-          border-bottom: 1px solid #2f6ff0;
+          color: #ffffff !important;      
+          white-space: nowrap;      
+          
         }
 
         .table-section table tbody tr {
@@ -888,13 +885,13 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
         }
       `}</style>
 
-      <div className="table-section">
+      <div  className="table-section fa-2x">
         <p>{trashMode ? "Trash" : "Lead Data"}</p>
 
-        <table>
+        <table border="1" cellPadding="0" cellSpacing="0">
           <thead>
             <tr>
-              <th>Lead ID</th>
+              <th style={{ borderStartStartRadius: '8px', borderEndStartRadius: '8px' }}>Lead ID</th>
               <th>Name</th>
               <th>Last Source</th>
               <th>Stage</th>
@@ -902,7 +899,7 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
               <th>Requirement</th>
               <th>Team</th>
               <th>Tags</th>
-              <th>Actions</th>
+              <th style={{ borderStartEndRadius: '8px', borderEndEndRadius: '8px' }}>Actions</th>
             </tr>
           </thead>
 
@@ -918,8 +915,8 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
                 <tr key={i}>
                   <td>{getLeadId(lead)}</td>
                   <td>
-                    <div className="lead-name-main">{getLeadName(lead)}</div>
-                    <div className="lead-name-owner">{getLeadOwner(lead)}</div>
+                    <div className="lead-name-main" style={{ fontSize: '14px' }}>{getLeadName(lead)}</div>
+                    {/* <div className="lead-name-owner">{getLeadOwner(lead)}</div> */}
                   </td>
                   <td>{getLastSource(lead)}</td>
                   <td>{getStage(lead)}</td>

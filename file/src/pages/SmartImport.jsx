@@ -109,7 +109,7 @@ const SmartImport = () => {
             type="file"
             ref={fileRef}
             className="file-input"
-            accept=".xlsx,.xls,.csv"
+            accept=".xlsx,.xls,.csv"               
             onChange={handleFileChange}
           />
 
@@ -132,7 +132,7 @@ const SmartImport = () => {
         )}
 
         <div className="smart-import-field">
-          <label htmlFor="leadImportAssignee">Assign imported leads to</label>
+          <label htmlFor="leadImportAssignee">Assign imported leads to :-</label>
           <select
             id="leadImportAssignee"
             value={selectedUserId}

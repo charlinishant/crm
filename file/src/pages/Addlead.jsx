@@ -606,7 +606,7 @@ const ADDLEAD = () => {
                   <label>SALUTATION & NAME</label>
                   <div className="lead-row">
                     <select name="salutation" value={formData.salutation} onChange={handleChange}>
-                      <option>Salutation</option>
+                      <option>Select option</option>
                       <option>Dr.</option>
                       <option>Mr.</option>
                       <option>Mrs.</option>
