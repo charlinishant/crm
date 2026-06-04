@@ -37,7 +37,7 @@
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background-color: #6b21a8; 
+  background-color: #487fff; 
   color: #ffffff;
   font-weight: 500;
   font-size: 13px;
@@ -48,7 +48,7 @@
 }
 
 .btn-new-plan:hover {
-  background-color: #581c87;
+  background-color: #487fff;
   box-shadow: 0 1px 3px rgba(107, 33, 168, 0.2);
 }
 

@@ -1043,14 +1043,14 @@ const Details = () => {
 
           .details-save {
             min-width: 130px;
-            background: #7c3aed;
+            background: #487fff;
             color: #ffffff;
             font-weight: 600;
             text-align: revert-layer;
           }
           
           .details-save:hover {
-            background: #6d28d9;
+            background: #487fff;
           }
 
           .details-note-error {

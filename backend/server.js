@@ -1,5 +1,3 @@
-const path = require("path")
-
 require("dotenv")
 
 const express = require("express")

@@ -251,7 +251,7 @@ enum Status{
   In_sourcing
   In_closing
   Booked
-  Nurture
+  Unqualified
 }
 model Lead{
   id Int @id @default(autoincrement())
