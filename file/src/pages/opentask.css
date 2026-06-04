@@ -1,47 +1,35 @@
-.all-task-toolbar {
+.open-task-toolbar {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
 }
 
-.all-task-filter-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: nowrap;
-}
-
-.all-task-filter-row .all-task-filter {
+.open-task-filter {
   width: 230px;
   max-width: 230px;
   margin: 0;
 }
 
-.all-task-filter-row .all-task-user-filter {
-  width: 230px;
-  max-width: 230px;
-}
-
-.all-task-total {
+.open-task-total {
   margin-top: 16px;
 }
 
-.all-task-table-wrap {
+.open-task-table-wrap {
   background: #ffffff;
   border-radius: 8px;
   margin-top: 18px;
   overflow-x: auto;
 }
 
-.all-task-table-wrap > p {
+.open-task-table-wrap > p {
   color: #111827;
   font-size: 18px;
   font-weight: 600;
   margin: 0 0 14px;
 }
 
-.all-task-table {
+.open-task-table {
   border: 0;
   border-collapse: separate;
   border-spacing: 0;
@@ -49,18 +37,18 @@
   width: 100%;
 }
 
-.all-task-table thead th {
+.open-task-table thead th {
   background: #487fff;
   border: 0;
   color: #ffffff;
+  font-size: 15px;
   font-weight: 600;
+  padding: 12px 8px;
   text-align: left;
   text-transform: capitalize;
-  font-size: 15px;
-  padding: 12px 8px;
 }
 
-.all-task-table tbody td {
+.open-task-table tbody td {
   border: 0;
   border-bottom: 1px solid #e2e8f0;
   color: #475569;
@@ -69,43 +57,33 @@
   vertical-align: middle;
 }
 
-.all-task-table tbody tr:nth-child(even) {
+.open-task-table tbody tr:nth-child(even) {
   background: #f8fafc;
 }
 
-.all-task-table tbody tr:hover,
-.all-task-table tbody tr:nth-child(even):hover {
+.open-task-table tbody tr:hover,
+.open-task-table tbody tr:nth-child(even):hover {
   background: #f1f5f9;
 }
 
-.all-task-title {
+.open-task-title {
   color: #334155;
   font-size: 14px;
   font-weight: 600;
 }
 
-.all-task-subtitle {
+.open-task-subtitle {
   color: #94a3b8;
   font-size: 12px;
   margin-top: 4px;
 }
 
-.all-task-status-select {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  color: #334155;
-  font-size: 13px;
-  min-width: 116px;
-  padding: 7px 10px;
-}
-
-.all-task-action-cell {
+.open-task-action-cell {
   position: relative;
   text-align: center;
 }
 
-.all-task-menu {
+.open-task-menu {
   align-items: center;
   background: #ffffff;
   border: 1px solid #e2e8f0;
@@ -117,19 +95,19 @@
   width: 34px;
 }
 
-.all-task-menu:hover {
+.open-task-menu:hover {
   background: #f8fafc;
   color: #334155;
 }
 
-.all-task-empty {
+.open-task-empty {
   color: #94a3b8;
   font-size: 14px;
   padding: 30px !important;
   text-align: center;
 }
 
-.all-task-pagination {
+.open-task-pagination {
   align-items: center;
   border-top: 1px solid #e2e8f0;
   display: flex;
@@ -139,23 +117,23 @@
   padding-top: 16px;
 }
 
-.all-task-page-info {
+.open-task-page-info {
   color: #64748b;
   font-size: 13px;
 }
 
-.all-task-page-info strong {
+.open-task-page-info strong {
   color: #334155;
   font-weight: 600;
 }
 
-.all-task-page-actions {
+.open-task-page-actions {
   align-items: center;
   display: flex;
   gap: 10px;
 }
 
-.all-task-page-btn {
+.open-task-page-btn {
   align-items: center;
   background: #ffffff;
   border: 1px solid #cbd5e1;
@@ -171,17 +149,17 @@
   padding: 0 14px;
 }
 
-.all-task-page-btn:hover:not(:disabled) {
+.open-task-page-btn:hover:not(:disabled) {
   background: #f8fafc;
   border-color: #94a3b8;
 }
 
-.all-task-page-btn:disabled {
+.open-task-page-btn:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
 
-.all-task-page-count {
+.open-task-page-count {
   align-items: center;
   background: #eff6ff;
   border: 1px solid #bfdbfe;
@@ -197,36 +175,27 @@
 }
 
 @media (max-width: 640px) {
-  .all-task-toolbar {
+  .open-task-toolbar {
     flex-direction: column;
   }
 
-  .all-task-filter-row {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .all-task-filter-row .all-task-filter,
-  .all-task-filter-row .all-task-user-filter {
+  .open-task-filter,
+  .open-task-actions {
     width: 100%;
     max-width: none;
   }
 
-  .all-task-actions {
-    width: 100%;
-  }
-
-  .all-task-pagination {
+  .open-task-pagination {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .all-task-page-actions {
-    width: 100%;
+  .open-task-page-actions {
     justify-content: space-between;
+    width: 100%;
   }
 
-  .all-task-page-btn {
+  .open-task-page-btn {
     flex: 1;
   }
 }

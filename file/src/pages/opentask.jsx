@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Icon } from "@iconify/react/dist/iconify.js";
 import { Link } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
+import "./opentask.css";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const TASKS_PER_PAGE = 10;
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -54,6 +56,7 @@ const normalizeTask = (task, index) => ({
 
 const OpenTask = () => {
   const [tasks, setTasks] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const [fetchError, setFetchError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -98,6 +101,18 @@ const OpenTask = () => {
     };
   }, []);
 
+  const totalPages = Math.max(1, Math.ceil(tasks.length / TASKS_PER_PAGE));
+  const paginatedTasks = useMemo(() => {
+    const startIndex = (currentPage - 1) * TASKS_PER_PAGE;
+    return tasks.slice(startIndex, startIndex + TASKS_PER_PAGE);
+  }, [currentPage, tasks]);
+  const firstTaskNumber = tasks.length === 0 ? 0 : (currentPage - 1) * TASKS_PER_PAGE + 1;
+  const lastTaskNumber = Math.min(currentPage * TASKS_PER_PAGE, tasks.length);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
+
   return (
     <MasterLayout>
       <div className="open-task-page">
@@ -126,16 +141,17 @@ const OpenTask = () => {
         </div>
 
         <div className="open-task-table-wrap">
+          {/* <p>Open Task Data</p> */}
           <table className="open-task-table">
             <thead>
               <tr>
-                <th>TITLE</th>
-                <th>ASSIGNED TO</th>
-                <th>STATUS</th>
-                <th>PRIORITY</th>
-                <th>CREATED ON</th>
-                <th>DUE ON</th>
-                <th>ACTIONS</th>
+                <th style={{ borderStartStartRadius: "8px", borderEndStartRadius: "8px" }}>Title</th>
+                <th>Assigned To</th>
+                <th>Status</th>
+                <th>Priority</th>
+                <th>Created On</th>
+                <th>Due On</th>
+                <th style={{ borderStartEndRadius: "8px", borderEndEndRadius: "8px" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -145,11 +161,11 @@ const OpenTask = () => {
                     {isLoading ? "Loading tasks..." : "No saved open tasks found."}
                   </td>
                 </tr>
-              ) : tasks.map((task) => (
+              ) : paginatedTasks.map((task) => (
                 <tr key={task.id}>
                   <td>
                     <div className="open-task-title">{task.title}</div>
-                    {task.subtitle && <div className="open-task-subtitle">{task.subtitle}</div>}
+                    {/* {task.subtitle && <div className="open-task-subtitle">{task.subtitle}</div>} */}
                   </td>
                   <td>
                     <div className="open-task-title">{task.assignedTo}</div>
@@ -169,6 +185,36 @@ const OpenTask = () => {
             </tbody>
           </table>
         </div>
+
+        {tasks.length > 0 && (
+          <div className="open-task-pagination">
+            <div className="open-task-page-info">
+              Showing <strong>{firstTaskNumber}</strong> to <strong>{lastTaskNumber}</strong> of{" "}
+              <strong>{tasks.length}</strong> tasks
+            </div>
+            <div className="open-task-page-actions">
+              <button
+                type="button"
+                className="open-task-page-btn"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              >
+                Previous
+              </button>
+              <span className="open-task-page-count">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                className="open-task-page-btn"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </MasterLayout>
   );

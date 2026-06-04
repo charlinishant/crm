@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Icon } from "@iconify/react/dist/iconify.js";
 import { Link } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
+import "./statusTask.css";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const TASKS_PER_PAGE = 10;
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -54,6 +56,7 @@ const normalizeTask = (task, index) => ({
 
 const CompletedTask = () => {
   const [tasks, setTasks] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const [fetchError, setFetchError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -98,6 +101,18 @@ const CompletedTask = () => {
     };
   }, []);
 
+  const totalPages = Math.max(1, Math.ceil(tasks.length / TASKS_PER_PAGE));
+  const paginatedTasks = useMemo(() => {
+    const startIndex = (currentPage - 1) * TASKS_PER_PAGE;
+    return tasks.slice(startIndex, startIndex + TASKS_PER_PAGE);
+  }, [currentPage, tasks]);
+  const firstTaskNumber = tasks.length === 0 ? 0 : (currentPage - 1) * TASKS_PER_PAGE + 1;
+  const lastTaskNumber = Math.min(currentPage * TASKS_PER_PAGE, tasks.length);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
+
   return (
     <MasterLayout>
       <div className="completed-task-page">
@@ -129,46 +144,47 @@ const CompletedTask = () => {
           </div>
         </div>
 
-        <div className="completed-task-table-wrap">
-          <table className="completed-task-table">
+        <div className="status-task-table-wrap">
+          {/* <p>Completed Task Data</p> */}
+          <table className="status-task-table">
             <thead>
               <tr>
-                <th>TITLE</th>
-                <th>ASSIGNED TO</th>
-                <th>STATUS</th>
-                <th>PRIORITY</th>
-                <th>CREATED ON</th>
-                <th>DUE ON</th>
-                <th>ACTIONS</th>
+                <th style={{ borderStartStartRadius: "8px", borderEndStartRadius: "8px" }}>Title</th>
+                <th>Assigned To</th>
+                <th>Status</th>
+                <th>Priority</th>
+                <th>Created On</th>
+                <th>Due On</th>
+                <th style={{ borderStartEndRadius: "8px", borderEndEndRadius: "8px" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {tasks.length === 0 ? (
                 <tr>
-                  <td colSpan="7" className="completed-task-empty">
+                  <td colSpan="7" className="status-task-empty">
                     {isLoading ? "Loading tasks..." : "No saved completed tasks found."}
                   </td>
                 </tr>
-              ) : tasks.map((task) => (
+              ) : paginatedTasks.map((task) => (
                 <tr key={task.id}>
                   <td>
-                    <div className="completed-task-title">{task.title}</div>
+                    <div className="status-task-title">{task.title}</div>
                     {task.subtitle && (
-                      <div className="completed-task-subtitle">{task.subtitle}</div>
+                      <div className="status-task-subtitle">{task.subtitle}</div>
                     )}
                   </td>
                   <td>
-                    <div className="completed-task-title">{task.assignedTo}</div>
-                    <div className="completed-task-subtitle">by {task.assignedBy}</div>
+                    <div className="status-task-title">{task.assignedTo}</div>
+                    <div className="status-task-subtitle">by {task.assignedBy}</div>
                   </td>
                   <td>{task.status}</td>
                   <td>{task.priority}</td>
                   <td>{task.createdOn}</td>
                   <td>{task.dueOn}</td>
-                  <td className="completed-task-action-cell">
+                  <td className="status-task-action-cell">
                     <button
                       type="button"
-                      className="completed-task-menu"
+                      className="status-task-menu"
                       aria-label="Task actions"
                     >
                       <Icon icon="ph:dots-three-vertical-bold" />
@@ -179,6 +195,36 @@ const CompletedTask = () => {
             </tbody>
           </table>
         </div>
+
+        {tasks.length > 0 && (
+          <div className="status-task-pagination">
+            <div className="status-task-page-info">
+              Showing <strong>{firstTaskNumber}</strong> to <strong>{lastTaskNumber}</strong> of{" "}
+              <strong>{tasks.length}</strong> tasks
+            </div>
+            <div className="status-task-page-actions">
+              <button
+                type="button"
+                className="status-task-page-btn"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              >
+                Previous
+              </button>
+              <span className="status-task-page-count">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                className="status-task-page-btn"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </MasterLayout>
   );

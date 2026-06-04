@@ -5,6 +5,7 @@ import MasterLayout from "../masterLayout/MasterLayout";
 import "./Alltask.css";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const TASKS_PER_PAGE = 10;
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -58,6 +59,7 @@ const Alltask = () => {
   const [users, setUsers] = useState([]);
   const [statusFilter, setStatusFilter] = useState("All");
   const [assigneeFilter, setAssigneeFilter] = useState("All");
+  const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState("");
 
@@ -137,7 +139,22 @@ const Alltask = () => {
     });
   }, [assigneeFilter, statusFilter, tasks]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredTasks.length / TASKS_PER_PAGE));
+  const paginatedTasks = useMemo(() => {
+    const startIndex = (currentPage - 1) * TASKS_PER_PAGE;
+    return filteredTasks.slice(startIndex, startIndex + TASKS_PER_PAGE);
+  }, [currentPage, filteredTasks]);
+  const firstTaskNumber = filteredTasks.length === 0 ? 0 : (currentPage - 1) * TASKS_PER_PAGE + 1;
+  const lastTaskNumber = Math.min(currentPage * TASKS_PER_PAGE, filteredTasks.length);
   const totalTasks = tasks.length || 0;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [assigneeFilter, statusFilter]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const updateTaskStatus = async (taskId, status) => {
     const previousTasks = tasks;
@@ -221,16 +238,17 @@ const Alltask = () => {
         </div>
 
         <div className="all-task-table-wrap">
+          {/* <p>Task Data</p> */}
           <table className="all-task-table">
             <thead>
               <tr>
-                <th>Title</th>
+                <th style={{ borderStartStartRadius: '8px', borderEndStartRadius: '8px' }}>Title</th>
                 <th>Assigned To</th>
                 <th>Status</th>
                 <th>Priority</th>
                 <th>Created On</th>
                 <th>Due On</th>
-                <th>Actions</th>
+                <th style={{ borderStartEndRadius: '8px', borderEndEndRadius: '8px' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -240,7 +258,7 @@ const Alltask = () => {
                     {isLoading ? "Loading tasks..." : "No saved tasks found."}
                   </td>
                 </tr>
-              ) : filteredTasks.map((task) => (
+              ) : paginatedTasks.map((task) => (
                 <tr key={task.id}>
                   <td>
                     <div className="all-task-title">{task.title}</div>
@@ -274,6 +292,36 @@ const Alltask = () => {
             </tbody>
           </table>
         </div>
+
+        {filteredTasks.length > 0 && (
+          <div className="all-task-pagination">
+            <div className="all-task-page-info">
+              Showing <strong>{firstTaskNumber}</strong> to <strong>{lastTaskNumber}</strong> of{" "}
+              <strong>{filteredTasks.length}</strong> tasks
+            </div>
+            <div className="all-task-page-actions">
+              <button
+                type="button"
+                className="all-task-page-btn"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              >
+                Previous
+              </button>
+              <span className="all-task-page-count">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                className="all-task-page-btn"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </MasterLayout>
   );

@@ -15,6 +15,7 @@ import {
   FaTimes,
   FaWhatsapp,
 } from "react-icons/fa";
+import UserBookingForm from "./UserBookingForm";
 
 const fallbackLead = {
   id: 10702,
@@ -194,6 +195,20 @@ const UserPreview = () => {
   );
 
   useEffect(() => {
+    if (!isBookingFormOpen) return undefined;
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [isBookingFormOpen]);
+
+  useEffect(() => {
     if (location.state?.lead) {
       setLead(location.state.lead);
       window.sessionStorage.setItem(
@@ -320,10 +335,15 @@ const UserPreview = () => {
 
     return Array.from(towerMap.values());
   }, [bookingProjectUnits]);
+  const getBookingUnitOptionValue = (unit) =>
+    String(unit?.id || `${unit?.groupId || "unit"}-${unit?.unitIndex || unit?.name || ""}`);
+  const getBookingUnitOptionLabel = (unit) =>
+    unit?.name || `Unit ${unit?.unitIndex || unit?.id || unit?.groupId || ""}`.trim();
   const selectedBookingUnit = flattenedBookingUnits.find(
     (unit) =>
       unit.name === bookingForm.unit ||
       String(unit.id) === String(bookingForm.unit) ||
+      String(unit.id) === String(bookingForm.unitId) ||
       String(unit.groupId) === String(bookingForm.unitId)
   );
   const visibleBookingUnits = useMemo(() => {
@@ -618,7 +638,8 @@ const UserPreview = () => {
   };
 
   const handleBookingUnitSelect = (unit) => {
-    const unitName = unit.name || `Unit ${unit.unitIndex || unit.id}`;
+    const unitName = getBookingUnitOptionLabel(unit);
+    const unitId = unit.id || unit.groupId || "";
 
     setBookingProjectMessage("");
     setEditableCostRows([]);
@@ -626,7 +647,9 @@ const UserPreview = () => {
     setBookingForm((prev) => ({
       ...prev,
       unit: unitName,
-      unitId: unit.groupId || "",
+      unitId,
+      projectId: unit.project?.id || prev.projectId,
+      projectDetails: unit.project?.name || prev.projectDetails,
       basePrice: unit.basePrice || "",
       baseRate: unit.baseRate || "",
       saleableArea: unit.saleable || prev.saleableArea,
@@ -690,6 +713,43 @@ const UserPreview = () => {
       setIsLoadingBookingProject(false);
     }
   };
+
+  useEffect(() => {
+    if (!isBookingFormOpen || bookingStepIndex !== 0 || (!bookingForm.projectId && !bookingForm.projectDetails)) return undefined;
+
+    let isMounted = true;
+
+    const fetchAdminCreatedUnits = async () => {
+      try {
+        const unitsResponse = await fetch(`${API_URL}/unit?limit=100`);
+        if (!unitsResponse.ok) throw new Error("Unable to load units");
+
+        const unitsResult = await unitsResponse.json();
+        const unitGroups = Array.isArray(unitsResult) ? unitsResult : unitsResult?.data || [];
+        const filteredUnits = unitGroups.filter((group) => {
+          if (bookingForm.projectId) return String(group.project?.id) === String(bookingForm.projectId);
+          return group.project?.name?.toLowerCase() === bookingForm.projectDetails.toLowerCase();
+        });
+
+        if (!isMounted) return;
+
+        setBookingProjectUnits(filteredUnits);
+        const firstTower = filteredUnits.find((group) => group.tower?.id || group.tower?.name)?.tower;
+        setSelectedBookingTowerId(firstTower ? String(firstTower.id || firstTower.name) : "");
+      } catch (error) {
+        console.error("Unable to load admin-created units:", error);
+        if (isMounted) {
+          setBookingProjectUnits([]);
+        }
+      }
+    };
+
+    fetchAdminCreatedUnits();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [API_URL, bookingForm.projectDetails, bookingForm.projectId, bookingStepIndex, isBookingFormOpen]);
 
   const handleOpenBookingForm = (message = "") => {
     setBookingForm({
@@ -1583,6 +1643,7 @@ const UserPreview = () => {
 
 .lead-preview-booking-form {
   display: contents;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
 }
 
 .lead-preview-booking-form label {
@@ -1594,6 +1655,7 @@ const UserPreview = () => {
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   color: #1e293b;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
   font-size: 14px;
   min-height: 36px;
   padding: 0 12px;
@@ -1604,8 +1666,8 @@ const UserPreview = () => {
 .lead-preview-booking-form input:focus,
 .lead-preview-booking-form select:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 1px #3b82f6;
+  border-color: #2563eb;
+  box-shadow: none;
 }
 
 .booking-modal-backdrop {
@@ -1627,6 +1689,7 @@ const UserPreview = () => {
   flex-direction: column;
   box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
   overflow: hidden;
+  font-family: Inter, "Segoe UI", Arial, sans-serif;
 }
 
 .booking-modal-header {
@@ -1643,7 +1706,7 @@ const UserPreview = () => {
   margin: 0;
   color: #ffffff;
   font-size: 22px;
-  font-weight: 400;
+  font-weight: 600;
   line-height: 1.2;
 }
 
@@ -1667,7 +1730,7 @@ const UserPreview = () => {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
-  padding: 28px 64px 20px;
+  padding: 26px 64px 18px;
   border-bottom: 1px solid #cbd5e1;
 }
 
@@ -1677,7 +1740,7 @@ const UserPreview = () => {
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  color: #4c2eca;
+  color: #2563eb;
   font-size: 13px;
   font-weight: 600;
   text-transform: uppercase;
@@ -1700,7 +1763,7 @@ const UserPreview = () => {
 
 .booking-step.is-complete::before,
 .booking-step.is-active::before {
-  background: #673ab7;
+  background: #2563eb;
 }
 
 .booking-step-number {
@@ -1720,23 +1783,23 @@ const UserPreview = () => {
 }
 
 .booking-step.is-complete .booking-step-number {
-  background: #673ab7;
-  border-color: #673ab7;
+  background: #2563eb;
+  border-color: #2563eb;
   color: #ffffff;
 }
 
 .booking-modal-main {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(320px, 1fr) 72px minmax(320px, 1fr);
-  align-items: stretch;
-  gap: 24px;
-  padding: 28px 64px 18px;
+  grid-template-columns: minmax(320px, 1fr) 48px minmax(320px, 1fr);
+  align-items: start;
+  gap: 36px;
+  padding: 24px 64px 18px;
   overflow-y: auto;
 }
 
 .booking-choice {
-  min-height: 430px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1745,11 +1808,13 @@ const UserPreview = () => {
 }
 
 .booking-illustration {
-  width: min(100%, 380px);
-  height: 230px;
-  margin: 0 auto 16px;
+  width: min(100%, 300px);
+  height: 185px;
+  margin: 0 auto 18px;
   position: relative;
   overflow: visible;
+  transform: scale(0.88);
+  transform-origin: center bottom;
 }
 
 .booking-illustration-city::before,
@@ -1914,49 +1979,49 @@ const UserPreview = () => {
 
 .booking-choice-title {
   margin: 0 0 8px;
-  color: #17202a;
-  font-size: 22px;
+  color: #1e293b;
+  font-size: 21px;
   font-weight: 600;
   line-height: 1.25;
 }
 
 .booking-choice-copy {
   margin: 0;
-  max-width: 560px;
-  color: #17202a;
-  font-size: 17px;
+  max-width: 520px;
+  color: #334155;
+  font-size: 16px;
   line-height: 1.45;
 }
 
 .booking-divider {
   align-self: center;
-  color: #17202a;
+  color: #334155;
   font-size: 18px;
-  font-weight: 500;
-  padding-top: 236px;
+  font-weight: 600;
+  padding-top: 290px;
 }
 
 .booking-choice-field {
-  width: min(100%, 560px);
-  margin-top: 22px;
+  width: min(100%, 520px);
+  margin-top: 26px;
   text-align: left;
 }
 
 .booking-choice-field label {
   display: block;
   margin-bottom: 8px;
-  color: #59616b;
+  color: #334155;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 500;
   text-transform: uppercase;
 }
 
 .booking-choice-field > span {
   display: block;
   margin-bottom: 10px;
-  color: #59616b;
-  font-size: 15px;
-  font-weight: 700;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 500;
   text-transform: uppercase;
 }
 
@@ -3120,10 +3185,11 @@ const UserPreview = () => {
   }
 
   .booking-illustration {
-    height: 220px;
-    transform: scale(0.86);
+    width: min(100%, 280px);
+    height: 170px;
+    transform: scale(0.8);
     transform-origin: center top;
-    margin-bottom: -24px;
+    margin-bottom: -10px;
   }
 
   .booking-divider {
@@ -3131,15 +3197,15 @@ const UserPreview = () => {
   }
 
   .booking-choice-title {
-    font-size: 22px;
+    font-size: 20px;
   }
 
   .booking-choice-copy {
-    font-size: 17px;
+    font-size: 15px;
   }
 
   .booking-choice-field {
-    margin-top: 22px;
+    margin-top: 20px;
   }
 
   .booking-modal-alert {
@@ -3517,48 +3583,36 @@ const UserPreview = () => {
               </button>
             </div>
 
-            {isBookingFormOpen && (
-              <div className="booking-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="booking-modal-title">
-                <form className="booking-modal lead-preview-booking-form" onSubmit={handleSaveBooking}>
-                  <div className="booking-modal-header">
-                    <h2 className="booking-modal-title" id="booking-modal-title">Booking Details</h2>
-                    <button
-                      type="button"
-                      className="booking-modal-close"
-                      onClick={handleCloseBookingForm}
-                      aria-label="Close booking details"
-                    >
-                      <FaTimes />
-                    </button>
-                  </div>
-
-                  <div className="booking-modal-stepper" aria-label="Booking progress">
-                    {bookingSteps.map((step, index) => (
-                      <div
-                        className={`booking-step${index < bookingStepIndex ? " is-complete" : ""}${index === bookingStepIndex ? " is-active" : ""}`}
-                        key={step}
-                      >
-                        <span className="booking-step-number">{String(index + 1).padStart(2, "0")}</span>
-                        <span>{step}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {bookingMessage && (
-                    <div className="booking-modal-alert">{bookingMessage}</div>
-                  )}
-                  {bookingStepIndex === 1 && bookingProjectMessage && (
-                    <div className="booking-modal-alert">{bookingProjectMessage}</div>
-                  )}
-
+            <UserBookingForm
+              isOpen={isBookingFormOpen}
+              bookingSteps={bookingSteps}
+              bookingStepIndex={bookingStepIndex}
+              bookingMessage={bookingMessage}
+              bookingProjectMessage={bookingProjectMessage}
+              bookingProjectSelectValue={bookingProjectSelectValue}
+              bookingForm={bookingForm}
+              leadName={leadName}
+              isSavingBooking={isSavingBooking}
+              isLoadingBookingProject={isLoadingBookingProject}
+              onClose={handleCloseBookingForm}
+              onSubmit={handleSaveBooking}
+              onPrevious={() => setBookingStepIndex((current) => Math.max(0, current - 1))}
+              onMarkInterested={() =>
+                setBookingProjectMessage(
+                  bookingForm.unit
+                    ? `${bookingForm.unit} marked as interested.`
+                    : "Select a unit before marking interest."
+                )
+              }
+            >
                   {bookingStepIndex === 0 ? (
                     <div className="booking-modal-main">
                       <section className="booking-choice">
                         <div className="booking-illustration booking-illustration-city" aria-hidden="true">
-                          <span className="booking-building" />
+                          {/* <span className="booking-building" />
                           <span className="booking-house" />
                           <span className="booking-person-search" />
-                          <span className="booking-magnifier" />
+                          <span className="booking-magnifier" /> */}
                         </div>
                         <h3 className="booking-choice-title">Select Project For Booking</h3>
                         <p className="booking-choice-copy">Start by selecting a project that you like and we will guide you further</p>
@@ -3599,23 +3653,42 @@ const UserPreview = () => {
 
                       <section className="booking-choice">
                         <div className="booking-illustration booking-illustration-phone" aria-hidden="true">
-                          <span className="booking-phone">
+                          {/* <span className="booking-phone">
                             <span className="booking-phone-house" />
                             <span className="booking-phone-button" />
                           </span>
-                          <span className="booking-person-unit" />
+                          <span className="booking-person-unit" /> */}
                         </div>
                         <h3 className="booking-choice-title">Quick Unit Selection</h3>
                         <p className="booking-choice-copy">Know your unit? Select it here and proceed to book directly.</p>
                         <div className="booking-choice-field">
                           <label htmlFor="booking-unit-quick">Select Unit</label>
-                          <input
+                          <select
                             id="booking-unit-quick"
                             name="unit"
-                            value={bookingForm.unit}
-                            onChange={handleBookingChange}
-                            placeholder="Enter unit"
-                          />
+                            value={selectedBookingUnit ? getBookingUnitOptionValue(selectedBookingUnit) : ""}
+                            onChange={(event) => {
+                              const unit = visibleBookingUnits.find(
+                                (item) => getBookingUnitOptionValue(item) === event.target.value
+                              );
+                              if (unit) handleBookingUnitSelect(unit);
+                              else setBookingForm((prev) => ({ ...prev, unit: "", unitId: "" }));
+                            }}
+                            disabled={!visibleBookingUnits.length}
+                          >
+                            <option value="">
+                              {bookingForm.projectId || bookingForm.projectDetails
+                                ? visibleBookingUnits.length
+                                  ? "Select Unit"
+                                  : "No units found"
+                                : "Select project first"}
+                            </option>
+                            {visibleBookingUnits.map((unit) => (
+                              <option key={`quick-${getBookingUnitOptionValue(unit)}`} value={getBookingUnitOptionValue(unit)}>
+                                {getBookingUnitOptionLabel(unit)}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       </section>
                     </div>
@@ -3745,9 +3818,11 @@ const UserPreview = () => {
                             <select
                               id="booking-unit-final"
                               name="unit"
-                              value={bookingForm.unit}
+                              value={selectedBookingUnit ? getBookingUnitOptionValue(selectedBookingUnit) : ""}
                               onChange={(event) => {
-                                const unit = visibleBookingUnits.find((item) => item.name === event.target.value);
+                                const unit = visibleBookingUnits.find(
+                                  (item) => getBookingUnitOptionValue(item) === event.target.value
+                                );
                                 if (unit) handleBookingUnitSelect(unit);
                                 else setBookingForm((prev) => ({ ...prev, unit: "", unitId: "" }));
                               }}
@@ -3755,20 +3830,15 @@ const UserPreview = () => {
                             >
                               <option value="">Select Unit</option>
                               {visibleBookingUnits.map((unit) => (
-                                <option key={`${unit.groupId}-select-${unit.id}`} value={unit.name}>
-                                  {unit.name || `Unit ${unit.unitIndex || unit.id}`}
+                                <option key={`final-${getBookingUnitOptionValue(unit)}`} value={getBookingUnitOptionValue(unit)}>
+                                  {getBookingUnitOptionLabel(unit)}
                                 </option>
                               ))}
                             </select>
                           ) : (
-                            <input
-                            id="booking-unit-final"
-                            name="unit"
-                            value={bookingForm.unit}
-                            onChange={handleBookingChange}
-                            placeholder="Enter unit"
-                            required
-                            />
+                            <select id="booking-unit-final" name="unit" value="" disabled required>
+                              <option value="">No admin-created units found</option>
+                            </select>
                           )}
                         </label>
                         <div className="booking-project-summary">
@@ -4160,69 +4230,7 @@ const UserPreview = () => {
                     </div>
                   )}
 
-                  <input name="customerName" type="hidden" value={bookingForm.customerName} readOnly />
-                  <input name="stage" type="hidden" value={bookingForm.stage} readOnly />
-                  <input name="bookedOn" type="hidden" value={bookingForm.bookedOn} readOnly />
-                  <input name="saleableArea" type="hidden" value={bookingForm.saleableArea} readOnly />
-                  <input name="basePrice" type="hidden" value={bookingForm.basePrice} readOnly />
-                  <input name="baseRate" type="hidden" value={bookingForm.baseRate} readOnly />
-
-                  <div className={`booking-modal-footer${bookingStepIndex === 0 ? " is-project-step" : ""}`}>
-                    {bookingStepIndex > 0 && (
-                      <div className="booking-modal-footer-note">
-                        You are taking a booking for <span>{leadName}</span>
-                      </div>
-                    )}
-                    <div className="booking-modal-footer-actions">
-                      <button
-                        type="button"
-                        className="lead-preview-booking-cancel"
-                        onClick={bookingStepIndex === 0 ? handleCloseBookingForm : () => setBookingStepIndex((current) => Math.max(0, current - 1))}
-                      >
-                        {bookingStepIndex === 0 ? "Cancel" : "Previous"}
-                      </button>
-                      {bookingStepIndex === 1 && (
-                        <button
-                          type="button"
-                          className="lead-preview-booking-cancel"
-                          onClick={() =>
-                            setBookingProjectMessage(
-                              bookingForm.unit
-                                ? `${bookingForm.unit} marked as interested.`
-                                : "Select a unit before marking interest."
-                            )
-                          }
-                        >
-                          Mark as Interested
-                        </button>
-                      )}
-                      <button
-                        type="submit"
-                        className="lead-preview-booking-save"
-                        disabled={
-                          isSavingBooking ||
-                          isLoadingBookingProject ||
-                          (bookingStepIndex === 0 && !bookingProjectSelectValue) ||
-                          (bookingStepIndex > 0 && !bookingForm.unit)
-                        }
-                      >
-                        {isSavingBooking
-                          ? "Saving..."
-                          : isLoadingBookingProject
-                            ? "Loading..."
-                            : bookingStepIndex === 0
-                              ? "Next"
-                              : bookingStepIndex === 1
-                                ? "Select Unit"
-                                : bookingStepIndex === 2
-                                  ? "Next"
-                                  : "Confirm Booking"}
-                      </button>
-                    </div>
-                  </div>
-                </form>
-              </div>
-            )}
+            </UserBookingForm>
           </div>
         </div>
       </>

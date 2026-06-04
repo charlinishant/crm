@@ -1,47 +1,38 @@
-.all-task-toolbar {
+.archived-task-toolbar,
+.completed-task-toolbar {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
 }
 
-.all-task-filter-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: nowrap;
-}
-
-.all-task-filter-row .all-task-filter {
+.archived-task-filter,
+.completed-task-filter {
   width: 230px;
   max-width: 230px;
   margin: 0;
 }
 
-.all-task-filter-row .all-task-user-filter {
-  width: 230px;
-  max-width: 230px;
-}
-
-.all-task-total {
+.archived-task-total,
+.completed-task-total {
   margin-top: 16px;
 }
 
-.all-task-table-wrap {
+.status-task-table-wrap {
   background: #ffffff;
   border-radius: 8px;
   margin-top: 18px;
   overflow-x: auto;
 }
 
-.all-task-table-wrap > p {
+.status-task-table-wrap > p {
   color: #111827;
   font-size: 18px;
   font-weight: 600;
   margin: 0 0 14px;
 }
 
-.all-task-table {
+.status-task-table {
   border: 0;
   border-collapse: separate;
   border-spacing: 0;
@@ -49,18 +40,18 @@
   width: 100%;
 }
 
-.all-task-table thead th {
+.status-task-table thead th {
   background: #487fff;
   border: 0;
   color: #ffffff;
+  font-size: 15px;
   font-weight: 600;
+  padding: 12px 8px;
   text-align: left;
   text-transform: capitalize;
-  font-size: 15px;
-  padding: 12px 8px;
 }
 
-.all-task-table tbody td {
+.status-task-table tbody td {
   border: 0;
   border-bottom: 1px solid #e2e8f0;
   color: #475569;
@@ -69,43 +60,33 @@
   vertical-align: middle;
 }
 
-.all-task-table tbody tr:nth-child(even) {
+.status-task-table tbody tr:nth-child(even) {
   background: #f8fafc;
 }
 
-.all-task-table tbody tr:hover,
-.all-task-table tbody tr:nth-child(even):hover {
+.status-task-table tbody tr:hover,
+.status-task-table tbody tr:nth-child(even):hover {
   background: #f1f5f9;
 }
 
-.all-task-title {
+.status-task-title {
   color: #334155;
   font-size: 14px;
   font-weight: 600;
 }
 
-.all-task-subtitle {
+.status-task-subtitle {
   color: #94a3b8;
   font-size: 12px;
   margin-top: 4px;
 }
 
-.all-task-status-select {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 6px;
-  color: #334155;
-  font-size: 13px;
-  min-width: 116px;
-  padding: 7px 10px;
-}
-
-.all-task-action-cell {
+.status-task-action-cell {
   position: relative;
   text-align: center;
 }
 
-.all-task-menu {
+.status-task-menu {
   align-items: center;
   background: #ffffff;
   border: 1px solid #e2e8f0;
@@ -117,19 +98,19 @@
   width: 34px;
 }
 
-.all-task-menu:hover {
+.status-task-menu:hover {
   background: #f8fafc;
   color: #334155;
 }
 
-.all-task-empty {
+.status-task-empty {
   color: #94a3b8;
   font-size: 14px;
   padding: 30px !important;
   text-align: center;
 }
 
-.all-task-pagination {
+.status-task-pagination {
   align-items: center;
   border-top: 1px solid #e2e8f0;
   display: flex;
@@ -139,23 +120,23 @@
   padding-top: 16px;
 }
 
-.all-task-page-info {
+.status-task-page-info {
   color: #64748b;
   font-size: 13px;
 }
 
-.all-task-page-info strong {
+.status-task-page-info strong {
   color: #334155;
   font-weight: 600;
 }
 
-.all-task-page-actions {
+.status-task-page-actions {
   align-items: center;
   display: flex;
   gap: 10px;
 }
 
-.all-task-page-btn {
+.status-task-page-btn {
   align-items: center;
   background: #ffffff;
   border: 1px solid #cbd5e1;
@@ -171,17 +152,17 @@
   padding: 0 14px;
 }
 
-.all-task-page-btn:hover:not(:disabled) {
+.status-task-page-btn:hover:not(:disabled) {
   background: #f8fafc;
   border-color: #94a3b8;
 }
 
-.all-task-page-btn:disabled {
+.status-task-page-btn:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
 
-.all-task-page-count {
+.status-task-page-count {
   align-items: center;
   background: #eff6ff;
   border: 1px solid #bfdbfe;
@@ -197,36 +178,30 @@
 }
 
 @media (max-width: 640px) {
-  .all-task-toolbar {
+  .archived-task-toolbar,
+  .completed-task-toolbar {
     flex-direction: column;
   }
 
-  .all-task-filter-row {
-    width: 100%;
-    flex-wrap: wrap;
-  }
-
-  .all-task-filter-row .all-task-filter,
-  .all-task-filter-row .all-task-user-filter {
+  .archived-task-filter,
+  .archived-task-actions,
+  .completed-task-filter,
+  .completed-task-actions {
     width: 100%;
     max-width: none;
   }
 
-  .all-task-actions {
-    width: 100%;
-  }
-
-  .all-task-pagination {
+  .status-task-pagination {
     align-items: flex-start;
     flex-direction: column;
   }
 
-  .all-task-page-actions {
-    width: 100%;
+  .status-task-page-actions {
     justify-content: space-between;
+    width: 100%;
   }
 
-  .all-task-page-btn {
+  .status-task-page-btn {
     flex: 1;
   }
 }

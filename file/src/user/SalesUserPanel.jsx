@@ -76,7 +76,7 @@ const leadStageFilters = [
   { key: "sourcing", label: "In sourcing" },
   { key: "closing", label: "In closing" },
   { key: "booked", label: "Booked" },
-  { key: "nurture", label: "Nurture" },
+  { key: "Unqualified", label: "Unqualified" },
 ];
 
 const initials = (name) =>
@@ -1111,12 +1111,12 @@ const SalesUserPanel = () => {
                       </button>
                       {openActionLeadId === leadId && (
                         <div className="sales-row-menu">
-                          {/* Lead action menu change: Call, WhatsApp, and Booking actions removed from this dropdown. */}
-                          <button type="button" onClick={() => openLeadPreview(lead)}>
-                            Preview
-                          </button>
+                          {/* Lead action menu change: Call and WhatsApp actions removed from this dropdown. */}
                           <button type="button" onClick={() => openLeadDetails(lead)}>
                             Details
+                          </button>
+                           <button type="button" onClick={() => openLeadPreview(lead, true)}>
+                            Booking Lead
                           </button>
                         </div>
                       )}
