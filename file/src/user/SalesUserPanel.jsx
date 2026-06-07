@@ -686,6 +686,11 @@ const SalesUserPanel = () => {
     { key: "tasks", label: "Tasks", icon: LayoutDashboard, count: panel.stats.tasks },
   ];
 
+  const visibleLeadStageFilters =
+    activeScreen === "bookings"
+      ? [{ key: "all", label: "All" }]
+      : leadStageFilters;
+
   return (
     <div
       className={`sales-panel ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${
@@ -712,6 +717,7 @@ const SalesUserPanel = () => {
                 type="button"
                 onClick={() => {
                   setActiveScreen(item.key);
+                  if (item.key === "bookings") setActiveLeadStage("all");
                   if (item.key === "calls") navigate("/user/sales/calls");
                   if (item.key === "conversation") navigate("/user/sales/conversation");
                   if (item.key === "whatsapp") navigate("/user/sales/whatsapp");
@@ -1058,7 +1064,7 @@ const SalesUserPanel = () => {
               </div>
 
               <div className="sales-stage-tabs" aria-label="Lead stage filters">
-                {leadStageFilters.map((stage) => (
+                {visibleLeadStageFilters.map((stage) => (
                   <button
                     key={stage.key}
                     type="button"
@@ -1113,10 +1119,10 @@ const SalesUserPanel = () => {
                         <div className="sales-row-menu">
                           {/* Lead action menu change: Call and WhatsApp actions removed from this dropdown. */}
                           <button type="button" onClick={() => openLeadDetails(lead)}>
-                            Details
+                            Preview
                           </button>
                            <button type="button" onClick={() => openLeadPreview(lead, true)}>
-                            Booking Lead
+                            Booked Lead
                           </button>
                         </div>
                       )}

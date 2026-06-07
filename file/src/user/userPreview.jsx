@@ -788,7 +788,7 @@ const UserPreview = () => {
       customerName: leadName,
       projectDetails: projectName,
     });
-    setBookingMessage("Fill the booking form for this lead.");
+    setBookingMessage(".");
     setBookingStepIndex(0);
     setBookingFilters(defaultBookingFilters);
     setSelectedBookingTowerId("");
@@ -874,9 +874,9 @@ const UserPreview = () => {
   const paymentScheduleRows = editablePaymentRows.length
     ? editablePaymentRows
     : [
-        { name: "Agreement", towerMilestone: "Agreement", value: 80, taxes: 0, tds: 0 },
-        { name: "Possession", towerMilestone: "Possession", value: 20, taxes: 0, tds: 0 },
-      ];
+      { name: "Agreement", towerMilestone: "Agreement", value: 80, taxes: 0, tds: 0 },
+      { name: "Possession", towerMilestone: "Possession", value: 20, taxes: 0, tds: 0 },
+    ];
   const calculatedPaymentRows = paymentScheduleRows.map((row) => {
     const value = toCleanNumber(row.value);
     const amount = (quotationAgreementValue * value) / 100;
@@ -1073,20 +1073,24 @@ const UserPreview = () => {
         typeof result === "object" && result
           ? result
           : {
-              ...bookingForm,
-              id: Date.now(),
-              leadId,
-              unit: bookingForm.unit,
-              projectDetails: bookingForm.projectDetails,
-              customerName: bookingForm.customerName,
-              bookedOn: bookingForm.bookedOn || bookingConfirmationDate,
-              basePrice: bookingForm.basePrice || quotationAgreementValue,
-              baseRate: bookingForm.baseRate || selectedBookingUnit?.baseRate,
-              saleableArea: bookingForm.saleableArea || selectedBookingUnit?.saleable,
-            };
+            ...bookingForm,
+            id: Date.now(),
+            leadId,
+            unit: bookingForm.unit,
+            projectDetails: bookingForm.projectDetails,
+            customerName: bookingForm.customerName,
+            bookedOn: bookingForm.bookedOn || bookingConfirmationDate,
+            basePrice: bookingForm.basePrice || quotationAgreementValue,
+            baseRate: bookingForm.baseRate || selectedBookingUnit?.baseRate,
+            saleableArea: bookingForm.saleableArea || selectedBookingUnit?.saleable,
+          };
       setBookings((current) => [savedBooking, ...current]);
       setIsBookingFormOpen(false);
       setBookingMessage("Booking saved successfully");
+      navigate("/user/sales?screen=bookings", {
+        replace: true,
+        state: { lead, booking: savedBooking },
+      });
     } catch (error) {
       console.error("Unable to save booking:", error);
       setBookingMessage("Booking could not be saved. Please check backend and database.");
@@ -1099,10 +1103,20 @@ const UserPreview = () => {
     <>
       <>
         <style>{`
-          .preview-page {
+.preview-page {
   min-height: 100vh;
   background: #f8fafc;
   padding: 0 16px 32px;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  color: #1e293b;
+}
+
+.preview-page button,
+.preview-page input,
+.preview-page select,
+.preview-page textarea {
+  font-family: inherit;
 }
 
 .lead-preview-shell {
@@ -1246,6 +1260,33 @@ const UserPreview = () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.booking-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.booking-checkbox input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.booking-checkbox span {
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.booking-checkbox input[type="checkbox"] {
+  width: 12px;
+  height: 12px;
 }
 
 .lead-preview-edit {
@@ -1789,32 +1830,49 @@ const UserPreview = () => {
 }
 
 .booking-modal-main {
+  position: relative;
   flex: 1;
-  display: grid;
-  grid-template-columns: minmax(320px, 1fr) 48px minmax(320px, 1fr);
-  align-items: start;
-  gap: 36px;
-  padding: 24px 64px 18px;
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 60px 80px 96px;
   overflow-y: auto;
+  background: #f8fafc;
 }
 
 .booking-choice {
-  min-height: 0;
+  width: 46%;
+  min-height: 330px;
+  padding: 35px;
+  border: 1px solid #d7dee8;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
+  align-items: stretch;
+  text-align: left;
   justify-content: flex-start;
 }
 
+.booking-choice-icon {
+  width: 46px;
+  height: 46px;
+  border: 1px solid #d7c8f4;
+  border-radius: 10px;
+  background: #f8f5ff;
+  color: #673ab7;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 21px;
+  margin-bottom: 18px;
+}
+
 .booking-illustration {
-  width: min(100%, 300px);
-  height: 185px;
-  margin: 0 auto 18px;
-  position: relative;
-  overflow: visible;
-  transform: scale(0.88);
-  transform-origin: center bottom;
+  display: none;
 }
 
 .booking-illustration-city::before,
@@ -1978,38 +2036,39 @@ const UserPreview = () => {
 }
 
 .booking-choice-title {
-  margin: 0 0 8px;
-  color: #1e293b;
-  font-size: 21px;
+  margin: 0 0 12px;
+  color: #1f2937;
+  font-size: 24px;
   font-weight: 600;
   line-height: 1.25;
 }
 
 .booking-choice-copy {
-  margin: 0;
-  max-width: 520px;
-  color: #334155;
-  font-size: 16px;
+  margin: 0 0 35px;
+  max-width: none;
+  color: #475569;
+  font-size: 15px;
   line-height: 1.45;
+  min-height: 44px;
 }
 
 .booking-divider {
   align-self: center;
   color: #334155;
-  font-size: 18px;
-  font-weight: 600;
-  padding-top: 290px;
+  font-size: 22px;
+  font-weight: 700;
+  padding-top: 0;
 }
 
 .booking-choice-field {
-  width: min(100%, 520px);
-  margin-top: 26px;
+  width: 100%;
+  margin-top: auto;
   text-align: left;
 }
 
 .booking-choice-field label {
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   color: #334155;
   font-size: 13px;
   font-weight: 500;
@@ -2028,31 +2087,38 @@ const UserPreview = () => {
 .booking-choice-field input,
 .booking-choice-field select {
   width: 100%;
-  min-height: 44px;
+  min-height: 42px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   color: #1e293b;
-  font-size: 15px;
-  padding: 0 12px;
+  font-size: 14px;
+  padding: 0 10px;
   background: #ffffff;
+  outline: none;
 }
 
 .booking-choice-note {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  width: calc(100% - 40px);
   color: #334155;
-  font-size: 14px;
-  margin-top: 8px;
+  font-size: 15px;
+  text-align: center;
 }
 
 .booking-choice-note span {
-  color: #5d32c8;
+  color: #6f42c1;
+  font-weight: 500;
 }
 
 .booking-modal-footer {
   min-height: 58px;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
-  gap: 8px;
+  gap: 16px;
   padding: 0 26px;
 }
 
@@ -2069,7 +2135,9 @@ const UserPreview = () => {
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
+  width: auto;
+  margin-left: auto;
 }
 
 .booking-modal-footer.is-project-step {
@@ -2078,24 +2146,25 @@ const UserPreview = () => {
 
 .lead-preview-booking-save,
 .lead-preview-booking-cancel {
-  min-width: 74px;
-  min-height: 38px;
-  border-radius: 5px;
+  min-width: 138px;
+  min-height: 52px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 15px;
-  font-weight: 500;
-  padding: 0 18px;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 0 20px;
   transition: all 0.2s ease;
 }
 
 .lead-preview-booking-save {
-  background: #673ab7;
-  border: 1px solid #673ab7;
+  background: #6f42c1;
+  border: 1px solid #6f42c1;
   color: #ffffff;
 }
 
 .lead-preview-booking-save:hover:not(:disabled) {
-  background: #562aa7;
+  background: #5f35ad;
+  border-color: #5f35ad;
 }
 
 .lead-preview-booking-save:disabled {
@@ -2105,12 +2174,22 @@ const UserPreview = () => {
 
 .lead-preview-booking-cancel {
   background: #ffffff;
-  border: 1px solid #673ab7;
-  color: #111827;
+  border: 1px solid #6f42c1;
+  color: #1f2937;
 }
 
 .lead-preview-booking-cancel:hover {
   background: #f8f5ff;
+  color: #6f42c1;
+}
+
+.lead-preview-booking-save,
+.lead-preview-booking-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  text-align: center;
 }
 
 .booking-modal-alert {
@@ -2126,28 +2205,42 @@ const UserPreview = () => {
 .booking-unit-main {
   flex: 1;
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr) 320px;
-  gap: 0;
-  padding: 14px 14px 10px;
+  grid-template-columns: 300px minmax(0, 1fr) 320px;
+  gap: 20px;
+  padding: 22px;
   overflow-y: auto;
+  background: #ffffff;
 }
 
 .booking-unit-filters,
 .booking-unit-selection,
 .booking-unit-gallery {
-  min-height: 360px;
-  padding: 10px 16px;
+  min-height: 420px;
+  background: #ffffff;
 }
 
-.booking-unit-filters,
+.booking-unit-filters {
+  border: 1px solid #d9e2ef;
+  border-radius: 10px;
+  padding: 22px;
+}
+
 .booking-unit-selection {
-  border-right: 1px solid #d7d7d7;
+  border: 1px solid #d9e2ef;
+  border-radius: 10px;
+  padding: 22px;
+}
+
+.booking-unit-gallery {
+  border: 1px solid #d9e2ef;
+  border-radius: 10px;
+  padding: 22px;
 }
 
 .booking-unit-filter-head,
 .booking-unit-topbar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
 }
@@ -2156,90 +2249,114 @@ const UserPreview = () => {
 .booking-unit-selection h3,
 .booking-unit-gallery h3 {
   margin: 0;
-  color: #343434;
-  font-size: 21px;
-  font-weight: 600;
-  line-height: 1.25;
+  color: #1f2937;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.1;
 }
 
-.booking-clear-filter,
-.booking-change-tower {
+.booking-clear-filter {
   border: 0;
   background: transparent;
-  color: #673ab7;
+  color: #6f42c1;
   cursor: pointer;
-  font-size: 14px;
-  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 0;
+}
+
+.booking-clear-filter:hover {
+  color: #562aa7;
 }
 
 .booking-tower-select {
-  display: inline-flex;
+  display: grid;
+  grid-template-columns: auto minmax(210px, 1fr);
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   margin: 0;
-  color: #673ab7;
-  font-size: 13px;
-  font-weight: 500;
+  min-width: min(100%, 520px);
 }
 
-.booking-tower-select span {
-  text-decoration: underline;
+.booking-tower-action {
+  min-height: 38px;
+  border: 1px solid #6f42c1;
+  border-radius: 6px;
+  color: #6f42c1;
+  background: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0 14px;
+  text-decoration: none;
+  white-space: nowrap;
 }
 
 .booking-tower-select select {
-  min-height: 32px;
-  border: 1px solid #cbd5e1;
-  border-radius: 4px;
-  color: #4b5563;
-  font-size: 13px;
-  padding: 0 10px;
+  min-height: 40px;
+  border: 1px solid #d9e2ef;
+  border-radius: 6px;
+  color: #1f2937;
+  font-size: 14px;
+  padding: 0 12px;
 }
 
 .booking-filter-block {
-  border-top: 1px solid #dddddd;
-  padding: 14px 0 12px;
+  border-top: 1px solid #d9e2ef;
+  padding: 18px 0;
 }
 
 .booking-filter-block:first-of-type {
-  margin-top: 18px;
+  margin-top: 14px;
 }
 
 .booking-filter-label {
-  margin-bottom: 10px;
-  color: #3f3f46;
+  margin-bottom: 12px;
+  color: #1f2937;
   font-size: 15px;
   font-weight: 700;
+}
+
+.booking-filter-title {
+  margin: 0;
+  color: #1f2937;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
 }
 
 .booking-pill-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
 
 .booking-filter-pill {
   min-height: 38px;
-  border: 1px solid #d1d1d1;
+  border: 1px solid #d9e2ef;
   border-radius: 999px;
   background: #ffffff;
-  color: #666666;
+  color: #64748b;
   cursor: pointer;
   font-size: 14px;
+  font-weight: 500;
   padding: 0 16px;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.booking-filter-pill:hover {
+  border-color: #6f42c1;
+  color: #6f42c1;
+  box-shadow: 0 0 0 3px rgba(111, 66, 193, 0.08);
 }
 
 .booking-filter-pill.is-selected {
-  border-color: #673ab7;
-  background: #673ab7;
+  border-color: #6f42c1;
+  background: #6f42c1;
   color: #ffffff;
-}
-
-.booking-unit-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 16px;
+  box-shadow: 0 8px 18px rgba(111, 66, 193, 0.18);
 }
 
 .booking-radio,
@@ -2247,8 +2364,9 @@ const UserPreview = () => {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #666666;
-  font-size: 15px;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .booking-radio input,
@@ -2258,18 +2376,49 @@ const UserPreview = () => {
   accent-color: #673ab7;
 }
 
+.booking-checkbox input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  border: 1px solid #d9e2ef;
+  border-radius: 6px;
+  background: #ffffff;
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  transition: background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.booking-checkbox input:checked {
+  background: #6f42c1;
+  border-color: #6f42c1;
+  box-shadow: 0 0 0 3px rgba(111, 66, 193, 0.12);
+}
+
+.booking-checkbox input:checked::after {
+  content: "";
+  width: 7px;
+  height: 13px;
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  margin-bottom: 2px;
+}
+
 .booking-tower-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 18px;
+  margin: 16px 0 18px;
 }
 
 .booking-tower-name {
-  color: #43a047;
-  font-size: 15px;
-  font-weight: 500;
+  color: #2563eb;
+  font-size: 14px;
+  font-weight: 700;
   text-transform: uppercase;
 }
 
@@ -2278,15 +2427,15 @@ const UserPreview = () => {
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
-  margin-bottom: 48px;
+  margin-bottom: 22px;
 }
 
 .booking-unit-results {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin: -28px auto 14px;
-  width: min(100%, 520px);
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin: 0 0 18px;
+  width: 100%;
 }
 
 .booking-unit-results.is-grid {
@@ -2294,19 +2443,25 @@ const UserPreview = () => {
 }
 
 .booking-unit-option {
-  border: 1px solid #d7d7d7;
-  border-radius: 6px;
+  border: 1px solid #d9e2ef;
+  border-radius: 8px;
   background: #ffffff;
-  color: #344054;
+  color: #1f2937;
   cursor: pointer;
-  min-height: 40px;
-  padding: 6px 10px;
+  min-height: 82px;
+  padding: 12px 14px;
   text-align: left;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.booking-unit-option:hover {
+  border-color: #6f42c1;
+  box-shadow: 0 8px 20px rgba(111, 66, 193, 0.12);
 }
 
 .booking-unit-option.is-selected {
-  border-color: #673ab7;
-  box-shadow: 0 0 0 1px #673ab7;
+  border-color: #6f42c1;
+  box-shadow: 0 0 0 2px rgba(111, 66, 193, 0.22);
   background: #fbf9ff;
 }
 
@@ -2319,9 +2474,9 @@ const UserPreview = () => {
 }
 
 .booking-unit-option span {
-  color: #667085;
+  color: #64748b;
   font-size: 12px;
-  margin-top: 2px;
+  margin-top: 5px;
 }
 
 .booking-legend-item {
@@ -2415,10 +2570,13 @@ const UserPreview = () => {
 }
 
 .booking-gallery-map {
-  width: 238px;
-  height: 270px;
-  margin: 10px auto 0;
-  border: 1px solid #d4d4d4;
+  width: 100%;
+  max-width: 280px;
+  height: 250px;
+  margin: 18px auto 0;
+  border: 1px solid #d9e2ef;
+  border-radius: 8px;
+  overflow: hidden;
   background:
     radial-gradient(circle at 52% 28%, #e6eef0 0 6%, transparent 7%),
     radial-gradient(circle at 48% 64%, #7ec9d2 0 9%, transparent 10%),
@@ -2440,30 +2598,30 @@ const UserPreview = () => {
 }
 
 .booking-unit-gallery .booking-choice-field {
-  width: 238px;
-  margin: 10px auto 0;
+  width: 100%;
+  margin: 18px auto 0;
 }
 
 .booking-project-summary {
-  width: 238px;
-  margin: 8px auto 0;
-  color: #475467;
+  width: 100%;
+  margin: 12px auto 0;
+  color: #64748b;
   display: grid;
   gap: 6px;
   font-size: 13px;
 }
 
 .booking-project-summary strong {
-  color: #343434;
+  color: #1f2937;
 }
 
 .booking-unit-empty-state {
-  width: min(100%, 520px);
-  margin: -28px auto 14px;
+  width: 100%;
+  margin: 0 0 18px;
   border: 1px dashed #d0d5dd;
-  border-radius: 6px;
-  color: #667085;
-  padding: 12px;
+  border-radius: 8px;
+  color: #64748b;
+  padding: 18px;
   text-align: center;
 }
 
@@ -2542,8 +2700,8 @@ const UserPreview = () => {
 .booking-quote-controls {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 28px 32px;
-  padding: 20px 22px 16px;
+  gap: 15px;
+  padding: 20px;
 }
 
 .booking-quote-controls label,
@@ -2557,13 +2715,13 @@ const UserPreview = () => {
 .booking-quote-controls select,
 .booking-quote-inventory select {
   width: 100%;
-  min-height: 41px;
+  min-height: 40px;
   border: 1px solid #cbd5e1;
-  border-radius: 3px;
+  border-radius: 6px;
   background: #ffffff;
-  color: #666666;
+  color: #1e293b;
   font-size: 14px;
-  padding: 0 12px;
+  padding: 0 10px;
 }
 
 .booking-quote-controls input:focus,
@@ -2578,8 +2736,8 @@ const UserPreview = () => {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(0, 0.9fr) auto;
   align-items: end;
-  gap: 32px;
-  padding: 16px 22px 24px;
+  gap: 15px;
+  padding: 16px 20px 24px;
   border-bottom: 1px solid #eceff3;
 }
 
@@ -2684,11 +2842,11 @@ const UserPreview = () => {
 
 .booking-quote-row select {
   width: 100%;
-  min-height: 42px;
+  min-height: 40px;
   border: 1px solid #cbd5e1;
-  border-radius: 4px;
+  border-radius: 6px;
   background: #ffffff;
-  color: #666666;
+  color: #1e293b;
   font-size: 14px;
   padding: 0 10px;
 }
@@ -2764,8 +2922,8 @@ const UserPreview = () => {
   width: 100%;
   min-height: 40px;
   border: 1px solid #cbd5e1;
-  border-radius: 4px;
-  color: #555555;
+  border-radius: 6px;
+  color: #1e293b;
   font-size: 14px;
   padding: 0 10px;
 }
@@ -2790,7 +2948,7 @@ const UserPreview = () => {
 .booking-confirmation-title {
   margin: 0 0 20px;
   color: #666666;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
 }
 
@@ -2815,8 +2973,8 @@ const UserPreview = () => {
 .booking-confirmation-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px 28px;
-  padding: 10px 14px 28px;
+  gap: 15px;
+  padding: 16px 14px 24px;
 }
 
 .booking-confirmation-field,
@@ -2854,13 +3012,13 @@ const UserPreview = () => {
 .booking-confirmation-input input,
 .booking-confirmation-input select {
   width: 100%;
-  min-height: 41px;
+  min-height: 40px;
   border: 1px solid #cbd5e1;
-  border-radius: 4px;
+  border-radius: 6px;
   background: #ffffff;
-  color: #4b5563;
+  color: #1e293b;
   font-size: 14px;
-  padding: 0 12px;
+  padding: 0 10px;
 }
 
 .booking-applicant-grid,
@@ -2868,8 +3026,8 @@ const UserPreview = () => {
 .booking-custom-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 20px 34px;
-  padding: 14px 14px 20px;
+  gap: 15px;
+  padding: 16px 14px 20px;
 }
 
 .booking-add-coapplicant {
@@ -2887,8 +3045,8 @@ const UserPreview = () => {
 .booking-confirmation-two {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 14px;
-  padding: 26px 14px 30px;
+  gap: 15px;
+  padding: 20px 14px 24px;
 }
 
 .booking-confirmation-wide {
@@ -2936,6 +3094,17 @@ const UserPreview = () => {
   color: #64748b;
   font-size: 18px;
   cursor: pointer;
+}
+
+.booking-tower-select-inline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.booking-tower-select-inline span {
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .lead-preview-stage-pill {
@@ -3105,9 +3274,10 @@ const UserPreview = () => {
     min-width: 96px;
   }
 
-  .booking-modal {
-    overflow-y: auto;
-  }
+.booking-modal {
+  font-family: inherit;
+  overflow-y: auto;
+}
 
   .booking-modal-header {
     padding: 0 16px;
@@ -3133,9 +3303,9 @@ const UserPreview = () => {
   }
 
   .booking-modal-main {
-    grid-template-columns: 1fr;
+    flex-direction: column;
     gap: 20px;
-    padding: 24px 18px;
+    padding: 30px 20px 82px;
   }
 
   .booking-unit-main {
@@ -3145,22 +3315,20 @@ const UserPreview = () => {
   }
 
   .booking-unit-filters,
-  .booking-unit-selection {
-    border-right: 0;
-    border-bottom: 1px solid #d7d7d7;
-  }
-
-  .booking-unit-filters,
   .booking-unit-selection,
   .booking-unit-gallery {
     min-height: auto;
-    padding: 18px 0;
+    padding: 18px;
   }
 
-  .booking-unit-toolbar,
   .booking-unit-topbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .booking-tower-select {
+    grid-template-columns: 1fr;
+    width: 100%;
   }
 
   .booking-legend {
@@ -3169,7 +3337,7 @@ const UserPreview = () => {
 
   .booking-unit-results {
     grid-template-columns: 1fr;
-    margin: 0 auto 24px;
+    margin: 0 0 24px;
   }
 
   .booking-unit-results.is-grid {
@@ -3181,23 +3349,21 @@ const UserPreview = () => {
   }
 
   .booking-choice {
+    width: 100%;
     min-height: auto;
   }
 
   .booking-illustration {
-    width: min(100%, 280px);
-    height: 170px;
-    transform: scale(0.8);
-    transform-origin: center top;
-    margin-bottom: -10px;
+    display: none;
   }
 
   .booking-divider {
+    margin: 10px 0;
     padding-top: 0;
   }
 
   .booking-choice-title {
-    font-size: 20px;
+    font-size: 26px;
   }
 
   .booking-choice-copy {
@@ -3206,6 +3372,10 @@ const UserPreview = () => {
 
   .booking-choice-field {
     margin-top: 20px;
+  }
+
+  .booking-choice-note {
+    bottom: 26px;
   }
 
   .booking-modal-alert {
@@ -3243,7 +3413,7 @@ const UserPreview = () => {
             </div>
 
             <div className="lead-preview-body">
-            
+
               <div className="lead-preview-summary">
                 <div className="lead-preview-person">
                   <span className="lead-preview-flag" aria-label="India" />
@@ -3605,61 +3775,52 @@ const UserPreview = () => {
                 )
               }
             >
-                  {bookingStepIndex === 0 ? (
-                    <div className="booking-modal-main">
-                      <section className="booking-choice">
-                        <div className="booking-illustration booking-illustration-city" aria-hidden="true">
-                          {/* <span className="booking-building" />
-                          <span className="booking-house" />
-                          <span className="booking-person-search" />
-                          <span className="booking-magnifier" /> */}
+              {bookingStepIndex === 0 ? (
+                <div className="booking-modal-main">
+                  <section className="booking-choice">
+                    <div className="booking-choice-icon" aria-hidden="true">
+                      <FaBriefcase />
+                    </div>
+                    <h6 className="booking-choice-title">Select Project For Booking</h6>
+                    <p className="booking-choice-copy">Start by selecting a project that you like and we will guide you further</p>
+                    <div className="booking-choice-field">
+                      <label htmlFor="booking-project">Select Project</label>
+                      <select
+                        id="booking-project"
+                        name="projectDetails"
+                        value={bookingProjectSelectValue}
+                        onChange={handleBookingProjectChange}
+                      >
+                        <option value="">
+                          {bookingProjects.length ? "Select a Project" : bookingForm.projectDetails || "Loading projects..."}
+                        </option>
+                        {bookingForm.projectDetails && !selectedBookingProject && (
+                          <option value="__lead_project__">
+                            {bookingForm.projectDetails}
+                          </option>
+                        )}
+                        {bookingProjects.map((project) => (
+                          <option key={project.id} value={project.id}>
+                            {project.name}
+                          </option>
+                        ))}
+                      </select>
+                      {bookingProjectMessage && (
+                        <div className="booking-modal-alert is-error" style={{ margin: "10px 0 0" }}>
+                          {bookingProjectMessage}
                         </div>
-                        <h3 className="booking-choice-title">Select Project For Booking</h3>
-                        <p className="booking-choice-copy">Start by selecting a project that you like and we will guide you further</p>
-                        <div className="booking-choice-field">
-                          <label htmlFor="booking-project">Select Project</label>
-                          <select
-                            id="booking-project"
-                            name="projectDetails"
-                            value={bookingProjectSelectValue}
-                            onChange={handleBookingProjectChange}
-                          >
-                            <option value="">
-                              {bookingProjects.length ? "Select a Project" : bookingForm.projectDetails || "Loading projects..."}
-                            </option>
-                            {bookingForm.projectDetails && !selectedBookingProject && (
-                              <option value="__lead_project__">
-                                {bookingForm.projectDetails}
-                              </option>
-                            )}
-                            {bookingProjects.map((project) => (
-                              <option key={project.id} value={project.id}>
-                                {project.name}
-                              </option>
-                            ))}
-                          </select>
-                          {bookingProjectMessage && (
-                            <div className="booking-modal-alert is-error" style={{ margin: "10px 0 0" }}>
-                              {bookingProjectMessage}
-                            </div>
-                          )}
-                          <div className="booking-choice-note">
-                            You are taking a booking for <span>{leadName}</span>
-                          </div>
-                        </div>
-                      </section>
+                      )}
 
-                      <div className="booking-divider">OR</div>
+                    </div>
+                  </section>
+
+                  {/* <div className="booking-divider">OR</div>
 
                       <section className="booking-choice">
-                        <div className="booking-illustration booking-illustration-phone" aria-hidden="true">
-                          {/* <span className="booking-phone">
-                            <span className="booking-phone-house" />
-                            <span className="booking-phone-button" />
-                          </span>
-                          <span className="booking-person-unit" /> */}
+                        <div className="booking-choice-icon" aria-hidden="true">
+                          <FaHome />
                         </div>
-                        <h3 className="booking-choice-title">Quick Unit Selection</h3>
+                        <h6 className="booking-choice-title">Quick Unit Selection</h6>
                         <p className="booking-choice-copy">Know your unit? Select it here and proceed to book directly.</p>
                         <div className="booking-choice-field">
                           <label htmlFor="booking-unit-quick">Select Unit</label>
@@ -3691,544 +3852,535 @@ const UserPreview = () => {
                           </select>
                         </div>
                       </section>
+
+                      */}
+                  <div className="booking-choice-note">
+                    You are taking a booking for <span>{leadName}</span>
+                  </div>
+
+                </div>
+
+
+              ) : bookingStepIndex === 1 ? (
+                <div className="booking-unit-main">
+                  <aside className="booking-unit-filters">
+                    <div className="booking-unit-filter-head">
+                      <h6 className="booking-filter-title">Filters By</h6>
+                      <button type="button" className="booking-clear-filter" onClick={handleClearBookingFilters}>
+                        Clear Filters
+                      </button>
                     </div>
-                  ) : bookingStepIndex === 1 ? (
-                    <div className="booking-unit-main">
-                      <aside className="booking-unit-filters">
-                        <div className="booking-unit-filter-head">
-                          <h3>Filters By</h3>
-                          <button type="button" className="booking-clear-filter" onClick={handleClearBookingFilters}>
-                            Clear Filters
-                          </button>
-                        </div>
 
-                        {[
-                          ["propertyPurpose", "Property purpose", ["Sale", "Resale", "Rental"]],
-                          ["unitType", "Unit type", ["Residential", "Commercial", "Plot"]],
-                          ["propertyType", "Property type", ["Villa", "Bungalow", "Apartment"]],
-                        ].map(([filterKey, label, options]) => (
-                          <div className="booking-filter-block" key={label}>
-                            <div className="booking-filter-label">{label}</div>
-                            <div className="booking-pill-row">
-                              {options.map((option) => (
-                                <button
-                                  type="button"
-                                  className={`booking-filter-pill${bookingFilters[filterKey] === option ? " is-selected" : ""}`}
-                                  key={option}
-                                  onClick={() => handleBookingFilterChange(filterKey, option)}
-                                >
-                                  {option}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </aside>
-
-                      <section className="booking-unit-selection">
-                        <div className="booking-unit-toolbar">
-                          <label className="booking-radio">
-                            <input
-                              type="radio"
-                              name="unitView"
-                              checked={bookingUnitView === "grid"}
-                              onChange={() => setBookingUnitView("grid")}
-                            />
-                            <span>Grid Layout</span>
-                          </label>
-                          <label className="booking-radio">
-                            <input
-                              type="radio"
-                              name="unitView"
-                              checked={bookingUnitView === "listing"}
-                              onChange={() => setBookingUnitView("listing")}
-                            />
-                            <span>Listing View</span>
-                          </label>
+                    {[
+                      ["propertyPurpose", "Property purpose", ["Sale", "Resale", "Rental"]],
+                      ["unitType", "Unit type", ["Residential", "Commercial", "Plot"]],
+                      // ["propertyType", "Property type", ["Villa", "Bungalow", "Apartment"]],
+                    ].map(([filterKey, label, options]) => (
+                      <div className="booking-filter-block" key={label}>
+                        <div className="booking-filter-label">{label}</div>
+                        <div className="booking-pill-row">
+                          {options.map((option) => (
+                            <button
+                              type="button"
+                              className={`booking-filter-pill${bookingFilters[filterKey] === option ? " is-selected" : ""}`}
+                              key={option}
+                              onClick={() => handleBookingFilterChange(filterKey, option)}
+                            >
+                              {option}
+                            </button>
+                          ))}
                         </div>
+                      </div>
+                    ))}
+                  </aside>
 
-                        <div className="booking-unit-topbar">
-                          <h3>Select Unit</h3>
-                          <label className="booking-tower-select">
-                            <span>Change Tower/Cluster</span>
-                            <select value={selectedBookingTowerId} onChange={handleBookingTowerChange}>
-                              <option value="">All Towers</option>
-                              {bookingTowerOptions.map((tower) => (
-                                <option key={tower.id} value={tower.id}>
-                                  {tower.name}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <label className="booking-checkbox">
-                            <input
-                              type="checkbox"
-                              checked={shouldCheckAvailability}
-                              onChange={(event) => setShouldCheckAvailability(event.target.checked)}
-                            />
-                            <span>Check Availability</span>
-                          </label>
-                        </div>
-                        <div className="booking-tower-row">
-                          <span className="booking-tower-name">{activeTowerName}</span>
-                        </div>
+                  <section className="booking-unit-selection">
+                    <div className="booking-unit-topbar">
+                      {/* <p style={{ fontSize: "12px" }}>Select Unit</p> */}
+                      <label className="booking-tower-select-inline">
+                        <span style={{ fontWeight: "600", whiteSpace: "nowrap" }}>Select Unit</span>
 
-                        <div className="booking-legend">
+                        <select
+                          value={selectedBookingTowerId}
+                          onChange={handleBookingTowerChange}
+                        >
+                          <option value="">All Towers</option>
+                          {bookingTowerOptions.map((tower) => (
+                            <option key={tower.id} value={tower.id}>
+                              {tower.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="booking-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={shouldCheckAvailability}
+                          onChange={(event) => setShouldCheckAvailability(event.target.checked)}
+                        />
+                        <span>Check Availability</span>
+                      </label>
+                    </div>
+                    <div className="booking-tower-row">
+                      <span className="booking-tower-name">{activeTowerName}</span>
+                    </div>
+
+                    {/* <div className="booking-legend">
                           <span className="booking-legend-item"><span className="booking-swatch filtered" />Filtered and Available</span>
                           <span className="booking-legend-item"><span className="booking-swatch interested" />Interested</span>
                           <span className="booking-legend-item"><span className="booking-swatch" />Selected</span>
                           <span className="booking-legend-item"><strong>N/A</strong> Unavailable</span>
-                        </div>
+                        </div> */}
 
-                        {visibleBookingUnits.length > 0 ? (
-                          <div className={`booking-unit-results${bookingUnitView === "grid" ? " is-grid" : ""}`}>
-                            {visibleBookingUnits.map((unit) => (
-                              <button
-                                type="button"
-                                className={`booking-unit-option${bookingForm.unit === unit.name ? " is-selected" : ""}`}
-                                key={`${unit.groupId}-${unit.id}`}
-                                onClick={() => handleBookingUnitSelect(unit)}
-                              >
-                                <strong>{unit.name || `Unit ${unit.unitIndex || unit.id}`}</strong>
-                                <span>Floor: {unit.floor || unit.floorPlan?.name || "-"} | Carpet Area: {unit.carpet || "-"} Sq. Ft.</span>
-                                <span>Saleable Area: {unit.saleable || "-"} Sq. Ft. | Rs. {Number(unit.basePrice || 0).toLocaleString("en-IN")}</span>
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="booking-unit-empty-state">
-                            {flattenedBookingUnits.length
-                              ? "No units match the selected filters."
-                              : bookingProjectMessage || "No units found for this project yet."}
-                          </div>
+                    {visibleBookingUnits.length > 0 ? (
+                      <div className={`booking-unit-results${bookingUnitView === "grid" ? " is-grid" : ""}`}>
+                        {visibleBookingUnits.map((unit) => (
+                          <button
+                            type="button"
+                            className={`booking-unit-option${bookingForm.unit === unit.name ? " is-selected" : ""}`}
+                            key={`${unit.groupId}-${unit.id}`}
+                            onClick={() => handleBookingUnitSelect(unit)}
+                          >
+                            <strong>{unit.name || `Unit ${unit.unitIndex || unit.id}`}</strong>
+                            <span>Floor: {unit.floor || unit.floorPlan?.name || "-"} | Carpet Area: {unit.carpet || "-"} Sq. Ft.</span>
+                            <span>Saleable Area: {unit.saleable || "-"} Sq. Ft. | Rs. {Number(unit.basePrice || 0).toLocaleString("en-IN")}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="booking-unit-empty-state">
+                        {flattenedBookingUnits.length
+                          ? "No units match the selected filters."
+                          : bookingProjectMessage || "No units found for this project yet."}
+                      </div>
+                    )}
+
+                    <div className="booking-unit-empty-art" aria-hidden="true">
+                      <span className="booking-unit-agent" />
+                      <span className="booking-unit-card-art" />
+                    </div>
+                  </section>
+
+                  <aside className="booking-unit-gallery">
+                    <h6>Gallery and Unit Details</h6>
+                    <div className="booking-gallery-map" aria-hidden="true" />
+                    <label className="booking-choice-field" htmlFor="booking-unit-final">
+                      <span>Select Unit</span>
+                      {visibleBookingUnits.length > 0 ? (
+                        <select
+                          id="booking-unit-final"
+                          name="unit"
+                          value={selectedBookingUnit ? getBookingUnitOptionValue(selectedBookingUnit) : ""}
+                          onChange={(event) => {
+                            const unit = visibleBookingUnits.find(
+                              (item) => getBookingUnitOptionValue(item) === event.target.value
+                            );
+                            if (unit) handleBookingUnitSelect(unit);
+                            else setBookingForm((prev) => ({ ...prev, unit: "", unitId: "" }));
+                          }}
+                          required
+                        >
+                          <option value="">Select Unit</option>
+                          {visibleBookingUnits.map((unit) => (
+                            <option key={`final-${getBookingUnitOptionValue(unit)}`} value={getBookingUnitOptionValue(unit)}>
+                              {getBookingUnitOptionLabel(unit)}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <select id="booking-unit-final" name="unit" value="" disabled required>
+                          <option value="">No admin-created units found</option>
+                        </select>
+                      )}
+                    </label>
+                    <div className="booking-project-summary">
+                      <strong>{bookingProjectDetails?.name || bookingForm.projectDetails || "Project details"}</strong>
+                      <span>{bookingProjectDetails?.projectType || "Residential"} · {visibleBookingUnits.length} of {flattenedBookingUnits.length} units shown</span>
+                      {selectedBookingUnit && (
+                        <>
+                          <span>{selectedBookingUnit.tower?.name || activeTowerName} | Floor {selectedBookingUnit.floor || quotationFloor}</span>
+                          <span>Carpet {selectedBookingUnit.carpet || "-"} Sq. Ft. | Saleable {selectedBookingUnit.saleable || "-"} Sq. Ft.</span>
+                          <span>Base price Rs. {Number(selectedBookingUnit.basePrice || 0).toLocaleString("en-IN")}</span>
+                        </>
+                      )}
+                    </div>
+                  </aside>
+                </div>
+              ) : bookingStepIndex === 2 ? (
+                <div className="booking-quote-main">
+                  <div className="booking-quote-tabs" aria-label="Quotation tabs">
+                    <button type="button" className={quotationTab === "unit" ? "is-active" : ""} onClick={() => setQuotationTab("unit")}>Unit Details</button>
+                    <button type="button" className={quotationTab === "cost" ? "is-active" : ""} onClick={() => setQuotationTab("cost")}>Cost Sheet</button>
+                    <button type="button" className={quotationTab === "payment" ? "is-active" : ""} onClick={() => setQuotationTab("payment")}>Payment Schedule</button>
+                  </div>
+
+                  {quotationTab === "unit" && (
+                    <section className="booking-quote-unit-strip">
+                      <div>
+                        <span>Name</span>
+                        <strong>{quotationUnitName}</strong>
+                        <span>Bedrooms</span>
+                        <strong>{formatBookingDetail(selectedBookingUnit?.bedrooms, "3")}</strong>
+                        <span>Base Rate</span>
+                        <strong>Rs. {quotationBaseRate}</strong>
+                        <span>Agreement Value</span>
+                      </div>
+                      <div>
+                        <span>Status</span>
+                        <strong>{formatBookingDetail(selectedBookingUnit?.status, "Available")}</strong>
+                        <span>Bathrooms</span>
+                        <strong>{formatBookingDetail(selectedBookingUnit?.bathrooms, "2")}</strong>
+                        <span>Floor Rise</span>
+                      </div>
+                      <div>
+                        <span>Floor</span>
+                        <strong>{quotationFloor}</strong>
+                        <span>Carpet</span>
+                        <strong>{formatBookingDetail(selectedBookingUnit?.carpet, "967")}</strong>
+                        <span>Effective Rate</span>
+                      </div>
+                      <div>
+                        <span>Project Tower Name</span>
+                        <strong>{quotationTowerName}</strong>
+                        <span>Saleable</span>
+                        <strong>{quotationSaleable}</strong>
+                        <span>Total Price</span>
+                      </div>
+                    </section>
+                  )}
+
+                  {quotationTab === "unit" && (
+                    <section className="booking-quote-controls">
+                      <label>
+                        <span>Select Scheme</span>
+                        <select value={quotationScheme} onChange={(event) => setQuotationScheme(event.target.value)}>
+                          <option value="default">Default Scheme</option>
+                          <option value="construction-linked">Construction Linked Scheme</option>
+                          <option value="possession-linked">Possession Linked Scheme</option>
+                          <option value="custom">Custom Scheme</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>Select Payment Schedule</span>
+                        <select value={quotationPaymentPlan} onChange={handlePaymentPlanChange}>
+                          <option value="80-20">80:20 Payment Schedule</option>
+                          <option value="60-40">60:40 Payment Schedule</option>
+                          <option value="100">100% Agreement Payment</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>Quotation Name</span>
+                        <input value={quotationName} readOnly />
+                      </label>
+                      <label>
+                        <span>Payment Schedule Name</span>
+                        <input value={quotationName} readOnly />
+                      </label>
+                    </section>
+                  )}
+
+                  {quotationTab === "unit" && (
+                    <section className="booking-quote-inventory">
+                      <label>
+                        <span>Additional Inventory Configuration</span>
+                        <select defaultValue="">
+                          <option value="">Choose Inventory Configuration</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>Additional Inventory</span>
+                        <select defaultValue="">
+                          <option value="">Choose Additional Inventory</option>
+                        </select>
+                      </label>
+                      <button type="button" className="booking-quote-apply">Apply</button>
+                    </section>
+                  )}
+
+                  {quotationTab === "cost" && (
+                    <section className="booking-quote-cost">
+                      <h6>Cost Sheet</h6>
+                      <div className="booking-quote-table" role="table" aria-label="Cost sheet">
+                        <div className="booking-quote-row is-head" role="row">
+                          <span>Sr. No.</span>
+                          <span>Field Name</span>
+                          <span>Original Value</span>
+                          <span>Discount Or AdHoc Cost</span>
+                          <span>Input Field</span>
+                          <span>New Value</span>
+                        </div>
+                        {quotationCostRows.map((row) =>
+                          row.type === "section" ? (
+                            <div className="booking-quote-row is-section" role="row" key={`${row.serial}-${row.name}`}>
+                              <strong>{row.serial} {row.name}</strong>
+                            </div>
+                          ) : (
+                            <div className={`booking-quote-row is-line${row.highlight ? " is-highlight" : ""}`} role="row" key={`${row.serial}-${row.name}`}>
+                              <span>{row.serial}</span>
+                              <span>{row.name}</span>
+                              <span>Rs. {formatCurrency(row.originalValue)}</span>
+                              <span>
+                                <select
+                                  value={row.costType || "Discount"}
+                                  onChange={(event) => handleCostRowChange(row.serial, "costType", event.target.value)}
+                                  aria-label={`${row.name} discount type`}
+                                >
+                                  <option value="Discount">Discount</option>
+                                  <option value="AdHoc Cost">AdHoc Cost</option>
+                                </select>
+                              </span>
+                              <span>
+                                <label className="booking-quote-money-field">
+                                  <b>Rs.</b>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={row.inputField ?? 0}
+                                    onChange={(event) => handleCostRowChange(row.serial, "inputField", event.target.value)}
+                                    aria-label={`${row.name} input value`}
+                                  />
+                                </label>
+                              </span>
+                              <span>
+                                <label className="booking-quote-money-field">
+                                  <b>Rs.</b>
+                                  <input value={formatCurrency(calculateCostNewValue(row))} readOnly aria-label={`${row.name} new value`} />
+                                </label>
+                              </span>
+                            </div>
+                          )
                         )}
+                      </div>
+                    </section>
+                  )}
 
-                        <div className="booking-unit-empty-art" aria-hidden="true">
-                          <span className="booking-unit-agent" />
-                          <span className="booking-unit-card-art" />
+                  {quotationTab === "payment" && (
+                    <section className="booking-quote-cost">
+                      <h6>Payment Schedule</h6>
+                      <div className="booking-quote-table booking-payment-table" role="table" aria-label="Payment schedule">
+                        <div className="booking-payment-row is-head" role="row">
+                          <span>Name</span>
+                          <span>Tower Milestone</span>
+                          <span>Value (In Percentage %)</span>
+                          <span>Amount</span>
+                          <span>Taxes</span>
+                          <span>TDS</span>
+                          <span>Grand Total</span>
                         </div>
-                      </section>
+                        {calculatedPaymentRows.map((row, index) => (
+                          <div className="booking-payment-row" role="row" key={`${row.name}-${index}`}>
+                            <span>
+                              <input
+                                className="booking-payment-text-input"
+                                value={row.name}
+                                onChange={(event) => handlePaymentRowChange(index, "name", event.target.value)}
+                                aria-label="Payment name"
+                              />
+                            </span>
+                            <span>
+                              <select
+                                value={row.towerMilestone}
+                                onChange={(event) => handlePaymentRowChange(index, "towerMilestone", event.target.value)}
+                                aria-label={`${row.name} tower milestone`}
+                              >
+                                <option value="Agreement">Agreement</option>
+                                <option value="Possession">Possession</option>
+                                <option value={quotationTowerName}>{quotationTowerName}</option>
+                              </select>
+                            </span>
+                            <span>
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                value={row.value}
+                                onChange={(event) => handlePaymentRowChange(index, "value", event.target.value)}
+                                aria-label={`${row.name} percentage`}
+                              />
+                            </span>
+                            <span>Rs. {formatCurrency(row.amount)}</span>
+                            <span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={row.taxes}
+                                onChange={(event) => handlePaymentRowChange(index, "taxes", event.target.value)}
+                                aria-label={`${row.name} taxes`}
+                              />
+                            </span>
+                            <span>
+                              <input
+                                type="number"
+                                min="0"
+                                value={row.tds}
+                                onChange={(event) => handlePaymentRowChange(index, "tds", event.target.value)}
+                                aria-label={`${row.name} tds`}
+                              />
+                            </span>
+                            <span>Rs. {formatCurrency(row.grandTotal)}</span>
+                          </div>
+                        ))}
+                        <div className="booking-payment-row is-total" role="row">
+                          <span>Total Agreement Value</span>
+                          <span>-</span>
+                          <span>{paymentTotals.value.toFixed(2)}%</span>
+                          <span>Rs. {formatCurrency(paymentTotals.amount)}</span>
+                          <span>Rs. {formatCurrency(paymentTotals.taxes)}</span>
+                          <span>Rs. {formatCurrency(paymentTotals.tds)}</span>
+                          <span>Rs. {formatCurrency(paymentTotals.grandTotal)}</span>
+                        </div>
+                      </div>
+                    </section>
+                  )}
+                </div>
+              ) : (
+                <div className="booking-confirmation-main">
+                  <h6 className="booking-confirmation-title">Booking Confirmation</h6>
 
-                      <aside className="booking-unit-gallery">
-                        <h3>Gallery and Unit Details</h3>
-                        <div className="booking-gallery-map" aria-hidden="true" />
-                        <label className="booking-choice-field" htmlFor="booking-unit-final">
-                          <span>Select Unit</span>
-                          {visibleBookingUnits.length > 0 ? (
-                            <select
-                              id="booking-unit-final"
-                              name="unit"
-                              value={selectedBookingUnit ? getBookingUnitOptionValue(selectedBookingUnit) : ""}
-                              onChange={(event) => {
-                                const unit = visibleBookingUnits.find(
-                                  (item) => getBookingUnitOptionValue(item) === event.target.value
-                                );
-                                if (unit) handleBookingUnitSelect(unit);
-                                else setBookingForm((prev) => ({ ...prev, unit: "", unitId: "" }));
-                              }}
-                              required
-                            >
-                              <option value="">Select Unit</option>
-                              {visibleBookingUnits.map((unit) => (
-                                <option key={`final-${getBookingUnitOptionValue(unit)}`} value={getBookingUnitOptionValue(unit)}>
-                                  {getBookingUnitOptionLabel(unit)}
-                                </option>
-                              ))}
+                  <section className="booking-confirmation-card">
+                    <div className="booking-confirmation-card-head">Unit Details</div>
+                    <div className="booking-confirmation-grid">
+                      {bookingUnitDetails.map(([label, value]) => (
+                        <div className="booking-confirmation-field" key={label}>
+                          <span>{label}</span>
+                          <strong>{value}</strong>
+                        </div>
+                      ))}
+                      <label className="booking-confirmation-input">
+                        <span>Booking Name</span>
+                        <input name="customerName" value={bookingForm.customerName} onChange={handleBookingChange} />
+                      </label>
+                      <label className="booking-confirmation-input">
+                        <span>Booking Date</span>
+                        <input name="bookedOn" type="date" value={bookingForm.bookedOn || bookingConfirmationDate} onChange={handleBookingChange} />
+                      </label>
+                      <label className="booking-confirmation-input">
+                        <span>Select Booking Cancellation Reason</span>
+                        <select name="bookingCancellationReason" value={bookingForm.bookingCancellationReason} onChange={handleBookingChange}>
+                          <option value="">Select Booking Cancellation Reason</option>
+                          <option value="Customer request">Customer request</option>
+                          <option value="Payment issue">Payment issue</option>
+                          <option value="Unit changed">Unit changed</option>
+                        </select>
+                      </label>
+                      <label className="booking-confirmation-input">
+                        <span>Add Booking Cancellation Note</span>
+                        <input name="bookingCancellationNote" value={bookingForm.bookingCancellationNote} onChange={handleBookingChange} placeholder="Add Booking Cancellation Note" />
+                      </label>
+                    </div>
+                  </section>
+
+                  <section className="booking-confirmation-card">
+                    <div className="booking-confirmation-card-head">Applicant Details</div>
+                    <div className="booking-applicant-grid">
+                      <div><span>Name</span><strong>{leadName}</strong></div>
+                      <div><span>Lead Name</span><strong>{leadName}</strong></div>
+                      <div><span>Phone</span><strong>{applicantPhone}</strong></div>
+                      <div><span>DOB</span><strong>{formatBookingDetail(lead.birthday, "-")}</strong></div>
+                      <div><span>PAN Number</span><strong>-</strong></div>
+                      <div><span>Aadhaar Number</span><strong>-</strong></div>
+                      <div><span>Email</span><strong>{applicantEmail}</strong></div>
+                    </div>
+                    <button type="button" className="booking-add-coapplicant">+ Add New Co-Applicant</button>
+                  </section>
+
+                  <section className="booking-confirmation-card">
+                    <div className="booking-confirmation-card-head">Cost Details</div>
+                    <div className="booking-cost-summary">
+                      <div><span>Scheme</span><strong>{quotationSchemeLabel}</strong></div>
+                      <div><span>Payment Schedule</span><strong>{quotationPaymentPlanLabel}</strong></div>
+                      <div><span>Original Agreement Value</span><strong>Rs. {formatCurrency(quotationAgreementValue)}</strong></div>
+                      <div><span>Final Agreement Value</span><strong>Rs. {formatCurrency(quotationAgreementValue)}</strong></div>
+                      <div><span>Original All Inclusive Value</span><strong>Rs. {formatCurrency(quotationAllInclusiveValue)}</strong></div>
+                      <div><span>Final All Inclusive Value</span><strong>Rs. {formatCurrency(quotationAllInclusiveValue)}</strong></div>
+                    </div>
+                  </section>
+
+                  <section className="booking-confirmation-card">
+                    <div className="booking-confirmation-card-head">Hold/Book Unit</div>
+                    <div className="booking-confirmation-two">
+                      <label className="booking-confirmation-input">
+                        <span>Select Booking Stage *</span>
+                        <select name="stage" value={bookingForm.stage} onChange={handleBookingChange}>
+                          <option value="Tentative">Tentative</option>
+                          <option value="Booked">Booked</option>
+                          <option value="Hold">Hold</option>
+                        </select>
+                      </label>
+                      <label className="booking-confirmation-input">
+                        <span>Select Project Unit Status *</span>
+                        <select defaultValue="Booked">
+                          <option>Booked</option>
+                          <option>Hold</option>
+                          <option>Available</option>
+                        </select>
+                      </label>
+                    </div>
+                  </section>
+
+                  <section className="booking-confirmation-card">
+                    <div className="booking-confirmation-card-head">Campaign Info</div>
+                    <div className="booking-confirmation-two">
+                      <label className="booking-confirmation-input">
+                        <span>Campaign</span>
+                        <select name="campaign" value={bookingForm.campaign} onChange={handleBookingChange}>
+                          <option value="walkin">walkin</option>
+                          <option value="channel_partner">channel_partner</option>
+                          <option value="digital">digital</option>
+                        </select>
+                      </label>
+                      <label className="booking-confirmation-input">
+                        <span>Source</span>
+                        <select name="source" value={bookingForm.source} onChange={handleBookingChange}>
+                          <option value="">Select Source</option>
+                          <option value="walkin">walkin</option>
+                          <option value="channel_partner">channel_partner</option>
+                          <option value="digital">digital</option>
+                        </select>
+                      </label>
+                      <label className="booking-confirmation-input booking-confirmation-wide">
+                        <span>Channel Partner</span>
+                        <select name="channelPartner" value={bookingForm.channelPartner} onChange={handleBookingChange}>
+                          <option value="">Select Channel Partner</option>
+                          <option value={cpName}>{cpName}</option>
+                        </select>
+                      </label>
+                    </div>
+                  </section>
+
+                  <section className="booking-confirmation-card">
+                    <div className="booking-confirmation-card-head">Custom Fields</div>
+                    <div className="booking-custom-grid">
+                      {[
+                        ["companyName", "Company Name", "select"],
+                        ["numberOfSeats", "Number Of Seats"],
+                        ["physicalSeats", "Physical Seats"],
+                        ["carpetArea", "Carpet Area"],
+                        ["tenureMonths", "Tenure In Months"],
+                        ["perSeatPrice", "Per Seat Price"],
+                        ["monthlyRevenue", "Monthly Revenue"],
+                        ["noticePeriodMonths", "Notice Period In Months"],
+                        ["lockInPeriod", "Lock In Period"],
+                        ["securityDeposit", "Security Deposit"],
+                        ["leaseStartDate", "Lease Start Date", "date"],
+                        ["leaseEndDate", "Lease End Date", "date"],
+                      ].map(([name, label, type]) => (
+                        <label className="booking-confirmation-input" key={name}>
+                          <span>{label}</span>
+                          {type === "select" ? (
+                            <select name={name} value={bookingForm[name]} onChange={handleBookingChange}>
+                              <option value="">select</option>
+                              <option value={lead.companyName || "Company"}>{lead.companyName || "Company"}</option>
                             </select>
                           ) : (
-                            <select id="booking-unit-final" name="unit" value="" disabled required>
-                              <option value="">No admin-created units found</option>
-                            </select>
+                            <input name={name} type={type || "text"} value={bookingForm[name]} onChange={handleBookingChange} />
                           )}
                         </label>
-                        <div className="booking-project-summary">
-                          <strong>{bookingProjectDetails?.name || bookingForm.projectDetails || "Project details"}</strong>
-                          <span>{bookingProjectDetails?.projectType || "Residential"} · {visibleBookingUnits.length} of {flattenedBookingUnits.length} units shown</span>
-                          {selectedBookingUnit && (
-                            <>
-                              <span>{selectedBookingUnit.tower?.name || activeTowerName} | Floor {selectedBookingUnit.floor || quotationFloor}</span>
-                              <span>Carpet {selectedBookingUnit.carpet || "-"} Sq. Ft. | Saleable {selectedBookingUnit.saleable || "-"} Sq. Ft.</span>
-                              <span>Base price Rs. {Number(selectedBookingUnit.basePrice || 0).toLocaleString("en-IN")}</span>
-                            </>
-                          )}
-                        </div>
-                      </aside>
+                      ))}
                     </div>
-                  ) : bookingStepIndex === 2 ? (
-                    <div className="booking-quote-main">
-                      <div className="booking-quote-tabs" aria-label="Quotation tabs">
-                        <button type="button" className={quotationTab === "unit" ? "is-active" : ""} onClick={() => setQuotationTab("unit")}>Unit Details</button>
-                        <button type="button" className={quotationTab === "cost" ? "is-active" : ""} onClick={() => setQuotationTab("cost")}>Cost Sheet</button>
-                        <button type="button" className={quotationTab === "payment" ? "is-active" : ""} onClick={() => setQuotationTab("payment")}>Payment Schedule</button>
-                      </div>
-
-                      {quotationTab === "unit" && (
-                      <section className="booking-quote-unit-strip">
-                        <div>
-                          <span>Name</span>
-                          <strong>{quotationUnitName}</strong>
-                          <span>Bedrooms</span>
-                          <strong>{formatBookingDetail(selectedBookingUnit?.bedrooms, "3")}</strong>
-                          <span>Base Rate</span>
-                          <strong>Rs. {quotationBaseRate}</strong>
-                          <span>Agreement Value</span>
-                        </div>
-                        <div>
-                          <span>Status</span>
-                          <strong>{formatBookingDetail(selectedBookingUnit?.status, "Available")}</strong>
-                          <span>Bathrooms</span>
-                          <strong>{formatBookingDetail(selectedBookingUnit?.bathrooms, "2")}</strong>
-                          <span>Floor Rise</span>
-                        </div>
-                        <div>
-                          <span>Floor</span>
-                          <strong>{quotationFloor}</strong>
-                          <span>Carpet</span>
-                          <strong>{formatBookingDetail(selectedBookingUnit?.carpet, "967")}</strong>
-                          <span>Effective Rate</span>
-                        </div>
-                        <div>
-                          <span>Project Tower Name</span>
-                          <strong>{quotationTowerName}</strong>
-                          <span>Saleable</span>
-                          <strong>{quotationSaleable}</strong>
-                          <span>Total Price</span>
-                        </div>
-                      </section>
-                      )}
-
-                      {quotationTab === "unit" && (
-                      <section className="booking-quote-controls">
-                        <label>
-                          <span>Select Scheme</span>
-                          <select value={quotationScheme} onChange={(event) => setQuotationScheme(event.target.value)}>
-                            <option value="default">Default Scheme</option>
-                            <option value="construction-linked">Construction Linked Scheme</option>
-                            <option value="possession-linked">Possession Linked Scheme</option>
-                            <option value="custom">Custom Scheme</option>
-                          </select>
-                        </label>
-                        <label>
-                          <span>Select Payment Schedule</span>
-                          <select value={quotationPaymentPlan} onChange={handlePaymentPlanChange}>
-                            <option value="80-20">80:20 Payment Schedule</option>
-                            <option value="60-40">60:40 Payment Schedule</option>
-                            <option value="100">100% Agreement Payment</option>
-                          </select>
-                        </label>
-                        <label>
-                          <span>Quotation Name</span>
-                          <input value={quotationName} readOnly />
-                        </label>
-                        <label>
-                          <span>Payment Schedule Name</span>
-                          <input value={quotationName} readOnly />
-                        </label>
-                      </section>
-                      )}
-
-                      {quotationTab === "unit" && (
-                      <section className="booking-quote-inventory">
-                        <label>
-                          <span>Additional Inventory Configuration</span>
-                          <select defaultValue="">
-                            <option value="">Choose Inventory Configuration</option>
-                          </select>
-                        </label>
-                        <label>
-                          <span>Additional Inventory</span>
-                          <select defaultValue="">
-                            <option value="">Choose Additional Inventory</option>
-                          </select>
-                        </label>
-                        <button type="button" className="booking-quote-apply">Apply</button>
-                      </section>
-                      )}
-
-                      {quotationTab === "cost" && (
-                      <section className="booking-quote-cost">
-                        <h3>Cost Sheet</h3>
-                        <div className="booking-quote-table" role="table" aria-label="Cost sheet">
-                          <div className="booking-quote-row is-head" role="row">
-                            <span>Sr. No.</span>
-                            <span>Field Name</span>
-                            <span>Original Value</span>
-                            <span>Discount Or AdHoc Cost</span>
-                            <span>Input Field</span>
-                            <span>New Value</span>
-                          </div>
-                          {quotationCostRows.map((row) =>
-                            row.type === "section" ? (
-                              <div className="booking-quote-row is-section" role="row" key={`${row.serial}-${row.name}`}>
-                                <strong>{row.serial} {row.name}</strong>
-                              </div>
-                            ) : (
-                              <div className={`booking-quote-row is-line${row.highlight ? " is-highlight" : ""}`} role="row" key={`${row.serial}-${row.name}`}>
-                                <span>{row.serial}</span>
-                                <span>{row.name}</span>
-                                <span>Rs. {formatCurrency(row.originalValue)}</span>
-                                <span>
-                                  <select
-                                    value={row.costType || "Discount"}
-                                    onChange={(event) => handleCostRowChange(row.serial, "costType", event.target.value)}
-                                    aria-label={`${row.name} discount type`}
-                                  >
-                                    <option value="Discount">Discount</option>
-                                    <option value="AdHoc Cost">AdHoc Cost</option>
-                                  </select>
-                                </span>
-                                <span>
-                                  <label className="booking-quote-money-field">
-                                    <b>Rs.</b>
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      value={row.inputField ?? 0}
-                                      onChange={(event) => handleCostRowChange(row.serial, "inputField", event.target.value)}
-                                      aria-label={`${row.name} input value`}
-                                    />
-                                  </label>
-                                </span>
-                                <span>
-                                  <label className="booking-quote-money-field">
-                                    <b>Rs.</b>
-                                    <input value={formatCurrency(calculateCostNewValue(row))} readOnly aria-label={`${row.name} new value`} />
-                                  </label>
-                                </span>
-                              </div>
-                            )
-                          )}
-                        </div>
-                      </section>
-                      )}
-
-                      {quotationTab === "payment" && (
-                        <section className="booking-quote-cost">
-                          <h3>Payment Schedule</h3>
-                          <div className="booking-quote-table booking-payment-table" role="table" aria-label="Payment schedule">
-                            <div className="booking-payment-row is-head" role="row">
-                              <span>Name</span>
-                              <span>Tower Milestone</span>
-                              <span>Value (In Percentage %)</span>
-                              <span>Amount</span>
-                              <span>Taxes</span>
-                              <span>TDS</span>
-                              <span>Grand Total</span>
-                            </div>
-                            {calculatedPaymentRows.map((row, index) => (
-                              <div className="booking-payment-row" role="row" key={`${row.name}-${index}`}>
-                                <span>
-                                  <input
-                                    className="booking-payment-text-input"
-                                    value={row.name}
-                                    onChange={(event) => handlePaymentRowChange(index, "name", event.target.value)}
-                                    aria-label="Payment name"
-                                  />
-                                </span>
-                                <span>
-                                  <select
-                                    value={row.towerMilestone}
-                                    onChange={(event) => handlePaymentRowChange(index, "towerMilestone", event.target.value)}
-                                    aria-label={`${row.name} tower milestone`}
-                                  >
-                                    <option value="Agreement">Agreement</option>
-                                    <option value="Possession">Possession</option>
-                                    <option value={quotationTowerName}>{quotationTowerName}</option>
-                                  </select>
-                                </span>
-                                <span>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    max="100"
-                                    value={row.value}
-                                    onChange={(event) => handlePaymentRowChange(index, "value", event.target.value)}
-                                    aria-label={`${row.name} percentage`}
-                                  />
-                                </span>
-                                <span>Rs. {formatCurrency(row.amount)}</span>
-                                <span>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    value={row.taxes}
-                                    onChange={(event) => handlePaymentRowChange(index, "taxes", event.target.value)}
-                                    aria-label={`${row.name} taxes`}
-                                  />
-                                </span>
-                                <span>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    value={row.tds}
-                                    onChange={(event) => handlePaymentRowChange(index, "tds", event.target.value)}
-                                    aria-label={`${row.name} tds`}
-                                  />
-                                </span>
-                                <span>Rs. {formatCurrency(row.grandTotal)}</span>
-                              </div>
-                            ))}
-                            <div className="booking-payment-row is-total" role="row">
-                              <span>Total Agreement Value</span>
-                              <span>-</span>
-                              <span>{paymentTotals.value.toFixed(2)}%</span>
-                              <span>Rs. {formatCurrency(paymentTotals.amount)}</span>
-                              <span>Rs. {formatCurrency(paymentTotals.taxes)}</span>
-                              <span>Rs. {formatCurrency(paymentTotals.tds)}</span>
-                              <span>Rs. {formatCurrency(paymentTotals.grandTotal)}</span>
-                            </div>
-                          </div>
-                        </section>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="booking-confirmation-main">
-                      <h3 className="booking-confirmation-title">Booking Confirmation</h3>
-
-                      <section className="booking-confirmation-card">
-                        <div className="booking-confirmation-card-head">Unit Details</div>
-                        <div className="booking-confirmation-grid">
-                          {bookingUnitDetails.map(([label, value]) => (
-                            <div className="booking-confirmation-field" key={label}>
-                              <span>{label}</span>
-                              <strong>{value}</strong>
-                            </div>
-                          ))}
-                          <label className="booking-confirmation-input">
-                            <span>Booking Name</span>
-                            <input name="customerName" value={bookingForm.customerName} onChange={handleBookingChange} />
-                          </label>
-                          <label className="booking-confirmation-input">
-                            <span>Booking Date</span>
-                            <input name="bookedOn" type="date" value={bookingForm.bookedOn || bookingConfirmationDate} onChange={handleBookingChange} />
-                          </label>
-                          <label className="booking-confirmation-input">
-                            <span>Select Booking Cancellation Reason</span>
-                            <select name="bookingCancellationReason" value={bookingForm.bookingCancellationReason} onChange={handleBookingChange}>
-                              <option value="">Select Booking Cancellation Reason</option>
-                              <option value="Customer request">Customer request</option>
-                              <option value="Payment issue">Payment issue</option>
-                              <option value="Unit changed">Unit changed</option>
-                            </select>
-                          </label>
-                          <label className="booking-confirmation-input">
-                            <span>Add Booking Cancellation Note</span>
-                            <input name="bookingCancellationNote" value={bookingForm.bookingCancellationNote} onChange={handleBookingChange} placeholder="Add Booking Cancellation Note" />
-                          </label>
-                        </div>
-                      </section>
-
-                      <section className="booking-confirmation-card">
-                        <div className="booking-confirmation-card-head">Applicant Details</div>
-                        <div className="booking-applicant-grid">
-                          <div><span>Name</span><strong>{leadName}</strong></div>
-                          <div><span>Lead Name</span><strong>{leadName}</strong></div>
-                          <div><span>Phone</span><strong>{applicantPhone}</strong></div>
-                          <div><span>DOB</span><strong>{formatBookingDetail(lead.birthday, "-")}</strong></div>
-                          <div><span>PAN Number</span><strong>-</strong></div>
-                          <div><span>Aadhaar Number</span><strong>-</strong></div>
-                          <div><span>Email</span><strong>{applicantEmail}</strong></div>
-                        </div>
-                        <button type="button" className="booking-add-coapplicant">+ Add New Co-Applicant</button>
-                      </section>
-
-                      <section className="booking-confirmation-card">
-                        <div className="booking-confirmation-card-head">Cost Details</div>
-                        <div className="booking-cost-summary">
-                          <div><span>Scheme</span><strong>{quotationSchemeLabel}</strong></div>
-                          <div><span>Payment Schedule</span><strong>{quotationPaymentPlanLabel}</strong></div>
-                          <div><span>Original Agreement Value</span><strong>Rs. {formatCurrency(quotationAgreementValue)}</strong></div>
-                          <div><span>Final Agreement Value</span><strong>Rs. {formatCurrency(quotationAgreementValue)}</strong></div>
-                          <div><span>Original All Inclusive Value</span><strong>Rs. {formatCurrency(quotationAllInclusiveValue)}</strong></div>
-                          <div><span>Final All Inclusive Value</span><strong>Rs. {formatCurrency(quotationAllInclusiveValue)}</strong></div>
-                        </div>
-                      </section>
-
-                      <section className="booking-confirmation-card">
-                        <div className="booking-confirmation-card-head">Hold/Book Unit</div>
-                        <div className="booking-confirmation-two">
-                          <label className="booking-confirmation-input">
-                            <span>Select Booking Stage *</span>
-                            <select name="stage" value={bookingForm.stage} onChange={handleBookingChange}>
-                              <option value="Tentative">Tentative</option>
-                              <option value="Booked">Booked</option>
-                              <option value="Hold">Hold</option>
-                            </select>
-                          </label>
-                          <label className="booking-confirmation-input">
-                            <span>Select Project Unit Status *</span>
-                            <select defaultValue="Booked">
-                              <option>Booked</option>
-                              <option>Hold</option>
-                              <option>Available</option>
-                            </select>
-                          </label>
-                        </div>
-                      </section>
-
-                      <section className="booking-confirmation-card">
-                        <div className="booking-confirmation-card-head">Campaign Info</div>
-                        <div className="booking-confirmation-two">
-                          <label className="booking-confirmation-input">
-                            <span>Campaign</span>
-                            <select name="campaign" value={bookingForm.campaign} onChange={handleBookingChange}>
-                              <option value="walkin">walkin</option>
-                              <option value="channel_partner">channel_partner</option>
-                              <option value="digital">digital</option>
-                            </select>
-                          </label>
-                          <label className="booking-confirmation-input">
-                            <span>Source</span>
-                            <select name="source" value={bookingForm.source} onChange={handleBookingChange}>
-                              <option value="">Select Source</option>
-                              <option value="walkin">walkin</option>
-                              <option value="channel_partner">channel_partner</option>
-                              <option value="digital">digital</option>
-                            </select>
-                          </label>
-                          <label className="booking-confirmation-input booking-confirmation-wide">
-                            <span>Channel Partner</span>
-                            <select name="channelPartner" value={bookingForm.channelPartner} onChange={handleBookingChange}>
-                              <option value="">Select Channel Partner</option>
-                              <option value={cpName}>{cpName}</option>
-                            </select>
-                          </label>
-                        </div>
-                      </section>
-
-                      <section className="booking-confirmation-card">
-                        <div className="booking-confirmation-card-head">Custom Fields</div>
-                        <div className="booking-custom-grid">
-                          {[
-                            ["companyName", "Company Name", "select"],
-                            ["numberOfSeats", "Number Of Seats"],
-                            ["physicalSeats", "Physical Seats"],
-                            ["carpetArea", "Carpet Area"],
-                            ["tenureMonths", "Tenure In Months"],
-                            ["perSeatPrice", "Per Seat Price"],
-                            ["monthlyRevenue", "Monthly Revenue"],
-                            ["noticePeriodMonths", "Notice Period In Months"],
-                            ["lockInPeriod", "Lock In Period"],
-                            ["securityDeposit", "Security Deposit"],
-                            ["leaseStartDate", "Lease Start Date", "date"],
-                            ["leaseEndDate", "Lease End Date", "date"],
-                          ].map(([name, label, type]) => (
-                            <label className="booking-confirmation-input" key={name}>
-                              <span>{label}</span>
-                              {type === "select" ? (
-                                <select name={name} value={bookingForm[name]} onChange={handleBookingChange}>
-                                  <option value="">select</option>
-                                  <option value={lead.companyName || "Company"}>{lead.companyName || "Company"}</option>
-                                </select>
-                              ) : (
-                                <input name={name} type={type || "text"} value={bookingForm[name]} onChange={handleBookingChange} />
-                              )}
-                            </label>
-                          ))}
-                        </div>
-                      </section>
-                    </div>
-                  )}
+                  </section>
+                </div>
+              )}
 
             </UserBookingForm>
           </div>
