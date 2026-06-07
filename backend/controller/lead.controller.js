@@ -12,6 +12,7 @@ const validLeadStatuses = new Set([
   "In_closing",
   "Booked",
   "Nurture",
+  "Unqualified",
 ])
 const leadTeamSelect = {
   id: true,
@@ -43,6 +44,30 @@ const importStatusMap = {
   "in closing": "In_closing",
   booked: "Booked",
   nurture: "Nurture",
+  unqualified: "Unqualified",
+}
+
+const leadStatusScoreMap = {
+  New: { score: 15, step: 1 },
+  Qualified: { score: 40, step: 2 },
+  In_sourcing: { score: 60, step: 3 },
+  In_closing: { score: 80, step: 4 },
+  Booked: { score: 100, step: 5 },
+  Nurture: { score: 25, step: 2 },
+  Unqualified: { score: 0, step: 0 },
+}
+
+const getLeadStageScore = (status) =>
+  leadStatusScoreMap[normalizeLeadStatusValue(status) || "New"] || leadStatusScoreMap.New
+
+const withLeadStageScore = (lead) => {
+  if (!lead) return lead
+  const stageScore = getLeadStageScore(lead.status)
+  return {
+    ...lead,
+    score: stageScore.score,
+    stageScore,
+  }
 }
 
 const normalizeImportStatus = (value) => {
@@ -372,7 +397,7 @@ exports.getLeads = async (req, res) => {
           }
         },
       })
-      res.status(200).json(filterDuplicateLeads(leads))
+      res.status(200).json(filterDuplicateLeads(leads).map(withLeadStageScore))
     } else {
       const Leads = await prisma.lead.findMany({
         where: {...activeLeadWhere},
@@ -402,7 +427,7 @@ exports.getLeads = async (req, res) => {
           }
         }
       })
-      res.status(200).json(filterDuplicateLeads(Leads))
+      res.status(200).json(filterDuplicateLeads(Leads).map(withLeadStageScore))
     }
   } catch (err) {
   console.log(err)
@@ -468,7 +493,7 @@ exports.getLeadById = async (req, res) => {
     })
     if (!lead) return res.status(404).json("Lead not found")
 
-    res.status(200).json(lead)
+    res.status(200).json(withLeadStageScore(lead))
   } catch (err) {
     console.log(err)
     res.status(500).json("something went wrong")
@@ -574,7 +599,7 @@ exports.updateLead = async (req, res) => {
         },
       },
     })
-    res.status(200).json(result)
+    res.status(200).json(withLeadStageScore(result))
   } catch (err) {
     console.log(err)
     res.status(500).json({ message: err.message || "Unable to update lead" })

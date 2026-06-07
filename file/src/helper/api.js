@@ -7,7 +7,7 @@ const api = axios.create({
 
 export const fetchAllUsers = async () => {
     try {
-        const response = await api.get('users/');
+        const response = await api.get('users/', { params: { limit: 1000 } });
         return response.data; 
     } catch (error) {
         throw error;

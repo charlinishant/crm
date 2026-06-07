@@ -20,6 +20,7 @@ import {
   FaSms,
   FaStar,
   FaEllipsisV,
+  FaTimes,
   FaUnderline,
   FaUndo,
   FaWhatsapp,
@@ -86,8 +87,29 @@ const leadStatusOptions = [
   { value: "In_sourcing", label: "In_sourcing" },
   { value: "In_closing", label: "In_closing" },
   { value: "Booked", label: "Booked" },
-  { value: "Nurture", label: "Nurture" },
+  { value: "Unqualified", label: "Unqualified" },
 ];
+
+const leadStageScores = {
+  New: { score: 15, step: 1 },
+  Qualified: { score: 40, step: 2 },
+  In_sourcing: { score: 60, step: 3 },
+  In_closing: { score: 80, step: 4 },
+  Booked: { score: 100, step: 5 },
+  Nurture: { score: 25, step: 2 },
+  Unqualified: { score: 0, step: 0 },
+};
+
+const getLeadStageScore = (status) =>
+  leadStageScores[normalizeStatus(status)] || leadStageScores.New;
+
+const splitLeadName = (name) => {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] || "",
+    lastName: parts.slice(1).join(" "),
+  };
+};
 
 const normalizeStatus = (value) => {
   if (!value) return "New";
@@ -141,6 +163,10 @@ const Details = () => {
   const [isStartingCall, setIsStartingCall] = useState(false);
   const [callMessage, setCallMessage] = useState("");
   const [callRefreshKey, setCallRefreshKey] = useState(0);
+  const [isEditingLeadName, setIsEditingLeadName] = useState(false);
+  const [leadNameDraft, setLeadNameDraft] = useState("");
+  const [isSavingLeadName, setIsSavingLeadName] = useState(false);
+  const [leadEditMessage, setLeadEditMessage] = useState("");
   const noteRef = useRef(null);
   const leadIdFromUrl = useMemo(
     () => new URLSearchParams(location.search).get("leadId"),
@@ -197,6 +223,7 @@ const Details = () => {
   );
   const leadId = getValue(lead, ["id", "_id", "lead_id"], "10702");
   const leadStatus = normalizeStatus(getValue(lead, ["status", "lead_status", "stage"], "New"));
+  const stageScore = getLeadStageScore(selectedStatus || leadStatus);
   const projectName = getValue(lead, ["project_name", "projectName", "interestedProjects"], "Binghatti Hills");
   const owner = getValue(lead, ["owner", "assigned_to", "sales"], "Tejas Sales");
   const country = getValue(lead, ["country", "lead_country", "city"], "India");
@@ -269,6 +296,12 @@ const Details = () => {
     fetchNotes();
   }, [API_URL, leadId]);
 
+  useEffect(() => {
+    if (!isEditingLeadName) {
+      setLeadNameDraft(leadName);
+    }
+  }, [isEditingLeadName, leadName]);
+
   const formatNoteDate = (value) => {
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) return value || "";
@@ -336,6 +369,51 @@ const Details = () => {
       setStatusMessage("Status could not be saved. Please check backend and database.");
     } finally {
       setIsSavingStatus(false);
+    }
+  };
+
+  const handleSaveLeadName = async () => {
+    const nextName = leadNameDraft.trim();
+    if (!nextName) {
+      setLeadEditMessage("Lead name is required.");
+      return;
+    }
+
+    try {
+      setIsSavingLeadName(true);
+      setLeadEditMessage("");
+      const nameParts = splitLeadName(nextName);
+      const response = await fetch(`${API_URL}/leads/${leadId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(nameParts),
+      });
+
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(result?.message || "Unable to update lead name");
+      }
+
+      const updatedLead = {
+        ...lead,
+        ...result,
+        ...nameParts,
+        name: nextName,
+      };
+
+      setLead(updatedLead);
+      updateStoredLead("selectedLeadDetails", updatedLead);
+      updateStoredLead("selectedLeadPreview", updatedLead);
+      setIsEditingLeadName(false);
+      setLeadEditMessage("Lead name saved.");
+    } catch (error) {
+      console.error("Unable to update lead name:", error);
+      setLeadEditMessage("Lead name could not be saved.");
+    } finally {
+      setIsSavingLeadName(false);
     }
   };
 
@@ -559,11 +637,37 @@ const Details = () => {
           .details-page {
             background-color: #f8fafc;
             min-height: 100vh;
+            position: relative;
             padding: 24px 20px 40px;
             color: #1e293b;
-            font-family: system-ui, -apple-system, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
             font-size: 14px;
             line-height: 1.5;
+          }
+
+          .details-close-btn {
+            position: absolute;
+            top: 14px;
+            right: 18px;
+            width: 36px;
+            height: 36px;
+            border: 1px solid #d9e2ef;
+            border-radius: 6px;
+            background: #ffffff;
+            color: #64748b;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 15px;
+            transition: all 0.2s ease;
+            z-index: 2;
+          }
+
+          .details-close-btn:hover {
+            border-color: #6f42c1;
+            color: #6f42c1;
+            background: #f8f5ff;
           }
 
           .details-grid {
@@ -649,6 +753,68 @@ const Details = () => {
             white-space: nowrap;
           }
 
+          .details-name-edit {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+          }
+
+          .details-name-input {
+            width: min(240px, 100%);
+            height: 30px;
+            border: 1px solid #cbd5e1;
+            border-radius: 4px;
+            color: #1f2937;
+            font-size: 14px;
+            padding: 0 8px;
+            outline: none;
+          }
+
+          .details-name-input:focus {
+            border-color: #6f42c1;
+            box-shadow: 0 0 0 2px rgba(111, 66, 193, 0.12);
+          }
+
+          .details-name-save,
+          .details-name-cancel,
+          .details-name-edit-btn {
+            border: 0;
+            background: transparent;
+            cursor: pointer;
+            padding: 0;
+          }
+
+          .details-name-save,
+          .details-name-cancel {
+            min-height: 28px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 0 10px;
+          }
+
+          .details-name-save {
+            background: #6f42c1;
+            color: #ffffff;
+          }
+
+          .details-name-save:disabled {
+            cursor: not-allowed;
+            opacity: 0.65;
+          }
+
+          .details-name-cancel {
+            border: 1px solid #cbd5e1;
+            color: #475569;
+          }
+
+          .details-edit-message {
+            color: #64748b;
+            font-size: 11px;
+            margin-top: 4px;
+          }
+
           .details-edit {
             color: #64748b;
             font-size: 14px;
@@ -657,7 +823,7 @@ const Details = () => {
           }
           
           .details-edit:hover {
-            color: #0d6efd;
+            color: #2563eb;
           }
 
           .details-whatsapp {
@@ -665,14 +831,14 @@ const Details = () => {
             width: 38px;
             height: 38px;
             border-radius: 10px;
-            background: #25d366;
+            background: #6f42c1;
             color: #ffffff;
             display: inline-flex;
             align-items: center;
             justify-content: center;
             font-size: 20px;
             margin-top: 12px;
-            box-shadow: 0 2px 4px rgba(37, 211, 102, 0.25);
+            box-shadow: 0 2px 4px rgba(111, 66, 193, 0.25);
             cursor: pointer;
             transition: transform 0.2s;
           }
@@ -695,7 +861,7 @@ const Details = () => {
             width: 28px;
             height: 28px;
             border-radius: 50%;
-            background: #3b82f6;
+            background: #2563eb;
             color: #ffffff;
             display: inline-flex;
             align-items: center;
@@ -718,7 +884,7 @@ const Details = () => {
             height: 104px;
             margin: 0 auto;
             border-radius: 50%;
-            background: conic-gradient(#3b82f6 0 42%, #f1f5f9 42% 100%);
+            background: conic-gradient(#2563eb 0 var(--details-score, 15%), #f1f5f9 var(--details-score, 15%) 100%);
           }
 
           .details-score::before {
@@ -795,7 +961,7 @@ const Details = () => {
           }
           
           .details-select:focus {
-            border-color: #3b82f6;
+            border-color: #6f42c1;
           }
 
           .details-status-row {
@@ -809,7 +975,7 @@ const Details = () => {
             min-height: 36px;
             border: 0;
             border-radius: 6px;
-            background: #0d6efd;
+            background: #6f42c1;
             color: #ffffff;
             cursor: pointer;
             font-size: 13px;
@@ -819,7 +985,7 @@ const Details = () => {
           }
           
           .details-status-save:hover {
-            background: #0b5ed7;
+            background: #5f35ad;
           }
 
           .details-status-save:disabled {
@@ -875,8 +1041,8 @@ const Details = () => {
           .details-action:hover,
           .details-action.active {
             background: #eff6ff;
-            border-color: #3b82f6;
-            color: #2563eb;
+            border-color: #6f42c1;
+            color: #6f42c1;
           }
 
           .details-action-panel {
@@ -917,7 +1083,7 @@ const Details = () => {
             min-height: 40px;
             border: 0;
             border-radius: 6px;
-            background: #3b82f6;
+            background: #6f42c1;
             color: #ffffff;
             font-size: 14px;
             font-weight: 600;
@@ -1349,7 +1515,7 @@ const Details = () => {
             background: #f5f7fb;
             color: #344054;
             font-size: 13px;
-            padding: 6px 14px 24px;
+            padding: 52px 14px 24px;
           }
 
           .details-grid {
@@ -1428,7 +1594,7 @@ const Details = () => {
           }
 
           .details-badge {
-            background: #3caf55;
+            background: #5f35ad;
             font-size: 11px;
             height: 22px;
             margin: 0;
@@ -1442,7 +1608,7 @@ const Details = () => {
           }
 
           .details-score {
-            background: conic-gradient(#47a954 0 42%, #f3f6f9 42% 100%);
+            background: conic-gradient(#2563eb 0 var(--details-score, 15%), #f3f6f9 var(--details-score, 15%) 100%);
             height: 96px;
             width: 96px;
           }
@@ -1482,9 +1648,9 @@ const Details = () => {
           }
 
           .details-select {
-            border-color: #6f38d9;
+            border-color: #6f42c1;
             border-radius: 2px;
-            color: #5a24c7;
+            color: #6f42c1;
             font-size: 11px;
             height: 25px;
             max-width: 118px;
@@ -1492,7 +1658,7 @@ const Details = () => {
           }
 
           .details-status-save {
-            background: #0d6efd;
+            background: #6f42c1;
             border-radius: 3px;
             font-size: 11px;
             min-height: 25px;
@@ -1526,9 +1692,9 @@ const Details = () => {
           }
 
           .details-match-btn {
-            border-color: #6f38d9;
+            border-color: #6f42c1;
             border-radius: 3px;
-            color: #5a24c7;
+            color: #6f42c1;
             font-size: 11px;
             height: 24px;
             min-width: 235px;
@@ -1588,7 +1754,7 @@ const Details = () => {
           }
 
           .details-action.active::after {
-            background: #6f38d9;
+            background: #6f42c1;
             bottom: -1px;
             content: "";
             height: 2px;
@@ -1657,13 +1823,13 @@ const Details = () => {
           }
 
           .details-save {
-            background: #673ab7;
+            background: #6f42c1;
             font-size: 12px;
             min-width: 91px;
           }
 
           .details-mic {
-            background: #673ab7;
+            background: #6f42c1;
             color: #ffffff;
             width: 38px;
           }
@@ -1711,7 +1877,7 @@ const Details = () => {
           }
 
           .details-feed-tabs button.active::after {
-            background: #6f38d9;
+            background: #6f42c1;
             height: 2px;
           }
 
@@ -1789,6 +1955,16 @@ const Details = () => {
         `}</style>
 
         <div className="details-page">
+          <button
+            type="button"
+            className="details-close-btn"
+            onClick={() => navigate("/user/sales/leads")}
+            aria-label="Close details and return to my leads"
+            title="Close"
+          >
+            <FaTimes />
+          </button>
+
           <div className="details-grid">
             <section className="details-card">
               <div className="details-left-head">
@@ -1798,9 +1974,59 @@ const Details = () => {
                     <div>
                       <div className="details-lead-id"># {leadId}</div>
                       <div className="details-lead-name">
-                        <span>{leadName}</span>
-                        <FaEdit className="details-edit" />
+                        {isEditingLeadName ? (
+                          <div className="details-name-edit">
+                            <input
+                              className="details-name-input"
+                              value={leadNameDraft}
+                              onChange={(event) => {
+                                setLeadNameDraft(event.target.value);
+                                setLeadEditMessage("");
+                              }}
+                              onKeyDown={(event) => {
+                                if (event.key === "Enter") handleSaveLeadName();
+                                if (event.key === "Escape") {
+                                  setLeadNameDraft(leadName);
+                                  setIsEditingLeadName(false);
+                                }
+                              }}
+                              autoFocus
+                            />
+                            <button
+                              type="button"
+                              className="details-name-save"
+                              disabled={isSavingLeadName}
+                              onClick={handleSaveLeadName}
+                            >
+                              {isSavingLeadName ? "Saving..." : "Save"}
+                            </button>
+                            <button
+                              type="button"
+                              className="details-name-cancel"
+                              onClick={() => {
+                                setLeadNameDraft(leadName);
+                                setIsEditingLeadName(false);
+                                setLeadEditMessage("");
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <span>{leadName}</span>
+                            <button
+                              type="button"
+                              className="details-name-edit-btn"
+                              onClick={() => setIsEditingLeadName(true)}
+                              aria-label="Edit lead name"
+                            >
+                              <FaEdit className="details-edit" />
+                            </button>
+                          </>
+                        )}
                       </div>
+                      {leadEditMessage && <div className="details-edit-message">{leadEditMessage}</div>}
                     </div>
                   </div>
                   <button
@@ -1825,9 +2051,9 @@ const Details = () => {
 
               <div className="details-left-main">
                 <div>
-                  <div className="details-score">
-                    <div className="details-score-text">42%</div>
-                    <div className="details-score-number">1</div>
+                  <div className="details-score" style={{ "--details-score": `${stageScore.score}%` }}>
+                    <div className="details-score-text">{stageScore.score}%</div>
+                    <div className="details-score-number">{stageScore.step}</div>
                   </div>
                 </div>
 

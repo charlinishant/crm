@@ -205,6 +205,14 @@ const formatTaskDate = (value) => {
   });
 };
 
+const getTimeGreeting = () => {
+  const hour = new Date().getHours();
+
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+};
+
 const SalesUserPanel = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -229,6 +237,7 @@ const SalesUserPanel = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(
     initialScreen === "whatsapp" || initialScreen === "details"
   );
+  const [timeGreeting, setTimeGreeting] = useState(() => getTimeGreeting());
 
   const loadPanel = useCallback(async (showLoading = true) => {
     if (showLoading) {
@@ -281,6 +290,14 @@ const SalesUserPanel = () => {
   useEffect(() => {
     loadPanel();
   }, [loadPanel]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setTimeGreeting(getTimeGreeting());
+    }, 60000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   // WhatsApp UI change: browser back/forward also restores the matching sidebar state.
   useEffect(() => {
@@ -771,25 +788,27 @@ const SalesUserPanel = () => {
         </header>
 
         <section className="sales-content">
-          <div className="sales-page-head">
-            <div>
-              <h1>Good morning, {panel.user?.firstName || userName}</h1>
-              <p>{panel.user?.department || "Sales"} dashboard connected with admin access</p>
+          {activeScreen === "home" && (
+            <div className="sales-page-head">
+              <div>
+                <h1>{timeGreeting}, {panel.user?.firstName || userName}</h1>
+                <p>{panel.user?.department || "Sales"} dashboard connected with admin access</p>
+              </div>
+              <div className="sales-actions">
+                {/* <button type="button">Today</button> */}
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => {
+                    setActiveScreen("addLead");
+                    navigate("/user/sales/add-lead");
+                  }}
+                >
+                  Add lead
+                </button>
+              </div>
             </div>
-            <div className="sales-actions">
-              {/* <button type="button">Today</button> */}
-              <button
-                type="button"
-                className="primary"
-                onClick={() => {
-                  setActiveScreen("addLead");
-                  navigate("/user/sales/add-lead");
-                }}
-              >
-                Add lead
-              </button>
-            </div>
-          </div>
+          )}
 
           {error && <div className="sales-alert">{error}. Showing saved login data.</div>}
 
