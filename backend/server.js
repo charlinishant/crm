@@ -19,7 +19,7 @@ const callRouter = require("./router/call.routes")
 const whatsappRouter = require("./router/whatsapp.routes")
 
 const leadRouter = require("./router/lead.routes")
-
+const emailRouetr = require("./router/email.routes")
 const app = express()
 
 app.use(cors({origin:"*"}))
@@ -38,6 +38,7 @@ app.use("/tasks", taskRouter)
 app.use("/calls", callRouter)
 app.use("/api/calls", callRouter)
 app.use("/api/whatsapp", whatsappRouter)
+app.use("/api/email", emailRouetr)
 // app.use('/all-users', userRouter)
 
 const PORT = process.env.PORT || 5000
