@@ -67,9 +67,9 @@ const ButtonLead = () => {
         </div>
 
         {/* Smart Search */}
-        <button type="button" style={styles.smartBtn} onClick={handleSmartSearch}>
+        {/* <button type="button" style={styles.smartBtn} onClick={handleSmartSearch}>
           <FaSlidersH /> Smart Search
-        </button>
+        </button> */}
       </div>
 
       {/* RIGHT SIDE */}
