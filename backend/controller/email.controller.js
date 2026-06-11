@@ -15,38 +15,40 @@ exports.sendWelcomeEmail = async (req, res) => {
   try {
     const data = req.body
 
-    let user = await prisma.user.findUnique({
+    let lead = await prisma.lead.findUnique({
       where: {
-        id: data.id,
+        id: data.leadId,
       },
     })
 
-    if (!user) {
-      res.status(404).json("User not found")
+    if (!lead) {
+      res.status(404).json("Lead not found")
     }
+
 
     let htmlTemplate = fs.readFileSync(
       path.join(__dirname, "./templates/welcome.html"),
       "utf-8",
     )
-
+    
     await transporter.sendMail({
       from: process.env.EMAIL,
-      to: user.email,
+      to: lead.emails[0]["value"],
       subject: "Welcome email",
       html: htmlTemplate,
     })
 
     await prisma.emailLog.create({
-      data: { from: process.env.EMAIL, to: user.email, success: true },
+      data: { from: process.env.EMAIL, to: lead.emails[0]["value"], success: true },
     })
+
     res.status(200).json("Email send successfully")
   } catch (error) {
     console.log(error)
     await prisma.emailLog.create({
       data: {
         from: process.env.EMAIL,
-        to: user.email,
+        to: lead.emails[0]["value"],
         success: false,
         error: error,
       },
