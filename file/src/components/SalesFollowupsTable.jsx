@@ -19,7 +19,9 @@ const followupStatusOptions = [
 ];
 
 const nextActionOptions = [
-  { value: "", label: "Next action" },
+  { value: "", label: "Choose option" },
+  { value: "call", label: "Call" },
+  { value: "whatsapp", label: "WhatsApp" },
   { value: "create-next-follow-up", label: "Create next follow-up" },
   { value: "Qualified", label: "Mark Qualified" },
   { value: "In Sourcing", label: "Move to In Sourcing" },
@@ -27,6 +29,10 @@ const nextActionOptions = [
   { value: "In Closing", label: "Move to In Closing" },
   { value: "Booked", label: "Mark Booked" },
   { value: "Unqualified", label: "Mark Unqualified" },
+  { value: "mark-done", label: "Mark Done" },
+  { value: "reschedule", label: "Reschedule" },
+  { value: "cancel", label: "Cancel" },
+  { value: "open-lead", label: "Open Lead" },
 ];
 
 const getLeadId = (lead) => lead?.id || lead?._id || lead?.lead_id || "";
@@ -251,9 +257,47 @@ const SalesFollowupsTable = () => {
     await refreshRows();
   };
 
+  const isActionDisabled = (row, action) => {
+    if (!action) return true;
+    if (["call", "whatsapp", "open-lead"].includes(action)) return false;
+    if (action === "reschedule") return row.status === "Done";
+    if (action === "cancel") return row.status === "Done" || row.status === "Cancelled";
+    return row.status === "Done" || row.status === "Cancelled";
+  };
+
   const handleProceed = async (row) => {
     const action = nextActions[row.rawId] || "";
-    if (!action) return;
+    if (isActionDisabled(row, action)) return;
+
+    if (action === "call") {
+      handleCall(row);
+      return;
+    }
+
+    if (action === "whatsapp") {
+      handleWhatsApp(row);
+      return;
+    }
+
+    if (action === "mark-done") {
+      await handleMarkDone(row);
+      return;
+    }
+
+    if (action === "reschedule") {
+      await handleReschedule(row);
+      return;
+    }
+
+    if (action === "cancel") {
+      await handleCancel(row);
+      return;
+    }
+
+    if (action === "open-lead") {
+      handleOpenLead(row);
+      return;
+    }
 
     if (action === "create-next-follow-up") {
       const nextDateTime = window.prompt("Next follow-up date and time (YYYY-MM-DDTHH:mm)", "");
@@ -399,19 +443,12 @@ const SalesFollowupsTable = () => {
                 <td>{row.notes}</td>
                 <td>
                   <div className="followup-actions">
-                    <button type="button" onClick={() => handleCall(row)}>
-                      <Icon icon="mdi:phone-outline" width={15} height={15} /> Call
-                    </button>
-                    <button type="button" onClick={() => handleWhatsApp(row)}>
-                      <Icon icon="mdi:message-outline" width={15} height={15} /> WhatsApp
-                    </button>
                     <div className="followup-next-action">
                       <select
                         value={nextActions[row.rawId] || ""}
                         onChange={(event) =>
                           setNextActions((current) => ({ ...current, [row.rawId]: event.target.value }))
                         }
-                        disabled={row.status === "Done" || row.status === "Cancelled"}
                       >
                         {nextActionOptions.map((option) => (
                           <option key={option.value} value={option.value}>
@@ -422,31 +459,11 @@ const SalesFollowupsTable = () => {
                       <button
                         type="button"
                         onClick={() => handleProceed(row)}
-                        disabled={!nextActions[row.rawId] || row.status === "Done" || row.status === "Cancelled"}
+                        disabled={isActionDisabled(row, nextActions[row.rawId] || "")}
                       >
                         Proceed
                       </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleMarkDone(row)}
-                      disabled={row.status === "Done" || row.status === "Cancelled"}
-                    >
-                      Mark Done
-                    </button>
-                    <button type="button" onClick={() => handleReschedule(row)} disabled={row.status === "Done"}>
-                      Reschedule
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleCancel(row)}
-                      disabled={row.status === "Done" || row.status === "Cancelled"}
-                    >
-                      Cancel
-                    </button>
-                    <button type="button" onClick={() => handleOpenLead(row)}>
-                      Open Lead
-                    </button>
                   </div>
                 </td>
               </tr>

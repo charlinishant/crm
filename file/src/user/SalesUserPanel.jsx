@@ -259,6 +259,28 @@ const formatTaskDate = (value) => {
   });
 };
 
+const getDateKey = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
+};
+
+const formatDashboardDate = () =>
+  new Date().toLocaleDateString("en-IN", {
+    weekday: "long",
+    day: "2-digit",
+    month: "short",
+  });
+
+const formatIndianCompactMoney = (value) => {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return "";
+  if (amount >= 10000000) return `Rs. ${(amount / 10000000).toFixed(amount % 10000000 ? 1 : 0)} Cr`;
+  if (amount >= 100000) return `Rs. ${(amount / 100000).toFixed(amount % 100000 ? 1 : 0)} L`;
+  return `Rs. ${amount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+};
+
 const getTimeGreeting = () => {
   const hour = new Date().getHours();
 
@@ -640,6 +662,76 @@ const SalesUserPanel = () => {
     ];
   }, [panel.leads]);
 
+  const homeMetrics = useMemo(() => {
+    const todayKey = getDateKey(new Date());
+    const currentMonthKey = todayKey.slice(0, 7);
+    const todayLeads = panel.leads.filter((lead) => getDateKey(lead.createdAt || lead.received_on) === todayKey);
+    const todaysVisits = panel.leads.filter((lead) =>
+      getDateKey(lead.conductSiteDate || lead.siteVisitDate || lead.siteVisitConductedOn) === todayKey
+    );
+    const completedVisitCount = todaysVisits.filter((lead) =>
+      ["done", "completed", "conducted", "visit done"].some((status) =>
+        normalizeStageText(lead.siteVisitStatus || lead.visitStatus || lead.conductSiteStatus).includes(status)
+      )
+    ).length;
+    const upcomingVisitCount = Math.max(todaysVisits.length - completedVisitCount, 0);
+    const monthBookings = (panel.bookings || []).filter((booking) =>
+      getDateKey(booking.bookedOn || booking.createdAt).startsWith(currentMonthKey)
+    );
+    const bookedAmount = monthBookings.reduce(
+      (total, booking) => total + (Number(booking.basePrice || booking.amount || booking.totalAmount) || 0),
+      0
+    );
+    const missedCount = panel.stats.missedFollowups || 0;
+
+    return [
+      {
+        key: "new-leads",
+        label: "New leads today",
+        value: todayLeads.length,
+        detail: todayLeads.length ? "+ from assigned leads" : "No new leads yet",
+        tone: "positive",
+        onClick: () => {
+          setActiveScreen("leads");
+          navigate("/user/sales/leads");
+        },
+      },
+      {
+        key: "site-visits",
+        label: "Site visits today",
+        value: todaysVisits.length || panel.stats.siteVisits || 0,
+        detail: `${completedVisitCount} done · ${upcomingVisitCount} upcoming`,
+        onClick: () => {
+          openScheduleVisit();
+          navigate("/user/sales/site-visit");
+        },
+      },
+      {
+        key: "bookings",
+        label: "Bookings MTD",
+        value: monthBookings.length || panel.stats.bookings || 0,
+        detail: bookedAmount ? `${formatIndianCompactMoney(bookedAmount)} booked` : "Booked this month",
+        tone: "positive",
+        onClick: () => {
+          setActiveScreen("bookings");
+          navigate("/user/sales/bookings");
+        },
+      },
+      {
+        key: "sla",
+        label: "SLA breaches",
+        value: missedCount,
+        detail: missedCount ? "Needs reassignment" : "No breaches",
+        tone: missedCount ? "danger" : "positive",
+        onClick: () => {
+          setActiveScreen("followups");
+          setActiveFollowupFilter("missed");
+          navigate("/user/sales/followups?filter=missed");
+        },
+      },
+    ];
+  }, [navigate, panel.bookings, panel.leads, panel.stats.bookings, panel.stats.missedFollowups, panel.stats.siteVisits]);
+
   const handleFunnelClick = (key) => {
     setActiveScreen("leads");
     setActiveLeadStage(key);
@@ -827,6 +919,22 @@ const SalesUserPanel = () => {
     setOpenActionLeadId(null);
     setActiveScreen("whatsapp");
     navigate(`/user/sales/whatsapp${leadId ? `?leadId=${leadId}` : ""}`, {
+      state: lead ? { lead } : undefined,
+    });
+  };
+
+  const openEmailPage = (lead = null) => {
+    const leadId = lead ? getLeadId(lead) : "";
+    setActiveScreen("conversation");
+    navigate(`/user/sales/conversation?tab=emails${leadId ? `&leadId=${leadId}` : ""}`, {
+      state: lead ? { lead } : undefined,
+    });
+  };
+
+  const openBookingPage = (lead = null) => {
+    const leadId = lead ? getLeadId(lead) : "";
+    setActiveScreen("bookings");
+    navigate(`/user/sales/bookings${leadId ? `?leadId=${leadId}` : ""}`, {
       state: lead ? { lead } : undefined,
     });
   };
@@ -1157,10 +1265,12 @@ const SalesUserPanel = () => {
             <div className="sales-page-head">
               <div>
                 <h1>{timeGreeting}, {panel.user?.firstName || userName}</h1>
-                <p>{panel.user?.department || "Sales"} dashboard connected with admin access</p>
+                <p>{formatDashboardDate()} · {panel.leads.length} assigned leads</p>
               </div>
               <div className="sales-actions">
-                {/* <button type="button">Today</button> */}
+                <button type="button" className="sales-range-btn">
+                  Last 7 days
+                </button>
                 <button
                   type="button"
                   className="primary"
@@ -1169,7 +1279,7 @@ const SalesUserPanel = () => {
                     navigate("/user/sales/add-lead");
                   }}
                 >
-                  Add lead
+                  + Add lead
                 </button>
               </div>
             </div>
@@ -1177,7 +1287,24 @@ const SalesUserPanel = () => {
 
           {error && <div className="sales-alert">{error}. Showing saved login data.</div>}
 
-          {activeScreen !== "whatsapp" && activeScreen !== "details" && activeScreen !== "conversation" && activeScreen !== "calls" && (
+          {activeScreen === "home" && (
+            <div className="sales-stat-grid sales-home-metrics">
+              {homeMetrics.map((metric) => (
+                <button
+                  className={`sales-stat sales-stat-click sales-home-metric ${metric.tone || ""}`}
+                  key={metric.key}
+                  type="button"
+                  onClick={metric.onClick}
+                >
+                  <span>{metric.label}</span>
+                  <strong>{loading ? "..." : metric.value}</strong>
+                  <small>{metric.detail}</small>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {activeScreen === "followups" && (
             <div className="sales-stat-grid">
               <button type="button" className="sales-stat sales-stat-click" onClick={() => openFollowups("today")}>
                 <span>Today follow-ups</span>
@@ -1253,6 +1380,8 @@ const SalesUserPanel = () => {
               user={panel.user}
               onOpenCallLead={openCallPage}
               onOpenWhatsAppLead={openWhatsAppPage}
+              onSendEmailLead={openEmailPage}
+              onBookLead={openBookingPage}
               onOpenLead={openLeadDetails}
               onScheduleVisitLead={openSalesSiteVisitPage}
               onRefreshPanel={() => loadPanel(false)}

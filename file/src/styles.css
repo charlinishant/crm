@@ -22655,10 +22655,8 @@ th{
 /* Admin follow-up action controls. */
 .followup-actions {
   align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-width: 520px;
+  display: block;
+  min-width: 300px;
 }
 
 .followup-actions button,
@@ -22680,12 +22678,13 @@ th{
 
 .followup-actions button {
   cursor: pointer;
-  min-width: 76px;
+  min-width: 92px;
 }
 
 .followup-actions select {
   cursor: pointer;
   min-width: 190px;
+  width: 100%;
 }
 
 .followup-actions button:disabled,
@@ -22696,6 +22695,9 @@ th{
 
 .followup-next-action {
   align-items: center;
-  display: inline-flex;
+  display: grid;
   gap: 8px;
+  grid-template-columns: minmax(170px, 1fr) auto;
+  max-width: 360px;
+  width: 100%;
 }

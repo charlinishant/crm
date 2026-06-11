@@ -102,6 +102,17 @@ const getCurrentUserName = () => {
   }
 };
 
+const getCurrentUserRole = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem("authUser") || "null");
+    return String(user?.role || "").trim().toUpperCase();
+  } catch {
+    return "";
+  }
+};
+
+const salesRoles = new Set(["SALES", "PRE_SALES", "POST_SALES"]);
+
 const getLeadId = (lead) => lead?.id || lead?._id || lead?.lead_id || "";
 
 const getLeadName = (lead) =>
@@ -261,6 +272,80 @@ const mergeNoteUiState = (leadId, notes) => {
       pinned: Boolean(localState[note.id]?.pinned),
       updatedAt: localState[note.id]?.updatedAt || note.updatedAt,
     }));
+};
+
+const activityNotificationStorageKey = "crmActivityNotifications";
+
+const getStoredActivityNotifications = () => {
+  try {
+    return JSON.parse(localStorage.getItem(activityNotificationStorageKey) || "[]");
+  } catch {
+    return [];
+  }
+};
+
+const saveActivityNotifications = (notifications) => {
+  localStorage.setItem(activityNotificationStorageKey, JSON.stringify(notifications));
+  window.dispatchEvent(new Event("crmActivityNotificationsChanged"));
+};
+
+const publishSalesActivityNotification = ({
+  id,
+  leadId,
+  leadName,
+  title,
+  description,
+  meta,
+  type,
+  createdAt = new Date().toISOString(),
+}) => {
+  if (!leadId || !salesRoles.has(getCurrentUserRole())) return;
+
+  const actorName = getCurrentUserName();
+  const token = localStorage.getItem("authToken");
+  const notification = {
+    id: id || `${leadId}-${type || "Activity"}-${createdAt}-${Math.random().toString(36).slice(2, 8)}`,
+    leadId,
+    leadName,
+    title,
+    description,
+    meta: meta || `Done by ${actorName}`,
+    type: type || "Activity",
+    actorName,
+    actorRole: getCurrentUserRole(),
+    createdAt,
+  };
+  const notifications = [
+    notification,
+    ...getStoredActivityNotifications().filter((item) => item.id !== notification.id),
+  ]
+    .sort((first, second) => {
+      const firstTime = toDate(first.createdAt)?.getTime() || 0;
+      const secondTime = toDate(second.createdAt)?.getTime() || 0;
+      return secondTime - firstTime;
+    })
+    .slice(0, 100);
+
+  saveActivityNotifications(notifications);
+
+  if (token) {
+    fetch(`${API_URL}/lead-activities`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        leadId: Number(leadId),
+        type: title || type || "Activity",
+        title,
+        description,
+        message: description,
+      }),
+    }).catch((error) => {
+      console.error("Unable to publish admin notification:", error);
+    });
+  }
 };
 
 const UserDetails = ({
@@ -488,6 +573,14 @@ const UserDetails = ({
         })
       );
       setStatusMessage(`Status saved as ${status}`);
+      publishSalesActivityNotification({
+        leadId,
+        leadName,
+        title: "Lead Status Updated",
+        description: `${leadName} status changed to ${status}`,
+        meta: `Done by ${getCurrentUserName()}`,
+        type: "History",
+      });
       return true;
     } catch (error) {
       console.error("Unable to update lead status:", error);
@@ -575,6 +668,16 @@ const UserDetails = ({
         if (!response.ok) throw new Error("Unable to save note");
         const saved = await response.json();
         setNotes((current) => [{ ...saved, pinned: false }, ...current]);
+        publishSalesActivityNotification({
+          id: `${leadId}-note-${saved.id || Date.now()}`,
+          leadId,
+          leadName,
+          title: "Note Added",
+          description: text,
+          meta: `Done by ${getCurrentUserName()}`,
+          type: "Notes",
+          createdAt: saved.createdAt || new Date().toISOString(),
+        });
       }
 
       setNoteDraft("");
@@ -621,7 +724,7 @@ const UserDetails = ({
     const [followUpDate, followUpTime = "09:00"] = followupDate.split("T");
 
     try {
-      await createFollowup({
+      const savedFollowup = await createFollowup({
         leadId,
         type: "Call",
         followUpDate,
@@ -631,6 +734,15 @@ const UserDetails = ({
       });
       setFollowupDraft("");
       setFollowupDate("");
+      publishSalesActivityNotification({
+        id: `${leadId}-followup-${savedFollowup?.id || savedFollowup?.followUp?.id || Date.now()}`,
+        leadId,
+        leadName,
+        title: "Follow-up Scheduled",
+        description: followupDraft.trim(),
+        meta: `Done by ${getCurrentUserName()} for ${formatDateTime(followupDate)}`,
+        type: "Follow-ups",
+      });
       fetchFollowups();
     } catch (error) {
       alert(error.message || "Unable to schedule follow-up");
@@ -652,6 +764,15 @@ const UserDetails = ({
           priority: item.priority || "Medium",
         });
       }
+      publishSalesActivityNotification({
+        id: `${leadId}-followup-${item.id}-${status}`,
+        leadId,
+        leadName,
+        title: `Follow-up ${status}`,
+        description: item.notes || item.title || "Follow-up updated",
+        meta: `Done by ${getCurrentUserName()}`,
+        type: "Follow-ups",
+      });
       fetchFollowups();
     } catch (error) {
       alert(error.message || "Unable to update follow-up");
@@ -772,6 +893,60 @@ const UserDetails = ({
     if (activeTab === "Emails" || activeTab === "SMS" || activeTab === "WhatsApp") return [];
     return activities.filter((activity) => activity.type === activeTab);
   }, [activeTab, activities]);
+
+  useEffect(() => {
+    if (!leadId || activities.length === 0 || !salesRoles.has(getCurrentUserRole())) return;
+
+    const actorName = getCurrentUserName();
+    const leadNotifications = activities
+      .map((activity) => ({
+        id: `${leadId}-${activity.id}`,
+        leadId,
+        leadName,
+        title: activity.title,
+        description: activity.description,
+        meta: `Done by ${actorName}${activity.meta ? ` | ${activity.meta}` : ""}`,
+        type: activity.type,
+        actorName,
+        actorRole: getCurrentUserRole(),
+        createdAt: activity.createdAt || new Date().toISOString(),
+      }));
+    if (leadNotifications.length === 0) return;
+    const leadNotificationIds = new Set(leadNotifications.map((item) => item.id));
+    const storedNotifications = getStoredActivityNotifications();
+    const storedNotificationIds = new Set(storedNotifications.map((item) => item.id));
+    const newLeadNotifications = leadNotifications.filter((item) => !storedNotificationIds.has(item.id));
+    const existingNotifications = storedNotifications.filter((item) => !leadNotificationIds.has(item.id));
+    const nextNotifications = [...leadNotifications, ...existingNotifications]
+      .sort((first, second) => {
+        const firstTime = toDate(first.createdAt)?.getTime() || 0;
+        const secondTime = toDate(second.createdAt)?.getTime() || 0;
+        return secondTime - firstTime;
+      })
+      .slice(0, 100);
+
+    saveActivityNotifications(nextNotifications);
+    if (token && newLeadNotifications.length > 0) {
+      newLeadNotifications.forEach((notification) => {
+        fetch(`${API_URL}/lead-activities`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            leadId: Number(notification.leadId),
+            type: notification.title || notification.type || "Activity",
+            title: notification.title,
+            description: notification.description,
+            message: notification.description,
+          }),
+        }).catch((error) => {
+          console.error("Unable to sync admin notification:", error);
+        });
+      });
+    }
+  }, [activities, leadId, leadName, token]);
 
   const groupedActivities = useMemo(() => {
     return filteredActivities.reduce((groups, activity) => {

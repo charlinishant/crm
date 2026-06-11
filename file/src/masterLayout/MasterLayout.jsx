@@ -3,9 +3,50 @@ import { Icon } from "@iconify/react/dist/iconify.js";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import ThemeToggleButton from "../helper/ThemeToggleButton";
 
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const activityNotificationStorageKey = "crmActivityNotifications";
+
+const getActivityNotifications = () => {
+  try {
+    return JSON.parse(localStorage.getItem(activityNotificationStorageKey) || "[]");
+  } catch {
+    return [];
+  }
+};
+
+const saveActivityNotifications = (notifications) => {
+  localStorage.setItem(activityNotificationStorageKey, JSON.stringify(notifications));
+};
+
+const fetchActivityNotifications = async () => {
+  const token = localStorage.getItem("authToken");
+  if (!token) return getActivityNotifications();
+
+  const response = await fetch(`${API_URL}/lead-activities?limit=100`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error("Unable to load activity notifications");
+  const notifications = await response.json();
+  saveActivityNotifications(Array.isArray(notifications) ? notifications : []);
+  return Array.isArray(notifications) ? notifications : [];
+};
+
+const formatNotificationTime = (value) => {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return "";
+
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
 const MasterLayout = ({ children }) => {
   let [sidebarActive, seSidebarActive] = useState(false);
   let [mobileMenu, setMobileMenu] = useState(false);
+  const [activityNotifications, setActivityNotifications] = useState(getActivityNotifications);
   const location = useLocation(); // Hook to get the current route
   const navigate = useNavigate();
   const savedUser = JSON.parse(localStorage.getItem("authUser") || "null");
@@ -18,6 +59,7 @@ const MasterLayout = ({ children }) => {
       savedUser.role.slice(1).toLowerCase()
     : "User";
   const profilePhoto = savedUser?.profilePhoto || "assets/images/user.png";
+  const recentActivityNotifications = activityNotifications.slice(0, 5);
 
   const handleLogout = async () => {
     const token = localStorage.getItem("authToken");
@@ -37,6 +79,25 @@ const MasterLayout = ({ children }) => {
     localStorage.removeItem("authUser");
     navigate("/sign-in");
   };
+
+  useEffect(() => {
+    const refreshNotifications = () => {
+      fetchActivityNotifications()
+        .then(setActivityNotifications)
+        .catch(() => setActivityNotifications(getActivityNotifications()));
+    };
+
+    refreshNotifications();
+    window.addEventListener("storage", refreshNotifications);
+    window.addEventListener("focus", refreshNotifications);
+    window.addEventListener("crmActivityNotificationsChanged", refreshNotifications);
+
+    return () => {
+      window.removeEventListener("storage", refreshNotifications);
+      window.removeEventListener("focus", refreshNotifications);
+      window.removeEventListener("crmActivityNotificationsChanged", refreshNotifications);
+    };
+  }, []);
 
   useEffect(() => {
     const handleDropdownClick = (event) => {
@@ -1533,7 +1594,7 @@ const MasterLayout = ({ children }) => {
               <div className='d-flex flex-wrap align-items-center gap-3'>
                 {/* ThemeToggleButton */}
                 <ThemeToggleButton />
-                <div className='dropdown d-none d-sm-inline-block'>
+                {/* <div className='dropdown d-none d-sm-inline-block'>
                   <button
                     className='has-indicator w-40-px h-40-px bg-neutral-200 rounded-circle d-flex justify-content-center align-items-center'
                     type='button'
@@ -1740,9 +1801,9 @@ const MasterLayout = ({ children }) => {
                       </div>
                     </div>
                   </div>
-                </div>
+                </div> */}
                 {/* Language dropdown end */}
-                <div className='dropdown'>
+                {/* <div className='dropdown'>
                   <button
                     className='has-indicator w-40-px h-40-px bg-neutral-200 rounded-circle d-flex justify-content-center align-items-center'
                     type='button'
@@ -1925,7 +1986,7 @@ const MasterLayout = ({ children }) => {
                       </Link>
                     </div>
                   </div>
-                </div>
+                </div> */}
                 {/* Message dropdown end */}
                 <div className='dropdown'>
                   <button
@@ -1946,129 +2007,49 @@ const MasterLayout = ({ children }) => {
                         </h6>
                       </div>
                       <span className='text-primary-600 fw-semibold text-lg w-40-px h-40-px rounded-circle bg-base d-flex justify-content-center align-items-center'>
-                        05
+                        {activityNotifications.length.toString().padStart(2, "0")}
                       </span>
                     </div>
                     <div className='max-h-400-px overflow-y-auto scroll-sm pe-4'>
-                      <Link
-                        to='#'
-                        className='px-24 py-12 d-flex align-items-start gap-3 mb-2 justify-content-between'
-                      >
-                        <div className='text-black hover-bg-transparent hover-text-primary d-flex align-items-center gap-3'>
-                          <span className='w-44-px h-44-px bg-success-subtle text-success-main rounded-circle d-flex justify-content-center align-items-center flex-shrink-0'>
-                            <Icon
-                              icon='bitcoin-icons:verify-outline'
-                              className='icon text-xxl'
-                            />
-                          </span>
-                          <div>
-                            <h6 className='text-md fw-semibold mb-4'>
-                              Congratulations
-                            </h6>
-                            <p className='mb-0 text-sm text-secondary-light text-w-200-px'>
-                              Your profile has been Verified. Your profile has
-                              been Verified
-                            </p>
-                          </div>
+                      {recentActivityNotifications.length === 0 ? (
+                        <div className='px-24 py-24 text-center text-secondary-light'>
+                          No activity notifications
                         </div>
-                        <span className='text-sm text-secondary-light flex-shrink-0'>
-                          23 Mins ago
-                        </span>
-                      </Link>
-                      <Link
-                        to='#'
-                        className='px-24 py-12 d-flex align-items-start gap-3 mb-2 justify-content-between bg-neutral-50'
-                      >
-                        <div className='text-black hover-bg-transparent hover-text-primary d-flex align-items-center gap-3'>
-                          <span className='w-44-px h-44-px bg-success-subtle text-success-main rounded-circle d-flex justify-content-center align-items-center flex-shrink-0'>
-                            <img
-                              src='assets/images/notification/profile-1.png'
-                              alt=''
-                            />
-                          </span>
-                          <div>
-                            <h6 className='text-md fw-semibold mb-4'>
-                              Ronald Richards
-                            </h6>
-                            <p className='mb-0 text-sm text-secondary-light text-w-200-px'>
-                              You can stitch between artboards
-                            </p>
-                          </div>
-                        </div>
-                        <span className='text-sm text-secondary-light flex-shrink-0'>
-                          23 Mins ago
-                        </span>
-                      </Link>
-                      <Link
-                        to='#'
-                        className='px-24 py-12 d-flex align-items-start gap-3 mb-2 justify-content-between'
-                      >
-                        <div className='text-black hover-bg-transparent hover-text-primary d-flex align-items-center gap-3'>
-                          <span className='w-44-px h-44-px bg-info-subtle text-info-main rounded-circle d-flex justify-content-center align-items-center flex-shrink-0'>
-                            AM
-                          </span>
-                          <div>
-                            <h6 className='text-md fw-semibold mb-4'>
-                              Arlene McCoy
-                            </h6>
-                            <p className='mb-0 text-sm text-secondary-light text-w-200-px'>
-                              Invite you to prototyping
-                            </p>
-                          </div>
-                        </div>
-                        <span className='text-sm text-secondary-light flex-shrink-0'>
-                          23 Mins ago
-                        </span>
-                      </Link>
-                      <Link
-                        to='#'
-                        className='px-24 py-12 d-flex align-items-start gap-3 mb-2 justify-content-between bg-neutral-50'
-                      >
-                        <div className='text-black hover-bg-transparent hover-text-primary d-flex align-items-center gap-3'>
-                          <span className='w-44-px h-44-px bg-success-subtle text-success-main rounded-circle d-flex justify-content-center align-items-center flex-shrink-0'>
-                            <img
-                              src='assets/images/notification/profile-2.png'
-                              alt=''
-                            />
-                          </span>
-                          <div>
-                            <h6 className='text-md fw-semibold mb-4'>
-                              Annette Black
-                            </h6>
-                            <p className='mb-0 text-sm text-secondary-light text-w-200-px'>
-                              Invite you to prototyping
-                            </p>
-                          </div>
-                        </div>
-                        <span className='text-sm text-secondary-light flex-shrink-0'>
-                          23 Mins ago
-                        </span>
-                      </Link>
-                      <Link
-                        to='#'
-                        className='px-24 py-12 d-flex align-items-start gap-3 mb-2 justify-content-between'
-                      >
-                        <div className='text-black hover-bg-transparent hover-text-primary d-flex align-items-center gap-3'>
-                          <span className='w-44-px h-44-px bg-info-subtle text-info-main rounded-circle d-flex justify-content-center align-items-center flex-shrink-0'>
-                            DR
-                          </span>
-                          <div>
-                            <h6 className='text-md fw-semibold mb-4'>
-                              Darlene Robertson
-                            </h6>
-                            <p className='mb-0 text-sm text-secondary-light text-w-200-px'>
-                              Invite you to prototyping
-                            </p>
-                          </div>
-                        </div>
-                        <span className='text-sm text-secondary-light flex-shrink-0'>
-                          23 Mins ago
-                        </span>
-                      </Link>
+                      ) : (
+                        recentActivityNotifications.map((notification, index) => (
+                          <Link
+                            to='/activity-notifications'
+                            className={`px-24 py-12 d-flex align-items-start gap-3 mb-2 justify-content-between ${
+                              index % 2 ? "bg-neutral-50" : ""
+                            }`}
+                            key={notification.id}
+                          >
+                            <div className='text-black hover-bg-transparent hover-text-primary d-flex align-items-center gap-3'>
+                              <span className='w-44-px h-44-px bg-info-subtle text-info-main rounded-circle d-flex justify-content-center align-items-center flex-shrink-0'>
+                                <Icon icon='iconoir:activity' className='icon text-xxl' />
+                              </span>
+                              <div>
+                                <h6 className='text-md fw-semibold mb-4'>
+                                  {notification.title}
+                                </h6>
+                                <p className='mb-0 text-sm text-secondary-light text-w-200-px'>
+                                  {notification.leadName}: {notification.description}
+                                </p>
+                                <p className='mb-0 text-xs text-secondary-light text-w-200-px'>
+                                  {notification.meta || `Done by ${notification.actorName || "Sales User"}`}
+                                </p>
+                              </div>
+                            </div>
+                            <span className='text-sm text-secondary-light flex-shrink-0'>
+                              {formatNotificationTime(notification.createdAt)}
+                            </span>
+                          </Link>
+                        ))
+                      )}
                     </div>
                     <div className='text-center py-12 px-16'>
                       <Link
-                        to='#'
+                        to='/activity-notifications'
                         className='text-primary-600 fw-semibold text-md'
                       >
                         See All Notification

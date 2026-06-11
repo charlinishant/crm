@@ -25,12 +25,14 @@ const initialFormData = {
   status: "Draft",
   unitStream: "Sale Unit",
   reraReference: "",
+  reraDate: "",
+  possessionDate: "",
   type: "",
   category: "",
   bedrooms: "",
   bathrooms: "",
   balconies: "0",
-  kitchenType: "",
+  kitchenType: "1",
   additionalRooms: [],
   applicableFloorFrom: "",
   applicableFloorTo: "",
@@ -52,6 +54,7 @@ const initialFormData = {
   flowerBedPocketTerrace: "",
   serviceSlabAcLedge: "",
   refugeAreaShare: "",
+  parkingRequired: "No",
   carParkingSlots: "0",
   parkingType: "",
   twoWheelerSlots: "",
@@ -70,7 +73,8 @@ const initialFormData = {
   legalDocumentation: "",
   gstPercent: "5",
   stampDutyPercent: "6",
-  registrationPercent: "1",
+  registrationAmount: "",
+  parkingCharges: "",
   advanceMaintenanceMonths: "",
   maintenanceRatePerSqftPerMonth: "",
   sinkingFundCorpus: "",
@@ -84,19 +88,12 @@ const initialFormData = {
 };
 
 const typeOptions = ["Residential", "Commercial", "Retail", "Office", "Mixed-Use"];
-const categoryOptions = ["Apartment", "Penthouse", "Duplex", "Row House", "Villa", "Studio", "Shop", "Showroom", "Office Unit"];
+const categoryOptions = ["Flat", "Penthouse", "Duplex", "Row House", "Villa", "Studio", "Shop", "Showroom", "Office Unit"];
+const configurationLabelOptions = ["Studio", "1 BHK", "2 BHK", "3 BHK", "4 BHK", "5 BHK", "2 BHK, 3 BHK Jodi", "Shop", "Office"];
 const statusOptions = ["Draft", "Active", "On Hold", "Sold Out", "Withdrawn"];
-const unitStreamOptions = ["Sale Unit", "PAAA Member Unit", "Rehab Unit"];
-const kitchenTypeOptions = ["Separate", "Open", "Island", "Kitchenette"];
-const additionalRoomOptions = ["Pooja Room", "Store Room", "Servant Room", "Powder Room", "Study", "Home Office", "Walk-in Wardrobe"];
-const facingOptions = ["N", "S", "E", "W", "NE", "NW", "SE", "SW"];
-const viewOptions = ["Sea View", "Garden View", "Pool View", "Road View", "Internal", "Skyline"];
-const loadingBasisOptions = ["On Carpet", "On Built-up"];
-const parkingTypeOptions = ["Covered Stilt", "Open", "Mechanical Stack", "Podium", "Basement"];
+const unitStreamOptions = ["Sale Unit", "PAAA Member Unit", "Rehab Unit", "Investor"];
+const fallbackUnitNumberOptions = ["A-101, A-201, A-301", "B-101, B-201, B-301", "C-101, C-201, C-301"];
 const rateBasisOptions = ["On Carpet", "On Saleable", "On Built-up"];
-const paymentPlanOptions = ["CLP", "Possession-Linked", "Subvention", "Custom"];
-const templateOptions = ["", "Sale Agreement", "PAAA Template", "Standard Allotment Letter", "Custom Template"];
-
 const AddFloorplan = () => {
   const navigate = useNavigate();
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
@@ -193,21 +190,15 @@ const AddFloorplan = () => {
       plcAmount +
       (toNumberOrNull(formData.infrastructureDevelopmentCharges) || 0) +
       (toNumberOrNull(formData.legalDocumentation) || 0);
-    const registration = Math.min(agreementValue * ((toNumberOrNull(formData.registrationPercent) || 0) / 100), 30000);
+    const registration = toNumberOrNull(formData.registrationAmount) || 0;
     const taxes =
       agreementValue * ((toNumberOrNull(formData.gstPercent) || 0) / 100) +
       agreementValue * ((toNumberOrNull(formData.stampDutyPercent) || 0) / 100) +
       registration;
-    const maintenance =
-      (toNumberOrNull(formData.advanceMaintenanceMonths) || 0) *
-      (toNumberOrNull(formData.maintenanceRatePerSqftPerMonth) || 0) *
-      (saleable || carpet);
     const allInclusive =
       agreementValue +
       taxes +
-      maintenance +
-      (toNumberOrNull(formData.clubMembership) || 0) +
-      (toNumberOrNull(formData.sinkingFundCorpus) || 0) +
+      (toNumberOrNull(formData.parkingCharges) || 0) +
       (toNumberOrNull(formData.societyFormationCharges) || 0);
 
     return {
@@ -217,6 +208,20 @@ const AddFloorplan = () => {
       allInclusive: Number(allInclusive.toFixed(2)),
     };
   }, [formData]);
+
+  const unitNumberOptions = useMemo(() => {
+    const from = toNumberOrNull(formData.applicableFloorFrom);
+    const to = toNumberOrNull(formData.applicableFloorTo);
+
+    if (from === null || to === null || from > to) return fallbackUnitNumberOptions;
+
+    const floors = [];
+    for (let floor = from; floor <= to; floor += 1) {
+      floors.push(`A-${floor}01`);
+    }
+
+    return floors.length ? [floors.join(", ")] : fallbackUnitNumberOptions;
+  }, [formData.applicableFloorFrom, formData.applicableFloorTo]);
 
   const handleChange = async (event) => {
     const { name, value, type, checked, selectedOptions, files } = event.target;
@@ -300,6 +305,9 @@ const AddFloorplan = () => {
       status: formData.status,
       unitStream: formData.unitStream,
       reraReference: formData.reraReference.trim(),
+      reraNumber: formData.reraReference.trim(),
+      reraDate: formData.reraDate,
+      possessionDate: formData.possessionDate,
       type: formData.type,
       category: formData.category,
       bedrooms: toNumberOrNull(formData.bedrooms),
@@ -327,6 +335,7 @@ const AddFloorplan = () => {
       flowerBedPocketTerrace: toNumberOrNull(formData.flowerBedPocketTerrace),
       serviceSlabAcLedge: toNumberOrNull(formData.serviceSlabAcLedge),
       refugeAreaShare: toNumberOrNull(formData.refugeAreaShare),
+      parkingRequired: formData.parkingRequired,
       carParkingSlots: toNumberOrNull(formData.carParkingSlots),
       parkingType: formData.parkingType,
       twoWheelerSlots: toNumberOrNull(formData.twoWheelerSlots),
@@ -345,7 +354,8 @@ const AddFloorplan = () => {
       legalDocumentation: toNumberOrNull(formData.legalDocumentation),
       gstPercent: toNumberOrNull(formData.gstPercent),
       stampDutyPercent: toNumberOrNull(formData.stampDutyPercent),
-      registrationPercent: toNumberOrNull(formData.registrationPercent),
+      registrationAmount: toNumberOrNull(formData.registrationAmount),
+      parkingCharges: toNumberOrNull(formData.parkingCharges),
       advanceMaintenanceMonths: toNumberOrNull(formData.advanceMaintenanceMonths),
       maintenanceRatePerSqftPerMonth: toNumberOrNull(formData.maintenanceRatePerSqftPerMonth),
       sinkingFundCorpus: toNumberOrNull(formData.sinkingFundCorpus),
@@ -424,10 +434,12 @@ const AddFloorplan = () => {
                     ))}
                   </SelectField>
                   <InputField label="FLOOR PLAN NAME *" name="floorPlanName" value={formData.floorPlanName} onChange={handleChange} required />
-                  <InputField label="CONFIGURATION LABEL *" name="configurationLabel" value={formData.configurationLabel} onChange={handleChange} placeholder="2 BHK, 3 BHK Jodi" required />
+                  <SelectField label="CONFIGURATION LABEL *" name="configurationLabel" value={formData.configurationLabel} onChange={handleChange} required options={configurationLabelOptions} />
                   <SelectField label="STATUS *" name="status" value={formData.status} onChange={handleChange} required options={statusOptions} />
                   <SelectField label="UNIT STREAM *" name="unitStream" value={formData.unitStream} onChange={handleChange} required options={unitStreamOptions} />
-                  <InputField label="RERA REFERENCE" name="reraReference" value={formData.reraReference} onChange={handleChange} />
+                  <InputField label="RERA NUMBER" name="reraReference" value={formData.reraReference} onChange={handleChange} />
+                  <InputField label="RERA DATE" name="reraDate" type="date" value={formData.reraDate} onChange={handleChange} />
+                  <InputField label="POSSESSION DATE" name="possessionDate" type="date" value={formData.possessionDate} onChange={handleChange} />
                 </div>
               </Section>
 
@@ -438,8 +450,7 @@ const AddFloorplan = () => {
                   <InputField label="BEDROOMS *" name="bedrooms" type="number" value={formData.bedrooms} onChange={handleChange} required />
                   <InputField label="BATHROOMS *" name="bathrooms" type="number" step="0.5" value={formData.bathrooms} onChange={handleChange} required />
                   <InputField label="BALCONIES *" name="balconies" type="number" value={formData.balconies} onChange={handleChange} required />
-                  <SelectField label="KITCHEN TYPE" name="kitchenType" value={formData.kitchenType} onChange={handleChange} options={kitchenTypeOptions} />
-                  <MultiSelectField label="ADDITIONAL ROOMS" name="additionalRooms" value={formData.additionalRooms} onChange={handleChange} options={additionalRoomOptions} />
+                  <InputField label="KITCHEN TYPE" name="kitchenType" type="number" value={formData.kitchenType} onChange={handleChange} />
                 </div>
               </Section>
 
@@ -447,11 +458,8 @@ const AddFloorplan = () => {
                 <div className="lead-grid">
                   <InputField label="APPLICABLE FLOOR FROM *" name="applicableFloorFrom" type="number" value={formData.applicableFloorFrom} onChange={handleChange} required />
                   <InputField label="APPLICABLE FLOOR TO *" name="applicableFloorTo" type="number" value={formData.applicableFloorTo} onChange={handleChange} required />
-                  <InputField label="UNIT NUMBERS" name="unitNumbers" value={formData.unitNumbers} onChange={handleChange} placeholder="A-101, A-201, A-301" />
+                  <SelectField label="UNIT NUMBERS" name="unitNumbers" value={formData.unitNumbers} onChange={handleChange} options={unitNumberOptions} />
                   <InputField label="TOTAL UNITS OF THIS PLAN *" name="totalUnitsOfPlan" type="number" value={formData.totalUnitsOfPlan} onChange={handleChange} required />
-                  <SelectField label="FACING *" name="facing" value={formData.facing} onChange={handleChange} required options={facingOptions} />
-                  <CheckboxField label="CORNER UNIT" name="cornerUnit" checked={formData.cornerUnit} onChange={handleChange} />
-                  <MultiSelectField label="VIEW" name="view" value={formData.view} onChange={handleChange} options={viewOptions} />
                 </div>
               </Section>
 
@@ -469,23 +477,13 @@ const AddFloorplan = () => {
                   <InputWithSuffix label="RERA CARPET AREA *" name="carpetArea" value={formData.carpetArea} onChange={handleChange} suffix={areaSuffix(formData.measure)} required />
                   <InputWithSuffix label="BUILT-UP AREA" name="builtupArea" value={formData.builtupArea} onChange={handleChange} suffix={areaSuffix(formData.measure)} />
                   <InputWithSuffix label="SALEABLE AREA *" name="saleableArea" value={formData.autoCalc ? computed.saleable : formData.saleableArea} onChange={handleChange} suffix={areaSuffix(formData.measure)} required disabled={formData.autoCalc} />
-                  <InputWithSuffix label="LOADING % *" name="loading" value={formData.loading} onChange={handleChange} suffix="%" required />
-                  <SelectField label="LOADING BASIS *" name="loadingBasis" value={formData.loadingBasis} onChange={handleChange} required options={loadingBasisOptions} />
                   <InputWithSuffix label="BALCONY AREA" name="balconyArea" value={formData.balconyArea} onChange={handleChange} suffix={areaSuffix(formData.measure)} />
-                  <InputWithSuffix label="ENCLOSED BALCONY / UTILITY" name="enclosedBalconyUtility" value={formData.enclosedBalconyUtility} onChange={handleChange} suffix={areaSuffix(formData.measure)} />
-                  <InputWithSuffix label="TERRACE AREA" name="terraceArea" value={formData.terraceArea} onChange={handleChange} suffix={areaSuffix(formData.measure)} />
-                  <InputWithSuffix label="FLOWER BED / POCKET TERRACE" name="flowerBedPocketTerrace" value={formData.flowerBedPocketTerrace} onChange={handleChange} suffix={areaSuffix(formData.measure)} />
-                  <InputWithSuffix label="SERVICE SLAB / AC LEDGE" name="serviceSlabAcLedge" value={formData.serviceSlabAcLedge} onChange={handleChange} suffix={areaSuffix(formData.measure)} />
-                  <InputWithSuffix label="REFUGE AREA SHARE" name="refugeAreaShare" value={formData.refugeAreaShare} onChange={handleChange} suffix={areaSuffix(formData.measure)} />
                 </div>
               </Section>
 
               <Section title="Parking & Extras">
                 <div className="lead-grid">
-                  <InputField label="CAR PARKING SLOTS *" name="carParkingSlots" type="number" value={formData.carParkingSlots} onChange={handleChange} required />
-                  <SelectField label="PARKING TYPE *" name="parkingType" value={formData.parkingType} onChange={handleChange} required options={parkingTypeOptions} />
-                  <InputField label="TWO-WHEELER SLOTS" name="twoWheelerSlots" type="number" value={formData.twoWheelerSlots} onChange={handleChange} />
-                  <InputWithSuffix label="BASEMENT STOREROOM" name="basementStoreroom" value={formData.basementStoreroom} onChange={handleChange} suffix={areaSuffix(formData.measure)} />
+                  <SelectField label="PARKING REQUIRED *" name="parkingRequired" value={formData.parkingRequired} onChange={handleChange} required options={["Yes", "No"]} />
                 </div>
               </Section>
 
@@ -496,25 +494,18 @@ const AddFloorplan = () => {
                   <InputField label="BASE PRICE" name="basePrice" type="number" value={formData.autoCalc ? computed.basePrice : formData.basePrice} onChange={handleChange} disabled={formData.autoCalc} />
                   <InputField label="FLOOR RISE / SQFT" name="floorRisePerSqft" type="number" value={formData.floorRisePerSqft} onChange={handleChange} />
                   <InputField label="BASE FLOOR FOR FLOOR RISE" name="baseFloorForFloorRise" type="number" value={formData.baseFloorForFloorRise} onChange={handleChange} />
-                  <InputField label="CORNER PLC %" name="cornerPlcPercent" type="number" value={formData.cornerPlcPercent} onChange={handleChange} />
-                  <InputField label="VIEW PLC %" name="viewPlcPercent" type="number" value={formData.viewPlcPercent} onChange={handleChange} />
-                  <InputField label="FACING PLC %" name="facingPlcPercent" type="number" value={formData.facingPlcPercent} onChange={handleChange} />
                 </div>
               </Section>
 
               <Section title="Other Charges">
                 <div className="lead-grid">
-                  <InputField label="CLUB MEMBERSHIP" name="clubMembership" type="number" value={formData.clubMembership} onChange={handleChange} />
-                  <InputField label="INFRASTRUCTURE / DEVELOPMENT CHARGES" name="infrastructureDevelopmentCharges" type="number" value={formData.infrastructureDevelopmentCharges} onChange={handleChange} />
-                  <SelectField label="INFRA / DEV BASIS" name="infrastructureDevelopmentChargeBasis" value={formData.infrastructureDevelopmentChargeBasis} onChange={handleChange} options={["Lump Sum", "Per Sqft"]} />
-                  <InputField label="LEGAL & DOCUMENTATION" name="legalDocumentation" type="number" value={formData.legalDocumentation} onChange={handleChange} />
+                  <InputField label="STAMP DUTY (%)" name="stampDutyPercent" type="number" value={formData.stampDutyPercent} onChange={handleChange} required />
                   <InputField label="GST % *" name="gstPercent" type="number" value={formData.gstPercent} onChange={handleChange} required />
-                  <InputField label="STAMP DUTY % *" name="stampDutyPercent" type="number" value={formData.stampDutyPercent} onChange={handleChange} required />
-                  <InputField label="REGISTRATION % *" name="registrationPercent" type="number" value={formData.registrationPercent} onChange={handleChange} required />
-                  <InputField label="ADVANCE MAINTENANCE MONTHS" name="advanceMaintenanceMonths" type="number" value={formData.advanceMaintenanceMonths} onChange={handleChange} />
-                  <InputField label="MAINTENANCE RATE / SQFT / MONTH" name="maintenanceRatePerSqftPerMonth" type="number" value={formData.maintenanceRatePerSqftPerMonth} onChange={handleChange} />
-                  <InputField label="SINKING FUND / CORPUS" name="sinkingFundCorpus" type="number" value={formData.sinkingFundCorpus} onChange={handleChange} />
+                  <InputField label="REGISTRATION CHARGES (INR)" name="registrationAmount" type="number" value={formData.registrationAmount} onChange={handleChange} required />
+                  <InputField label="LEGAL CHARGES (INR)" name="legalDocumentation" type="number" value={formData.legalDocumentation} onChange={handleChange} />
+                  <InputField label="DEVELOPMENT CHARGES (INR)" name="infrastructureDevelopmentCharges" type="number" value={formData.infrastructureDevelopmentCharges} onChange={handleChange} />
                   <InputField label="SOCIETY FORMATION CHARGES" name="societyFormationCharges" type="number" value={formData.societyFormationCharges} onChange={handleChange} />
+                  <InputField label="PARKING CHARGES (INR)" name="parkingCharges" type="number" value={formData.parkingCharges} onChange={handleChange} />
                 </div>
               </Section>
 
@@ -523,14 +514,6 @@ const AddFloorplan = () => {
                   <FileField label="FLOOR PLAN IMAGE" name="floorPlanImages" onChange={handleChange} required={formData.status === "Active"} />
                   <InputField label="BROCHURE PAGE REFERENCE" name="brochurePageReference" value={formData.brochurePageReference} onChange={handleChange} />
                   <InputField label="3D WALKTHROUGH LINK" name="walkthrough3dLink" type="url" value={formData.walkthrough3dLink} onChange={handleChange} />
-                </div>
-              </Section>
-
-              <Section title="Linked Entities">
-                <div className="lead-grid">
-                  <SelectField label="PAYMENT PLAN *" name="paymentPlan" value={formData.paymentPlan} onChange={handleChange} required options={paymentPlanOptions} />
-                  <SelectField label="DEFAULT ALLOTMENT LETTER TEMPLATE" name="allotmentLetterTemplate" value={formData.allotmentLetterTemplate} onChange={handleChange} options={templateOptions} />
-                  <SelectField label="DEFAULT AGREEMENT TEMPLATE" name="agreementTemplate" value={formData.agreementTemplate} onChange={handleChange} options={templateOptions} />
                 </div>
               </Section>
 

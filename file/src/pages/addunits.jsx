@@ -8,7 +8,6 @@ const emptyUnit = {
   unitIndex: "",
   baseRate: "",
   basePrice: "",
-  propertyPurpose: "Sales",
 };
 
 const AddUnits = () => {
@@ -19,14 +18,7 @@ const AddUnits = () => {
     projectId: "",
     towerId: "",
     floorId: "",
-    type: "",
-    category: "",
-    bedrooms: "",
-    bathrooms: "",
-    measure: "sqft",
-    carpet: "",
-    saleable: "",
-    loading: "0.0",
+    propertyPurpose: "",
     description: "",
   });
   const [unitList, setUnitList] = useState([{ ...emptyUnit }]);
@@ -101,27 +93,6 @@ const AddUnits = () => {
     fetchProjectData();
   }, [API_URL, formData.projectId]);
 
-  useEffect(() => {
-    if (!formData.floorId) return;
-
-    const selectedFloorPlan = floorPlans.find(
-      (plan) => String(plan.id) === String(formData.floorId)
-    );
-
-    if (!selectedFloorPlan) return;
-
-    setFormData((prev) => ({
-      ...prev,
-      type: selectedFloorPlan.type || prev.type,
-      category: selectedFloorPlan.category || prev.category,
-      bedrooms: selectedFloorPlan.bedrooms ?? prev.bedrooms,
-      bathrooms: selectedFloorPlan.bathrooms ?? prev.bathrooms,
-      measure: selectedFloorPlan.measure || prev.measure,
-      carpet: selectedFloorPlan.carpet ?? prev.carpet,
-      saleable: selectedFloorPlan.saleable ?? prev.saleable,
-    }));
-  }, [formData.floorId, floorPlans]);
-
   const handleChange = (event) => {
     const { name, value } = event.target;
     setFormData((prev) => ({
@@ -160,19 +131,11 @@ const AddUnits = () => {
         unitIndex: toNumberOrNull(unit.unitIndex),
         baseRate: toNumberOrNull(unit.baseRate),
         basePrice: toNumberOrNull(unit.basePrice),
-        propertyPurpose: unit.propertyPurpose.trim(),
       })),
       projectId: toNumberOrNull(formData.projectId),
       towerId: toNumberOrNull(formData.towerId),
       floorId: toNumberOrNull(formData.floorId),
-      type: formData.type.trim(),
-      category: formData.category.trim(),
-      bedrooms: toNumberOrNull(formData.bedrooms),
-      bathrooms: toNumberOrNull(formData.bathrooms),
-      measure: formData.measure,
-      carpet: toNumberOrNull(formData.carpet),
-      saleable: toNumberOrNull(formData.saleable),
-      loading: toNumberOrNull(formData.loading),
+      propertyPurpose: formData.propertyPurpose,
       description: formData.description,
     };
 
@@ -265,6 +228,17 @@ const AddUnits = () => {
                     </option>
                   ))}
                 </SelectField>
+                <SelectField
+                  label="PROPERTY PURPOSE *"
+                  name="propertyPurpose"
+                  value={formData.propertyPurpose}
+                  onChange={handleChange}
+                  required
+                >
+                  <option value="">Select Purpose</option>
+                  <option value="Investment">Investment</option>
+                  <option value="Self Use">Self Use</option>
+                </SelectField>
               </div>
             </Section>
 
@@ -292,41 +266,9 @@ const AddUnits = () => {
                     <FormField label="UNIT INDEX *" name="unitIndex" type="number" value={unit.unitIndex} onChange={(event) => handleUnitChange(index, event)} placeholder="0" required />
                     <FormField label="BASE RATE *" name="baseRate" type="number" value={unit.baseRate} onChange={(event) => handleUnitChange(index, event)} required />
                     <FormField label="BASE PRICE *" name="basePrice" type="number" value={unit.basePrice} onChange={(event) => handleUnitChange(index, event)} required />
-                    <SelectField
-                      label="PROPERTY PURPOSE *"
-                      name="propertyPurpose"
-                      value={unit.propertyPurpose}
-                      onChange={(event) => handleUnitChange(index, event)}
-                      required
-                    >
-                      <option value="">Select Purpose</option>
-                      <option value="Sales">Sales</option>
-                      <option value="Rent">Rent</option>
-                    </SelectField>
                   </div>
                 </div>
               ))}
-            </Section>
-
-            <Section title="Details">
-              <div className="lead-grid">
-                <FormField label="TYPE" name="type" value={formData.type} onChange={handleChange} />
-                <FormField label="CATEGORY" name="category" value={formData.category} onChange={handleChange} />
-                <FormField label="BEDROOMS" name="bedrooms" type="number" value={formData.bedrooms} onChange={handleChange} placeholder="0" />
-                <FormField label="BATHROOMS" name="bathrooms" type="number" value={formData.bathrooms} onChange={handleChange} placeholder="0" />
-              </div>
-            </Section>
-
-            <Section title="Areas">
-              <div className="lead-grid">
-                <SelectField label="MEASURE *" name="measure" value={formData.measure} onChange={handleChange} required>
-                  <option value="sqft">Sq. Ft.</option>
-                  <option value="sqm">Sq. M.</option>
-                </SelectField>
-                <InputWithSuffix label="CARPET" name="carpet" value={formData.carpet} onChange={handleChange} suffix={formData.measure === "sqm" ? "Sq. m." : "Sq. ft."} />
-                <InputWithSuffix label="SALEABLE" name="saleable" value={formData.saleable} onChange={handleChange} suffix={formData.measure === "sqm" ? "Sq. m." : "Sq. ft."} />
-                <InputWithSuffix label="LOADING" name="loading" value={formData.loading} onChange={handleChange} suffix="%" />
-              </div>
             </Section>
 
             <Section title="Description">
@@ -397,18 +339,3 @@ const SelectField = ({ label, name, value, onChange, children, required = false,
   </div>
 );
 
-const InputWithSuffix = ({ label, name, value, onChange, suffix }) => (
-  <div className="lead-group">
-    <label>{label}</label>
-    <div className="unit-input-group">
-      <input
-        name={name}
-        type="number"
-        value={value}
-        onChange={onChange}
-        placeholder="0.0"
-      />
-      <span>{suffix}</span>
-    </div>
-  </div>
-);

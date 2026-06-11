@@ -250,23 +250,27 @@ img.sales-avatar {
 }
 
 .sales-content {
-  padding: 20px;
+  padding: 24px 30px;
 }
 
 .sales-page-head {
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: 22px;
+  min-height: 46px;
 }
 
 .sales-page-head h1 {
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0 0 4px;
+  color: #05070a;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.18;
+  margin: 0 0 5px;
 }
 
 .sales-actions {
   display: flex;
   gap: 8px;
+  justify-content: flex-end;
 }
 
 .sales-actions button,
@@ -277,7 +281,8 @@ img.sales-avatar {
   color: var(--sales-text);
   cursor: pointer;
   font-size: 12px;
-  padding: 6px 12px;
+  height: 34px;
+  padding: 0 13px;
   text-decoration: none;
 }
 
@@ -286,6 +291,13 @@ img.sales-avatar {
   background: var(--sales-blue);
   border-color: var(--sales-blue);
   color: #fff;
+}
+
+.sales-actions .sales-range-btn {
+  background: #ffffff;
+  border-color: #d8dde6;
+  color: #111827;
+  min-width: 98px;
 }
 
 .sales-alert {
@@ -337,6 +349,48 @@ img.sales-avatar {
   font-size: 20px;
   line-height: 1.2;
   margin: 3px 0;
+}
+
+.sales-home-metrics {
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.sales-home-metric {
+  border-color: #e1e5eb;
+  border-radius: 8px;
+  box-shadow: none;
+  min-height: 120px;
+  padding: 20px 20px 17px;
+}
+
+.sales-home-metric span {
+  color: #414a5f;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.sales-home-metric strong {
+  color: #020617;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  margin: 9px 0 8px;
+}
+
+.sales-home-metric small {
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.sales-home-metric.positive small {
+  color: #166534;
+}
+
+.sales-home-metric.danger strong,
+.sales-home-metric.danger small {
+  color: #b91c1c;
 }
 
 .sales-grid {
@@ -3171,6 +3225,14 @@ img.sales-avatar {
 }
 
 @media (max-width: 1100px) {
+  .sales-content {
+    padding: 20px;
+  }
+
+  .sales-home-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .user-whatsapp-shell,
   .user-whatsapp-page.embedded .user-whatsapp-shell {
     grid-template-columns: minmax(290px, 340px) minmax(0, 1fr);
@@ -3235,6 +3297,44 @@ img.sales-avatar {
 }
 
 @media (max-width: 640px) {
+  .sales-content {
+    padding: 16px 12px;
+  }
+
+  .sales-page-head {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .sales-page-head h1 {
+    font-size: 21px;
+  }
+
+  .sales-actions {
+    width: 100%;
+  }
+
+  .sales-actions button {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .sales-home-metrics {
+    gap: 10px;
+    grid-template-columns: 1fr;
+  }
+
+  .sales-home-metric {
+    min-height: 104px;
+    padding: 16px;
+  }
+
+  .sales-home-metric strong {
+    font-size: 26px;
+  }
+
   .sales-panel.whatsapp-screen .sales-content {
     padding: 0;
   }
@@ -3295,7 +3395,10 @@ img.sales-avatar {
 
 /* Sales follow-ups table: match the My Lead table action style. */
 .sales-followups-card .followup-table {
-  overflow-x: auto;
+  display: grid;
+  gap: 0;
+  overflow-x: hidden;
+  width: 100%;
 }
 
 .sales-followups-card .followup-table-head,
@@ -3303,15 +3406,15 @@ img.sales-avatar {
   display: grid;
   gap: 12px;
   grid-template-columns:
-    minmax(190px, 1.3fr)
-    90px
-    minmax(150px, 0.9fr)
-    90px
-    110px
-    120px
-    minmax(160px, 1fr)
-    minmax(520px, 2fr);
-  min-width: 1320px;
+    minmax(150px, 1.1fr)
+    minmax(72px, 0.5fr)
+    minmax(130px, 0.8fr)
+    minmax(76px, 0.45fr)
+    minmax(96px, 0.55fr)
+    minmax(96px, 0.55fr)
+    minmax(120px, 0.8fr)
+    minmax(300px, 1.5fr);
+  min-width: 0;
 }
 
 .sales-followups-card .followup-table-head {
@@ -3323,7 +3426,7 @@ img.sales-avatar {
 }
 
 .sales-followups-card .followup-row {
-  align-items: center;
+  align-items: start;
   border-bottom: 1px solid var(--sales-line);
   padding: 10px 0;
 }
@@ -3341,65 +3444,97 @@ img.sales-avatar {
   color: var(--sales-text);
   font-size: 12px;
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .sales-followups-card .followup-row small,
 .sales-followups-card .followup-notes {
   color: var(--sales-muted);
   font-size: 11px;
+  overflow-wrap: anywhere;
 }
 
 .sales-followups-card .followup-actions {
   align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+  display: grid;
+  gap: 7px;
+  grid-template-columns: minmax(180px, 1fr) auto;
   min-width: 0;
+  width: 100%;
 }
 
-.sales-followups-card .followup-actions button,
-.sales-followups-card .followup-actions select {
+.sales-followups-card .followup-actions select,
+.sales-followups-card .followup-proceed-btn {
   align-items: center;
   background: #ffffff;
   border: 1px solid var(--sales-line-strong);
-  border-radius: 8px;
+  border-radius: 7px;
   color: var(--sales-text);
-  display: inline-flex;
   font: inherit;
   font-size: 12px;
-  gap: 6px;
+  font-weight: 700;
   height: 36px;
-  justify-content: center;
   line-height: 1;
-  padding: 0 12px;
+  min-width: 0;
+  padding: 0 11px;
   white-space: nowrap;
-}
-
-.sales-followups-card .followup-actions button {
-  cursor: pointer;
-  min-width: 76px;
 }
 
 .sales-followups-card .followup-actions select {
   cursor: pointer;
-  min-width: 190px;
+  width: 100%;
 }
 
-.sales-followups-card .followup-actions button:hover:not(:disabled),
-.sales-followups-card .followup-actions select:hover:not(:disabled) {
+.sales-followups-card .followup-proceed-btn {
+  display: inline-flex;
+  justify-content: center;
+  cursor: pointer;
+  min-width: 88px;
+}
+
+.sales-followups-card .followup-actions select:hover:not(:disabled),
+.sales-followups-card .followup-proceed-btn:hover:not(:disabled) {
   background: var(--sales-blue-soft);
   border-color: #9ac8f4;
   color: #185fa5;
 }
 
-.sales-followups-card .followup-actions button:disabled,
-.sales-followups-card .followup-actions select:disabled {
+.sales-followups-card .followup-actions select:disabled,
+.sales-followups-card .followup-proceed-btn:disabled {
   cursor: not-allowed;
   opacity: 0.55;
 }
 
-.sales-followups-card .followup-next-action {
-  align-items: center;
-  display: inline-flex;
-  gap: 8px;
+@media (max-width: 1180px) {
+  .sales-followups-card .followup-table-head {
+    display: none;
+  }
+
+  .sales-followups-card .followup-row {
+    background: #ffffff;
+    border: 1px solid var(--sales-line);
+    border-radius: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-bottom: 12px;
+    padding: 12px;
+  }
+
+  .sales-followups-card .followup-row > span {
+    min-width: 0;
+  }
+
+  .sales-followups-card .followup-actions {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) minmax(110px, 0.4fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .sales-followups-card .followup-row {
+    grid-template-columns: 1fr;
+  }
+
+  .sales-followups-card .followup-actions {
+    grid-template-columns: 1fr;
+  }
 }

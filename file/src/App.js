@@ -49,6 +49,7 @@ import ListPage from "./pages/ListPage";
 import MarketplaceDetailsPage from "./pages/MarketplaceDetailsPage";
 import MarketplacePage from "./pages/MarketplacePage";
 import NotificationAlertPage from "./pages/NotificationAlertPage";
+import ActivityNotificationsPage from "./pages/ActivityNotificationsPage";
 import NotificationPage from "./pages/NotificationPage";
 import PaginationPage from "./pages/PaginationPage";
 import PaymentGatewayPage from "./pages/PaymentGatewayPage";
@@ -337,6 +338,7 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/leads' element={<MarketplacePage />} />
         <Route exact path='/trash' element={<TrashPage />} />
         <Route exact path='/notification-alert' element={<NotificationAlertPage />} />
+        <Route exact path='/activity-notifications' element={<ActivityNotificationsPage />} />
          <Route exact path='/add-units' element={<AddUnits />} />
         <Route exact path='/units' element={<Units />} />
         <Route exact path='/floorplans' element={<Floorplans />} />

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, MessageSquare, Phone } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import CreateFollowupModal from "../../components/sales/CreateFollowupModal";
 import FollowupFilters from "../../components/sales/FollowupFilters";
 import FollowupStatusBadge from "../../components/sales/FollowupStatusBadge";
@@ -42,15 +42,18 @@ const getFilterForFollowup = (followup) => {
   return "missed";
 };
 
-const nextActionOptions = [
-  { value: "", label: "Next action" },
-  { value: "create-next-follow-up", label: "Create next follow-up" },
-  { value: "Qualified", label: "Mark Qualified" },
-  { value: "In Sourcing", label: "Move to In Sourcing" },
-  { value: "Visit Scheduled", label: "Schedule Visit" },
-  { value: "In Closing", label: "Move to In Closing" },
-  { value: "Booked", label: "Mark Booked" },
-  { value: "Unqualified", label: "Mark Unqualified" },
+const followupActionOptions = [
+  { value: "", label: "Choose option" },
+  { value: "call", label: "Call" },
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "email", label: "Send Email" },
+  { value: "visit", label: "Schedule Visit" },
+  { value: "booked", label: "Booked" },
+  { value: "not-interested", label: "Not Interested" },
+  { value: "done", label: "Mark Done" },
+  { value: "reschedule", label: "Reschedule" },
+  { value: "cancel", label: "Cancel" },
+  { value: "open-lead", label: "Open Lead" },
 ];
 
 const SalesFollowups = ({
@@ -59,6 +62,8 @@ const SalesFollowups = ({
   user,
   onOpenCallLead,
   onOpenWhatsAppLead,
+  onSendEmailLead,
+  onBookLead,
   onOpenLead,
   onScheduleVisitLead,
   onRefreshPanel,
@@ -69,7 +74,7 @@ const SalesFollowups = ({
   const [error, setError] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [rescheduleTarget, setRescheduleTarget] = useState(null);
-  const [nextActions, setNextActions] = useState({});
+  const [selectedActions, setSelectedActions] = useState({});
 
   useEffect(() => {
     setFilter(activeFilter);
@@ -118,57 +123,49 @@ const SalesFollowups = ({
     if (onRefreshPanel) onRefreshPanel();
   };
 
-  const handleProceed = async (followup) => {
-    const nextAction = nextActions[followup.id] || "";
-    if (!nextAction) return;
+  const updateLeadStatus = async (followup, status, extraPayload = {}) => {
+    const leadId = getLeadId(followup.lead);
+    if (!leadId) return;
 
-    if (nextAction === "Unqualified") {
-      const reason = window.prompt("Reason required: Not Answering / Not Interested / Wrong Number / Budget Issue / Other", "");
-      if (!reason) return;
+    const response = await fetch(`${process.env.REACT_APP_API_URL || "http://localhost:5000"}/leads/${leadId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status, ...extraPayload }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result?.message || "Unable to update lead status");
+  };
+
+  const handleNotInterested = async (followup) => {
+    const reason = window.prompt("Reason for not interested", "Not Interested");
+    if (!reason) return;
+
+    try {
+      await updateLeadStatus(followup, "Unqualified", {
+        unqualifiedReason: "Not Interested",
+        unqualifiedNote: reason,
+      });
       await handleMarkDone(followup, {
-        nextAction,
+        nextAction: "Unqualified",
         reason,
         note: reason,
       });
-      onOpenLead?.(followup.lead);
-      return;
+    } catch (err) {
+      setError(err.message || "Unable to mark lead as not interested");
     }
+  };
 
-    if (nextAction === "create-next-follow-up") {
-      const nextDateTime = window.prompt("Next follow-up date and time (YYYY-MM-DDTHH:mm)", "");
-      if (!nextDateTime) return;
-      const [followUpDate, followUpTime = "09:00"] = nextDateTime.split("T");
-
-      await createFollowup({
-        leadId: getLeadId(followup.lead),
-        type: followup.type || "Call",
-        followUpDate,
-        followUpTime,
-        priority: followup.priority || "Medium",
-        notes: followup.notes || "",
-      });
+  const handleBooked = async (followup) => {
+    try {
+      await updateLeadStatus(followup, "Booked");
       await handleMarkDone(followup, {
-        nextAction,
-        note: "Follow-up completed. Next follow-up created.",
+        nextAction: "Booked",
+        note: "Follow-up completed. Booking selected.",
       });
-      onOpenLead?.(followup.lead);
-      return;
+      onBookLead?.(followup.lead);
+    } catch (err) {
+      setError(err.message || "Unable to mark lead as booked");
     }
-
-    if (nextAction === "Visit Scheduled" && onScheduleVisitLead) {
-      await handleMarkDone(followup, {
-        nextAction,
-        note: "Follow-up completed. Schedule visit selected.",
-      });
-      onScheduleVisitLead(followup.lead);
-      return;
-    }
-
-    await handleMarkDone(followup, {
-      nextAction,
-      note: `Follow-up completed. Next action: ${nextAction}`,
-    });
-    onOpenLead?.(followup.lead);
   };
 
   const handleCancel = async (followup) => {
@@ -182,6 +179,50 @@ const SalesFollowups = ({
     await rescheduleFollowup(rescheduleTarget.id, payload);
     await loadFollowups();
     if (onRefreshPanel) onRefreshPanel();
+  };
+
+  const isFollowupClosed = (followup) =>
+    followup.status === "Done" ||
+    followup.status === "Cancelled" ||
+    followup.effectiveStatus === "Done" ||
+    followup.effectiveStatus === "Cancelled";
+
+  const isActionDisabled = (followup, action) => {
+    const closed = isFollowupClosed(followup);
+    const done = followup.status === "Done" || followup.effectiveStatus === "Done";
+
+    if (["booked", "not-interested", "done", "cancel"].includes(action)) return closed;
+    if (action === "reschedule") return done;
+    return false;
+  };
+
+  const handleActionChange = (followupId, action) => {
+    setSelectedActions((current) => ({ ...current, [followupId]: action }));
+  };
+
+  const clearSelectedAction = (followupId) => {
+    setSelectedActions((current) => ({ ...current, [followupId]: "" }));
+  };
+
+  const handleProceed = async (followup) => {
+    const action = selectedActions[followup.id] || "";
+    if (!action || isActionDisabled(followup, action)) return;
+
+    try {
+      if (action === "call") onOpenCallLead?.(followup.lead);
+      if (action === "whatsapp") onOpenWhatsAppLead?.(followup.lead);
+      if (action === "email") onSendEmailLead?.(followup.lead);
+      if (action === "visit") onScheduleVisitLead?.(followup.lead);
+      if (action === "booked") await handleBooked(followup);
+      if (action === "not-interested") await handleNotInterested(followup);
+      if (action === "done") await handleMarkDone(followup);
+      if (action === "reschedule") setRescheduleTarget(followup);
+      if (action === "cancel") await handleCancel(followup);
+      if (action === "open-lead") onOpenLead?.(followup.lead);
+      clearSelectedAction(followup.id);
+    } catch (err) {
+      setError(err.message || "Unable to complete selected action");
+    }
   };
 
   return (
@@ -233,41 +274,28 @@ const SalesFollowups = ({
               <span>{followup.leadStatus || "-"}</span>
               <span className="followup-notes">{followup.notes || "-"}</span>
               <span className="followup-actions">
-                <button type="button" onClick={() => onOpenCallLead?.(followup.lead)} title="Call">
-                  <Phone size={14} /> Call
-                </button>
-                <button type="button" onClick={() => onOpenWhatsAppLead?.(followup.lead)} title="WhatsApp">
-                  <MessageSquare size={14} /> WhatsApp
-                </button>
-                <div className="followup-next-action">
-                  <select
-                    value={nextActions[followup.id] || ""}
-                    onChange={(event) => setNextActions((current) => ({ ...current, [followup.id]: event.target.value }))}
-                    disabled={followup.status === "Done" || followup.status === "Cancelled"}
-                  >
-                    {nextActionOptions.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() => handleProceed(followup)}
-                    disabled={!nextActions[followup.id] || followup.status === "Done" || followup.status === "Cancelled"}
-                  >
-                    Proceed
-                  </button>
-                </div>
-                <button type="button" onClick={() => handleMarkDone(followup)} disabled={followup.status === "Cancelled" || followup.status === "Done"}>
-                  Mark Done
-                </button>
-                <button type="button" onClick={() => setRescheduleTarget(followup)} disabled={followup.status === "Done"}>
-                  Reschedule
-                </button>
-                <button type="button" onClick={() => handleCancel(followup)} disabled={followup.status === "Cancelled" || followup.status === "Done"}>
-                  Cancel
-                </button>
-                <button type="button" onClick={() => onOpenLead?.(followup.lead)}>
-                  Open Lead
+                <select
+                  aria-label={`Choose action for ${followup.leadName}`}
+                  value={selectedActions[followup.id] || ""}
+                  onChange={(event) => handleActionChange(followup.id, event.target.value)}
+                >
+                  {followupActionOptions.map((option) => (
+                    <option
+                      disabled={option.value ? isActionDisabled(followup, option.value) : false}
+                      key={option.value}
+                      value={option.value}
+                    >
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="followup-proceed-btn"
+                  disabled={!selectedActions[followup.id] || isActionDisabled(followup, selectedActions[followup.id])}
+                  type="button"
+                  onClick={() => handleProceed(followup)}
+                >
+                  Proceed
                 </button>
               </span>
             </div>
