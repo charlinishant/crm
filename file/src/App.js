@@ -142,6 +142,10 @@ const salesAllowedExactPaths = new Set([
   "/user-add-lead",
   "/user-attendance",
 ]);
+const adminAllowedExactPaths = new Set([
+  "/user-attendance",
+  "/attendance",
+]);
 const salesAllowedPrefixes = ["/user/sales"];
 
 const clearSession = () => {
@@ -173,6 +177,9 @@ const getStoredAuthUser = () => {
 const isSalesPathAllowed = (pathname) =>
   salesAllowedExactPaths.has(pathname) ||
   salesAllowedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+
+const isAdminPathAllowed = (pathname) =>
+  adminAllowedExactPaths.has(pathname);
 
 const getRoleName = (user) => String(user?.role || "").trim().toUpperCase();
 
@@ -244,7 +251,7 @@ const ProtectedAppRoutes = () => {
     return <Navigate to={salesHomePath} replace state={{ blockedPath: location.pathname }} />;
   }
 
-  if (token && !isPublicPath && !isAccessDeniedPath && isAdminUser && isSalesPath) {
+  if (token && !isPublicPath && !isAccessDeniedPath && isAdminUser && isSalesPath && !isAdminPathAllowed(location.pathname)) {
     return <Navigate to={adminHomePath} replace state={{ blockedPath: location.pathname }} />;
   }
 
