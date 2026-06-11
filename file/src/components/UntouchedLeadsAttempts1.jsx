@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import './UntouchedLeadsAttempts1.css';
 import TableHeader from './TableHeader';
 
 const UntouchedLeadsAttempts1 = () => {

@@ -1,3 +1,4 @@
+import "./styles.css";
 import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ADDLEAD from"./pages/Addlead"
@@ -81,6 +82,7 @@ import VoiceGeneratorPage from "./pages/VoiceGeneratorPage";
 import WalletPage from "./pages/WalletPage";
 import WidgetsPage from "./pages/WidgetsPage";
 import SiteVistsPage from "./pages/SiteVistsPage";
+import AttendancePage from "./pages/AttendancePage";
 import NewEnquiriesPage from "./pages/NewEnquiriesPage";
 import CallLaterPage from "./pages/CallLaterPage";
 import MissedCallPage from "./pages/MissedCallPage";
@@ -129,6 +131,18 @@ import UserDetails from "./user/userDetails";
 import TrashPage from "./pages/TrashPage";
 
 const publicPaths = new Set(["/", "/sign-in", "/sign-up", "/forgot-password"]);
+const accessDeniedPath = "/access-denied";
+const adminHomePath = "/dashboard";
+const salesHomePath = "/user/sales";
+const adminRoles = new Set(["ADMIN", "SUPER_ADMIN"]);
+const salesRoles = new Set(["SALES", "PRE_SALES", "POST_SALES"]);
+const salesAllowedExactPaths = new Set([
+  "/user-preview",
+  "/user-details",
+  "/user-add-lead",
+  "/user-attendance",
+]);
+const salesAllowedPrefixes = ["/user/sales"];
 
 const clearSession = () => {
   localStorage.removeItem("authToken");
@@ -148,13 +162,45 @@ const isTokenExpired = (token) => {
   }
 };
 
+const getStoredAuthUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem("authUser") || "null");
+  } catch {
+    return null;
+  }
+};
+
+const isSalesPathAllowed = (pathname) =>
+  salesAllowedExactPaths.has(pathname) ||
+  salesAllowedPrefixes.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+
+const getRoleName = (user) => String(user?.role || "").trim().toUpperCase();
+
+const getHomePathForRole = (role) => {
+  if (salesRoles.has(role)) return salesHomePath;
+  if (adminRoles.has(role)) return adminHomePath;
+  return accessDeniedPath;
+};
+
+const RedirectWithSearch = ({ to }) => {
+  const location = useLocation();
+  return <Navigate to={`${to}${location.search || ""}`} replace state={location.state} />;
+};
+
 const ProtectedAppRoutes = () => {
   const location = useLocation();
   const [sessionExpired, setSessionExpired] = useState(false);
   const token = localStorage.getItem("authToken");
+  const authUser = getStoredAuthUser();
+  const role = getRoleName(authUser);
+  const isSalesUser = salesRoles.has(role);
+  const isAdminUser = adminRoles.has(role);
+  const isAccessDeniedPath = location.pathname === accessDeniedPath;
+  const isPublicPath = publicPaths.has(location.pathname);
+  const isSalesPath = isSalesPathAllowed(location.pathname);
 
   useEffect(() => {
-    if (publicPaths.has(location.pathname)) {
+    if (isPublicPath) {
       setSessionExpired(false);
       return undefined;
     }
@@ -175,19 +221,35 @@ const ProtectedAppRoutes = () => {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", checkSession);
     };
-  }, [location.pathname]);
+  }, [isPublicPath, location.pathname]);
 
-  if (sessionExpired && !publicPaths.has(location.pathname)) {
+  if (sessionExpired && !isPublicPath) {
     return <Navigate to="/sign-in" replace state={{ sessionExpired: true }} />;
   }
 
-  if (!token && !publicPaths.has(location.pathname)) {
+  if (!token && !isPublicPath) {
     return <Navigate to="/sign-in" replace state={{ from: location.pathname }} />;
   }
 
-  if (token && isTokenExpired(token) && !publicPaths.has(location.pathname)) {
+  if (token && isTokenExpired(token) && !isPublicPath) {
     clearSession();
     return <Navigate to="/sign-in" replace state={{ sessionExpired: true }} />;
+  }
+
+  if (token && !isTokenExpired(token) && isPublicPath) {
+    return <Navigate to={getHomePathForRole(role)} replace />;
+  }
+
+  if (token && !isPublicPath && !isAccessDeniedPath && isSalesUser && !isSalesPath) {
+    return <Navigate to={salesHomePath} replace state={{ blockedPath: location.pathname }} />;
+  }
+
+  if (token && !isPublicPath && !isAccessDeniedPath && isAdminUser && isSalesPath) {
+    return <Navigate to={adminHomePath} replace state={{ blockedPath: location.pathname }} />;
+  }
+
+  if (token && !isPublicPath && !isAccessDeniedPath && !isAdminUser && !isSalesUser) {
+    return <Navigate to={accessDeniedPath} replace state={{ blockedPath: location.pathname }} />;
   }
 
   return (
@@ -201,11 +263,14 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/user/sales' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/leads' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/calls' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/followups' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/conversation' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/whatsapp' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/details' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/site-visit' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/bookings' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/add-lead' element={<SalesUserPanel />} />
-        <Route exact path='/user-add-lead' element={<Navigate to="/user/sales/add-lead" replace />} />
+        <Route exact path='/user-add-lead' element={<RedirectWithSearch to="/user/sales/add-lead" />} />
         <Route exact path='/import-leads' element={<HomePageTwo />} />
          <Route exact path='/svp-dashboard' element={<HomePageThree />} />
          <Route exact path='/reports' element={<HomePageFour />} />
@@ -319,8 +384,10 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/UntouchedLeadsAttempts3' element={<UntouchedLeadsAttemptsPage3/>} />
         <Route exact path='/Followups' element={< FollowupsPage />} />
         <Route exact path='/SiteVists' element={< SiteVistsPage/>} />
+        <Route exact path='/attendance' element={< AttendancePage/>} />
+        <Route exact path='/user-attendance' element={< AttendancePage/>} />
          <Route exact path='/WhatApp' element={< WhatAppPage />} />
-         <Route exact path='/user-details' element={< UserDetails/>} />
+         <Route exact path='/user-details' element={<RedirectWithSearch to="/user/sales/details" />} />
          <Route exact path='/BlukClickToCalls' element={< BlukClickPage />} />
         <Route exact path='*' element={<ErrorPage />} />
       </Routes>
@@ -498,6 +565,7 @@ function App() {
         <Route exact path='/UntouchedLeadsAttempts3' element={<UntouchedLeadsAttemptsPage3/>} />
         <Route exact path='/Followups' element={< FollowupsPage />} />
         <Route exact path='/SiteVists' element={< SiteVistsPage/>} />
+        <Route exact path='/user-attendance' element={< AttendancePage/>} />
          <Route exact path='/WhatApp' element={< WhatAppPage />} />
          <Route exact path='/BlukClickToCalls' element={< BlukClickPage />} />
 

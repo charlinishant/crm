@@ -12,7 +12,7 @@ const SiteVistsPage = () => {
       <MasterLayout>
 
         {/* Breadcrumb */}
-        <Breadcrumb title="Site Vists" />
+        <Breadcrumb title="Site Visits" />
 
        <SiteVists/>
 

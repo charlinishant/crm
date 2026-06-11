@@ -1,5 +1,4 @@
  import React from 'react';
-import './FormLayoutLayer.css';
 const FormLayoutLayer = () => {
     return (
     

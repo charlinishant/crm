@@ -165,13 +165,6 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
 
   const handlePreview = (lead) => {
     window.sessionStorage.setItem("selectedLeadPreview", JSON.stringify(lead));
-    const leadId = lead.id || lead._id || lead.lead_id || "";
-    setOpenMenu(null);
-    setMenuPosition(null);
-    navigate(leadId ? `/preview?leadId=${leadId}` : "/preview", { state: { lead } });
-  };
-
-  const handleDetails = (lead) => {
     window.sessionStorage.setItem("selectedLeadDetails", JSON.stringify(lead));
     const leadId = lead.id || lead._id || lead.lead_id || "";
     setOpenMenu(null);
@@ -1001,12 +994,6 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
                             <button
                               type="button"
                               onClick={() => handlePreview(lead)}
-                            >
-                              Preview
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDetails(lead)}
                             >
                               Details
                             </button>

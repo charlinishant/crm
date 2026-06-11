@@ -2,7 +2,6 @@ import React, { useEffect, useRef } from 'react'
 import Calendar from './child/Calendar'
 import { Icon } from '@iconify/react/dist/iconify.js'
 import flatpickr from 'flatpickr';
-import 'flatpickr/dist/flatpickr.min.css';
 
 
 const DatePicker = ({ id, placeholder }) => {

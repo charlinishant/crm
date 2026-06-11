@@ -1,41 +1,80 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  FaBold,
+  FaArrowLeft,
   FaCalendarAlt,
-  FaCaretDown,
+  FaCheckCircle,
   FaClock,
+  FaExchangeAlt,
   FaEdit,
-  FaEnvelopeOpen,
-  FaEraser,
-  FaItalic,
-  FaLink,
-  FaListOl,
-  FaListUl,
-  FaMicrophone,
-  FaPhoneAlt,
-  FaQuoteLeft,
-  FaRedo,
-  FaSearch,
-  FaSms,
-  FaStar,
   FaEllipsisV,
+  FaEnvelope,
+  FaHistory,
+  FaLock,
+  FaMapMarkerAlt,
+  FaPhoneAlt,
+  FaPlus,
+  FaRegStickyNote,
+  FaSave,
+  FaStar,
   FaTimes,
-  FaUnderline,
-  FaUndo,
+  FaTrash,
+  FaUserTie,
   FaWhatsapp,
 } from "react-icons/fa";
-import CallHistory from "./CallHistory";
+import {
+  createFollowup,
+  getLeadFollowupContext,
+  markFollowupDone,
+  rescheduleFollowup,
+} from "../services/followupApi";
+
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
+const crmStatuses = [
+  "New",
+  "Qualified",
+  "In sourcing",
+  "In closing",
+  "Booked",
+  "Unqualified",
+];
+
+const imageStatuses = ["Image pending", "Image received", "Image shared"];
+
+const backendStatusMap = {
+  All: "New",
+  New: "New",
+  Qualified: "Qualified",
+  "In sourcing": "In_sourcing",
+  "In closing": "In_closing",
+  Booked: "Booked",
+  Unqualified: "Unqualified",
+  "Image pending": "Image_pending",
+  "Image received": "Image_received",
+  "Image shared": "Image_shared",
+};
+
+const tabs = [
+  "Activity",
+  "Notes",
+  "Calls",
+  "Site Visits",
+  "Follow-ups",
+  "Emails",
+  "SMS",
+  "WhatsApp",
+  "History",
+];
 
 const fallbackLead = {
   id: 10702,
-  name: "chetan agrawal",
-  lead_status: "New",
+  firstName: "Chetan",
+  lastName: "Agrawal",
+  status: "New",
   source: "channel_partner",
-  city: "India",
-  owner: "Tejas Sales",
-  tags: "channel_partner, channe...",
-  project_name: "Binghatti Hills",
+  interestedProjects: "Binghatti Hills",
+  tags: "channel_partner",
 };
 
 const getStoredLead = () => {
@@ -44,24 +83,38 @@ const getStoredLead = () => {
       JSON.parse(window.sessionStorage.getItem("selectedLeadDetails") || "null") ||
       JSON.parse(window.sessionStorage.getItem("selectedLeadPreview") || "null")
     );
-  } catch (error) {
+  } catch {
     return null;
   }
 };
 
-const getValue = (lead, keys, fallback = "-") => {
-  for (const key of keys) {
-    const value = lead?.[key];
-    if (value !== undefined && value !== null && value !== "") return value;
+const getCurrentUserName = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem("authUser") || "null");
+    return (
+      [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+      user?.username ||
+      user?.email ||
+      "User"
+    );
+  } catch {
+    return "User";
   }
-  return fallback;
 };
+
+const getLeadId = (lead) => lead?.id || lead?._id || lead?.lead_id || "";
+
+const getLeadName = (lead) =>
+  [lead?.firstName, lead?.lastName].filter(Boolean).join(" ") ||
+  lead?.name ||
+  lead?.full_name ||
+  lead?.customer_name ||
+  lead?.companyName ||
+  (getLeadId(lead) ? `Lead #${getLeadId(lead)}` : "Lead");
 
 const getContactValue = (value, keys = ["value", "email", "phone", "number"]) => {
   if (!value) return "";
-
   if (typeof value === "string") return value;
-
   if (Array.isArray(value)) {
     for (const item of value) {
       const result = getContactValue(item, keys);
@@ -69,2165 +122,1590 @@ const getContactValue = (value, keys = ["value", "email", "phone", "number"]) =>
     }
     return "";
   }
-
   if (typeof value === "object") {
     for (const key of keys) {
       if (value[key]) return value[key];
     }
   }
-
   return "";
 };
 
-const cleanPhone = (value) => String(value || "").replace(/\D/g, "");
-
-const leadStatusOptions = [
-  { value: "New", label: "New" },
-  { value: "Qualified", label: "Qualified" },
-  { value: "In_sourcing", label: "In_sourcing" },
-  { value: "In_closing", label: "In_closing" },
-  { value: "Booked", label: "Booked" },
-  { value: "Unqualified", label: "Unqualified" },
-];
-
-const leadStageScores = {
-  New: { score: 15, step: 1 },
-  Qualified: { score: 40, step: 2 },
-  In_sourcing: { score: 60, step: 3 },
-  In_closing: { score: 80, step: 4 },
-  Booked: { score: 100, step: 5 },
-  Nurture: { score: 25, step: 2 },
-  Unqualified: { score: 0, step: 0 },
+const valueOf = (lead, keys, fallback = "-") => {
+  for (const key of keys) {
+    const value = lead?.[key];
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return fallback;
 };
 
-const getLeadStageScore = (status) =>
-  leadStageScores[normalizeStatus(status)] || leadStageScores.New;
-
-const splitLeadName = (name) => {
-  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
-  return {
-    firstName: parts[0] || "",
-    lastName: parts.slice(1).join(" "),
-  };
-};
-
-const normalizeStatus = (value) => {
-  if (!value) return "New";
-  const match = leadStatusOptions.find(
-    (option) =>
-      option.value === value ||
-      option.label.toLowerCase() === String(value).toLowerCase()
-  );
-  return match?.value || "New";
-};
-
-const getStatusLabel = (value) => {
-  return leadStatusOptions.find((option) => option.value === value)?.label || value;
-};
-
-const formatDate = (value, fallback) => {
-  if (!value) return fallback;
+const toDate = (value) => {
+  if (!value) return null;
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
+  return Number.isNaN(date.getTime()) ? null : date;
+};
 
+const formatDateTime = (value, fallback = "-") => {
+  const date = toDate(value);
+  if (!date) return fallback;
   return date.toLocaleString("en-IN", {
-    weekday: "short",
-    month: "short",
     day: "2-digit",
+    month: "short",
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
   });
 };
 
-const Details = () => {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
-  const [lead, setLead] = useState(location.state?.lead || getStoredLead() || fallbackLead);
-  const [selectedStatus, setSelectedStatus] = useState(
-    normalizeStatus(
-      getValue(
-        location.state?.lead || getStoredLead() || fallbackLead,
-        ["status", "lead_status", "stage"],
-        "New"
-      )
-    )
+const formatDateOnly = (value, fallback = "-") => {
+  const date = toDate(value);
+  if (!date) return fallback;
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const normalizeApiFollowup = (item) => ({
+  ...item,
+  title: item.notes || `${item.type || "Call"} follow-up`,
+  dueAt: item.followUpDate && item.followUpTime
+    ? `${String(item.followUpDate).slice(0, 10)}T${item.followUpTime}`
+    : item.followUpDate,
+  status: item.effectiveStatus || item.status || "Pending",
+});
+
+const formatMoney = (value) => {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) return "-";
+  return new Intl.NumberFormat("en-IN", {
+    currency: "INR",
+    maximumFractionDigits: 0,
+    style: "currency",
+  }).format(amount);
+};
+
+const normalizeText = (value) => String(value || "").toLowerCase();
+
+const getCrmStatusFromLead = (lead) => {
+  const rawStatus = String(valueOf(lead, ["crmStatus", "status", "lead_status", "stage"], "New"));
+  if (crmStatuses.includes(rawStatus)) return rawStatus;
+  if (rawStatus === "In_sourcing") return "In sourcing";
+  if (rawStatus === "In_closing") return "In closing";
+  if (rawStatus === "Image_pending") return "Image pending";
+  if (rawStatus === "Image_received") return "Image received";
+  if (rawStatus === "Image_shared") return "Image shared";
+  if (rawStatus === "Nurture" || rawStatus === "Follow-up") return "Qualified";
+  if (rawStatus === "Lost" || rawStatus === "Junk") return "Unqualified";
+  if (rawStatus === "Fresh_Lead" || rawStatus === "Prospect") return "New";
+  if (rawStatus === "Registered") return "In closing";
+  return "New";
+};
+
+const getStatusScore = (status) => {
+  const statusScores = {
+    All: 0,
+    New: 15,
+    Qualified: 35,
+    "In sourcing": 55,
+    "In closing": 75,
+    Booked: 100,
+    Unqualified: 0,
+  };
+
+  return statusScores[status] ?? 0;
+};
+
+const getOwnerName = (lead) => {
+  const team = lead?.team;
+  return (
+    valueOf(lead, ["owner", "assigned_to", "sales"], "") ||
+    [team?.firstName, team?.lastName].filter(Boolean).join(" ") ||
+    team?.username ||
+    team?.email ||
+    "Unassigned"
   );
-  const [isSavingStatus, setIsSavingStatus] = useState(false);
-  const [statusMessage, setStatusMessage] = useState("");
-  const [activeAction, setActiveAction] = useState("note");
-  const [savedNotes, setSavedNotes] = useState([]);
-  const [isSavingNote, setIsSavingNote] = useState(false);
-  const [noteError, setNoteError] = useState("");
-  const [isStartingCall, setIsStartingCall] = useState(false);
-  const [callMessage, setCallMessage] = useState("");
-  const [callRefreshKey, setCallRefreshKey] = useState(0);
-  const [isEditingLeadName, setIsEditingLeadName] = useState(false);
-  const [leadNameDraft, setLeadNameDraft] = useState("");
-  const [isSavingLeadName, setIsSavingLeadName] = useState(false);
-  const [leadEditMessage, setLeadEditMessage] = useState("");
-  const noteRef = useRef(null);
+};
+
+const getActivityDay = (value) => {
+  const date = toDate(value);
+  if (!date) return "Older";
+  const today = new Date();
+  const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const startDate = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const diff = Math.round((startToday - startDate) / 86400000);
+  if (diff === 0) return "Today";
+  if (diff === 1) return "Yesterday";
+  return formatDateOnly(date);
+};
+
+const getLocalNotes = (leadId) => {
+  try {
+    return JSON.parse(localStorage.getItem(`leadNoteUi:${leadId}`) || "{}");
+  } catch {
+    return {};
+  }
+};
+
+const saveLocalNotes = (leadId, value) => {
+  localStorage.setItem(`leadNoteUi:${leadId}`, JSON.stringify(value));
+};
+
+const mergeNoteUiState = (leadId, notes) => {
+  const localState = getLocalNotes(leadId);
+  return notes
+    .filter((note) => !localState[note.id]?.deleted)
+    .map((note) => ({
+      ...note,
+      note: localState[note.id]?.note || note.note,
+      pinned: Boolean(localState[note.id]?.pinned),
+      updatedAt: localState[note.id]?.updatedAt || note.updatedAt,
+    }));
+};
+
+const UserDetails = ({
+  context = "auto",
+  embedded = false,
+  onOpenCallLead,
+  onOpenWhatsAppLead,
+  onScheduleVisitLead,
+}) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const noteInputRef = useRef(null);
+  const token = localStorage.getItem("authToken");
   const leadIdFromUrl = useMemo(
     () => new URLSearchParams(location.search).get("leadId"),
     [location.search]
   );
 
-  useEffect(() => {
-    if (location.state?.lead) {
-      setLead(location.state.lead);
-      window.sessionStorage.setItem("selectedLeadDetails", JSON.stringify(location.state.lead));
-      return;
-    }
+  const [lead, setLead] = useState(location.state?.lead || getStoredLead() || fallbackLead);
+  const [notes, setNotes] = useState([]);
+  const [calls, setCalls] = useState([]);
+  const [visits, setVisits] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [activeTab, setActiveTab] = useState("Activity");
+  const [selectedStatus, setSelectedStatus] = useState(getCrmStatusFromLead(lead));
+  const [statusMessage, setStatusMessage] = useState("");
+  const [noteDraft, setNoteDraft] = useState("");
+  const [editingNoteId, setEditingNoteId] = useState(null);
+  const [isSavingNote, setIsSavingNote] = useState(false);
+  const [isSavingStatus, setIsSavingStatus] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [followups, setFollowups] = useState([]);
+  const [followupDraft, setFollowupDraft] = useState("");
+  const [followupDate, setFollowupDate] = useState("");
 
-    const storedLead = getStoredLead();
-    const storedId = storedLead?.id || storedLead?._id || storedLead?.lead_id;
-
-    if (storedLead && (!leadIdFromUrl || String(storedId) === String(leadIdFromUrl))) {
-      setLead(storedLead);
-      return;
-    }
-
-    if (!leadIdFromUrl) return;
-
-    const fetchLead = async () => {
-      try {
-        const response = await fetch(`${API_URL}/leads/`);
-        const result = await response.json();
-        const leads = Array.isArray(result) ? result : result?.data || [];
-        const foundLead = leads.find((item) => {
-          const itemId = item.id || item._id || item.lead_id;
-          return String(itemId) === String(leadIdFromUrl);
-        });
-
-        if (foundLead) {
-          setLead(foundLead);
-          window.sessionStorage.setItem("selectedLeadDetails", JSON.stringify(foundLead));
-        }
-      } catch (error) {
-        console.error("Unable to load lead details:", error);
-      }
-    };
-
-    fetchLead();
-  }, [API_URL, leadIdFromUrl, location.state]);
-
-  useEffect(() => {
-    setSelectedStatus(normalizeStatus(getValue(lead, ["status", "lead_status", "stage"], "New")));
-  }, [lead]);
-
-  const leadName = getValue(
+  const leadId = getLeadId(lead);
+  const leadName = getLeadName(lead);
+  const primaryPhone =
+    getContactValue(lead?.phones, ["phone", "number", "value"]) ||
+    valueOf(lead, ["phone", "mobile", "primaryPhone"], "");
+  const primaryEmail =
+    getContactValue(lead?.emails, ["email", "value"]) ||
+    valueOf(lead, ["email", "primaryEmail"], "");
+  const projectInterest = valueOf(
     lead,
-    ["name", "full_name", "customer_name"],
-    `${lead.firstName || ""} ${lead.lastName || ""}`.trim() || "chetan agrawal"
+    ["interestedProjects", "projectName", "project_name", "siteVisitProject", "propertyType"],
+    "-"
   );
-  const leadId = getValue(lead, ["id", "_id", "lead_id"], "10702");
-  const leadStatus = normalizeStatus(getValue(lead, ["status", "lead_status", "stage"], "New"));
-  const stageScore = getLeadStageScore(selectedStatus || leadStatus);
-  const projectName = getValue(lead, ["project_name", "projectName", "interestedProjects"], "Binghatti Hills");
-  const owner = getValue(lead, ["owner", "assigned_to", "sales"], "Tejas Sales");
-  const country = getValue(lead, ["country", "lead_country", "city"], "India");
-  const tags = getValue(lead, ["tags", "source"], "channel_partner, channe...");
-  const primaryPhone = getContactValue(lead.phones, ["phone", "number", "value"]) || getValue(lead, ["phone", "mobile", "primaryPhone"], "");
-  const primaryEmail = getContactValue(lead.emails, ["email", "value"]) || getValue(lead, ["email", "primaryEmail"], "");
-  const whatsappPhone = cleanPhone(primaryPhone);
-  const receivedOn = formatDate(
-    getValue(lead, ["createdAt", "created_at", "received_on"], ""),
-    "Thu, Apr 30, 2026 4:44 P..."
-  );
+  const source = valueOf(lead, ["source", "channelPartner", "tags"], "-");
+  const owner = getOwnerName(lead);
+  const currentStatus = selectedStatus || getCrmStatusFromLead(lead);
+  const leadScoreNumber = getStatusScore(currentStatus);
+  const createdDate = valueOf(lead, ["createdAt", "created_at", "received_on"], "");
+  const isSalesContext =
+    context === "sales" || (context !== "admin" && location.pathname.startsWith("/user/sales"));
+  const isAdminContext = context === "admin" || !isSalesContext;
+  const detailsBackPath = isAdminContext ? "/leads" : "/user/sales";
+  const statusOptions = crmStatuses;
+  const stageStatusValue = statusOptions.includes(selectedStatus) ? selectedStatus : "";
 
-  const detailItems = [
-    ["RECEIVED ON", receivedOn],
-    ["LEAD AGE", getValue(lead, ["lead_age", "age"], "01 day")],
-    ["TAGS", tags, true],
-    ["LAST CONTACT", getValue(lead, ["last_contact"], receivedOn)],
-    ["OWNER", owner],
-    ["LAST CALL", getValue(lead, ["last_call"], "No recording available")],
-    ["PHONE VERIFIED", getValue(lead, ["phone_verified"], "No")],
-    ["LEAD COUNTRY", country],
-    ["LEAD'S CURRENT TIME", getValue(lead, ["current_time"], "02/05/2026 11:52 AM")],
-    ["INTERESTED PROJECTS", projectName],
-    ["LAST CONTACT ATTEMPTED BY LEAD", getValue(lead, ["last_contact_attempted_by_lead"], "-")],
-    ["LAST CONTACT BY LEAD", getValue(lead, ["last_contact_by_lead"], "-")],
-    ["LAST CONTACT ATTEMPTED BY SALES", getValue(lead, ["last_contact_attempted_by_sales"], "-")],
-    ["LAST CONTACT BY SALES", getValue(lead, ["last_contact_by_sales"], "-")],
-  ];
-
-  const requirementItems = [
-    ["CONFIGURATION", getValue(lead, ["configuration"], "-")],
-    ["PROPERTY TYPE", getValue(lead, ["propertyTypes", "property_type", "type"], "-")],
-    ["BUDGET", getValue(lead, ["budget", "maxBudget"], "-")],
-    ["LOCATIONS", getValue(lead, ["locationPreferences", "city"], "-")],
-    ["POSSESSION", getValue(lead, ["possession", "maxPossession"], "-")],
-    ["PURPOSE", getValue(lead, ["purpose", "enduse"], "-")],
-    ["TRANSACTION TYPE", getValue(lead, ["transactionType"], "-")],
-    ["FUNDING SOURCE", getValue(lead, ["fundingSource"], "-")],
-    ["BATHROOMS", getValue(lead, ["bathroomPreferences"], "-")],
-    ["FURNISHING", getValue(lead, ["furnishing"], "-")],
-    ["FACING", getValue(lead, ["facing"], "-")],
-  ];
-
-  const cpName = getValue(lead, ["cp_name", "channel_partner_name", "broker_name"], "Our Nest Realty(Zeeshan Khan)");
-  const actionItems = [
-    { key: "note", label: "Note", icon: <FaQuoteLeft />, title: `Add a note for ${leadName}` },
-    { key: "call", label: "Call", icon: <FaPhoneAlt />, title: primaryPhone ? `Call ${primaryPhone}` : "No phone number available" },
-    { key: "email", label: "Email", icon: <FaEnvelopeOpen />, title: primaryEmail ? `Email ${primaryEmail}` : "No email available" },
-    { key: "sms", label: "SMS", icon: <FaSms />, title: primaryPhone ? `Send SMS to ${primaryPhone}` : "No phone number available" },
-    { key: "whatsapp", label: "WhatsApp", icon: <FaWhatsapp />, title: whatsappPhone ? `Open WhatsApp for ${primaryPhone}` : "No WhatsApp number available" },
-    { key: "siteVisit", label: "Site visit", icon: <FaCalendarAlt />, title: `Plan site visit for ${projectName}` },
-    { key: "followup", label: "Followup", icon: <FaClock />, title: `Create followup with ${owner}` },
-    { key: "more", label: "More", icon: <FaCaretDown />, title: "More actions" },
-  ];
-
-  useEffect(() => {
-    if (!leadId) return;
-
-    const fetchNotes = async () => {
-      try {
-        const response = await fetch(`${API_URL}/lead-notes/${leadId}`);
-        if (!response.ok) return;
-        const result = await response.json();
-        setSavedNotes(Array.isArray(result) ? result : []);
-      } catch (error) {
-        console.error("Unable to load notes:", error);
-      }
-    };
-
-    fetchNotes();
-  }, [API_URL, leadId]);
-
-  useEffect(() => {
-    if (!isEditingLeadName) {
-      setLeadNameDraft(leadName);
+  const openSalesCallPage = () => {
+    if (onOpenCallLead) {
+      onOpenCallLead(lead);
+      return;
     }
-  }, [isEditingLeadName, leadName]);
 
-  const formatNoteDate = (value) => {
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value || "";
-
-    return date.toLocaleString("en-IN", {
-      hour: "numeric",
-      minute: "2-digit",
-      day: "2-digit",
-      month: "short",
+    navigate(`/user/sales/calls${leadId ? `?leadId=${leadId}` : ""}`, {
+      state: { lead },
     });
   };
 
-  const updateStoredLead = (storageKey, updatedLead) => {
-    try {
-      const storedLead = JSON.parse(window.sessionStorage.getItem(storageKey) || "null");
-      const storedId = storedLead?.id || storedLead?._id || storedLead?.lead_id;
-
-      if (!storedLead || String(storedId) === String(leadId)) {
-        window.sessionStorage.setItem(storageKey, JSON.stringify(updatedLead));
-      }
-    } catch (error) {
-      window.sessionStorage.setItem(storageKey, JSON.stringify(updatedLead));
+  const openSalesWhatsAppPage = () => {
+    if (onOpenWhatsAppLead) {
+      onOpenWhatsAppLead(lead);
+      return;
     }
+
+    navigate(`/user/sales/whatsapp${leadId ? `?leadId=${leadId}` : ""}`, {
+      state: { lead },
+    });
   };
 
-  const handleSaveStatus = async () => {
-    try {
-      setIsSavingStatus(true);
-      setStatusMessage("");
+  const openSalesSiteVisitPage = (status = "") => {
+    if (onScheduleVisitLead) {
+      onScheduleVisitLead(lead, status);
+      return;
+    }
 
+    const params = new URLSearchParams();
+    if (leadId) params.set("leadId", leadId);
+    if (status) params.set("status", status);
+    navigate(`/user/sales/site-visit${params.toString() ? `?${params.toString()}` : ""}`, {
+      state: { lead, status },
+    });
+  };
+
+  const fetchLead = useCallback(async () => {
+    const nextLeadId = leadIdFromUrl || leadId;
+    if (!nextLeadId) return;
+
+    try {
+      const response = await fetch(`${API_URL}/leads/${nextLeadId}`);
+      if (!response.ok) return;
+      const result = await response.json();
+      setLead(result);
+      setSelectedStatus(getCrmStatusFromLead(result));
+      window.sessionStorage.setItem("selectedLeadDetails", JSON.stringify(result));
+    } catch (error) {
+      console.error("Unable to load lead details:", error);
+    }
+  }, [leadId, leadIdFromUrl]);
+
+  const fetchNotes = useCallback(async () => {
+    if (!leadId) return;
+    try {
+      const response = await fetch(`${API_URL}/lead-notes/${leadId}`);
+      if (!response.ok) return;
+      const result = await response.json();
+      const rows = Array.isArray(result) ? result : [];
+      setNotes(mergeNoteUiState(leadId, rows));
+    } catch (error) {
+      console.error("Unable to load notes:", error);
+    }
+  }, [leadId]);
+
+  const fetchCalls = useCallback(async () => {
+    if (!leadId || !token) return;
+    try {
+      const response = await fetch(`${API_URL}/calls/lead/${leadId}?limit=100`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) return;
+      const result = await response.json();
+      setCalls(Array.isArray(result?.data) ? result.data : []);
+    } catch (error) {
+      console.error("Unable to load calls:", error);
+    }
+  }, [leadId, token]);
+
+  const fetchVisits = useCallback(async () => {
+    if (!leadId) return;
+    try {
+      const response = await fetch(`${API_URL}/schedule-visits`);
+      if (!response.ok) return;
+      const result = await response.json();
+      const rows = (Array.isArray(result) ? result : result?.data || []).filter(
+        (visit) => String(visit.leadId || visit.lead?.id) === String(leadId)
+      );
+      setVisits(rows);
+    } catch (error) {
+      console.error("Unable to load site visits:", error);
+    }
+  }, [leadId]);
+
+  const fetchBookings = useCallback(async () => {
+    if (!leadId) return;
+    try {
+      const response = await fetch(`${API_URL}/bookings?leadId=${leadId}&limit=100`);
+      if (!response.ok) return;
+      const result = await response.json();
+      setBookings(Array.isArray(result?.data) ? result.data : []);
+    } catch (error) {
+      console.error("Unable to load bookings:", error);
+    }
+  }, [leadId]);
+
+  const fetchFollowups = useCallback(async () => {
+    if (!leadId || isAdminContext) {
+      setFollowups([]);
+      return;
+    }
+
+    try {
+      const result = await getLeadFollowupContext(leadId);
+      setFollowups((result?.followUps || []).map(normalizeApiFollowup));
+    } catch (error) {
+      console.error("Unable to load follow-ups:", error);
+      setFollowups([]);
+    }
+  }, [isAdminContext, leadId]);
+
+  useEffect(() => {
+    fetchLead();
+  }, [fetchLead]);
+
+  useEffect(() => {
+    fetchNotes();
+    fetchCalls();
+    fetchVisits();
+    fetchBookings();
+    fetchFollowups();
+  }, [fetchBookings, fetchCalls, fetchFollowups, fetchNotes, fetchVisits]);
+
+  const saveStatus = async (status) => {
+    if (!leadId) return false;
+    setIsSavingStatus(true);
+    setStatusMessage("");
+    const backendStatus = backendStatusMap[status] || String(status || "New").replace(/\s+/g, "_");
+    const nextScore = getStatusScore(status);
+
+    try {
       const response = await fetch(`${API_URL}/leads/${leadId}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ status: selectedStatus }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: backendStatus, score: nextScore }),
       });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || "Unable to update status");
 
-      let result = {};
-      try {
-        result = await response.json();
-      } catch {
-        result = {};
-      }
-
-      if (!response.ok) {
-        throw new Error(result?.message || "Unable to update status");
-      }
-
-      const savedStatus = result.status || selectedStatus;
-      const updatedLead = {
-        ...lead,
-        ...result,
-        status: savedStatus,
-        lead_status: savedStatus,
-        stage: savedStatus,
-      };
-
+      const updatedLead = { ...lead, ...result, status, crmStatus: status, score: nextScore };
       setLead(updatedLead);
-      updateStoredLead("selectedLeadDetails", updatedLead);
-      updateStoredLead("selectedLeadPreview", updatedLead);
-      setStatusMessage(`Saved: ${getStatusLabel(savedStatus)}`);
+      setSelectedStatus(status);
+      window.sessionStorage.setItem("selectedLeadDetails", JSON.stringify(updatedLead));
+      window.localStorage.setItem(
+        "leadStatusUpdates",
+        JSON.stringify({
+          ...JSON.parse(window.localStorage.getItem("leadStatusUpdates") || "{}"),
+          [leadId]: {
+            status,
+            crmStatus: status,
+            score: nextScore,
+            backendStatus,
+            updatedAt: new Date().toISOString(),
+          },
+        })
+      );
+      setStatusMessage(`Status saved as ${status}`);
+      return true;
     } catch (error) {
       console.error("Unable to update lead status:", error);
-      setStatusMessage("Status could not be saved. Please check backend and database.");
+      setStatusMessage("Status could not be saved.");
+      return false;
     } finally {
       setIsSavingStatus(false);
     }
   };
 
-  const handleSaveLeadName = async () => {
-    const nextName = leadNameDraft.trim();
-    if (!nextName) {
-      setLeadEditMessage("Lead name is required.");
+  const handleStatusChange = (nextStatus) => {
+    const nextScore = getStatusScore(nextStatus);
+    setSelectedStatus(nextStatus);
+    setLead((currentLead) => ({
+      ...currentLead,
+      crmStatus: nextStatus,
+      score: nextScore,
+      status: nextStatus,
+    }));
+  };
+
+  const reassignLead = async () => {
+    if (!leadId) return;
+    const nextOwnerId = window.prompt("Enter sales user ID to reassign this lead:");
+    if (!nextOwnerId) return;
+
+    const normalizedOwnerId = Number.parseInt(nextOwnerId, 10);
+    if (!Number.isFinite(normalizedOwnerId)) {
+      alert("Please enter a valid sales user ID.");
       return;
     }
 
     try {
-      setIsSavingLeadName(true);
-      setLeadEditMessage("");
-      const nameParts = splitLeadName(nextName);
       const response = await fetch(`${API_URL}/leads/${leadId}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(nameParts),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ teamId: normalizedOwnerId, leadReassigned: true }),
       });
-
       const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || "Unable to reassign lead");
 
-      if (!response.ok) {
-        throw new Error(result?.message || "Unable to update lead name");
-      }
-
-      const updatedLead = {
-        ...lead,
-        ...result,
-        ...nameParts,
-        name: nextName,
-      };
-
+      const updatedLead = { ...lead, ...result };
       setLead(updatedLead);
-      updateStoredLead("selectedLeadDetails", updatedLead);
-      updateStoredLead("selectedLeadPreview", updatedLead);
-      setIsEditingLeadName(false);
-      setLeadEditMessage("Lead name saved.");
+      window.sessionStorage.setItem("selectedLeadDetails", JSON.stringify(updatedLead));
+      setStatusMessage("Lead reassigned successfully.");
     } catch (error) {
-      console.error("Unable to update lead name:", error);
-      setLeadEditMessage("Lead name could not be saved.");
-    } finally {
-      setIsSavingLeadName(false);
+      alert(error.message || "Unable to reassign lead");
     }
   };
 
-  const handleSaveNote = async () => {
-    const text = noteRef.current?.innerText?.trim();
-    if (!text || text === "Add note for lead") return;
+  const saveNote = async () => {
+    const text = noteDraft.trim();
+    if (!text || !leadId) return;
 
+    setIsSavingNote(true);
     try {
-      setIsSavingNote(true);
-      setNoteError("");
-
-      const response = await fetch(`${API_URL}/lead-notes`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          leadId: Number(leadId),
-          note: text,
-          owner,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Unable to save note: ${response.status}`);
+      if (editingNoteId) {
+        const localState = getLocalNotes(leadId);
+        const nextState = {
+          ...localState,
+          [editingNoteId]: {
+            ...localState[editingNoteId],
+            note: text,
+            updatedAt: new Date().toISOString(),
+          },
+        };
+        saveLocalNotes(leadId, nextState);
+        setNotes((current) =>
+          current.map((note) =>
+            String(note.id) === String(editingNoteId)
+              ? { ...note, note: text, updatedAt: nextState[editingNoteId].updatedAt }
+              : note
+          )
+        );
+      } else {
+        const response = await fetch(`${API_URL}/lead-notes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            leadId: Number(leadId),
+            note: text,
+            owner: getCurrentUserName(),
+          }),
+        });
+        if (!response.ok) throw new Error("Unable to save note");
+        const saved = await response.json();
+        setNotes((current) => [{ ...saved, pinned: false }, ...current]);
       }
 
-      const savedNote = await response.json();
-      setSavedNotes((current) => [savedNote, ...current]);
-
-      if (noteRef.current) {
-        noteRef.current.innerText = "Add note for lead";
-      }
+      setNoteDraft("");
+      setEditingNoteId(null);
+      noteInputRef.current?.focus();
     } catch (error) {
-      console.error("Unable to save note:", error);
-      setNoteError("Note could not be saved. Please check backend and database.");
+      alert(error.message || "Unable to save note");
     } finally {
       setIsSavingNote(false);
     }
   };
 
-  const handleStartCall = async () => {
+  const editNote = (note) => {
+    setActiveTab("Notes");
+    setEditingNoteId(note.id);
+    setNoteDraft(note.note || "");
+    setTimeout(() => noteInputRef.current?.focus(), 0);
+  };
+
+  const deleteNote = (note) => {
+    if (!window.confirm("Delete this note from this page?")) return;
+    const localState = getLocalNotes(leadId);
+    saveLocalNotes(leadId, {
+      ...localState,
+      [note.id]: { ...localState[note.id], deleted: true },
+    });
+    setNotes((current) => current.filter((item) => String(item.id) !== String(note.id)));
+  };
+
+  const togglePinNote = (note) => {
+    const localState = getLocalNotes(leadId);
+    const pinned = !note.pinned;
+    saveLocalNotes(leadId, {
+      ...localState,
+      [note.id]: { ...localState[note.id], pinned },
+    });
+    setNotes((current) =>
+      current.map((item) => (String(item.id) === String(note.id) ? { ...item, pinned } : item))
+    );
+  };
+
+  const scheduleFollowup = async () => {
+    if (!followupDraft.trim() || !followupDate || !leadId) return;
+    const [followUpDate, followUpTime = "09:00"] = followupDate.split("T");
+
     try {
-      setIsStartingCall(true);
-      setCallMessage("");
-      const savedUser = JSON.parse(localStorage.getItem("authUser") || "null");
-      const token = localStorage.getItem("authToken");
-      let agentPhone = String(savedUser?.phone || "").replace(/\D/g, "");
-
-      if (!primaryPhone) {
-        setCallMessage("Lead phone number is missing.");
-        return;
-      }
-
-      if (!agentPhone) {
-        agentPhone = window.prompt("Enter your agent phone number for IVR bridge call", "")?.replace(/\D/g, "") || "";
-      }
-
-      if (!agentPhone) {
-        setCallMessage("Agent phone number is required to start a cloud call.");
-        return;
-      }
-
-      const response = await fetch(`${API_URL}/api/calls/start`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          leadId: Number(leadId),
-          agentId: savedUser?.id,
-          phone: cleanPhone(primaryPhone),
-          agentPhone,
-        }),
+      await createFollowup({
+        leadId,
+        type: "Call",
+        followUpDate,
+        followUpTime,
+        priority: "Medium",
+        notes: followupDraft.trim(),
       });
-      const result = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(result?.message || "Unable to start call");
-      }
-
-      setCallMessage(`Call started: ${result.callId || result.callLog?.callId || "initiated"}`);
-      setCallRefreshKey((current) => current + 1);
+      setFollowupDraft("");
+      setFollowupDate("");
+      fetchFollowups();
     } catch (error) {
-      setCallMessage(error.message || "Unable to start call");
-    } finally {
-      setIsStartingCall(false);
+      alert(error.message || "Unable to schedule follow-up");
     }
   };
 
-  const openWhatsAppPage = () => {
-    if (!leadId) return;
-
-    // Details WhatsApp link: keep the selected lead available for the CRM WhatsApp page.
-    window.sessionStorage.setItem("selectedLeadDetails", JSON.stringify(lead));
-    navigate(`/user/sales/whatsapp?leadId=${leadId}`, { state: { lead } });
+  const updateFollowupStatus = async (item, status) => {
+    try {
+      if (status === "Done" || status === "Completed") {
+        await markFollowupDone(item.id);
+      } else if (status === "Rescheduled") {
+        const nextDate = window.prompt("New follow-up date and time (YYYY-MM-DDTHH:mm)", item.dueAt || "");
+        if (!nextDate) return;
+        const [followUpDate, followUpTime = "09:00"] = nextDate.split("T");
+        await rescheduleFollowup(item.id, {
+          followUpDate,
+          followUpTime,
+          notes: item.notes || item.title,
+          priority: item.priority || "Medium",
+        });
+      }
+      fetchFollowups();
+    } catch (error) {
+      alert(error.message || "Unable to update follow-up");
+    }
   };
 
-  const renderActionPanel = () => {
-    if (activeAction === "note") {
-      return (
-        <div className="details-action-panel">
-          <div className="details-action-card">
-            <div className="details-editor">
-              <div className="details-toolbar">
-                <button className="details-tool" title="Bold">
-                  <FaBold />
-                </button>
-                <button className="details-tool" title="Italic">
-                  <FaItalic />
-                </button>
-                <button className="details-tool" title="Underline">
-                  <FaUnderline />
-                </button>
-                <button className="details-tool" title="Bullet List">
-                  <FaListUl />
-                </button>
-                <button className="details-tool" title="Numbered List">
-                  <FaListOl />
-                </button>
-                <button className="details-tool" title="Quote">
-                  <FaQuoteLeft />
-                </button>
-                <button className="details-tool" title="Link">
-                  <FaLink />
-                </button>
-                <div style={{ width: "1px", height: "24px", background: "#d7dde8" }} />
-                <button className="details-tool" title="Undo">
-                  <FaUndo />
-                </button>
-                <button className="details-tool" title="Redo">
-                  <FaRedo />
-                </button>
-                <button className="details-tool" title="Clear Formatting">
-                  <FaEraser />
-                </button>
-              </div>
+  const activities = useMemo(() => {
+    const noteActivities = notes.map((note) => ({
+      id: `note-${note.id}`,
+      type: "Notes",
+      icon: <FaRegStickyNote />,
+      title: note.pinned ? "Pinned Note" : "Note Added",
+      description: note.note,
+      meta: `Created by ${note.owner || "User"}`,
+      createdAt: note.updatedAt || note.createdAt,
+      source: note,
+    }));
 
-              <div
-                className="details-note-area"
-                contentEditable
-                ref={noteRef}
-                onFocus={(e) => {
-                  if (e.target.innerText.trim() === "Add note for lead") {
-                    e.target.innerText = "";
-                  }
-                }}
-                onBlur={(e) => {
-                  if (e.target.innerText.trim() === "") {
-                    e.target.innerText = "Add note for lead";
-                  }
-                }}
-              >
-                Add note for lead
-              </div>
+    const callActivities = calls.map((call) => ({
+      id: `call-${call.id}`,
+      type: "Calls",
+      icon: <FaPhoneAlt />,
+      title: normalizeText(call.status).includes("connected") || normalizeText(call.status).includes("completed")
+        ? "Call Connected"
+        : "Call Attempted",
+      description: `${call.phone || primaryPhone || "-"}${call.duration ? `, ${call.duration}s` : ""}`,
+      meta: call.disposition || call.provider || "Call log",
+      createdAt: call.startedAt || call.createdAt,
+      source: call,
+    }));
 
-              <div className="details-note-resize">...</div>
-            </div>
+    const visitActivities = visits.map((visit) => ({
+      id: `visit-${visit.id}`,
+      type: "Site Visits",
+      icon: <FaMapMarkerAlt />,
+      title: `Site Visit ${visit.status || "Scheduled"}`,
+      description: visit.project || projectInterest,
+      meta: visit.meetingPoint || visit.salesExecutive || "Site visit",
+      createdAt: visit.scheduledOn || visit.updatedAt || visit.createdAt,
+      source: visit,
+    }));
 
-            <div className="details-note-limit">Maximum 2000 characters are allowed.</div>
-            {noteError && <div className="details-note-error">{noteError}</div>}
+    const followupActivities = followups.map((item) => ({
+      id: `followup-${item.id}`,
+      type: "Follow-ups",
+      icon: <FaClock />,
+      title: `Follow-up ${item.status || "Scheduled"}`,
+      description: item.title,
+      meta: formatDateTime(item.dueAt),
+      createdAt: item.updatedAt || item.dueAt || item.createdAt,
+      source: item,
+    }));
 
-            <div className="details-save-row">
-              <button
-                className="details-save"
-                disabled={isSavingNote}
-                onClick={handleSaveNote}
-              >
-                {isSavingNote ? "Saving..." : "Save Note"}
-              </button>
-              <button className="details-mic" title="Voice Input">
-                <FaMicrophone />
-              </button>
-            </div>
-          </div>
-        </div>
-      );
-    }
+    const bookingActivities = bookings.map((booking) => ({
+      id: `booking-${booking.id}`,
+      type: "History",
+      icon: <FaCheckCircle />,
+      title: "Booking Created",
+      description: booking.projectDetails || booking.customerName || "Booking",
+      meta: `${formatMoney(booking.basePrice)} ${booking.stage || ""}`.trim(),
+      createdAt: booking.bookedOn || booking.createdAt,
+      source: booking,
+    }));
 
-    if (activeAction === "call") {
-      return (
-        <div className="details-action-panel">
-          <div className="details-action-card">
-            <div className="details-action-title">Call {leadName}</div>
-            <div className="details-action-grid">
-              <div className="details-action-muted">
-                Start a cloud telephony bridge call. The provider calls the agent first, then connects the lead and records the call.
-              </div>
-            </div>
-            <div className="details-save-row">
-              <button
-                className="details-save"
-                disabled={isStartingCall}
-                onClick={handleStartCall}
-              >
-                {isStartingCall ? "Connecting..." : `Call Now ${primaryPhone || ""}`}
-              </button>
-              <button
-                className="details-mic"
-                title="Open call queue"
-                onClick={() => navigate(`/user/sales/calls?leadId=${leadId}`)}
-              >
-                <FaPhoneAlt />
-              </button>
-            </div>
-            {callMessage && <div className="details-status-message">{callMessage}</div>}
-          </div>
-          <CallHistory leadId={leadId} refreshKey={callRefreshKey} />
-        </div>
-      );
-    }
+    const statusActivity = {
+      id: `status-${leadId}`,
+      type: "History",
+      icon: <FaHistory />,
+      title: "Lead Status",
+      description: currentStatus,
+      meta: "Current workflow state",
+      createdAt: valueOf(lead, ["updatedAt", "createdAt"], new Date().toISOString()),
+      source: lead,
+    };
 
-    return null;
-  };
+    const createdActivity = {
+      id: `created-${leadId}`,
+      type: "History",
+      icon: <FaPlus />,
+      title: "Lead Created",
+      description: `${leadName} entered CRM`,
+      meta: source,
+      createdAt: createdDate || new Date().toISOString(),
+      source: lead,
+    };
+
+    return [
+      ...noteActivities,
+      ...callActivities,
+      ...visitActivities,
+      ...followupActivities,
+      ...bookingActivities,
+      statusActivity,
+      createdActivity,
+    ].sort((first, second) => {
+      const firstTime = toDate(first.createdAt)?.getTime() || 0;
+      const secondTime = toDate(second.createdAt)?.getTime() || 0;
+      return secondTime - firstTime;
+    });
+  }, [
+    bookings,
+    calls,
+    createdDate,
+    currentStatus,
+    followups,
+    lead,
+    leadId,
+    leadName,
+    notes,
+    primaryPhone,
+    projectInterest,
+    source,
+    visits,
+  ]);
+
+  const filteredActivities = useMemo(() => {
+    if (activeTab === "Activity") return activities;
+    if (activeTab === "Emails" || activeTab === "SMS" || activeTab === "WhatsApp") return [];
+    return activities.filter((activity) => activity.type === activeTab);
+  }, [activeTab, activities]);
+
+  const groupedActivities = useMemo(() => {
+    return filteredActivities.reduce((groups, activity) => {
+      const day = getActivityDay(activity.createdAt);
+      return { ...groups, [day]: [...(groups[day] || []), activity] };
+    }, {});
+  }, [filteredActivities]);
+
+  const overview = useMemo(() => {
+    const connectedCalls = calls.filter((call) =>
+      ["connected", "completed", "answered"].some((status) => normalizeText(call.status).includes(status))
+    ).length;
+    const missedCalls = calls.filter((call) =>
+      ["missed", "no-answer", "failed", "busy"].some((status) => normalizeText(call.status).includes(status))
+    ).length;
+
+    return [
+      ["Total Calls", calls.length],
+      ["Connected Calls", connectedCalls],
+      ["Missed Calls", missedCalls],
+      ["Follow-ups", followups.length],
+      ["Site Visits", visits.length],
+      ["Bookings", bookings.length],
+      ["Notes", notes.length],
+    ];
+  }, [bookings.length, calls, followups.length, notes.length, visits.length]);
+
+  const upcomingFollowups = followups.filter((item) => item.status !== "Completed" && new Date(item.dueAt) >= new Date());
+  const overdueFollowups = followups.filter((item) => item.status !== "Completed" && new Date(item.dueAt) < new Date());
+  const completedVisits = visits.filter((visit) => normalizeText(visit.status).includes("done") || normalizeText(visit.status).includes("completed"));
+  const cancelledVisits = visits.filter((visit) => normalizeText(visit.status).includes("cancel"));
+  const scheduledVisits = visits.filter((visit) => !completedVisits.includes(visit) && !cancelledVisits.includes(visit));
+  const lastActivity = activities[0]?.createdAt || createdDate;
 
   return (
     <>
-      <>
-        <style>{`
-          .details-page {
-            background-color: #f8fafc;
-            min-height: 100vh;
-            position: relative;
-            padding: 24px 20px 40px;
-            color: #1e293b;
-            font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
-            font-size: 14px;
-            line-height: 1.5;
-          }
+      <style>{`
+        .crm-details {
+          background: var(--neutral-50, #f5f6fa);
+          color: var(--neutral-800, #1f2937);
+          min-height: ${embedded ? "calc(100vh - 40px)" : "100vh"};
+          padding: ${embedded ? "0" : "22px"};
+        }
 
-          .details-close-btn {
-            position: absolute;
-            top: 14px;
-            right: 18px;
-            width: 36px;
-            height: 36px;
-            border: 1px solid #d9e2ef;
-            border-radius: 6px;
-            background: #ffffff;
-            color: #64748b;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            font-size: 15px;
-            transition: all 0.2s ease;
-            z-index: 2;
-          }
+        .crm-details-shell {
+          display: grid;
+          gap: 18px;
+          margin: 0 auto;
+          max-width: 1500px;
+        }
 
-          .details-close-btn:hover {
-            border-color: #6f42c1;
-            color: #6f42c1;
-            background: #f8f5ff;
-          }
+        .crm-lead-header,
+        .crm-panel,
+        .crm-card {
+          background: var(--white, #ffffff);
+          border: 1px solid var(--neutral-200, #ebecef);
+          border-radius: var(--rounded-8, 8px);
+          box-shadow: var(--shadow-4, 4px 8px 24px 0 rgba(182, 182, 182, 0.2));
+        }
 
-          .details-grid {
-            display: grid;
-            grid-template-columns: 1fr 1.2fr;
-            gap: 24px;
-            align-items: start;
-            max-width: 1440px;
-            margin: 0 auto;
-          }
+        .crm-lead-header {
+          display: grid;
+          gap: 16px;
+          padding: 18px;
+        }
 
-          .details-card {
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
-            overflow: hidden;
-          }
+        .crm-header-top {
+          align-items: flex-start;
+          display: flex;
+          gap: 16px;
+          justify-content: space-between;
+        }
 
-          .details-left-head {
-            min-height: 160px;
-            display: grid;
-            grid-template-columns: 1fr auto auto;
-            gap: 24px;
-            align-items: start;
-            padding: 24px;
-            border-bottom: 1px solid #f1f5f9;
-          }
+        .crm-lead-title h1 {
+          color: var(--neutral-900, #111827);
+          font-size: 24px;
+          font-weight: 700;
+          line-height: 1.2;
+          margin: 0 0 6px;
+        }
 
-          .details-person {
-            display: flex;
-            align-items: flex-start;
-            gap: 16px;
-            min-width: 0;
-          }
+        .crm-lead-title p {
+          color: var(--neutral-500, #6b7280);
+          margin: 0;
+        }
 
-          .details-flag {
-            width: 32px;
-            height: 20px;
-            margin-top: 6px;
-            border-radius: 2px;
-            box-shadow: 0 0 0 1px rgba(0,0,0,0.08);
-            background: linear-gradient(to bottom, #ff9933 0 33%, #ffffff 33% 66%, #138808 66% 100%);
-            position: relative;
-            flex-shrink: 0;
-          }
+        .crm-status-badge {
+          background: var(--primary-50, #e4f1ff);
+          border: 1px solid var(--primary-100, #bfdcff);
+          border-radius: 999px;
+          color: var(--primary-600, #487fff);
+          display: inline-flex;
+          font-size: 13px;
+          font-weight: 700;
+          padding: 7px 12px;
+          white-space: nowrap;
+        }
 
-          .details-flag::after {
-            content: "";
-            position: absolute;
-            left: 50%;
-            top: 50%;
-            width: 6px;
-            height: 6px;
-            border: 1px solid #1a4fb5;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-          }
+        .crm-header-grid,
+        .crm-overview-grid {
+          display: grid;
+          gap: 10px;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+        }
 
-          .details-lead-id {
-            color: #64748b;
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 4px;
-          }
+        .crm-header-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(140px, 0.7fr);
+        }
 
-          .details-lead-name {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: #0f172a;
-            font-size: 20px;
-            font-weight: 700;
-            line-height: 1.2;
-            min-width: 0;
-          }
+        .crm-header-field,
+        .crm-overview-card {
+          background: var(--neutral-50, #f5f6fa);
+          border: 1px solid var(--neutral-200, #ebecef);
+          border-radius: var(--rounded-6, 6px);
+          padding: 11px 12px;
+        }
 
-          .details-lead-name span {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-          }
+        .crm-score-field {
+          align-items: center;
+          display: flex;
+          gap: 12px;
+          min-height: 86px;
+        }
 
-          .details-name-edit {
-            display: flex;
-            align-items: center;
-            gap: 8px;
+        .crm-score-circle {
+          --score: 0;
+          align-items: center;
+          background: conic-gradient(var(--primary-600, #487fff) calc(var(--score) * 1%), var(--neutral-200, #ebecef) 0);
+          border-radius: 50%;
+          display: inline-flex;
+          flex: 0 0 66px;
+          height: 66px;
+          justify-content: center;
+          position: relative;
+          width: 66px;
+        }
+
+        .crm-score-circle::before {
+          background: var(--white, #ffffff);
+          border-radius: 50%;
+          content: "";
+          inset: 7px;
+          position: absolute;
+        }
+
+        .crm-score-circle strong {
+          color: var(--neutral-900, #111827);
+          font-size: 16px;
+          line-height: 1;
+          position: relative;
+          z-index: 1;
+        }
+
+        .crm-label {
+          color: var(--neutral-500, #6b7280);
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          margin-bottom: 4px;
+          text-transform: uppercase;
+        }
+
+        .crm-value {
+          color: var(--neutral-800, #1f2937);
+          font-size: 14px;
+          font-weight: 600;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .crm-action-bar {
+          align-items: center;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          overflow-x: visible;
+        }
+
+        .crm-status-control {
+          align-items: center;
+          display: flex;
+          gap: 8px;
+          margin-left: auto;
+        }
+
+        .crm-action-btn,
+        .crm-small-btn {
+          align-items: center;
+          background: var(--white, #ffffff);
+          border: 1px solid var(--neutral-300, #d1d5db);
+          border-radius: var(--rounded-6, 6px);
+          color: var(--neutral-700, #374151);
+          cursor: pointer;
+          display: inline-flex;
+          font-size: 13px;
+          font-weight: 700;
+          gap: 8px;
+          min-height: 36px;
+          padding: 0 12px;
+        }
+
+        .crm-action-btn:hover,
+        .crm-small-btn:hover {
+          background: var(--primary-50, #e4f1ff);
+          border-color: var(--primary-200, #95c7ff);
+          color: var(--primary-700, #486cea);
+        }
+
+        .crm-action-btn.primary,
+        .crm-small-btn.primary {
+          background: var(--primary-600, #487fff);
+          border-color: var(--primary-600, #487fff);
+          color: var(--white, #ffffff);
+        }
+
+        .crm-action-btn.primary:hover,
+        .crm-small-btn.primary:hover {
+          background: var(--primary-700, #486cea);
+          border-color: var(--primary-700, #486cea);
+          color: var(--white, #ffffff);
+        }
+
+        .crm-action-btn.danger,
+        .crm-small-btn.danger {
+          color: var(--danger-700, #b91c1c);
+        }
+
+        .crm-status-select {
+          border: 1px solid var(--neutral-300, #d1d5db);
+          border-radius: var(--rounded-6, 6px);
+          color: var(--neutral-700, #374151);
+          height: 36px;
+          min-width: 174px;
+          padding: 0 10px;
+        }
+
+        .crm-status-save {
+          min-width: 92px;
+        }
+
+        .crm-more-wrap {
+          position: relative;
+        }
+
+        .crm-more-menu {
+          background: var(--white, #ffffff);
+          border: 1px solid var(--neutral-200, #ebecef);
+          border-radius: var(--rounded-8, 8px);
+          box-shadow: var(--shadow-4, 4px 8px 24px 0 rgba(182, 182, 182, 0.2));
+          display: grid;
+          min-width: 210px;
+          padding: 6px;
+          position: absolute;
+          right: 0;
+          top: 42px;
+          z-index: 20;
+        }
+
+        .crm-more-menu button {
+          align-items: center;
+          background: transparent;
+          border: 0;
+          border-radius: var(--rounded-6, 6px);
+          color: var(--neutral-700, #374151);
+          cursor: pointer;
+          display: flex;
+          font: inherit;
+          gap: 9px;
+          padding: 9px 10px;
+          text-align: left;
+        }
+
+        .crm-more-menu button:hover {
+          background: var(--primary-50, #e4f1ff);
+          color: var(--primary-700, #486cea);
+        }
+
+        .crm-more-field {
+          display: grid;
+          gap: 6px;
+          padding: 8px;
+        }
+
+        .crm-more-field .crm-status-select {
+          min-width: 190px;
+          width: 100%;
+        }
+
+        .crm-main-grid {
+          align-items: start;
+          display: grid;
+          gap: 18px;
+          grid-template-columns: minmax(280px, 0.42fr) minmax(0, 1fr);
+        }
+
+        .crm-panel {
+          overflow: hidden;
+        }
+
+        .crm-panel-head {
+          align-items: center;
+          border-bottom: 1px solid var(--neutral-200, #ebecef);
+          display: flex;
+          justify-content: space-between;
+          padding: 14px 16px;
+        }
+
+        .crm-panel-head h2 {
+          color: var(--neutral-800, #1f2937);
+          font-size: 16px;
+          font-weight: 700;
+          margin: 0;
+        }
+
+        .crm-panel-body {
+          display: grid;
+          gap: 12px;
+          padding: 16px;
+        }
+
+        .crm-info-row,
+        .crm-list-row {
+          border-bottom: 1px solid var(--neutral-200, #ebecef);
+          display: grid;
+          gap: 5px;
+          padding-bottom: 10px;
+        }
+
+        .crm-info-row:last-child,
+        .crm-list-row:last-child {
+          border-bottom: 0;
+          padding-bottom: 0;
+        }
+
+        .crm-overview-card strong {
+          display: block;
+          font-size: 22px;
+          line-height: 1;
+          margin-top: 4px;
+        }
+
+        .crm-workspace {
+          display: grid;
+          gap: 18px;
+        }
+
+        .crm-note-box,
+        .crm-followup-form,
+        .crm-visit-link-panel {
+          display: grid;
+          gap: 10px;
+        }
+
+        .crm-note-box textarea,
+        .crm-followup-form input {
+          border: 1px solid var(--neutral-300, #d1d5db);
+          border-radius: var(--rounded-6, 6px);
+          color: var(--neutral-700, #374151);
+          min-height: 38px;
+          padding: 9px 10px;
+          width: 100%;
+        }
+
+        .crm-note-box textarea {
+          min-height: 92px;
+          resize: vertical;
+        }
+
+        .crm-form-actions {
+          align-items: center;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .crm-note-save,
+        .crm-back-btn {
+          justify-content: center;
+          width: max-content;
+        }
+
+        .crm-note-save {
+          min-width: 122px;
+        }
+
+        .crm-back-btn {
+          min-width: 92px;
+        }
+
+        .crm-visit-link-panel {
+          background: var(--neutral-50, #f5f6fa);
+          border: 1px solid var(--neutral-200, #ebecef);
+          border-radius: var(--rounded-8, 8px);
+          padding: 14px;
+        }
+
+        .crm-visit-link-panel p {
+          color: var(--neutral-500, #6b7280);
+          margin: 0;
+        }
+
+        .crm-status-control {
+          align-items: center;
+          display: flex;
+          flex: 0 0 auto;
+          gap: 8px;
+          margin-left: 0;
+        }
+
+        .crm-action-bar > .crm-status-control {
+          margin-left: auto;
+        }
+
+        .crm-status-field {
+          align-items: center;
+          display: flex;
+          gap: 8px;
+        }
+
+        .crm-status-select {
+          background: var(--white, #ffffff);
+          border: 1px solid var(--neutral-300, #d1d5db);
+          border-radius: var(--rounded-6, 6px);
+          color: var(--neutral-900, #111827);
+          font-size: 14px;
+          font-weight: 600;
+          height: 46px;
+          min-width: 190px;
+          padding: 0 12px;
+        }
+
+        .crm-status-score {
+          align-items: center;
+          background: var(--neutral-50, #f5f6fa);
+          border: 1px solid var(--neutral-200, #ebecef);
+          border-radius: var(--rounded-6, 6px);
+          color: var(--neutral-800, #1f2937);
+          display: inline-flex;
+          font-size: 13px;
+          font-weight: 700;
+          height: 46px;
+          padding: 0 12px;
+          white-space: nowrap;
+        }
+
+        .crm-admin-status-tools {
+          align-items: center;
+          display: flex;
+          flex: 0 0 auto;
+          gap: 8px;
+          margin-left: auto;
+        }
+
+        .crm-image-status-field {
+          align-items: center;
+          display: flex;
+          gap: 8px;
+        }
+
+        .crm-status-inline-label {
+          color: var(--neutral-500, #6b7280);
+          font-size: 12px;
+          font-weight: 800;
+          text-transform: uppercase;
+          white-space: nowrap;
+        }
+
+        .crm-footer-actions {
+          display: flex;
+          justify-content: flex-end;
+        }
+
+        .crm-tabs {
+          border-bottom: 1px solid var(--neutral-200, #ebecef);
+          display: flex;
+          gap: 18px;
+          overflow-x: auto;
+          padding: 0 16px;
+          white-space: nowrap;
+        }
+
+        .crm-tabs button {
+          background: transparent;
+          border: 0;
+          color: var(--neutral-500, #6b7280);
+          cursor: pointer;
+          font-size: 13px;
+          font-weight: 700;
+          padding: 14px 0 11px;
+          position: relative;
+        }
+
+        .crm-tabs button.active {
+          color: var(--neutral-800, #1f2937);
+        }
+
+        .crm-tabs button.active::after {
+          background: var(--primary-600, #487fff);
+          bottom: 0;
+          content: "";
+          height: 2px;
+          left: 0;
+          position: absolute;
+          right: 0;
+        }
+
+        .crm-timeline {
+          display: grid;
+          gap: 20px;
+          padding: 16px;
+        }
+
+        .crm-day {
+          display: grid;
+          gap: 10px;
+        }
+
+        .crm-day-title {
+          color: var(--neutral-500, #6b7280);
+          font-size: 12px;
+          font-weight: 800;
+          text-transform: uppercase;
+        }
+
+        .crm-activity {
+          border: 1px solid var(--neutral-200, #ebecef);
+          border-radius: var(--rounded-6, 6px);
+          display: grid;
+          gap: 8px;
+          padding: 13px;
+        }
+
+        .crm-activity-top {
+          align-items: flex-start;
+          display: flex;
+          gap: 12px;
+          justify-content: space-between;
+        }
+
+        .crm-activity-title {
+          align-items: center;
+          color: var(--neutral-800, #1f2937);
+          display: flex;
+          font-size: 14px;
+          font-weight: 800;
+          gap: 9px;
+        }
+
+        .crm-activity-title svg {
+          color: var(--primary-600, #487fff);
+        }
+
+        .crm-activity p {
+          color: var(--neutral-600, #4b5563);
+          margin: 0;
+        }
+
+        .crm-muted {
+          color: var(--neutral-500, #6b7280);
+          font-size: 12px;
+        }
+
+        .crm-note-actions {
+          display: flex;
+          gap: 8px;
+        }
+
+        .crm-bottom-grid {
+          display: grid;
+          gap: 18px;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .crm-empty {
+          color: var(--neutral-500, #6b7280);
+          padding: 18px;
+          text-align: center;
+        }
+
+        @media (max-width: 1100px) {
+          .crm-action-bar {
             flex-wrap: wrap;
           }
 
-          .details-name-input {
-            width: min(240px, 100%);
-            height: 30px;
-            border: 1px solid #cbd5e1;
-            border-radius: 4px;
-            color: #1f2937;
-            font-size: 14px;
-            padding: 0 8px;
-            outline: none;
-          }
-
-          .details-name-input:focus {
-            border-color: #6f42c1;
-            box-shadow: 0 0 0 2px rgba(111, 66, 193, 0.12);
-          }
-
-          .details-name-save,
-          .details-name-cancel,
-          .details-name-edit-btn {
-            border: 0;
-            background: transparent;
-            cursor: pointer;
-            padding: 0;
-          }
-
-          .details-name-save,
-          .details-name-cancel {
-            min-height: 28px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
-            padding: 0 10px;
-          }
-
-          .details-name-save {
-            background: #6f42c1;
-            color: #ffffff;
-          }
-
-          .details-name-save:disabled {
-            cursor: not-allowed;
-            opacity: 0.65;
-          }
-
-          .details-name-cancel {
-            border: 1px solid #cbd5e1;
-            color: #475569;
-          }
-
-          .details-edit-message {
-            color: #64748b;
-            font-size: 11px;
-            margin-top: 4px;
-          }
-
-          .details-edit {
-            color: #64748b;
-            font-size: 14px;
-            cursor: pointer;
-            transition: color 0.2s;
-          }
-          
-          .details-edit:hover {
-            color: #2563eb;
-          }
-
-          .details-whatsapp {
-            border: 0;
-            width: 38px;
-            height: 38px;
-            border-radius: 10px;
-            background: #6f42c1;
-            color: #ffffff;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
-            margin-top: 12px;
-            box-shadow: 0 2px 4px rgba(111, 66, 193, 0.25);
-            cursor: pointer;
-            transition: transform 0.2s;
-          }
-          
-          .details-whatsapp:hover {
-            transform: scale(1.05);
-          }
-
-          .details-count {
-            text-align: center;
-            color: #475569;
-            font-size: 13px;
-            background: #f8fafc;
-            padding: 12px 16px;
-            border-radius: 8px;
-            min-width: 76px;
-          }
-
-          .details-badge {
-            width: 28px;
-            height: 28px;
-            border-radius: 50%;
-            background: #2563eb;
-            color: #ffffff;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 14px;
-            font-weight: 700;
-            margin-bottom: 4px;
-          }
-
-          .details-left-main {
-            display: grid;
-            grid-template-columns: 200px 1fr;
-            gap: 32px;
-            padding: 24px;
-          }
-
-          .details-score {
-            position: relative;
-            width: 104px;
-            height: 104px;
-            margin: 0 auto;
-            border-radius: 50%;
-            background: conic-gradient(#2563eb 0 var(--details-score, 15%), #f1f5f9 var(--details-score, 15%) 100%);
-          }
-
-          .details-score::before {
-            content: "";
-            position: absolute;
-            inset: 8px;
-            border-radius: 50%;
-            background: #ffffff;
-          }
-
-          .details-score-text {
-            position: absolute;
-            inset: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #94a3b8;
-            font-size: 16px;
-            font-weight: 700;
-          }
-
-          .details-score-number {
-            position: absolute;
-            right: -8px;
-            top: 0;
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            background: #64748b;
-            color: #ffffff;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 13px;
-            font-weight: 700;
-            border: 2px solid #ffffff;
-          }
-
-          .details-stage {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 20px;
-          }
-
-          .details-label {
-            color: #64748b;
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            margin-bottom: 6px;
-          }
-
-          .details-value {
-            color: #1e293b;
-            font-size: 14px;
-            font-weight: 500;
-            word-break: break-word;
-          }
-
-          .details-select {
-            width: 100%;
-            max-width: 160px;
-            height: 36px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            color: #334155;
-            background: #ffffff;
-            padding: 0 12px;
-            font-size: 13px;
-            outline: none;
-            transition: border-color 0.2s;
-            cursor: pointer;
-          }
-          
-          .details-select:focus {
-            border-color: #6f42c1;
-          }
-
-          .details-status-row {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            flex-wrap: wrap;
-          }
-
-          .details-status-save {
-            min-height: 36px;
-            border: 0;
-            border-radius: 6px;
-            background: #6f42c1;
-            color: #ffffff;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 600;
-            padding: 0 16px;
-            transition: background-color 0.2s;
-          }
-          
-          .details-status-save:hover {
-            background: #5f35ad;
-          }
-
-          .details-status-save:disabled {
-            cursor: not-allowed;
-            opacity: 0.6;
-          }
-
-          .details-status-message {
-            color: #64748b;
-            font-size: 12px;
-            margin-top: 6px;
-          }
-
-          .details-info-grid {
-            grid-column: 1 / -1;
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px 24px;
-            margin-top: 24px;
-            padding-top: 24px;
-            border-top: 1px solid #f1f5f9;
-          }
-
-          .details-actions {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            min-height: 64px;
-            padding: 12px 20px;
-            background: #f8fafc;
-            border-bottom: 1px solid #e2e8f0;
-            overflow-x: auto;
-            white-space: nowrap;
-          }
-
-          .details-action {
-            border: 1px solid #cbd5e1;
-            background: #ffffff;
-            border-radius: 6px;
-            color: #475569;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            font-size: 13px;
-            font-weight: 500;
-            min-height: 36px;
-            padding: 0 12px;
-            cursor: pointer;
-            transition: all 0.2s;
-          }
-
-          .details-action:hover,
-          .details-action.active {
-            background: #eff6ff;
-            border-color: #6f42c1;
-            color: #6f42c1;
-          }
-
-          .details-action-panel {
-            padding: 24px;
-          }
-
-          .details-action-card {
-            border: 1px solid #e2e8f0;
-            border-radius: 10px;
-            background: #ffffff;
-            padding: 20px;
-          }
-
-          .details-action-title {
-            color: #0f172a;
-            font-size: 16px;
-            font-weight: 700;
-            margin-bottom: 14px;
-          }
-
-          .details-action-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-            margin-bottom: 18px;
-          }
-
-          .details-action-muted {
-            color: #64748b;
-            font-size: 13px;
-            line-height: 1.5;
-          }
-
-          .details-action-primary {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 40px;
-            border: 0;
-            border-radius: 6px;
-            background: #6f42c1;
-            color: #ffffff;
-            font-size: 14px;
-            font-weight: 600;
-            padding: 0 18px;
-            text-decoration: none;
-            transition: background-color 0.2s;
-          }
-          
-          .details-action-primary:hover {
-            background: #2563eb;
-          }
-
-          .details-action-primary.disabled {
-            background: #94a3b8;
-            cursor: not-allowed;
-            pointer-events: none;
-          }
-
-          .details-note {
-            padding: 24px;
-          }
-
-          .details-editor {
-            border: 1px solid #cbd5e1;
-            border-radius: 8px;
-            overflow: hidden;
-            background: #ffffff;
-          }
-
-          .details-toolbar {
-            min-height: 52px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 12px;
-            background: #f8fafc;
-            border-bottom: 1px solid #e2e8f0;
-            flex-wrap: wrap;
-          }
-
-          .details-tool,
-          .details-tool-wide {
-            height: 34px;
-            min-width: 40px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            background: #ffffff;
-            color: #475569;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            font-size: 14px;
-            transition: all 0.2s;
-            cursor: pointer;
-          }
-          
-          .details-tool:hover, .details-tool-wide:hover {
-            background: #f1f5f9;
-          }
-
-          .details-tool-wide {
-            min-width: 60px;
-            font-size: 13px;
-            font-weight: 500;
-          }
-
-          .details-highlight {
-            color: #1e3a8a;
-            background: #fef08a;
-            padding: 0 4px;
-            font-weight: 600;
-            border-radius: 2px;
-          }
-
-          .details-note-area {
-            min-height: 160px;
-            padding: 16px;
-            color: #334155;
-            font-size: 14px;
-            line-height: 1.6;
-            outline: none;
-          }
-
-          .details-note-resize {
-            height: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #cbd5e1;
-            font-size: 14px;
-            border-top: 1px solid #f1f5f9;
-            background: #f8fafc;
-          }
-
-          .details-note-foot {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 8px;
-            margin-top: 8px;
-            color: #64748b;
-            font-size: 12px;
-          }
-
-          .details-save-row {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 12px;
-            margin-top: 20px;
-          }
-
-          .details-save,
-          .details-mic {
-            height: 40px;
-            border: 0;
-            border-radius: 6px;
-            font-size: 14px;
-            cursor: pointer;
-            transition: all 0.2s;
-          }
-
-          .details-save {
-            min-width: 130px;
-            background: #487fff;
-            color: #ffffff;
-            font-weight: 600;
-            text-align: revert-layer;
-          }
-          
-          .details-save:hover {
-            background: #487fff;
-          }
-
-          .details-note-error {
-            color: #ef4444;
-            font-size: 12px;
-            margin-top: 8px;
-            text-align: right;
-          }
-
-          .details-mic {
-            width: 44px;
-            background: #e2e8f0;
-            color: #334155;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-          
-          .details-mic:hover {
-            background: #cbd5e1;
-          }
-
-          .details-overview {
-            margin-top: 32px;
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
-          }
-
-          .details-overview-title {
-            padding: 20px 24px;
-            color: #0f172a;
-            font-size: 18px;
-            font-weight: 700;
-            border-bottom: 1px solid #f1f5f9;
-          }
-
-          .details-overview-table {
-            width: 100%;
-            border-collapse: collapse;
-          }
-
-          .details-overview-table th,
-          .details-overview-table td {
-            border-right: 1px solid #f1f5f9;
-            border-bottom: 1px solid #f1f5f9;
-            text-align: center;
-            color: #334155;
-            font-size: 14px;
-            padding: 12px 16px;
-          }
-
-          .details-overview-table th {
-            font-weight: 600;
-            background: #f8fafc;
-          }
-
-          .details-overview-table th:last-child,
-          .details-overview-table td:last-child {
-            border-right: 0;
-          }
-
-          .details-section-block {
-            border-top: 1px solid #e2e8f0;
-            margin-top: 32px;
-            background: #ffffff;
-            border-radius: 12px;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
-          }
-
-          .details-section-head {
-            min-height: 72px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 20px;
-            padding: 0 24px;
-            border-bottom: 1px solid #f1f5f9;
-          }
-
-          .details-section-title {
-            color: #0f172a;
-            font-size: 18px;
-            font-weight: 700;
-          }
-
-          .details-match-btn {
-            height: 36px;
-            min-width: 240px;
-            border: 1px solid #7c3aed;
-            border-radius: 6px;
-            background: #ffffff;
-            color: #7c3aed;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-          }
-          
-          .details-match-btn:hover {
-            background: #f5f3ff;
-          }
-
-          .details-requirement-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 28px 32px;
-            padding: 28px 24px;
-          }
-
-          .details-inline-input {
-            width: 100%;
-            border: 0;
-            background: transparent;
-            color: #1e293b;
-            font-size: 14px;
-            font-weight: 500;
-            padding: 0;
-            outline: 0;
-            text-overflow: ellipsis;
-          }
-
-          .details-partner-area {
-            padding: 24px;
-          }
-
-          .details-feed-card {
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
-            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
-            margin-top: 24px;
-          }
-
-          .details-feed-tabs {
-            display: flex;
-            align-items: center;
-            gap: 24px;
-            padding: 0 20px;
-            border-bottom: 1px solid #e2e8f0;
-            overflow-x: auto;
-            white-space: nowrap;
-          }
-
-          .details-feed-tabs button {
-            border: 0;
-            background: transparent;
-            color: #64748b;
-            font-size: 14px;
-            font-weight: 600;
-            padding: 16px 8px;
-            position: relative;
-            cursor: pointer;
-            transition: color 0.2s;
-          }
-          
-          .details-feed-tabs button:hover,
-          .details-feed-tabs button.active {
-            color: #0f172a;
-          }
-
-          .details-feed-tabs button.active::after {
-            content: "";
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            height: 2.5px;
-            background: #3b82f6;
-            border-radius: 2px 2px 0 0;
-          }
-
-          .details-feed-subtabs {
-            display: flex;
-            align-items: center;
-            gap: 24px;
-            min-height: 48px;
-            padding: 0 24px;
-            border-bottom: 1px solid #f1f5f9;
-            background: #f8fafc;
-          }
-
-          .details-feed-filter {
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            background: #ffffff;
-            color: #334155;
-            font-size: 13px;
-            margin: 16px 0 0 24px;
-            padding: 8px 12px;
-            outline: none;
-          }
-
-          .details-timeline {
-            position: relative;
-            padding: 12px 20px 24px 36px;
-          }
-
-          .details-timeline::before {
-            content: "";
-            position: absolute;
-            left: 16px;
-            top: 16px;
-            bottom: 16px;
-            width: 2px;
-            background: #e2e8f0;
-          }
-
-          .details-feed-item {
-            position: relative;
-            margin-top: 24px;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            background: #ffffff;
-            padding: 18px;
-            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02);
-          }
-
-          .details-empty-notes {
-            color: #64748b;
-            font-size: 14px;
-            padding: 32px 20px;
-            text-align: center;
-          }
-
-          .details-feed-item::before {
-            content: "";
-            position: absolute;
-            left: -33px;
-            top: 22px;
-            width: 12px;
-            height: 12px;
-            border: 2px solid #3b82f6;
-            border-radius: 50%;
-            background: #ffffff;
-          }
-
-          .details-feed-row {
-            display: flex;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 16px;
-          }
-
-          .details-feed-text {
-            color: #334155;
-            font-size: 14px;
-            line-height: 1.5;
-            word-break: break-word;
-          }
-
-          .details-feed-actions {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            color: #94a3b8;
-            font-size: 18px;
-          }
-
-          .details-feed-link {
-            border: 0;
-            background: transparent;
-            color: #3b82f6;
-            font-size: 13px;
-            font-weight: 500;
-            padding: 12px 0;
-            cursor: pointer;
-            transition: color 0.2s;
-          }
-          
-          .details-feed-link:hover {
-            color: #1d4ed8;
-          }
-
-          .details-feed-meta {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            border-top: 1px solid #f1f5f9;
-            padding-top: 14px;
-            margin-top: 14px;
-            color: #64748b;
-            font-size: 12px;
-          }
-
-          /* Details UI refresh: Agiln-style CRM layout matching the uploaded reference, with existing logic preserved. */
-          .details-page {
-            background: #f5f7fb;
-            color: #344054;
-            font-size: 13px;
-            padding: 52px 14px 24px;
-          }
-
-          .details-grid {
-            align-items: start;
-            gap: 28px;
-            grid-template-columns: minmax(420px, 0.72fr) minmax(620px, 1fr);
-            max-width: 1820px;
-          }
-
-          .details-card,
-          .details-overview,
-          .details-feed-card {
-            border: 1px solid #cfd7e3;
-            border-radius: 3px;
-            box-shadow: none;
-            overflow: hidden;
-          }
-
-          .details-left-head {
-            align-items: start;
-            background: #ffffff;
-            gap: 18px;
-            grid-template-columns: minmax(0, 1fr) 86px 86px;
-            min-height: 52px;
-            padding: 8px 14px;
-          }
-
-          .details-person {
-            align-items: center;
-            gap: 10px;
-          }
-
-          .details-flag {
-            height: 17px;
-            margin-top: 0;
-            width: 28px;
-          }
-
-          .details-lead-id {
-            font-size: 11px;
-            letter-spacing: 0;
-            margin-bottom: 1px;
-            text-transform: none;
-          }
-
-          .details-lead-name {
-            color: #3f4f65;
-            font-size: 15px;
-            font-weight: 500;
-          }
-
-          .details-edit {
-            color: #111827;
-            font-size: 12px;
-          }
-
-          .details-whatsapp {
-            border-radius: 999px;
-            box-shadow: none;
-            font-size: 16px;
-            height: 26px;
-            margin: 4px 0 0 38px;
-            width: 26px;
-          }
-
-          .details-count {
-            background: transparent;
-            color: #344054;
-            min-width: 0;
-            padding: 0;
-          }
-
-          .details-count div {
-            font-size: 10px;
-            margin-top: 1px;
-          }
-
-          .details-badge {
-            background: #5f35ad;
-            font-size: 11px;
-            height: 22px;
-            margin: 0;
-            width: 22px;
-          }
-
-          .details-left-main {
-            gap: 24px;
-            grid-template-columns: 210px minmax(0, 1fr);
-            padding: 16px 16px 26px;
-          }
-
-          .details-score {
-            background: conic-gradient(#2563eb 0 var(--details-score, 15%), #f3f6f9 var(--details-score, 15%) 100%);
-            height: 96px;
-            width: 96px;
-          }
-
-          .details-score-text {
-            color: #b4beca;
-            font-size: 15px;
-            font-weight: 500;
-          }
-
-          .details-score-number {
-            background: #5f6670;
-            font-size: 12px;
-            height: 34px;
-            right: -6px;
-            width: 34px;
-          }
-
-          .details-stage {
-            gap: 18px 34px;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-          }
-
-          .details-label {
-            color: #8b95a5;
-            font-size: 10px;
-            font-weight: 500;
-            letter-spacing: 0;
-            margin-bottom: 6px;
-          }
-
-          .details-value,
-          .details-inline-input {
-            color: #344054;
-            font-size: 12px;
-            font-weight: 400;
-          }
-
-          .details-select {
-            border-color: #6f42c1;
-            border-radius: 2px;
-            color: #6f42c1;
-            font-size: 11px;
-            height: 25px;
-            max-width: 118px;
-            padding: 0 8px;
-          }
-
-          .details-status-save {
-            background: #6f42c1;
-            border-radius: 3px;
-            font-size: 11px;
-            min-height: 25px;
-            padding: 0 10px;
-          }
-
-          .details-info-grid {
-            border-top: 0;
-            gap: 26px 44px;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            margin-top: 24px;
-            padding-top: 18px;
-          }
-
-          .details-requirements-block {
-            border-top: 1px solid #e1e6ef;
-            background: #ffffff;
-          }
-
-          .details-section-head {
-            border-bottom: 1px solid #e1e6ef;
-            min-height: 56px;
-            padding: 0 14px;
-          }
-
-          .details-section-title,
-          .details-overview-title {
-            color: #40516a;
-            font-size: 18px;
-            font-weight: 500;
-          }
-
-          .details-match-btn {
-            border-color: #6f42c1;
-            border-radius: 3px;
-            color: #6f42c1;
-            font-size: 11px;
-            height: 24px;
-            min-width: 235px;
-          }
-
-          .details-requirement-grid {
-            gap: 30px 44px;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            padding: 18px 14px 26px;
-          }
-
-          .details-partner-area {
-            border-top: 1px solid #edf0f5;
-            padding: 16px 14px 20px;
-          }
-
-          .details-right-pane {
-            display: grid;
-            gap: 28px;
-            min-width: 0;
-          }
-
-          .details-work-card {
-            background: #ffffff;
-          }
-
-          .details-actions {
-            background: #ffffff;
-            border-bottom: 1px solid #d8dfe9;
-            gap: 14px;
-            min-height: 42px;
-            padding: 0 8px;
-          }
-
-          .details-action {
-            background: transparent;
-            border: 0;
-            border-radius: 0;
-            color: #000000;
-            font-size: 13px;
-            font-weight: 500;
-            min-height: 40px;
-            padding: 0 0 1px;
-            position: relative;
-          }
-
-          .details-action svg {
-            color: #000000;
-            font-size: 13px;
-          }
-
-          .details-action:hover,
-          .details-action.active {
-            background: transparent;
-            border-color: transparent;
-            color: #000000;
-          }
-
-          .details-action.active::after {
-            background: #6f42c1;
-            bottom: -1px;
-            content: "";
-            height: 2px;
-            left: 0;
-            position: absolute;
-            right: 0;
-          }
-
-          .details-action-panel {
-            padding: 14px;
-          }
-
-          .details-action-card {
-            border: 0;
-            border-radius: 0;
-            padding: 0;
-          }
-
-          .details-editor {
-            border-color: #cfd7e3;
-            border-radius: 3px;
-          }
-
-          .details-toolbar {
-            background: #ffffff;
-            gap: 5px;
-            min-height: 46px;
-            padding: 7px 8px;
-          }
-
-          .details-tool,
-          .details-tool-wide {
-            border-color: #c9d2df;
-            border-radius: 2px;
-            color: #40516a;
-            height: 30px;
-            min-width: 36px;
-          }
-
-          .details-note-area {
-            min-height: 142px;
-            padding: 10px;
-          }
-
-          .details-note-resize {
-            background: #ffffff;
-            height: 10px;
-          }
-
-          .details-note-limit {
-            color: #6b7280;
-            font-size: 11px;
-            margin-top: 2px;
-            text-align: right;
-          }
-
-          .details-save-row {
-            gap: 4px;
-            margin-top: 24px;
-          }
-
-          .details-save,
-          .details-mic {
-            border-radius: 3px;
-            height: 33px;
-          }
-
-          .details-save {
-            background: #6f42c1;
-            font-size: 12px;
-            min-width: 91px;
-          }
-
-          .details-mic {
-            background: #6f42c1;
-            color: #ffffff;
-            width: 38px;
-          }
-
-          .details-overview {
-            margin-top: 0;
-          }
-
-          .details-overview-title {
-            border-bottom: 1px solid #d8dfe9;
-            padding: 14px;
-          }
-
-          .details-overview-table th,
-          .details-overview-table td {
-            border-color: #d8dfe9;
-            color: #344054;
-            font-size: 12px;
-            font-weight: 400;
-            padding: 10px 12px;
-          }
-
-          .details-overview-table td {
-            color: #155b93;
-          }
-
-          .details-feed-card {
-            background: transparent;
-            border: 0;
-            border-radius: 0;
-          }
-
-          .details-feed-tabs {
-            background: transparent;
-            border-bottom: 1px solid #d8dfe9;
-            gap: 24px;
-            padding: 0;
-          }
-
-          .details-feed-tabs button {
-            color: #000000;
-            font-size: 12px;
-            font-weight: 500;
-            padding: 13px 0 10px;
-          }
-
-          .details-feed-tabs button.active::after {
-            background: #6f42c1;
-            height: 2px;
-          }
-
-          .details-timeline {
-            padding: 48px 0 24px 30px;
-          }
-
-          .details-timeline::before {
-            background: #d8dfe9;
-            left: 0;
-            top: 18px;
-          }
-
-          .details-feed-item {
-            border-color: #cfd7e3;
-            border-radius: 3px;
-            margin-top: 0;
-            padding: 18px 14px 14px;
-          }
-
-          .details-feed-item::before {
-            border-color: #cfd7e3;
-            height: 10px;
-            left: -36px;
-            top: 28px;
-            width: 10px;
-          }
-
-          .details-feed-text {
-            color: #344054;
-            font-size: 13px;
-          }
-
-          .details-feed-actions {
-            color: #111827;
-            font-size: 16px;
-          }
-
-          .details-feed-meta {
-            color: #8b95a5;
-            font-size: 11px;
-          }
-
-          @media (max-width: 1200px) {
-            .details-grid,
-            .details-left-main,
-            .details-info-grid,
-            .details-requirement-grid {
-              grid-template-columns: 1fr;
-            }
-
-            .details-stage,
-            .details-action-grid {
-              grid-template-columns: 1fr;
-            }
-
-            .details-left-head {
-              grid-template-columns: 1fr;
-            }
-
-            .details-count {
-              text-align: left;
-            }
-
-            .details-section-head {
-              align-items: flex-start;
-              flex-direction: column;
-              padding: 16px 20px;
-            }
-
-            .details-match-btn {
-              min-width: 100%;
-            }
-          }
-        `}</style>
-
-        <div className="details-page">
-          <button
-            type="button"
-            className="details-close-btn"
-            onClick={() => navigate("/user/sales/leads")}
-            aria-label="Close details and return to my leads"
-            title="Close"
-          >
-            <FaTimes />
-          </button>
-
-          <div className="details-grid">
-            <section className="details-card">
-              <div className="details-left-head">
+          .crm-main-grid,
+          .crm-bottom-grid,
+          .crm-header-grid,
+          .crm-overview-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .crm-header-top {
+            flex-direction: column;
+          }
+        }
+      `}</style>
+
+      <div className="crm-details">
+        <div className="crm-details-shell">
+          <section className="crm-lead-header">
+            <div className="crm-header-top">
+              <div className="crm-lead-title">
+                <h1>{leadName}</h1>
+                <p>#{leadId || "-"} | {primaryPhone || "No mobile number"} | {projectInterest}</p>
+              </div>
+              <span className="crm-status-badge">{currentStatus}</span>
+            </div>
+
+            <div className="crm-header-grid">
+              {[
+                ["Mobile Number", primaryPhone || "-"],
+                ["Project Interest", projectInterest],
+                ["Source", source],
+                ["Assigned Sales User", owner],
+                ["Created Date", formatDateTime(createdDate)],
+                ["Last Activity", formatDateTime(lastActivity)],
+                ["Email", primaryEmail || "-"],
+              ].map(([label, value]) => (
+                <div className="crm-header-field" key={label}>
+                  <div className="crm-label">{label}</div>
+                  <div className="crm-value">{value}</div>
+                </div>
+              ))}
+              <div className="crm-header-field crm-score-field">
                 <div>
-                  <div className="details-person">
-                    <span className="details-flag" aria-label="India" />
-                    <div>
-                      <div className="details-lead-id"># {leadId}</div>
-                      <div className="details-lead-name">
-                        {isEditingLeadName ? (
-                          <div className="details-name-edit">
-                            <input
-                              className="details-name-input"
-                              value={leadNameDraft}
-                              onChange={(event) => {
-                                setLeadNameDraft(event.target.value);
-                                setLeadEditMessage("");
-                              }}
-                              onKeyDown={(event) => {
-                                if (event.key === "Enter") handleSaveLeadName();
-                                if (event.key === "Escape") {
-                                  setLeadNameDraft(leadName);
-                                  setIsEditingLeadName(false);
-                                }
-                              }}
-                              autoFocus
-                            />
-                            <button
-                              type="button"
-                              className="details-name-save"
-                              disabled={isSavingLeadName}
-                              onClick={handleSaveLeadName}
-                            >
-                              {isSavingLeadName ? "Saving..." : "Save"}
-                            </button>
-                            <button
-                              type="button"
-                              className="details-name-cancel"
-                              onClick={() => {
-                                setLeadNameDraft(leadName);
-                                setIsEditingLeadName(false);
-                                setLeadEditMessage("");
-                              }}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <span>{leadName}</span>
-                            <button
-                              type="button"
-                              className="details-name-edit-btn"
-                              onClick={() => setIsEditingLeadName(true)}
-                              aria-label="Edit lead name"
-                            >
-                              <FaEdit className="details-edit" />
-                            </button>
-                          </>
-                        )}
-                      </div>
-                      {leadEditMessage && <div className="details-edit-message">{leadEditMessage}</div>}
-                    </div>
-                  </div>
+                  <div className="crm-label">Lead Score</div>
+                  <div className="crm-muted">Based on current stage</div>
+                </div>
+                <div className="crm-score-circle" style={{ "--score": leadScoreNumber }}>
+                  <strong>{leadScoreNumber}%</strong>
+                </div>
+              </div>
+            </div>
+
+            <div className="crm-action-bar">
+              {!isAdminContext && (
+                <>
+                  <button className="crm-action-btn primary" type="button" onClick={openSalesCallPage}>
+                    <FaPhoneAlt /> Call
+                  </button>
+                  <button className="crm-action-btn" type="button" onClick={openSalesWhatsAppPage}>
+                    <FaWhatsapp /> WhatsApp
+                  </button>
+                </>
+              )}
+              <button className="crm-action-btn" type="button" onClick={() => setActiveTab("Notes")}>
+                <FaRegStickyNote /> Add Note
+              </button>
+              {!isAdminContext && (
+                <>
+                  <button className="crm-action-btn" type="button" onClick={() => setActiveTab("Follow-ups")}>
+                    <FaClock /> Schedule Follow-up
+                  </button>
                   <button
+                    className="crm-action-btn"
                     type="button"
-                    className="details-whatsapp"
-                    title={whatsappPhone ? `Open WhatsApp for ${primaryPhone}` : "Open WhatsApp conversation"}
-                    onClick={openWhatsAppPage}
+                    onClick={() => openSalesSiteVisitPage()}
                   >
-                    <FaWhatsapp />
+                    <FaCalendarAlt /> Site Visit
+                  </button>
+                </>
+              )}
+              <a className="crm-action-btn" href={primaryEmail ? `mailto:${primaryEmail}` : undefined}>
+                <FaEnvelope /> Send Email
+              </a>
+              <div className={isAdminContext ? "crm-admin-status-tools" : "crm-status-control"}>
+                <div className="crm-status-control">
+                  <label className="crm-status-field">
+                    <select
+                      className="crm-status-select"
+                      disabled={isSavingStatus}
+                      value={stageStatusValue}
+                      onChange={(event) => handleStatusChange(event.target.value)}
+                    >
+                      {!stageStatusValue && (
+                        <option value="" disabled>
+                          Select status
+                        </option>
+                      )}
+                      {statusOptions.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    className="crm-small-btn primary crm-status-save"
+                    disabled={isSavingStatus || !stageStatusValue}
+                    type="button"
+                    onClick={() => saveStatus(stageStatusValue)}
+                  >
+                    <FaSave /> {isSavingStatus ? "Saving..." : "Save"}
                   </button>
                 </div>
-
-                <div className="details-count">
-                  <span className="details-badge">1</span>
-                  <div>Units</div>
-                </div>
-                <div className="details-count">
-                  <span className="details-badge">0</span>
-                  <div>Tasks</div>
-                </div>
               </div>
-
-              <div className="details-left-main">
-                <div>
-                  <div className="details-score" style={{ "--details-score": `${stageScore.score}%` }}>
-                    <div className="details-score-text">{stageScore.score}%</div>
-                    <div className="details-score-number">{stageScore.step}</div>
-                  </div>
-                </div>
-
-                <div className="details-stage">
-                  <div>
-                    <div className="details-label">Lead Stage</div>
-                    <div className="details-value">{getStatusLabel(leadStatus)}</div>
-                  </div>
-                  <div>
-                    <div className="details-label">Change Stage</div>
-                    <div className="details-status-row">
-                      <select
-                        className="details-select"
-                        value={selectedStatus}
-                        onChange={(e) => setSelectedStatus(e.target.value)}
-                      >
-                        {leadStatusOptions.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        className="details-status-save"
-                        disabled={isSavingStatus}
-                        onClick={handleSaveStatus}
-                      >
-                        {isSavingStatus ? "Saving..." : "Save"}
-                      </button>
-                    </div>
-                    {statusMessage && (
-                      <div className="details-status-message">{statusMessage}</div>
-                    )}
-                  </div>
-
-                  <div className="details-info-grid">
-                    {detailItems.map(([label, value, isHighlight], index) => (
-                      <div key={index}>
-                        <div className="details-label">{label}</div>
-                        <div className={`details-value ${isHighlight ? "details-highlight" : ""}`}>
-                          <input className="details-inline-input" readOnly value={value} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Details UI refresh: keep lead facts and requirements together in the left pane. */}
-              <div className="details-requirements-block">
-                <div className="details-section-head">
-                  <div className="details-section-title">Requirement</div>
-                  <button className="details-match-btn">
-                    <FaSearch /> Show Matching Properties
-                  </button>
-                </div>
-                
-                <div className="details-requirement-grid">
-                  {requirementItems.map(([label, value], index) => (
-                    <div key={index}>
-                      <div className="details-label">{label}</div>
-                      <div className="details-value">{value}</div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="details-partner-area">
-                  <div className="details-label">CHANNEL PARTNER NAME</div>
-                  <div className="details-value" style={{ fontWeight: 600, color: "#3b82f6" }}>
-                    {cpName}
-                  </div>
-                </div>
-              </div>
-            </section>
-
-            <section className="details-right-pane">
-              {/* Details UI refresh: actions and activity now sit in the right pane like the reference CRM screen. */}
-              <div className="details-card details-work-card">
-                <div className="details-actions">
-                  {actionItems.map((item) => (
+              <div className="crm-more-wrap">
+                <button
+                  className="crm-action-btn"
+                  type="button"
+                  onClick={() => setShowMoreMenu((current) => !current)}
+                >
+                  <FaEllipsisV /> More
+                </button>
+                {showMoreMenu && (
+                  <div className="crm-more-menu">
                     <button
-                      key={item.key}
-                      className={`details-action ${activeAction === item.key ? "active" : ""}`}
-                      title={item.title}
+                      type="button"
                       onClick={() => {
-                        if (item.key === "whatsapp") {
-                          openWhatsAppPage();
-                          return;
-                        }
-
-                        setActiveAction(item.key);
+                        setShowMoreMenu(false);
+                        reassignLead();
                       }}
                     >
-                      {item.icon}
-                      {item.label}
+                      <FaExchangeAlt /> Reassign Lead
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        if (isAdminContext) {
+                          navigate("/SiteVists", { state: { lead, status: "Conducted" } });
+                          return;
+                        }
+                        openSalesSiteVisitPage("Conducted");
+                      }}
+                    >
+                      <FaCalendarAlt /> Conducted Site visit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        navigate(isAdminContext ? "/bookings" : "/user/sales/bookings", {
+                          state: { lead },
+                        });
+                      }}
+                    >
+                      <FaLock /> Bookings
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        alert("Merge Leads workflow is ready to connect.");
+                      }}
+                    >
+                      <FaExchangeAlt /> Merge Leads
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+            {statusMessage && <div className="crm-muted">{statusMessage}</div>}
+          </section>
+
+          <section className="crm-overview-grid">
+            {overview.map(([label, count]) => (
+              <div className="crm-overview-card" key={label}>
+                <div className="crm-label">{label}</div>
+                <strong>{count}</strong>
+              </div>
+            ))}
+          </section>
+
+          <div className="crm-main-grid">
+            <aside className="crm-panel">
+              <div className="crm-panel-head">
+                <h2>Lead Information</h2>
+                <FaUserTie />
+              </div>
+              <div className="crm-panel-body">
+                {[
+                  ["Status", currentStatus],
+                  ["Assigned To", owner],
+                  ["Source", source],
+                  ["Project", projectInterest],
+                  ["Configuration", valueOf(lead, ["configration", "configuration"], "-")],
+                  ["Budget", valueOf(lead, ["budget", "budgetMax", "budgetMin"], "-")],
+                  ["Location", valueOf(lead, ["locationPreferences", "city"], "-")],
+                  ["Property Type", valueOf(lead, ["propertyType", "type"], "-")],
+                  ["Funding Source", valueOf(lead, ["fundingSource"], "-")],
+                  ["Tags", valueOf(lead, ["tags"], "-")],
+                ].map(([label, value]) => (
+                  <div className="crm-info-row" key={label}>
+                    <div className="crm-label">{label}</div>
+                    <div className="crm-value">{value}</div>
+                  </div>
+                ))}
+              </div>
+            </aside>
+
+            <section className="crm-workspace">
+              {(activeTab === "Notes" || activeTab === "Activity") && (
+                <div className="crm-panel">
+                  <div className="crm-panel-head">
+                    <h2>{editingNoteId ? "Edit Note" : "Add Note"}</h2>
+                    {editingNoteId && (
+                      <button
+                        className="crm-small-btn"
+                        type="button"
+                        onClick={() => {
+                          setEditingNoteId(null);
+                          setNoteDraft("");
+                        }}
+                      >
+                        <FaTimes /> Cancel
+                      </button>
+                    )}
+                  </div>
+                  <div className="crm-panel-body">
+                    <div className="crm-note-box">
+                      <textarea
+                        ref={noteInputRef}
+                        value={noteDraft}
+                        onChange={(event) => setNoteDraft(event.target.value)}
+                        placeholder="Add note for lead. Use @name to mention a user."
+                      />
+                      <div className="crm-form-actions">
+                        <button className="crm-small-btn primary crm-note-save" disabled={isSavingNote} type="button" onClick={saveNote}>
+                          <FaSave /> {isSavingNote ? "Saving..." : "Save Note"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === "Follow-ups" && (
+                <div className="crm-panel">
+                  <div className="crm-panel-head">
+                    <h2>Schedule Follow-up</h2>
+                  </div>
+                  <div className="crm-panel-body">
+                    <div className="crm-followup-form">
+                      <input
+                        value={followupDraft}
+                        onChange={(event) => setFollowupDraft(event.target.value)}
+                        placeholder="Follow-up purpose"
+                      />
+                      <input
+                        type="datetime-local"
+                        value={followupDate}
+                        onChange={(event) => setFollowupDate(event.target.value)}
+                      />
+                      <button className="crm-small-btn primary" type="button" onClick={scheduleFollowup}>
+                        <FaCalendarAlt /> Schedule Follow-up
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === "Site Visits" && (
+                <div className="crm-panel">
+                  <div className="crm-panel-head">
+                    <h2>Site Visit</h2>
+                  </div>
+                  <div className="crm-panel-body">
+                    <div className="crm-visit-link-panel">
+                      <p>Open the Site Visits page to create, conduct, or update this lead visit.</p>
+                      <button
+                        className="crm-small-btn primary crm-note-save"
+                        type="button"
+                        onClick={() => {
+                          if (isAdminContext) {
+                            const params = new URLSearchParams();
+                            if (leadId) params.set("leadId", leadId);
+                            navigate(`/SiteVists${params.toString() ? `?${params.toString()}` : ""}`, {
+                              state: { lead },
+                            });
+                            return;
+                          }
+                          openSalesSiteVisitPage();
+                        }}
+                      >
+                        <FaMapMarkerAlt /> Open Site Visit
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="crm-panel">
+                <div className="crm-tabs">
+                  {tabs.map((tab) => (
+                    <button
+                      className={activeTab === tab ? "active" : ""}
+                      key={tab}
+                      type="button"
+                      onClick={() => setActiveTab(tab)}
+                    >
+                      {tab}
                     </button>
                   ))}
                 </div>
 
-                {renderActionPanel()}
-              </div>
-
-              <div className="details-overview">
-                <div className="details-overview-title">Lead Activities Overview</div>
-                <table className="details-overview-table">
-                  <thead>
-                    <tr>
-                      <th>Conducted Site Visits</th>
-                      <th>Outgoing Not Answered Calls</th>
-                      <th>Outgoing Answered Calls</th>
-                      <th>Incoming Not Answered Calls</th>
-                      <th>Incoming Answered Calls</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr>
-                      <td>1</td>
-                      <td>0</td>
-                      <td>0</td>
-                      <td>0</td>
-                      <td>0</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              <div className="details-feed-card">
-                <div className="details-feed-tabs">
-                  <button className="active">Activity</button>
-                  <button>Starred</button>
-                  <button>Notes</button>
-                  <button>Calls</button>
-                  <button>Site visit</button>
-                  <button>Feed</button>
-                  <button>Followups</button>
-                  <button>Emails</button>
-                  <button>SMS</button>
-                  <button>Whatsapp</button>
-                  <button>History</button>
-                </div>
-                
-                <div className="details-timeline">
-                  {savedNotes.length === 0 ? (
-                    <div className="details-feed-item">
-                      <div className="details-feed-row">
-                        <div className="details-feed-text">
-                          Thank You For The Visit
-                        </div>
-                        <div className="details-feed-actions">
-                          <FaStar />
-                          <FaEllipsisV />
-                        </div>
-                      </div>
-                      <div className="details-feed-meta">
-                        <div>{receivedOn} | Generated via Workflow | Lead</div>
-                        <div>outgoing | delivered</div>
-                      </div>
-                    </div>
+                <div className="crm-timeline">
+                  {Object.keys(groupedActivities).length === 0 ? (
+                    <div className="crm-empty">No records found for {activeTab}.</div>
                   ) : (
-                    savedNotes.map((note) => (
-                      <div key={note.id || note._id} className="details-feed-item">
-                        <div className="details-feed-row">
-                          <div className="details-feed-text">
-                            {note.note}
-                          </div>
-                          <div className="details-feed-actions">
-                            <FaStar />
-                            <FaEllipsisV />
-                          </div>
-                        </div>
-                        <div className="details-feed-meta">
-                          <div>Created by: {note.owner}</div>
-                          <div>{formatNoteDate(note.createdAt || new Date())}</div>
-                        </div>
+                    Object.entries(groupedActivities).map(([day, dayActivities]) => (
+                      <div className="crm-day" key={day}>
+                        <div className="crm-day-title">{day}</div>
+                        {dayActivities.map((activity) => (
+                          <article className="crm-activity" key={activity.id}>
+                            <div className="crm-activity-top">
+                              <div>
+                                <div className="crm-activity-title">
+                                  {activity.icon}
+                                  {activity.title}
+                                </div>
+                                <p>{activity.description}</p>
+                              </div>
+                              {activity.type === "Notes" && (
+                                <div className="crm-note-actions">
+                                  <button className="crm-small-btn" type="button" onClick={() => togglePinNote(activity.source)}>
+                                    <FaStar /> {activity.source.pinned ? "Unpin" : "Pin"}
+                                  </button>
+                                  <button className="crm-small-btn" type="button" onClick={() => editNote(activity.source)}>
+                                    <FaEdit /> Edit
+                                  </button>
+                                  <button className="crm-small-btn danger" type="button" onClick={() => deleteNote(activity.source)}>
+                                    <FaTrash /> Delete
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                            <div className="crm-muted">
+                              {activity.meta} | {formatDateTime(activity.createdAt)}
+                            </div>
+                          </article>
+                        ))}
                       </div>
                     ))
                   )}
@@ -2235,10 +1713,87 @@ const Details = () => {
               </div>
             </section>
           </div>
+
+          <section className="crm-bottom-grid">
+            <div className="crm-panel">
+              <div className="crm-panel-head">
+                <h2>Follow-ups</h2>
+                <span className="crm-muted">{upcomingFollowups.length} upcoming, {overdueFollowups.length} overdue</span>
+              </div>
+              <div className="crm-panel-body">
+                {followups.length === 0 ? (
+                  <div className="crm-empty">No follow-ups scheduled.</div>
+                ) : (
+                  followups.map((item) => (
+                    <div className="crm-list-row" key={item.id}>
+                      <div className="crm-value">{item.title}</div>
+                      <div className="crm-muted">{formatDateTime(item.dueAt)} | {item.status}</div>
+                      <div className="crm-action-bar">
+                        <button className="crm-small-btn" type="button" onClick={() => updateFollowupStatus(item, "Done")}>Mark Done</button>
+                        <button className="crm-small-btn" type="button" onClick={() => updateFollowupStatus(item, "Rescheduled")}>Reschedule</button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="crm-panel">
+              <div className="crm-panel-head">
+                <h2>Site Visits</h2>
+                <span className="crm-muted">{scheduledVisits.length} scheduled, {completedVisits.length} completed, {cancelledVisits.length} cancelled</span>
+              </div>
+              <div className="crm-panel-body">
+                {visits.length === 0 ? (
+                  <div className="crm-empty">No site visits found.</div>
+                ) : (
+                  visits.map((visit) => (
+                    <div className="crm-list-row" key={visit.id}>
+                      <div className="crm-value">{visit.project || projectInterest}</div>
+                      <div className="crm-muted">{formatDateTime(visit.scheduledOn)} | {visit.status}</div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="crm-panel">
+              <div className="crm-panel-head">
+                <h2>Bookings & Audit</h2>
+                <FaHistory />
+              </div>
+              <div className="crm-panel-body">
+                {bookings.length === 0 ? (
+                  <div className="crm-empty">No bookings found.</div>
+                ) : (
+                  bookings.map((booking) => (
+                    <div className="crm-list-row" key={booking.id}>
+                      <div className="crm-value">{booking.projectDetails || booking.customerName || "Booking"}</div>
+                      <div className="crm-muted">
+                        {formatDateOnly(booking.bookedOn || booking.createdAt)} | {formatMoney(booking.basePrice)} | {booking.stage || "-"}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </section>
+
+          {!embedded && (
+            <div className="crm-footer-actions">
+              <button
+                className="crm-small-btn crm-back-btn"
+                type="button"
+                onClick={() => navigate(detailsBackPath)}
+              >
+                <FaArrowLeft /> Back
+              </button>
+            </div>
+          )}
         </div>
-      </>
+      </div>
     </>
   );
 };
 
-export default Details;
+export default UserDetails;

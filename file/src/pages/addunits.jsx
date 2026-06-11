@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
-import "./addLead.css";
 
 const emptyUnit = {
   name: "",
@@ -27,7 +26,7 @@ const AddUnits = () => {
     measure: "sqft",
     carpet: "",
     saleable: "",
-    loading: "",
+    loading: "0.0",
     description: "",
   });
   const [unitList, setUnitList] = useState([{ ...emptyUnit }]);

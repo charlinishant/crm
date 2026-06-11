@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import hljs from 'highlight.js';
 import ReactQuill from 'react-quill-new';
-import 'highlight.js/styles/github.css';
 
 const TermsConditionLayer = () => {
     const quillRef = useRef(null);

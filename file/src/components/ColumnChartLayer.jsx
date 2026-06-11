@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaPlus } from "react-icons/fa";
+import { FaEllipsisV, FaPlus } from "react-icons/fa";
 
 const ColumnChartLayer = () => {
   const navigate = useNavigate();
@@ -35,22 +35,23 @@ const ColumnChartLayer = () => {
         .project-wrapper {
           background: #ffffff;
           border-radius: 10px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.07);
-          overflow: hidden;
-          font-family: sans-serif;
+          border: 1px solid #e2e8f0;
+          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+          padding: 20px;
         }
 
         .project-topbar {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          padding: 14px 20px;
-          border-bottom: 1px solid #e2e8f0;
+          gap: 14px;
+          margin-bottom: 15px;
         }
 
         .project-count {
-          font-size: 14px;
-          color: #64748b;
+          color: #1e293b;
+          font-size: 18px;
+          font-weight: 600;
         }
 
         .project-topbar-actions {
@@ -60,7 +61,7 @@ const ColumnChartLayer = () => {
         }
 
         .btn-new-project {
-          background: #7c3aed;
+          background: #487fff;
           color: #ffffff;
           border: none;
           padding: 9px 18px;
@@ -74,7 +75,7 @@ const ColumnChartLayer = () => {
         }
 
         .btn-new-project:hover {
-          background: #6d28d9;
+          background: #386fe8;
         }
 
         .icon-btn {
@@ -100,45 +101,77 @@ const ColumnChartLayer = () => {
         .project-table {
           width: 100%;
           border-collapse: collapse;
-          font-size: 13px;
-        }
-
-        .project-table thead tr {
-          background: #f1f5f9;
+          font-size: 14px;
         }
 
         .project-table thead th {
-          padding: 11px 16px;
+          background: #487fff !important;
+          color: #ffffff !important;
+          padding: 14px 15px;
           text-align: left;
           font-weight: 600;
-          font-size: 12px;
-          color: #64748b;
-          text-transform: uppercase;
+          white-space: nowrap;
         }
 
         .project-table tbody tr {
-          border-bottom: 1px solid #f1f5f9;
+          border-bottom: 1px solid #e2e8f0;
+          transition: background 0.2s;
         }
 
         .project-table tbody tr:hover {
+          background: #f1f5f9;
+        }
+
+        .project-table tbody tr:nth-child(even) {
           background: #f8fafc;
         }
 
+        .project-table tbody tr:nth-child(even):hover {
+          background: #f1f5f9;
+        }
+
         .project-table tbody td {
-          padding: 14px 16px;
-          color: #1e293b;
+          color: #334155;
+          font-size: 14px;
+          padding: 12px 15px;
+          position: relative;
+          vertical-align: middle;
+          white-space: nowrap;
+        }
+
+        .project-table thead th:first-child {
+          border-start-start-radius: 8px;
+          border-end-start-radius: 8px;
+        }
+
+        .project-table thead th:last-child {
+          border-start-end-radius: 8px;
+          border-end-end-radius: 8px;
+          text-align: center;
         }
 
         .actions-cell {
+          overflow: visible;
           position: relative;
-          text-align: right;
+          text-align: center;
         }
 
         .actions-menu-btn {
-          background: none;
-          border: none;
+          align-items: center;
+          background: #ffffff;
+          border: 1px solid #d1d5db;
+          border-radius: 6px;
+          color: #475569;
           cursor: pointer;
-          font-size: 20px;
+          display: inline-flex;
+          height: 32px;
+          justify-content: center;
+          width: 32px;
+        }
+
+        .actions-menu-btn svg {
+          height: 14px;
+          width: 14px;
         }
 
         .actions-dropdown {
@@ -147,18 +180,23 @@ const ColumnChartLayer = () => {
           top: 36px;
           background: #ffffff;
           border: 1px solid #e2e8f0;
-          border-radius: 8px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-          z-index: 100;
+          border-radius: 6px;
+          box-shadow: 0 10px 22px rgba(15, 23, 42, 0.14);
+          min-width: 142px;
+          overflow: hidden;
+          z-index: 999;
         }
 
         .actions-dropdown button {
           display: block;
           width: 100%;
-          padding: 10px;
-          background: none;
+          padding: 12px 14px;
+          background: #ffffff;
           border: none;
+          color: #334155;
           cursor: pointer;
+          font-size: 14px;
+          text-align: left;
         }
 
         .actions-dropdown button:hover {
@@ -166,7 +204,32 @@ const ColumnChartLayer = () => {
         }
 
         .danger {
-          color: red;
+          color: #dc2626 !important;
+        }
+
+        .project-empty {
+          color: #94a3b8 !important;
+          padding: 30px !important;
+          text-align: center;
+        }
+
+        @media (max-width: 768px) {
+          .project-wrapper {
+            overflow-x: auto;
+          }
+
+          .project-topbar {
+            align-items: stretch;
+            flex-direction: column;
+          }
+
+          .project-topbar-actions {
+            justify-content: space-between;
+          }
+
+          .project-table {
+            min-width: 760px;
+          }
         }
       `}</style>
       
@@ -212,11 +275,11 @@ const ColumnChartLayer = () => {
             <tbody>
               {loadError ? (
                 <tr>
-                  <td colSpan="8" className="text-danger">{loadError}</td>
+                  <td colSpan="8" className="project-empty text-danger">{loadError}</td>
                 </tr>
               ) : projects.length === 0 ? (
                 <tr>
-                  <td colSpan="8">No Data</td>
+                  <td colSpan="8" className="project-empty">No Data Available</td>
                 </tr>
               ) : (
                 projects.map((proj) => (
@@ -246,7 +309,9 @@ const ProjectRow = ({ proj }) => {
       <td>{formatted}</td>
       <td>{proj.integratedPortals}</td>
       <td className="actions-cell">
-        <button onClick={() => setOpen(!open)}>⋮</button>
+        <button className="actions-menu-btn" type="button" onClick={() => setOpen(!open)}>
+          <FaEllipsisV />
+        </button>
 
         {open && (
           <div className="actions-dropdown">

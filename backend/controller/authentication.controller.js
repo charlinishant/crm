@@ -27,6 +27,36 @@ const normalizeDepartment = (department, role) => {
     return allowedDepartments.has(value) ? value : null
 }
 
+const startOrResumeAttendance = async (userId) => {
+    const now = new Date()
+    const attendance = await prisma.userAttendance.findFirst({
+        where:{userId},
+        orderBy:{loginAt:"desc"}
+    })
+
+    if(!attendance){
+        return prisma.userAttendance.create({
+            data:{
+                userId,
+                status:"Available",
+                loginAt:now
+            }
+        })
+    }
+
+    return prisma.userAttendance.update({
+        where:{id:attendance.id},
+        data:{
+            status:"Available",
+            loginAt:now,
+            logoutAt:null,
+            breakStartedAt:null,
+            breakEndedAt:null,
+            totalBreakSeconds:0
+        }
+    })
+}
+
 exports.register = async (req, res)=>{
     try{
         const {email, username, password, role, firstName, lastName, phone, department} = req.body;
@@ -106,6 +136,8 @@ exports.login = async (req, res)=>{
         const token = jwt.sign({id:user.id, email:user.email, role:user.role}, 
                                 process.env.JWT_SECRET,
                             {expiresIn:"1h"})
+        await startOrResumeAttendance(user.id)
+
         const data = {
             "id":user.id,
             "username":user.username,

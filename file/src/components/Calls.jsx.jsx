@@ -1,6 +1,5 @@
 
 import React, { useState } from 'react';
-import "./Calls.css"
 
 const Calls = () => {
   const [leadData, setLeadData] = useState([

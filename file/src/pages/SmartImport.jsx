@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import "./smartImport.css";
 
 const getUserName = (user) =>
   [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||

@@ -1,5 +1,4 @@
 import React from "react";
-import "./exportButton.css";
 
 const Exportbutton = () => {
   return (

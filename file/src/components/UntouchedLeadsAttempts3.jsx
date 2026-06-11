@@ -1,5 +1,4 @@
 
-import './NewEnquiries.css';
 import TableHeader from './TableHeader';
 
 const UntouchedLeadsAttempts3 = () => {

@@ -3,7 +3,6 @@ import { Icon } from "@iconify/react";
 import { useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
 import Breadcrumb from "../components/Breadcrumb";
-import "./FloorPlans.css"; 
 
 const Floorplans = () => {
     const navigate = useNavigate();
@@ -108,19 +107,19 @@ const Floorplans = () => {
                             <tbody>
                                 {loading ? (
                                     <tr>
-                                        <td colSpan="7" className="text-center py-4">
+                                        <td colSpan="7" className="floor-empty">
                                             Loading...
                                         </td>
                                     </tr>
                                 ) : error ? (
                                     <tr>
-                                        <td colSpan="7" className="text-center text-danger py-4">
+                                        <td colSpan="7" className="floor-empty text-danger">
                                             {error}
                                         </td>
                                     </tr>
                                 ) : floorplans.length === 0 ? (
                                     <tr>
-                                        <td colSpan="7" className="text-center py-4">
+                                        <td colSpan="7" className="floor-empty">
                                             No Data Found
                                         </td>
                                     </tr>

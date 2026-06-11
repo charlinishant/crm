@@ -74,6 +74,7 @@ const UserConversationPanel = ({
   loading = false,
   onOpenCallLead = null,
   onOpenWhatsAppLead = null,
+  onScheduleVisitLead = null,
 }) => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("calls");
@@ -96,7 +97,9 @@ const UserConversationPanel = ({
       project: lead.interestedProjects || lead.propertyType || "-",
       status: lead.status || "Fresh Lead",
       date: formatDate(lead.conductSiteDate || lead.createdAt),
-      visitStatus: lead.conductSiteVisit || lead.conductSiteDate ? "Scheduled" : "Pending",
+      visitStatus: lead.siteVisitStatus || lead.visitStatus || (lead.conductSiteVisit || lead.conductSiteDate ? "Scheduled" : "Pending"),
+      visitLocation: lead.siteVisitLocation || lead.meetingPoint || lead.locationPreferences || "-",
+      visitExecutive: lead.siteVisitExecutive || lead.team || owner,
       message:
         lead.requirementComment ||
         lead.locationPreferences ||
@@ -109,7 +112,7 @@ const UserConversationPanel = ({
     calls: records,
     emails: records.filter((record) => record.email !== "-"),
     sms: records.filter((record) => record.phone !== "-"),
-    siteVisits: records.filter((record) => record.visitStatus === "Scheduled"),
+    siteVisits: records,
     whatsapp: records.filter((record) => record.phone !== "-"),
   };
 
@@ -143,6 +146,14 @@ const UserConversationPanel = ({
 
     const leadId = lead.id || lead._id || lead.lead_id || "";
     navigate(`/user/sales/whatsapp${leadId ? `?leadId=${leadId}` : ""}`, { state: { lead } });
+  };
+
+  const openScheduleVisit = (lead) => {
+    if (!lead) return;
+
+    if (typeof onScheduleVisitLead === "function") {
+      onScheduleVisitLead(lead);
+    }
   };
 
   return (
@@ -221,7 +232,13 @@ const UserConversationPanel = ({
                         ? maskPhone(record.phone)
                         : record.phone}
                 </strong>
-                {!isWhatsapp && <small>{record.message}</small>}
+                {!isWhatsapp && (
+                  <small>
+                    {activeTab === "siteVisits"
+                      ? `${record.visitLocation} - ${record.visitExecutive}`
+                      : record.message}
+                  </small>
+                )}
               </span>
               <span>{renderStatus(status)}</span>
               <span>{record.owner}</span>
@@ -243,6 +260,10 @@ const UserConversationPanel = ({
                 ) : isCall && record.phone !== "-" ? (
                   <button type="button" onClick={() => openCallLead(record.lead)}>
                     Call
+                  </button>
+                ) : activeTab === "siteVisits" ? (
+                  <button type="button" onClick={() => openScheduleVisit(record.lead)}>
+                    {record.visitStatus === "Pending" ? "Schedule Visit" : "Update Visit"}
                   </button>
                 ) : (
                   <button type="button" aria-label="More conversation actions">

@@ -1,81 +1,191 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { Icon } from "@iconify/react";
 import { useNavigate } from "react-router-dom";
-import "./svpDashboard.css";
+
+const getLeadId = (lead) => lead?.id || lead?._id || lead?.lead_id || "";
+
+const getLeadName = (lead) => {
+  const fullName = [lead?.firstName, lead?.lastName].filter(Boolean).join(" ");
+  return lead?.name || lead?.full_name || lead?.customer_name || fullName || "-";
+};
+
+const getDisplayValue = (value, fallback = "-") => {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "string" || typeof value === "number") return value;
+
+  if (Array.isArray(value)) {
+    return value.map((item) => getDisplayValue(item, "")).find(Boolean) || fallback;
+  }
+
+  if (typeof value === "object") {
+    return (
+      [value.firstName, value.lastName].filter(Boolean).join(" ") ||
+      value.username ||
+      value.name ||
+      value.email ||
+      value.label ||
+      value.value ||
+      fallback
+    );
+  }
+
+  return fallback;
+};
+
+const getUserName = (user) => getDisplayValue(user);
+
+const formatVisitDate = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString("en-GB");
+};
+
+const formatVisitDay = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("en-US", { weekday: "long" });
+};
+
+const formatVisitTime = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const normalizeStatus = (value) => {
+  const normalized = String(value || "")
+    .toLowerCase()
+    .replace(/[_-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (normalized === "visit done" || normalized === "conducted" || normalized === "done") {
+    return "Visit Done";
+  }
+  if (normalized === "visit missed" || normalized === "missed") return "Visit Missed";
+  if (normalized === "cancelled" || normalized === "canceled") return "Cancelled";
+  if (normalized === "rescheduled") return "Rescheduled";
+  if (normalized === "confirmed") return "Confirmed";
+  return "Scheduled";
+};
+
+const getStatusClass = (status) =>
+  String(status || "Scheduled")
+    .toLowerCase()
+    .replace(/[_-]/g, " ")
+    .trim()
+    .replace(/\s+/g, "-");
+
+const getVisitLead = (visit) => visit?.lead || visit?.Lead || {};
+
+const hasScheduledVisitData = (lead) =>
+  Boolean(
+    lead?.conductSiteVisit ||
+      lead?.conductSiteDate ||
+      lead?.siteVisitProject ||
+      lead?.siteVisitDate ||
+      lead?.siteVisitStatus ||
+      lead?.visitStatus ||
+      lead?.conductSiteStatus
+  );
+
+const leadToVisit = (lead) => ({
+  id: lead?.siteVisitId || getLeadId(lead),
+  lead,
+  project: getDisplayValue(
+    lead?.siteVisitProject || lead?.conductSiteVisit || lead?.interestedProjects || lead?.project
+  ),
+  status: normalizeStatus(lead?.siteVisitStatus || lead?.visitStatus || lead?.conductSiteStatus),
+  scheduledOn: lead?.conductSiteDate || lead?.siteVisitDate,
+  salesExecutive: lead?.siteVisitExecutive || lead?.team,
+  location: getDisplayValue(lead?.siteVisitLocation || lead?.meetingPoint || lead?.locationPreferences),
+});
+
+const scheduleVisitToVisit = (visit) => {
+  const lead = getVisitLead(visit);
+
+  return {
+    id: visit?.id || getLeadId(lead),
+    lead,
+    project: getDisplayValue(visit?.project || lead?.siteVisitProject || lead?.conductSiteVisit),
+    status: normalizeStatus(visit?.status || lead?.siteVisitStatus || lead?.visitStatus || lead?.conductSiteStatus),
+    scheduledOn: visit?.scheduledOn || lead?.conductSiteDate || lead?.siteVisitDate,
+    salesExecutive: visit?.salesExecutive || lead?.siteVisitExecutive || lead?.team,
+    location: getDisplayValue(visit?.meetingPoint || lead?.siteVisitLocation || lead?.meetingPoint),
+  };
+};
 
 const SVPDashboard = () => {
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const recordsPerPage = 10;
   const navigate = useNavigate();
-  const [visitedLeads, setVisitedLeads] = useState([]);
+  const [scheduledVisits, setScheduledVisits] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
-  const getLeadName = (lead) => {
-    const fullName = [lead.firstName, lead.lastName].filter(Boolean).join(" ");
-    return lead.name || fullName || "-";
-  };
-
-  const getUserName = (user) =>
-    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
-    user?.username ||
-    user?.email ||
-    "-";
-
-  const formatVisitDate = (value) => {
-    if (!value) return "-";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return value;
-    return date.toLocaleDateString("en-GB");
-  };
-
-  const formatVisitDay = (value) => {
-    if (!value) return "-";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "-";
-    return date.toLocaleDateString("en-US", { weekday: "long" });
-  };
-
-  const formatVisitTime = (value) => {
-    if (!value) return "-";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "-";
-    return date.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
-  const fetchVisitedLeads = useCallback(async (showLoading = false) => {
+  const fetchScheduledVisits = useCallback(async (showLoading = false) => {
     try {
       if (showLoading) setIsLoading(true);
 
-      const response = await fetch(`${API_URL}/leads/`);
-      if (!response.ok) throw new Error("Unable to load visited leads");
+      const token = localStorage.getItem("authToken");
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+      const response = await fetch(`${API_URL}/schedule-visits`, { headers });
+      const result = await response.json().catch(() => ({}));
 
-      const result = await response.json();
-      const leads = Array.isArray(result) ? result : result?.data || [];
-      setVisitedLeads(leads.filter((lead) => lead.conductSiteVisit || lead.conductSiteDate));
+      if (!response.ok) throw new Error(result?.message || "Unable to load scheduled visits");
+
+      const visits = Array.isArray(result) ? result : result?.data || result?.visits || [];
+      setScheduledVisits(visits.map(scheduleVisitToVisit));
       setError("");
     } catch (err) {
-      console.error("Unable to load visited leads:", err);
-      setError(err.message || "Unable to load visited leads");
+      console.error("Unable to load scheduled visits:", err);
+      setError(err.message || "Unable to load scheduled visits");
+
+      try {
+        const token = localStorage.getItem("authToken");
+        const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+        const fallbackResponse = await fetch(`${API_URL}/leads/`, { headers });
+        const fallbackResult = await fallbackResponse.json().catch(() => ({}));
+        const leads = Array.isArray(fallbackResult)
+          ? fallbackResult
+          : fallbackResult?.data || fallbackResult?.leads || [];
+        setScheduledVisits(leads.filter(hasScheduledVisitData).map(leadToVisit));
+      } catch {
+        setScheduledVisits([]);
+      }
     } finally {
       if (showLoading) setIsLoading(false);
     }
   }, [API_URL]);
 
   useEffect(() => {
-    fetchVisitedLeads(true);
-    const intervalId = window.setInterval(() => fetchVisitedLeads(false), 15000);
-    return () => window.clearInterval(intervalId);
-  }, [fetchVisitedLeads]);
+    fetchScheduledVisits(true);
+    const intervalId = window.setInterval(() => fetchScheduledVisits(false), 15000);
+    const handleFocus = () => fetchScheduledVisits(false);
+    const handleSiteVisitStatusUpdated = () => fetchScheduledVisits(false);
 
-  const totalPages = Math.max(1, Math.ceil(visitedLeads.length / recordsPerPage));
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("siteVisitStatusUpdated", handleSiteVisitStatusUpdated);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("siteVisitStatusUpdated", handleSiteVisitStatusUpdated);
+    };
+  }, [fetchScheduledVisits]);
+
+  const totalPages = Math.max(1, Math.ceil(scheduledVisits.length / recordsPerPage));
   const activePage = Math.min(currentPage, totalPages);
   const pageStartIndex = (activePage - 1) * recordsPerPage;
-  const paginatedLeads = visitedLeads.slice(pageStartIndex, pageStartIndex + recordsPerPage);
-  const pageEndIndex = Math.min(pageStartIndex + paginatedLeads.length, visitedLeads.length);
+  const paginatedVisits = scheduledVisits.slice(pageStartIndex, pageStartIndex + recordsPerPage);
+  const pageEndIndex = Math.min(pageStartIndex + paginatedVisits.length, scheduledVisits.length);
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
@@ -83,106 +193,106 @@ const SVPDashboard = () => {
 
   const handleEdit = (lead) => {
     window.sessionStorage.setItem("selectedLeadEdit", JSON.stringify(lead));
-    const leadId = lead.id || lead._id || lead.lead_id || "";
+    const leadId = getLeadId(lead);
     navigate(leadId ? `/add-lead?editLeadId=${leadId}` : "/add-lead", { state: { lead } });
   };
 
   return (
-    <div className="svp-container">
-      <div className="svp-header">
-        <div>
-          <p className="breadcrumb">Home / Scheduled Visit Planned Report</p>
-          <p className="svp-title">Scheduled Visit Planned Report</p>
-        </div>
-
-        <div className="svp-actions">
-          <button className="btn-outline">Export</button>
-          <button className="btn-outline">Calendar</button>
-        </div>
+    <div className="table-section site-visits-section">
+      <div className="site-visits-title-row">
+        <p>Scheduled Visit Planned</p>
+        <button className="btn btn-primary svp-export-btn text-sm btn-sm px-16 py-8 radius-8" type="button">
+          Export
+        </button>
       </div>
 
-      <div className="svp-card">
-        <div className="count-box">{isLoading ? "..." : visitedLeads.length}</div>
-        <div>
-          <p className="card-title">Lead Visited</p>
-          <span className="card-sub">Visited</span>
-        </div>
-      </div>
+      {isLoading && <div className="site-visit-message">Loading scheduled visits...</div>}
+      {error && <div className="site-visit-message error">{error}.</div>}
 
-      <button className="smart-btn">Smart Search</button>
-
-      <div className="table-container">
-        <table>
+      <div className="table-responsive">
+        <table border="1" cellPadding="0" cellSpacing="0">
           <thead>
             <tr>
-              <th>Name</th>
+              <th style={{ borderStartStartRadius: "8px", borderEndStartRadius: "8px" }}>Lead ID</th>
+              <th>Lead Name</th>
+              <th>Project</th>
+              <th>Status</th>
               <th>Scheduled Date</th>
               <th>Day</th>
               <th>Time</th>
-              <th>Assigned To</th>
-              <th>Project</th>
-              <th>Description</th>
-              <th>Action</th>
+              <th>Sales Executive</th>
+              <th>Location</th>
+              <th style={{ borderStartEndRadius: "8px", borderEndEndRadius: "8px" }}>Action</th>
             </tr>
           </thead>
 
           <tbody>
-            {isLoading ? (
-              <tr>
-                <td colSpan="8" className="svp-empty-state">Loading visited leads...</td>
-              </tr>
-            ) : error ? (
-              <tr>
-                <td colSpan="8" className="svp-empty-state">{error}</td>
-              </tr>
-            ) : visitedLeads.length === 0 ? (
-              <tr>
-                <td colSpan="8" className="svp-empty-state">No visited leads found</td>
-              </tr>
-            ) : (
-              paginatedLeads.map((lead) => (
-                <tr key={lead.id || lead._id || `${lead.firstName}-${lead.lastName}`}>
-                  <td>{getLeadName(lead)}</td>
-                  <td>{formatVisitDate(lead.conductSiteDate)}</td>
-                  <td>{formatVisitDay(lead.conductSiteDate)}</td>
-                  <td>{formatVisitTime(lead.conductSiteDate)}</td>
-                  <td>{getUserName(lead.team)}</td>
-                  <td>{lead.interestedProjects || lead.project || "-"}</td>
-                  <td>{lead.conductSiteVisit || lead.requirementComment || "-"}</td>
+            {paginatedVisits.map((visit) => {
+              const lead = visit.lead || {};
+              const leadId = getLeadId(lead);
+
+              return (
+                <tr key={visit.id || leadId || `${getLeadName(lead)}-${visit.scheduledOn}`}>
+                  <td className="text-muted">{leadId ? `#${leadId}` : "-"}</td>
+                  <td>
+                    <div className="lead-name-main" style={{ fontSize: "14px" }}>
+                      {getLeadName(lead)}
+                    </div>
+                  </td>
+                  <td>{visit.project}</td>
+                  <td>
+                    <span className={`status-pill status-${getStatusClass(visit.status)}`}>
+                      {visit.status}
+                    </span>
+                  </td>
+                  <td>{formatVisitDate(visit.scheduledOn)}</td>
+                  <td>{formatVisitDay(visit.scheduledOn)}</td>
+                  <td>{formatVisitTime(visit.scheduledOn)}</td>
+                  <td>{getUserName(visit.salesExecutive)}</td>
+                  <td>{visit.location}</td>
                   <td>
                     <button
                       type="button"
-                      className="edit-btn"
+                      className="lead-action-btn"
                       onClick={() => handleEdit(lead)}
+                      aria-label="Edit scheduled visit lead"
                     >
-                      Edit
+                      <Icon icon="mdi:pencil" width={16} height={16} />
                     </button>
                   </td>
                 </tr>
-              ))
+              );
+            })}
+
+            {!isLoading && scheduledVisits.length === 0 && (
+              <tr>
+                <td colSpan="10" className="site-visit-empty">
+                  No scheduled visit planned leads found.
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
 
-        {visitedLeads.length > 0 && (
-          <div className="svp-pagination">
-            <div className="svp-pagination-info">
+        {scheduledVisits.length > 0 && (
+          <div className="lead-pagination">
+            <div className="lead-pagination-info">
               Showing <strong>{pageStartIndex + 1}</strong> to <strong>{pageEndIndex}</strong> of{" "}
-              <strong>{visitedLeads.length}</strong> visited leads
+              <strong>{scheduledVisits.length}</strong> scheduled visits
             </div>
-            <div className="svp-pagination-actions">
+            <div className="lead-pagination-actions">
               <button
                 type="button"
-                className="svp-pagination-btn"
+                className="lead-pagination-btn"
                 onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                 disabled={activePage === 1}
               >
                 Previous
               </button>
-              <span className="svp-pagination-page">{activePage} / {totalPages}</span>
+              <span className="lead-pagination-page">{activePage} / {totalPages}</span>
               <button
                 type="button"
-                className="svp-pagination-btn"
+                className="lead-pagination-btn"
                 onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                 disabled={activePage === totalPages}
               >

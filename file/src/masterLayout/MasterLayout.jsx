@@ -19,7 +19,20 @@ const MasterLayout = ({ children }) => {
     : "User";
   const profilePhoto = savedUser?.profilePhoto || "assets/images/user.png";
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const token = localStorage.getItem("authToken");
+
+    if (token) {
+      try {
+        await fetch(`${process.env.REACT_APP_API_URL || "http://localhost:5000"}/attendance/logout`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch (error) {
+        console.error("Unable to update attendance logout:", error);
+      }
+    }
+
     localStorage.removeItem("authToken");
     localStorage.removeItem("authUser");
     navigate("/sign-in");
@@ -755,6 +768,17 @@ const MasterLayout = ({ children }) => {
                     Site visits
                   </NavLink>
                 </li>
+                {/* <li>
+                  <NavLink
+                    to='/attendance'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
+                    Attendance
+                  </NavLink>
+                </li> */}
                 <li>
                   <NavLink
                     to='/Followups'
@@ -1061,6 +1085,17 @@ const MasterLayout = ({ children }) => {
                   >
                     <i className='ri-circle-fill circle-icon text-primary-600 w-auto' />{" "}
                     Users List
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to='/user-attendance'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
+                    User Attendance
                   </NavLink>
                 </li>
                 {/* 

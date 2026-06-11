@@ -1,5 +1,4 @@
 import { Phone, Grid3X3, Filter} from 'lucide-react';
-import "./TableHeader.css"
 const TableHeader = ()=>{
     return(
       

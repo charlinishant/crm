@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Icon } from "@iconify/react/dist/iconify.js";
 import { Link } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
-import "./Alltask.css";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 const TASKS_PER_PAGE = 10;

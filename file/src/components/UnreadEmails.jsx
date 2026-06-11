@@ -1,5 +1,4 @@
 
-import './UnreadEmails.css';
 import TableHeader from './TableHeader';
 
 const UnreadEmails = () => {

@@ -1,5 +1,4 @@
 
-import './MissedCall.css';
 import TableHeader from "./TableHeader"
 
 const MissedCall = () => {

@@ -35,6 +35,13 @@ exports.createBooking = async (req, res) => {
       })
       createdBookingId = booking.id
 
+      if (bookingData.leadId) {
+        await tx.lead.update({
+          where: { id: bookingData.leadId },
+          data: { status: "Booked" },
+        })
+      }
+
       let costSheetData = Array.isArray(req.body.costSheet) ? req.body.costSheet : []
       const firstCostSheet = costSheetData[0]
 
@@ -104,7 +111,9 @@ exports.getBookings = async (req, res) => {
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 10
     const skip = (page - 1) * limit
-    const where = req.query.leadId ? { leadId: Number(req.query.leadId) } : {}
+    const where = {}
+    if (req.query.leadId) where.leadId = Number(req.query.leadId)
+    if (req.query.stage) where.stage = String(req.query.stage)
 
     const totalItems = await prisma.booking.count({ where })
     const data = await prisma.booking.findMany({

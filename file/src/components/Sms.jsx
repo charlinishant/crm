@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import './Sms.css';
 
 const Sms = () => {
   // State for dynamic features like the selected filter and data length

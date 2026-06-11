@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import React, { useEffect, useState } from "react";
 import MasterLayout from "../masterLayout/MasterLayout";
-import "./Units.css";
+import { FaEllipsisV } from "react-icons/fa";
 
 const Units = () => {
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
@@ -103,19 +103,19 @@ const Units = () => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="13" className="text-center py-4">
+                    <td colSpan="13" className="floor-empty">
                       Loading units...
                     </td>
                   </tr>
                 ) : error ? (
                   <tr>
-                    <td colSpan="13" className="text-center text-danger py-4">
+                    <td colSpan="13" className="floor-empty text-danger">
                       {error}
                     </td>
                   </tr>
                 ) : data.length === 0 ? (
                   <tr>
-                    <td colSpan="13" className="text-center py-4">
+                    <td colSpan="13" className="floor-empty">
                       No units found.
                     </td>
                   </tr>
@@ -139,7 +139,11 @@ const Units = () => {
                         </span>
                       </td>
                       <td>{item.updated}</td>
-                      <td className="text-right">...</td>
+                      <td className="floor-action-cell">
+                        <button className="floor-action-menu-btn" type="button" aria-label="Open unit actions">
+                          <FaEllipsisV />
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}

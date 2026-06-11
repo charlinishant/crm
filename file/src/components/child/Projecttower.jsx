@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { Plus, Filter, MoreVertical, Layers, Building, Trash2, Pencil, X } from 'lucide-react';
-import './Projecttower.css';
 
 const initialTowerData = [
   { id: 1, name: 'TOWER D', project: 'Binghatti Hills', floorPlans: 27, totalFloors: 36 },

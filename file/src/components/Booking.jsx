@@ -1,12 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import './Booking.css';
 import { MoreVertical } from 'lucide-react';
 
 const Booking = () => {
     const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
     const RECORDS_PER_PAGE = 10;
     const [searchQuery, setSearchQuery] = useState('');
-    const [bookingFilter, setBookingFilter] = useState('All Bookings');
+    const [bookingFilter, setBookingFilter] = useState('Booked');
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
     const [updatingBookingId, setUpdatingBookingId] = useState(null);
@@ -34,7 +33,7 @@ const Booking = () => {
         const fetchBookings = async () => {
             try {
                 setLoading(true);
-                const response = await fetch(`${API_URL}/bookings?limit=100`);
+                const response = await fetch(`${API_URL}/bookings?limit=100&stage=Booked`);
                 if (!response.ok) throw new Error("Unable to load bookings");
 
                 const result = await response.json();

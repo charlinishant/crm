@@ -8,6 +8,9 @@ const adminUserStyles = `
 .admin-users-access {
   color: #1f2937;
   font-family: inherit;
+  font-size: 15px;
+  background: #f8fafc;
+  padding: 20px;
 }
 
 .admin-users-access * {
@@ -25,30 +28,31 @@ const adminUserStyles = `
 .admin-users-head h2 {
   margin: 0;
   color: #1f2937;
-  font-size: 24px;
-  font-weight: 800;
+  font-size: 22px;
+  font-weight: 700;
 }
 
 .admin-users-head p {
   margin: 6px 0 0;
   color: #64748b;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .admin-users-search {
   width: min(360px, 100%);
-  height: 44px;
-  border: 1px solid #d9e2ef;
-  border-radius: 8px;
+  height: 40px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
   padding: 0 14px;
   color: #1f2937;
+  font-size: 15px;
   outline: none;
   background: #ffffff;
 }
 
 .admin-users-search:focus {
-  border-color: #6f42c1;
-  box-shadow: 0 0 0 3px rgba(111, 66, 193, 0.12);
+  border-color: #487fff;
+  box-shadow: 0 0 0 3px rgba(72, 127, 255, 0.12);
 }
 
 .admin-users-stats {
@@ -59,17 +63,17 @@ const adminUserStyles = `
 }
 
 .admin-user-stat {
-  border: 1px solid #d9e2ef;
-  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   background: #ffffff;
-  padding: 16px;
-  box-shadow: 0 10px 28px rgba(31, 41, 55, 0.06);
+  padding: 14px 16px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
 }
 
 .admin-user-stat span {
   display: block;
   color: #64748b;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
 }
 
@@ -85,15 +89,15 @@ const adminUserStyles = `
   display: block;
   margin-top: 8px;
   color: #64748b;
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .admin-users-card {
-  border: 1px solid #d9e2ef;
-  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
   background: #ffffff;
-  box-shadow: 0 10px 28px rgba(31, 41, 55, 0.06);
-  overflow: hidden;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  padding: 20px;
 }
 
 .admin-users-card-head {
@@ -101,49 +105,23 @@ const adminUserStyles = `
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 18px 20px;
-  border-bottom: 1px solid #d9e2ef;
+  padding: 0 0 15px;
 }
 
 .admin-users-card-head h3 {
   margin: 0;
   color: #1f2937;
   font-size: 18px;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .admin-users-card-head p {
   margin: 5px 0 0;
   color: #64748b;
-  font-size: 13px;
-}
-
-.admin-status-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 16px 20px 4px;
-}
-
-.admin-status-tabs button {
-  min-height: 40px;
-  border: 1px solid #d9e2ef;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #1f2937;
-  padding: 8px 14px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.admin-status-tabs button.active {
-  border-color: #6f42c1;
-  background: rgba(111, 66, 193, 0.1);
-  color: #6f42c1;
+  font-size: 15px;
 }
 
 .admin-users-table-wrap {
-  padding: 10px 20px 20px;
   overflow-x: auto;
 }
 
@@ -151,22 +129,56 @@ const adminUserStyles = `
   width: 100%;
   border-collapse: collapse;
   min-width: 860px;
+  font-size: 14px;
 }
 
 .admin-users-table th {
-  border-bottom: 1px solid #d9e2ef;
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 800;
-  padding: 12px 10px;
+  background: #487fff !important;
+  color: #ffffff !important;
+  font-size: 15px;
+  font-weight: 600;
+  padding: 14px 15px;
   text-align: left;
-  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.admin-users-table th:first-child {
+  border-start-start-radius: 8px;
+  border-end-start-radius: 8px;
+}
+
+.admin-users-table th:last-child {
+  border-start-end-radius: 8px;
+  border-end-end-radius: 8px;
+  text-align: center;
 }
 
 .admin-users-table td {
-  border-bottom: 1px solid #edf2f7;
-  padding: 14px 10px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #334155;
+  font-size: 15px;
+  padding: 12px 15px;
   vertical-align: middle;
+}
+
+.admin-users-table td:last-child {
+  text-align: center;
+}
+
+.admin-users-table tbody tr {
+  transition: background 0.2s;
+}
+
+.admin-users-table tbody tr:hover {
+  background: #f1f5f9;
+}
+
+.admin-users-table tbody tr:nth-child(even) {
+  background: #f8fafc;
+}
+
+.admin-users-table tbody tr:nth-child(even):hover {
+  background: #f1f5f9;
 }
 
 .admin-user-cell {
@@ -191,14 +203,14 @@ const adminUserStyles = `
 .admin-user-cell strong {
   display: block;
   color: #1f2937;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .admin-user-cell small,
 .admin-users-muted {
   display: block;
   color: #64748b;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .admin-user-badge {
@@ -208,7 +220,7 @@ const adminUserStyles = `
   min-height: 26px;
   border-radius: 999px;
   padding: 4px 10px;
-  font-size: 12px;
+  font-size: 15px;
   font-weight: 800;
 }
 
@@ -223,29 +235,43 @@ const adminUserStyles = `
 }
 
 .admin-user-badge.role {
-  background: rgba(111, 66, 193, 0.1);
-  color: #6f42c1;
+  background: #e4f1ff;
+  color: #487fff;
 }
 
 .admin-user-actions {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
 }
 
 .admin-user-btn {
-  min-height: 38px;
-  border: 1px solid #6f42c1;
-  border-radius: 8px;
+  min-height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
   background: #ffffff;
-  color: #6f42c1;
-  padding: 8px 13px;
-  font-size: 13px;
-  font-weight: 800;
+  color: #334155;
+  padding: 0 12px;
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .admin-user-btn.primary {
-  background: #6f42c1;
+  background: #487fff;
+  border-color: #487fff;
+  color: #ffffff;
+}
+
+.admin-user-btn:hover:not(:disabled) {
+  background: #e4f1ff;
+  border-color: #95c7ff;
+  color: #487fff;
+}
+
+.admin-user-btn.primary:hover:not(:disabled) {
+  background: #386fe8;
+  border-color: #386fe8;
   color: #ffffff;
 }
 
@@ -255,9 +281,76 @@ const adminUserStyles = `
 }
 
 .admin-users-empty {
-  padding: 34px;
+  padding: 30px;
   text-align: center;
+  color: #94a3b8;
+}
+
+.admin-users-pagination {
+  align-items: center;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 8px;
+  padding-top: 16px;
+}
+
+.admin-users-pagination-info {
   color: #64748b;
+  font-size: 15px;
+}
+
+.admin-users-pagination-info strong {
+  color: #334155;
+  font-weight: 600;
+}
+
+.admin-users-pagination-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.admin-users-pagination-btn {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 15px;
+  font-weight: 500;
+  height: 36px;
+  justify-content: center;
+  min-width: 88px;
+  padding: 0 14px;
+}
+
+.admin-users-pagination-btn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.admin-users-pagination-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.admin-users-pagination-page {
+  align-items: center;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  color: #1d4ed8;
+  display: inline-flex;
+  font-size: 15px;
+  font-weight: 600;
+  height: 36px;
+  justify-content: center;
+  min-width: 78px;
+  padding: 0 12px;
 }
 
 .admin-user-message {
@@ -431,6 +524,19 @@ const adminUserStyles = `
   .admin-user-drawer {
     width: 100%;
   }
+
+  .admin-users-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-users-pagination-actions {
+    justify-content: space-between;
+  }
+
+  .admin-users-pagination-btn {
+    flex: 1;
+  }
 }
 `;
 
@@ -466,14 +572,15 @@ const getRoleKey = (role) =>
 const getStatusLabel = (user) => (user?.isActive === false ? "Inactive" : "Active");
 
 const UsersListLayer = () => {
+  const RECORDS_PER_PAGE = 10;
   const { users, loading, error } = useUsers();
   const navigate = useNavigate();
   const [adminUsers, setAdminUsers] = useState([]);
-  const [selectedFilter, setSelectedFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedUser, setSelectedUser] = useState(null);
   const [savingStatusId, setSavingStatusId] = useState(null);
   const [statusMessage, setStatusMessage] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     setAdminUsers(Array.isArray(users) ? users : []);
@@ -501,34 +608,10 @@ const UsersListLayer = () => {
     };
   }, [adminUsers]);
 
-  const statusFilters = useMemo(
-    () => [
-      { key: "all", label: "All Users", count: stats.total },
-      { key: "active", label: "Active", count: stats.active },
-      { key: "inactive", label: "Inactive", count: stats.inactive },
-      { key: "role-admin", label: "Admin", count: stats.admin },
-      { key: "role-sales", label: "Sales", count: stats.sales },
-      { key: "role-manager", label: "Manager", count: adminUsers.filter((user) => getRoleKey(user.role) === "manager").length },
-      { key: "role-pre-sales", label: "Pre Sales", count: adminUsers.filter((user) => getRoleKey(user.role) === "pre-sales").length },
-      { key: "role-post-sales", label: "Post Sales", count: adminUsers.filter((user) => getRoleKey(user.role) === "post-sales").length },
-      { key: "role-agency-user", label: "Agency User", count: adminUsers.filter((user) => getRoleKey(user.role) === "agency-user").length },
-      { key: "role-agent", label: "Agent", count: adminUsers.filter((user) => getRoleKey(user.role) === "agent").length },
-    ],
-    [adminUsers, stats]
-  );
-
   const filteredUsers = useMemo(() => {
     const query = searchTerm.trim().toLowerCase();
 
     return adminUsers.filter((user) => {
-      const matchesFilter =
-        selectedFilter === "all" ||
-        (selectedFilter === "active" && user.isActive !== false) ||
-        (selectedFilter === "inactive" && user.isActive === false) ||
-        (selectedFilter.startsWith("role-") && getRoleKey(user.role) === selectedFilter.replace("role-", ""));
-
-      if (!matchesFilter) return false;
-
       if (!query) return true;
 
       return [
@@ -543,7 +626,21 @@ const UsersListLayer = () => {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query));
     });
-  }, [adminUsers, searchTerm, selectedFilter]);
+  }, [adminUsers, searchTerm]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / RECORDS_PER_PAGE));
+  const activePage = Math.min(currentPage, totalPages);
+  const pageStartIndex = (activePage - 1) * RECORDS_PER_PAGE;
+  const paginatedUsers = filteredUsers.slice(pageStartIndex, pageStartIndex + RECORDS_PER_PAGE);
+  const pageEndIndex = Math.min(pageStartIndex + paginatedUsers.length, filteredUsers.length);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, adminUsers.length]);
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
 
   const updateUserStatus = async (user, nextStatus) => {
     setSavingStatusId(user.id);
@@ -645,7 +742,7 @@ const UsersListLayer = () => {
       <section className="admin-users-card">
         <div className="admin-users-card-head">
           <div>
-            <h3>All User Details</h3>
+            <h6>All User Details</h6>
             <p>{filteredUsers.length} users showing from {adminUsers.length} registered users</p>
           </div>
           <button
@@ -655,19 +752,6 @@ const UsersListLayer = () => {
           >
             Add User
           </button>
-        </div>
-
-        <div className="admin-status-tabs" aria-label="Admin user status filters">
-          {statusFilters.map((filter) => (
-            <button
-              key={filter.key}
-              type="button"
-              className={selectedFilter === filter.key ? "active" : ""}
-              onClick={() => setSelectedFilter(filter.key)}
-            >
-              {filter.label} ({filter.count})
-            </button>
-          ))}
         </div>
 
         {statusMessage && <div className="admin-user-message">{statusMessage}</div>}
@@ -686,7 +770,7 @@ const UsersListLayer = () => {
             </thead>
             <tbody>
               {filteredUsers.length > 0 ? (
-                filteredUsers.map((user) => (
+                paginatedUsers.map((user) => (
                   <tr key={user.id}>
                     <td>
                       <button
@@ -746,6 +830,36 @@ const UsersListLayer = () => {
             </tbody>
           </table>
         </div>
+
+        {filteredUsers.length > 0 && (
+          <div className="admin-users-pagination">
+            <div className="admin-users-pagination-info">
+              Showing <strong>{pageStartIndex + 1}</strong> to <strong>{pageEndIndex}</strong> of{" "}
+              <strong>{filteredUsers.length}</strong> users
+            </div>
+            <div className="admin-users-pagination-actions">
+              <button
+                type="button"
+                className="admin-users-pagination-btn"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={activePage === 1}
+              >
+                Previous
+              </button>
+              <span className="admin-users-pagination-page">
+                {activePage} / {totalPages}
+              </span>
+              <button
+                type="button"
+                className="admin-users-pagination-btn"
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                disabled={activePage === totalPages}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {selectedUser && (

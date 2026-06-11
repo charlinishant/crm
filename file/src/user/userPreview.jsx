@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import {
   FaBriefcase,
   FaCalendarAlt,
@@ -33,7 +33,7 @@ const emptyBookingForm = {
   unit: "",
   unitId: "",
   customerName: "",
-  stage: "Tentative",
+  stage: "Booked",
   projectDetails: "",
   bookedOn: "",
   saleableArea: "",
@@ -142,7 +142,6 @@ const formatLeadDate = (value, fallback) => {
 };
 
 const UserPreview = () => {
-  const navigate = useNavigate();
   const location = useLocation();
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const [lead, setLead] = useState(location.state?.lead || readStoredLead() || fallbackLead);
@@ -779,6 +778,13 @@ const UserPreview = () => {
     setBookingStepIndex(0);
   };
 
+  const showUserDetails = () => {
+    setIsBookingFormOpen(false);
+    setBookingStepIndex(0);
+    setIsLeadEditOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   useEffect(() => {
     if (!shouldOpenBookingForm || bookingOpenRequestedRef.current) return;
 
@@ -1012,6 +1018,7 @@ const UserPreview = () => {
       setBookingMessage("");
       setBookingForm((prev) => ({
         ...prev,
+        stage: "Booked",
         bookedOn: prev.bookedOn || bookingConfirmationDate,
         basePrice: prev.basePrice || quotationAgreementValue || "",
         saleableArea: prev.saleableArea || selectedBookingUnit?.saleable || "",
@@ -1048,6 +1055,7 @@ const UserPreview = () => {
         },
         body: JSON.stringify({
           ...bookingForm,
+          stage: "Booked",
           leadId: Number(leadId),
           unitId: bookingForm.unitId ? Number(bookingForm.unitId) : undefined,
           source: bookingForm.source || leadSource,
@@ -1084,13 +1092,34 @@ const UserPreview = () => {
             baseRate: bookingForm.baseRate || selectedBookingUnit?.baseRate,
             saleableArea: bookingForm.saleableArea || selectedBookingUnit?.saleable,
           };
+      const updatedLead = {
+        ...lead,
+        status: "Booked",
+        lead_status: "Booked",
+        stage: "Booked",
+        score: 100,
+      };
+      setLead(updatedLead);
+      setSelectedStatus("Booked");
+      updateStoredLead("selectedLeadPreview", updatedLead);
+      updateStoredLead("selectedLeadDetails", updatedLead);
+      window.localStorage.setItem(
+        "leadStatusUpdates",
+        JSON.stringify({
+          ...JSON.parse(window.localStorage.getItem("leadStatusUpdates") || "{}"),
+          [leadId]: {
+            status: "Booked",
+            crmStatus: "Booked",
+            score: 100,
+            backendStatus: "Booked",
+            updatedAt: new Date().toISOString(),
+          },
+        })
+      );
       setBookings((current) => [savedBooking, ...current]);
       setIsBookingFormOpen(false);
       setBookingMessage("Booking saved successfully");
-      navigate("/user/sales?screen=bookings", {
-        replace: true,
-        state: { lead, booking: savedBooking },
-      });
+      showUserDetails();
     } catch (error) {
       console.error("Unable to save booking:", error);
       setBookingMessage("Booking could not be saved. Please check backend and database.");
@@ -3407,7 +3436,7 @@ const UserPreview = () => {
           <div className="lead-preview-shell">
             <div className="lead-preview-topbar">
               <h1 className="lead-preview-title">{leadName}</h1>
-              <button className="lead-preview-close" type="button" onClick={() => navigate(-1)} aria-label="Close preview">
+              <button className="lead-preview-close" type="button" onClick={showUserDetails} aria-label="Show user details">
                 <FaTimes />
               </button>
             </div>

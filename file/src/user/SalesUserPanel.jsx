@@ -20,6 +20,7 @@ import UserAddlead from "./userAddlead";
 import UserConversationPanel from "./UserConversationPanel";
 import UserDetails from "./userDetails";
 import UserWhatsAppPage from "./UserWhatsAppPage";
+import SalesFollowups from "../pages/sales/SalesFollowups";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
@@ -34,6 +35,10 @@ const fallbackPanel = {
   stats: {
     assignedLeads: 0,
     followupsDue: 0,
+    followupsToday: 0,
+    missedFollowups: 0,
+    upcomingFollowups: 0,
+    highPriorityFollowups: 0,
     siteVisits: 0,
     bookings: 0,
     tasks: 0,
@@ -45,24 +50,38 @@ const fallbackPanel = {
 
 // WhatsApp UI change: keep route-derived screens centralized so sidebar collapse restores on route changes.
 const getScreenFromPath = (pathname) =>
-  pathname.endsWith("/leads")
+  pathname === "/user/sales"
+    ? "home"
+    : pathname.endsWith("/leads")
     ? "leads"
+    : pathname.endsWith("/bookings")
+      ? "bookings"
     : pathname.endsWith("/details")
       ? "details"
       : pathname.endsWith("/whatsapp")
         ? "whatsapp"
         : pathname.endsWith("/calls")
           ? "calls"
-          : pathname.endsWith("/conversation")
-            ? "conversation"
-            : pathname.endsWith("/add-lead")
-              ? "addLead"
-              : "";
+          : pathname.endsWith("/followups")
+            ? "followups"
+          : pathname.endsWith("/site-visit")
+            ? "scheduleVisit"
+            : pathname.endsWith("/conversation")
+              ? "conversation"
+              : pathname.endsWith("/add-lead")
+                ? "addLead"
+                : "";
 
 const statusLabel = {
   Fresh_Lead: "Fresh Lead",
   Prospect: "Prospect",
   Registered: "Registered",
+  New: "New",
+  Qualified: "Qualified",
+  In_sourcing: "In sourcing",
+  "In sourcing": "In sourcing",
+  In_closing: "In closing",
+  "In closing": "In closing",
   Booked: "Booked",
   Lost: "Lost",
   NP: "NP",
@@ -118,17 +137,6 @@ const getLeadPhone = (lead) => {
   return lead.phones || "-";
 };
 
-const getLeadEmail = (lead) => {
-  if (!lead?.emails) return "-";
-  if (Array.isArray(lead.emails)) {
-    const first = lead.emails[0];
-    if (!first) return "-";
-    return typeof first === "object" ? first.value || "-" : first;
-  }
-  if (typeof lead.emails === "object") return lead.emails.value || "-";
-  return lead.emails || "-";
-};
-
 const getActionPhone = (lead) => getLeadPhone(lead).replace(/[^\d+]/g, "");
 
 const getLeadId = (lead) => lead?.id || lead?._id || lead?.lead_id || "";
@@ -171,21 +179,67 @@ const getLeadStage = (lead) => {
   return "new";
 };
 
-const pipelineStages = ["new", "qualified", "sourcing", "closing", "booked"];
-
-const pipelineStageLabels = {
-  new: "New",
-  qualified: "Qualified",
-  sourcing: "Sourcing",
-  closing: "Closing",
-  booked: "Booked",
-};
+const isBookedLead = (lead) =>
+  getLeadStage(lead) === "booked" ||
+  (lead?.bookings || []).some((booking) => normalizeStageText(booking?.stage) === "booked");
 
 const taskStatusOptions = ["Open", "Completed", "Archived"];
+const siteVisitStatusOptions = [
+  "Scheduled",
+  "Confirmed",
+  "Visit Done",
+  "Visit Missed",
+  "Cancelled",
+  "Rescheduled",
+];
 
-const getPipelineIndex = (lead) => {
-  const index = pipelineStages.indexOf(getLeadStage(lead));
-  return index >= 0 ? index : 0;
+const getDefaultVisitDateTime = () => {
+  const date = new Date();
+  date.setHours(date.getHours() + 2, 0, 0, 0);
+  const timezoneOffset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - timezoneOffset).toISOString().slice(0, 16);
+};
+
+const toDateTimeLocalValue = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return getDefaultVisitDateTime();
+
+  const timezoneOffset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - timezoneOffset).toISOString().slice(0, 16);
+};
+
+const getProjectName = (project) =>
+  project?.projectName ||
+  project?.project_name ||
+  project?.name ||
+  project?.title ||
+  project?.label ||
+  "";
+
+const getCachedSiteVisitUpdate = (leadId) => {
+  try {
+    const cachedUpdates = JSON.parse(localStorage.getItem("siteVisitStatusUpdates") || "{}");
+    return cachedUpdates[String(leadId)] || null;
+  } catch (error) {
+    return null;
+  }
+};
+
+const getCachedLeadStatusUpdates = () => {
+  try {
+    return JSON.parse(localStorage.getItem("leadStatusUpdates") || "{}");
+  } catch (error) {
+    return {};
+  }
+};
+
+const applyCachedLeadStatusUpdates = (leads = []) => {
+  const cachedUpdates = getCachedLeadStatusUpdates();
+
+  return leads.map((lead) => {
+    const update = cachedUpdates[String(getLeadId(lead))];
+    return update ? { ...lead, ...update, status: update.status, score: update.score } : lead;
+  });
 };
 
 const getPercent = (value, total) => {
@@ -217,15 +271,17 @@ const SalesUserPanel = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const initialScreen =
-    getScreenFromPath(window.location.pathname) ||
     new URLSearchParams(window.location.search).get("screen") ||
+    getScreenFromPath(window.location.pathname) ||
     "home";
   const [panel, setPanel] = useState(fallbackPanel);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [activeScreen, setActiveScreen] = useState(initialScreen);
   const [activeLeadStage, setActiveLeadStage] = useState("all");
-  const [selectedLead, setSelectedLead] = useState(null);
+  const [activeFollowupFilter, setActiveFollowupFilter] = useState(
+    new URLSearchParams(window.location.search).get("filter") || "today"
+  );
   const [openActionLeadId, setOpenActionLeadId] = useState(null);
   const [focusedCallLeadId, setFocusedCallLeadId] = useState(
     new URLSearchParams(window.location.search).get("leadId") || null
@@ -233,6 +289,22 @@ const SalesUserPanel = () => {
   const [callDispositions, setCallDispositions] = useState({});
   const [callLogsByLead, setCallLogsByLead] = useState({});
   const [callingLeadId, setCallingLeadId] = useState(null);
+  const [siteVisitLead, setSiteVisitLead] = useState(null);
+  const [siteVisitForm, setSiteVisitForm] = useState({
+    leadId: "",
+    project: "",
+    visitDateTime: getDefaultVisitDateTime(),
+    location: "",
+    executive: "",
+    note: "",
+    status: "Scheduled",
+  });
+  const [siteVisitMessage, setSiteVisitMessage] = useState("");
+  const [isSavingSiteVisit, setIsSavingSiteVisit] = useState(false);
+  const [projects, setProjects] = useState([]);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+  const [attendance, setAttendance] = useState(null);
+  const [attendanceBusy, setAttendanceBusy] = useState(false);
   // Dashboard detail pages reuse this sidebar state so focused workspaces can auto-collapse it.
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(
     initialScreen === "whatsapp" || initialScreen === "details"
@@ -274,6 +346,7 @@ const SalesUserPanel = () => {
 
         setPanel({
           ...result,
+          leads: applyCachedLeadStatusUpdates(result.leads || []),
           user: {
             ...result.user,
             profilePhoto: result.user?.profilePhoto || savedUser?.profilePhoto || getProfilePhoto(result.user),
@@ -291,6 +364,75 @@ const SalesUserPanel = () => {
     loadPanel();
   }, [loadPanel]);
 
+  const updateAttendance = useCallback(async (action) => {
+    const token = localStorage.getItem("authToken");
+    if (!token) return null;
+
+    setAttendanceBusy(true);
+
+    try {
+      const response = await fetch(`${API_URL}/attendance/${action}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(result?.message || "Unable to update attendance");
+      }
+
+      setAttendance(result?.data || null);
+      return result?.data || null;
+    } catch (err) {
+      alert(err.message || "Unable to update attendance");
+      return null;
+    } finally {
+      setAttendanceBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem("authToken");
+    if (!token) return;
+
+    let isMounted = true;
+
+    const loadAttendance = async () => {
+      try {
+        const currentResponse = await fetch(`${API_URL}/attendance/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const currentResult = await currentResponse.json().catch(() => ({}));
+
+        if (currentResult?.data) {
+          if (isMounted) setAttendance(currentResult.data);
+          return;
+        }
+
+        const startResponse = await fetch(`${API_URL}/attendance/login`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const startResult = await startResponse.json().catch(() => ({}));
+        if (isMounted) setAttendance(startResult?.data || null);
+      } catch (error) {
+        console.error("Unable to load attendance", error);
+      }
+    };
+
+    loadAttendance();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   useEffect(() => {
     const intervalId = window.setInterval(() => {
       setTimeGreeting(getTimeGreeting());
@@ -299,13 +441,74 @@ const SalesUserPanel = () => {
     return () => window.clearInterval(intervalId);
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadProjects = async () => {
+      const projectEndpoints = [
+        `${API_URL}/projects`,
+        `${API_URL}/api/projects`,
+        `${API_URL}/project`,
+        `${API_URL}/api/project`,
+      ];
+
+      setIsLoadingProjects(true);
+
+      for (const endpoint of projectEndpoints) {
+        try {
+          const response = await fetch(endpoint);
+          if (!response.ok) continue;
+
+          const result = await response.json();
+          const projectList = Array.isArray(result)
+            ? result
+            : result?.data || result?.projects || result?.items || [];
+
+          if (!Array.isArray(projectList)) continue;
+
+          if (isMounted) {
+            setProjects(projectList.filter((project) => getProjectName(project)));
+          }
+          setIsLoadingProjects(false);
+          return;
+        } catch (error) {
+          console.error("Unable to load projects from endpoint:", endpoint, error);
+        }
+      }
+
+      if (isMounted) {
+        setProjects([]);
+        setIsLoadingProjects(false);
+      }
+    };
+
+    loadProjects();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [API_URL]);
+
   // WhatsApp UI change: browser back/forward also restores the matching sidebar state.
   useEffect(() => {
-    const screenFromPath = getScreenFromPath(location.pathname);
+    const screenFromSearch = new URLSearchParams(location.search).get("screen");
+    const screenFromPath = screenFromSearch || getScreenFromPath(location.pathname);
     if (!screenFromPath) return;
 
     setActiveScreen((current) => (current === screenFromPath ? current : screenFromPath));
-  }, [location.pathname]);
+    setPanel((current) => ({
+      ...current,
+      leads: applyCachedLeadStatusUpdates(current.leads),
+    }));
+
+    if (screenFromPath === "followups") {
+      setActiveFollowupFilter(new URLSearchParams(location.search).get("filter") || "today");
+    }
+
+    if (location.state?.refreshPanel) {
+      loadPanel(false);
+    }
+  }, [loadPanel, location.pathname, location.search, location.state?.refreshPanel]);
 
   // Dashboard detail pages auto-collapse the existing sidebar; other routes restore normal behavior.
   useEffect(() => {
@@ -337,6 +540,26 @@ const SalesUserPanel = () => {
     );
   }, [callDispositions]);
 
+  const projectOptions = useMemo(() => {
+    const projectNames = [
+      ...projects.map(getProjectName),
+      ...panel.leads.flatMap((lead) => [
+        lead.siteVisitProject,
+        lead.conductSiteVisit,
+        lead.interestedProjects,
+        lead.projectName,
+        lead.project_name,
+        lead.propertyType,
+      ]),
+    ]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+
+    return Array.from(new Set(projectNames)).sort((first, second) =>
+      first.localeCompare(second)
+    );
+  }, [panel.leads, projects]);
+
   const filteredLeads = useMemo(() => {
     let leads = panel.leads;
 
@@ -348,7 +571,7 @@ const SalesUserPanel = () => {
     }
 
     if (activeScreen === "bookings") {
-      leads = leads.filter((lead) => lead.status === "Booked" || lead.bookings?.length);
+      leads = leads.filter(isBookedLead);
     }
 
     if (activeLeadStage === "visited") {
@@ -366,7 +589,7 @@ const SalesUserPanel = () => {
     const qualified = leads.filter((lead) => getLeadStage(lead) === "qualified").length;
     const sourced = leads.filter((lead) => getLeadStage(lead) === "sourcing").length;
     const visited = leads.filter((lead) => lead.conductSiteVisit || lead.conductSiteDate).length;
-    const booked = leads.filter((lead) => getLeadStage(lead) === "booked" || lead.bookings?.length).length;
+    const booked = leads.filter(isBookedLead).length;
 
     return [
       {
@@ -422,11 +645,114 @@ const SalesUserPanel = () => {
     setActiveLeadStage(key);
   };
 
-  const patchSelectedLead = async (updates) => {
-    if (!selectedLead?.id) return;
+  const openFollowups = (filter = "today") => {
+    setActiveScreen("followups");
+    setActiveFollowupFilter(filter);
+    navigate(`/user/sales/followups?filter=${filter}`);
+  };
+
+  const openScheduleVisit = (lead = null) => {
+    const nextLead = lead || panel.leads[0] || null;
+    const nextLeadId = getLeadId(nextLead);
+    const cachedVisit = getCachedSiteVisitUpdate(nextLeadId);
+    const visitData = {
+      ...cachedVisit,
+      ...nextLead,
+      siteVisitStatus: nextLead?.siteVisitStatus || cachedVisit?.siteVisitStatus,
+      visitStatus: nextLead?.visitStatus || cachedVisit?.visitStatus,
+      conductSiteStatus: nextLead?.conductSiteStatus || cachedVisit?.conductSiteStatus,
+      siteVisitProject: nextLead?.siteVisitProject || cachedVisit?.siteVisitProject,
+      conductSiteVisit: nextLead?.conductSiteVisit || cachedVisit?.conductSiteVisit,
+      conductSiteDate: nextLead?.conductSiteDate || cachedVisit?.conductSiteDate,
+      siteVisitLocation: nextLead?.siteVisitLocation || cachedVisit?.siteVisitLocation,
+      meetingPoint: nextLead?.meetingPoint || cachedVisit?.meetingPoint,
+      siteVisitExecutive: nextLead?.siteVisitExecutive || cachedVisit?.siteVisitExecutive,
+      siteVisitNote: nextLead?.siteVisitNote || cachedVisit?.siteVisitNote,
+    };
+
+    setOpenActionLeadId(null);
+    setSiteVisitLead(nextLead);
+    setSiteVisitMessage("");
+    setSiteVisitForm({
+      leadId: nextLeadId ? String(nextLeadId) : "",
+      project: visitData.siteVisitProject || visitData.conductSiteVisit || nextLead?.interestedProjects || nextLead?.propertyType || "",
+      visitDateTime: visitData.conductSiteDate
+        ? toDateTimeLocalValue(visitData.conductSiteDate)
+        : getDefaultVisitDateTime(),
+      location: visitData.siteVisitLocation || visitData.meetingPoint || nextLead?.locationPreferences || "",
+      executive: visitData.siteVisitExecutive || nextLead?.team || getName(panel.user),
+      note: visitData.siteVisitNote || "",
+      status: visitData.siteVisitStatus || visitData.visitStatus || visitData.conductSiteStatus || "Scheduled",
+    });
+    setActiveScreen("scheduleVisit");
+  };
+
+  const handleSiteVisitChange = (event) => {
+    const { name, value } = event.target;
+
+    if (name !== "leadId") {
+      setSiteVisitForm((current) => ({ ...current, [name]: value }));
+      return;
+    }
+
+    const nextLead = panel.leads.find((lead) => String(getLeadId(lead)) === String(value)) || null;
+    setSiteVisitLead(nextLead);
+    setSiteVisitForm((current) => {
+      return {
+        ...current,
+        leadId: value,
+        project: nextLead?.siteVisitProject || nextLead?.conductSiteVisit || nextLead?.interestedProjects || nextLead?.propertyType || current.project,
+        visitDateTime: nextLead?.conductSiteDate ? toDateTimeLocalValue(nextLead.conductSiteDate) : current.visitDateTime,
+        location: nextLead?.siteVisitLocation || nextLead?.meetingPoint || nextLead?.locationPreferences || current.location,
+        executive: nextLead?.siteVisitExecutive || nextLead?.team || current.executive,
+        note: nextLead?.siteVisitNote || current.note,
+        status: nextLead?.siteVisitStatus || nextLead?.visitStatus || nextLead?.conductSiteStatus || current.status,
+      };
+    });
+  };
+
+  const saveSiteVisit = async (event) => {
+    event.preventDefault();
+
+    if (!siteVisitForm.leadId || !siteVisitForm.project || !siteVisitForm.visitDateTime) {
+      setSiteVisitMessage("Select lead, project, date and time before saving.");
+      return;
+    }
+
+    const updates = {
+      conductSiteVisit: siteVisitForm.project,
+      conductSiteDate: new Date(siteVisitForm.visitDateTime).toISOString(),
+      siteVisitProject: siteVisitForm.project,
+      siteVisitLocation: siteVisitForm.location,
+      siteVisitExecutive: siteVisitForm.executive,
+      siteVisitNote: siteVisitForm.note,
+      siteVisitStatus: siteVisitForm.status,
+      visitStatus: siteVisitForm.status,
+      conductSiteStatus: siteVisitForm.status,
+      meetingPoint: siteVisitForm.location,
+    };
+
+    const previousLeads = panel.leads;
+    const previousStats = panel.stats;
+    const leadId = siteVisitForm.leadId;
+
+    setIsSavingSiteVisit(true);
+    setSiteVisitMessage("");
+    setPanel((current) => ({
+      ...current,
+      stats: {
+        ...current.stats,
+        siteVisits: current.leads.some((lead) => String(getLeadId(lead)) === String(leadId) && (lead.conductSiteVisit || lead.conductSiteDate))
+          ? current.stats.siteVisits
+          : (current.stats.siteVisits || 0) + 1,
+      },
+      leads: current.leads.map((lead) =>
+        String(getLeadId(lead)) === String(leadId) ? { ...lead, ...updates } : lead
+      ),
+    }));
 
     try {
-      const response = await fetch(`${API_URL}/leads/${selectedLead.id}`, {
+      const response = await fetch(`${API_URL}/leads/${leadId}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -434,38 +760,56 @@ const SalesUserPanel = () => {
         body: JSON.stringify(updates),
       });
 
-      if (!response.ok) {
-        throw new Error("Unable to update lead");
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || "Unable to schedule visit");
+
+      try {
+        await fetch(`${API_URL}/schedule-visits`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            leadId: Number(leadId),
+            project: siteVisitForm.project,
+            status: siteVisitForm.status,
+            meetingPoint: siteVisitForm.location,
+            salesExecutive: siteVisitForm.executive,
+            note: siteVisitForm.note,
+            initiatedBy: panel.user?.firstName || panel.user?.username || panel.user?.email || "",
+            scheduledOn: new Date(siteVisitForm.visitDateTime).toISOString(),
+          }),
+        });
+      } catch (error) {
+        console.error("Unable to save schedule visit table row:", error);
       }
 
-      const updatedLead = await response.json();
-      setSelectedLead((current) => ({ ...current, ...updatedLead }));
+      try {
+        const cachedUpdates = JSON.parse(localStorage.getItem("siteVisitStatusUpdates") || "{}");
+        cachedUpdates[leadId] = {
+          ...updates,
+          updatedAt: new Date().toISOString(),
+        };
+        localStorage.setItem("siteVisitStatusUpdates", JSON.stringify(cachedUpdates));
+        window.dispatchEvent(new Event("siteVisitStatusUpdated"));
+      } catch (error) {
+        console.error("Unable to cache site visit status:", error);
+      }
+
       setPanel((current) => ({
         ...current,
         leads: current.leads.map((lead) =>
-          lead.id === selectedLead.id ? { ...lead, ...updatedLead } : lead
+          String(getLeadId(lead)) === String(leadId) ? { ...lead, ...result, ...updates } : lead
         ),
       }));
+      setSiteVisitLead((current) => (current ? { ...current, ...result, ...updates } : current));
+      setSiteVisitMessage("Site visit saved. Admin conversation/site visit status can read this lead status.");
     } catch (err) {
-      alert(err.message || "Unable to update lead");
+      setPanel((current) => ({ ...current, stats: previousStats, leads: previousLeads }));
+      setSiteVisitMessage(err.message || "Unable to schedule visit.");
+    } finally {
+      setIsSavingSiteVisit(false);
     }
-  };
-
-  const scheduleVisit = () => {
-    const dateValue = window.prompt("Enter site visit date (YYYY-MM-DD)", new Date().toISOString().slice(0, 10));
-    if (!dateValue) return;
-
-    patchSelectedLead({
-      conductSiteVisit: selectedLead.interestedProjects || selectedLead.propertyType || "Scheduled",
-      conductSiteDate: new Date(dateValue).toISOString(),
-    });
-  };
-
-  const reassignLead = () => {
-    const teamValue = window.prompt("Assign to team/user", selectedLead.team || "");
-    if (!teamValue) return;
-
-    patchSelectedLead({ team: teamValue });
   };
 
   const openCallPage = (lead = null) => {
@@ -473,7 +817,6 @@ const SalesUserPanel = () => {
       setFocusedCallLeadId(getLeadId(lead));
     }
     setOpenActionLeadId(null);
-    setSelectedLead(null);
     setActiveScreen("calls");
     const leadId = lead ? getLeadId(lead) : "";
     navigate(`/user/sales/calls${leadId ? `?leadId=${leadId}` : ""}`);
@@ -482,10 +825,20 @@ const SalesUserPanel = () => {
   const openWhatsAppPage = (lead = null) => {
     const leadId = lead ? getLeadId(lead) : "";
     setOpenActionLeadId(null);
-    setSelectedLead(null);
     setActiveScreen("whatsapp");
     navigate(`/user/sales/whatsapp${leadId ? `?leadId=${leadId}` : ""}`, {
       state: lead ? { lead } : undefined,
+    });
+  };
+
+  const openSalesSiteVisitPage = (lead = null, status = "") => {
+    openScheduleVisit(lead);
+    const leadId = lead ? getLeadId(lead) : "";
+    const params = new URLSearchParams();
+    if (leadId) params.set("leadId", leadId);
+    if (status) params.set("status", status);
+    navigate(`/user/sales/site-visit${params.toString() ? `?${params.toString()}` : ""}`, {
+      state: lead ? { lead, status } : undefined,
     });
   };
 
@@ -678,7 +1031,15 @@ const SalesUserPanel = () => {
     setOpenActionLeadId((current) => (current === leadId ? null : leadId));
   };
 
-  const logout = () => {
+  const attendanceStatus = attendance?.status || "Available";
+  const isOnBreak = attendanceStatus === "On Break";
+
+  const toggleBreak = () => {
+    updateAttendance(isOnBreak ? "break/end" : "break/start");
+  };
+
+  const logout = async () => {
+    await updateAttendance("logout");
     localStorage.removeItem("authToken");
     localStorage.removeItem("authUser");
     window.location.href = "/sign-in";
@@ -697,6 +1058,7 @@ const SalesUserPanel = () => {
     { key: "leads", label: "My Leads", icon: Users, count: panel.stats.assignedLeads },
     // { key: "calls", label: "Calls", icon: Phone, count: callQueue.length },
     { key: "followups", label: "Follow-ups", icon: CalendarDays, count: panel.stats.followupsDue },
+    { key: "scheduleVisit", label: "Schedule Visit", icon: CalendarDays, count: panel.stats.siteVisits },
     { key: "bookings", label: "Bookings", icon: LayoutDashboard, count: panel.stats.bookings },
     { key: "conversation", label: "Conversation", icon: MessageSquare, count: panel.leads.length },
     { key: "whatsapp", label: "WhatsApp", icon: Smartphone, count: panel.leads.filter((lead) => getActionPhone(lead).replace(/\D/g, "")).length },
@@ -736,10 +1098,13 @@ const SalesUserPanel = () => {
                   setActiveScreen(item.key);
                   if (item.key === "bookings") setActiveLeadStage("all");
                   if (item.key === "calls") navigate("/user/sales/calls");
+                  if (item.key === "followups") openFollowups(activeFollowupFilter);
                   if (item.key === "conversation") navigate("/user/sales/conversation");
                   if (item.key === "whatsapp") navigate("/user/sales/whatsapp");
                   if (item.key === "leads") navigate("/user/sales/leads");
+                  if (item.key === "bookings") navigate("/user/sales/bookings");
                   if (item.key === "addLead") navigate("/user/sales/add-lead");
+                  if (item.key === "scheduleVisit") openSalesSiteVisitPage();
                 }}
               >
                 <Icon size={16} />
@@ -814,26 +1179,26 @@ const SalesUserPanel = () => {
 
           {activeScreen !== "whatsapp" && activeScreen !== "details" && activeScreen !== "conversation" && activeScreen !== "calls" && (
             <div className="sales-stat-grid">
-              <div className="sales-stat">
-                <span>Assigned leads</span>
-                <strong>{loading ? "..." : panel.stats.assignedLeads}</strong>
-                <small>From admin CRM</small>
-              </div>
-              <div className="sales-stat">
-                <span>Follow-ups due</span>
-                <strong>{loading ? "..." : panel.stats.followupsDue}</strong>
-                <small>Fresh and prospect leads</small>
-              </div>
-              <div className="sales-stat">
-                <span>Site visits</span>
-                <strong>{loading ? "..." : panel.stats.siteVisits}</strong>
-                <small>Scheduled visits</small>
-              </div>
-              <div className="sales-stat">
-                <span>Bookings</span>
-                <strong>{loading ? "..." : panel.stats.bookings}</strong>
-                <small>Latest booked units</small>
-              </div>
+              <button type="button" className="sales-stat sales-stat-click" onClick={() => openFollowups("today")}>
+                <span>Today follow-ups</span>
+                <strong>{loading ? "..." : panel.stats.followupsToday || 0}</strong>
+                <small>Due today</small>
+              </button>
+              <button type="button" className="sales-stat sales-stat-click" onClick={() => openFollowups("missed")}>
+                <span>Missed follow-ups</span>
+                <strong>{loading ? "..." : panel.stats.missedFollowups || 0}</strong>
+                <small>Pending past time</small>
+              </button>
+              <button type="button" className="sales-stat sales-stat-click" onClick={() => openFollowups("upcoming")}>
+                <span>Upcoming follow-ups</span>
+                <strong>{loading ? "..." : panel.stats.upcomingFollowups || 0}</strong>
+                <small>Future schedule</small>
+              </button>
+              <button type="button" className="sales-stat sales-stat-click" onClick={() => openFollowups("all")}>
+                <span>High priority</span>
+                <strong>{loading ? "..." : panel.stats.highPriorityFollowups || 0}</strong>
+                <small>Needs attention</small>
+              </button>
             </div>
           )}
 
@@ -881,6 +1246,17 @@ const SalesUserPanel = () => {
                 }}
               />
             </div>
+          ) : activeScreen === "followups" ? (
+            <SalesFollowups
+              activeFilter={activeFollowupFilter}
+              leads={panel.leads}
+              user={panel.user}
+              onOpenCallLead={openCallPage}
+              onOpenWhatsAppLead={openWhatsAppPage}
+              onOpenLead={openLeadDetails}
+              onScheduleVisitLead={openSalesSiteVisitPage}
+              onRefreshPanel={() => loadPanel(false)}
+            />
           ) : activeScreen === "calls" ? (
             <section className="sales-call-workspace">
               <div className="sales-call-head">
@@ -889,8 +1265,10 @@ const SalesUserPanel = () => {
                   <p>{callQueue.length} leads · next SLA breach in 3 min</p>
                 </div>
                 <div className="sales-call-presence">
-                  <span>Available</span>
-                  <button type="button">Take break</button>
+                  <span>{attendanceStatus}</span>
+                  <button type="button" onClick={toggleBreak} disabled={attendanceBusy}>
+                    {isOnBreak ? "Return" : "Take break"}
+                  </button>
                 </div>
               </div>
 
@@ -1011,6 +1389,138 @@ const SalesUserPanel = () => {
                 </div>
               )}
             </section>
+          ) : activeScreen === "scheduleVisit" ? (
+            <section className="sales-card sales-visit-card">
+              <div className="sales-card-head">
+                <div>
+                  <h2>Schedule Site Visit</h2>
+                  <p>Create and update site visit status for admin conversation access</p>
+                </div>
+              </div>
+
+              <form className="sales-visit-form" onSubmit={saveSiteVisit}>
+                <label>
+                  <span>Lead</span>
+                  <select
+                    name="leadId"
+                    value={siteVisitForm.leadId}
+                    onChange={handleSiteVisitChange}
+                    required
+                  >
+                    <option value="">Select lead</option>
+                    {panel.leads.map((lead) => (
+                      <option key={getLeadId(lead) || getLeadName(lead)} value={getLeadId(lead)}>
+                        {getLeadName(lead)} {getLeadPhone(lead) !== "-" ? `- ${getLeadPhone(lead)}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Project</span>
+                  <select
+                    name="project"
+                    value={siteVisitForm.project}
+                    onChange={handleSiteVisitChange}
+                    required
+                  >
+                    <option value="">
+                      {isLoadingProjects ? "Loading projects..." : "Select project"}
+                    </option>
+                    {siteVisitForm.project && !projectOptions.includes(siteVisitForm.project) && (
+                      <option value={siteVisitForm.project}>{siteVisitForm.project}</option>
+                    )}
+                    {projectOptions.map((project) => (
+                      <option key={project} value={project}>
+                        {project}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label>
+                  <span>Date and time</span>
+                  <input
+                    name="visitDateTime"
+                    type="datetime-local"
+                    value={siteVisitForm.visitDateTime}
+                    onChange={handleSiteVisitChange}
+                    required
+                  />
+                </label>
+
+                <label>
+                  <span>Customer location / meeting point</span>
+                  <input
+                    name="location"
+                    value={siteVisitForm.location}
+                    onChange={handleSiteVisitChange}
+                    placeholder="Pickup address or meeting point"
+                  />
+                </label>
+
+                <label>
+                  <span>Assign sales executive</span>
+                  <input
+                    name="executive"
+                    value={siteVisitForm.executive}
+                    onChange={handleSiteVisitChange}
+                    placeholder="Sales executive name"
+                  />
+                </label>
+
+                <label>
+                  <span>Visit Status</span>
+                  <select
+                    name="status"
+                    value={siteVisitForm.status}
+                    onChange={handleSiteVisitChange}
+                  >
+                    {siteVisitStatusOptions.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="sales-visit-note">
+                  <span>Visit note</span>
+                  <textarea
+                    name="note"
+                    value={siteVisitForm.note}
+                    onChange={handleSiteVisitChange}
+                    placeholder="Customer interest, meeting instructions, documents to carry..."
+                  />
+                </label>
+
+                <div className="sales-visit-summary">
+                  <div>
+                    <span>Selected lead</span>
+                    <strong>{siteVisitLead ? getLeadName(siteVisitLead) : "No lead selected"}</strong>
+                  </div>
+                  <div>
+                    <span>Phone</span>
+                    <strong>{siteVisitLead ? getLeadPhone(siteVisitLead) : "-"}</strong>
+                  </div>
+                  <div>
+                    <span>Status visible to admin</span>
+                    <strong>{siteVisitForm.status}</strong>
+                  </div>
+                </div>
+
+                {siteVisitMessage && <div className="sales-visit-message">{siteVisitMessage}</div>}
+
+                <div className="sales-visit-actions">
+                  <button type="button" onClick={() => setActiveScreen("conversation")}>
+                    Back to Conversation
+                  </button>
+                  <button className="primary" type="submit" disabled={isSavingSiteVisit}>
+                    {isSavingSiteVisit ? "Saving..." : "Save visit"}
+                  </button>
+                </div>
+              </form>
+            </section>
           ) : activeScreen === "conversation" ? (
             <UserConversationPanel
               leads={panel.leads}
@@ -1018,6 +1528,7 @@ const SalesUserPanel = () => {
               loading={loading}
               onOpenCallLead={openCallPage}
               onOpenWhatsAppLead={openWhatsAppPage}
+              onScheduleVisitLead={openScheduleVisit}
             />
           ) : activeScreen === "whatsapp" ? (
             <UserWhatsAppPage
@@ -1027,7 +1538,12 @@ const SalesUserPanel = () => {
               embedded
             />
           ) : activeScreen === "details" ? (
-            <UserDetails />
+            <UserDetails
+              context="sales"
+              onOpenCallLead={openCallPage}
+              onOpenWhatsAppLead={openWhatsAppPage}
+              onScheduleVisitLead={openSalesSiteVisitPage}
+            />
           ) : activeScreen === "tasks" ? (
             <section className="sales-card sales-tasks-card">
               <div className="sales-card-head">
@@ -1109,7 +1625,7 @@ const SalesUserPanel = () => {
                   const leadId = getLeadId(lead);
 
                   return (
-                  <div className="sales-row" key={leadId || lead.email} onClick={() => setSelectedLead(lead)}>
+                  <div className="sales-row" key={leadId || lead.email}>
                     <span className="sales-lead-name">
                       <span className="sales-avatar small">{initials(getLeadName(lead))}</span>
                       <span>
@@ -1161,8 +1677,7 @@ const SalesUserPanel = () => {
               </div>
               <div className="sales-action-list">
                 <button type="button" onClick={() => openCallPage()}><Phone size={15} /> Call next lead</button>
-                <button type="button"><CalendarDays size={15} /> Schedule visit</button>
-                <button type="button"><Users size={15} /> Request reassignment</button>
+                <button type="button" onClick={() => openScheduleVisit()}><CalendarDays size={15} /> Schedule visit</button>
               </div>
 
               <div className="sales-card-head compact">
@@ -1186,79 +1701,6 @@ const SalesUserPanel = () => {
         </section>
       </main>
 
-      {selectedLead && (
-        <div className="sales-drawer-wrap" onClick={() => setSelectedLead(null)}>
-          <aside className="sales-drawer" onClick={(event) => event.stopPropagation()}>
-            <div className="sales-drawer-head">
-              <div className="sales-avatar large">{initials(getLeadName(selectedLead))}</div>
-              <div className="sales-drawer-title">
-                <h2>{getLeadName(selectedLead)}</h2>
-                <p>#{selectedLead.id} · {getLeadPhone(selectedLead)} · {getLeadEmail(selectedLead)}</p>
-              </div>
-              <span className="sales-score">Score {selectedLead.score || 65}</span>
-              <button className="sales-drawer-close" type="button" onClick={() => setSelectedLead(null)}>×</button>
-            </div>
-            <div className="sales-drawer-actions">
-              <button className="primary" type="button" onClick={() => openCallPage(selectedLead)}>Call</button>
-              <button type="button" onClick={() => openWhatsAppPage(selectedLead)}>
-                WhatsApp
-              </button>
-              <a href={`mailto:${getLeadEmail(selectedLead)}`}>Email</a>
-              <button type="button" onClick={scheduleVisit}>Schedule visit</button>
-              <a
-                href={`mailto:${getLeadEmail(selectedLead)}?subject=${encodeURIComponent(`Quote for ${selectedLead.interestedProjects || "your requirement"}`)}`}
-              >
-                Send quote
-              </a>
-              <button type="button" onClick={reassignLead}>Reassign</button>
-            </div>
-            <section className="sales-pipeline">
-              <p>Pipeline stage</p>
-              <div className="sales-stage-bar">
-                {pipelineStages.map((stage, index) => (
-                  <span
-                    key={stage}
-                    className={index <= getPipelineIndex(selectedLead) ? "done" : ""}
-                  />
-                ))}
-              </div>
-              <div className="sales-stage-labels">
-                {pipelineStages.map((stage, index) => (
-                  <span
-                    key={stage}
-                    className={index <= getPipelineIndex(selectedLead) ? "done" : ""}
-                  >
-                    {pipelineStageLabels[stage]}
-                  </span>
-                ))}
-              </div>
-            </section>
-            <div className="sales-meta-grid">
-              <div><span>Source</span><strong>{selectedLead.channelPartner || selectedLead.tags || "Website"}</strong></div>
-              <div><span>Project</span><strong>{selectedLead.interestedProjects || selectedLead.propertyType || "-"}</strong></div>
-              <div><span>Config</span><strong>{selectedLead.configration || selectedLead.configuration || "-"}</strong></div>
-              <div><span>Budget</span><strong>{selectedLead.budget || "-"}</strong></div>
-              <div><span>Assigned to</span><strong>{selectedLead.team || panel.user?.firstName || "-"}</strong></div>
-              <div><span>Created</span><strong>{getCreatedLabel(selectedLead)}</strong></div>
-            </div>
-            <section className="sales-activity">
-              <h3>Activity</h3>
-              <div className="sales-timeline">
-                <button type="button" onClick={() => { window.location.href = `tel:${getActionPhone(selectedLead)}`; }}>
-                  <span />
-                  <strong>Call attempted · no answer</strong>
-                  <small>Today · 8:00 AM</small>
-                </button>
-                <button type="button" onClick={() => { window.location.href = `mailto:${getLeadEmail(selectedLead)}`; }}>
-                  <span />
-                  <strong>Email follow-up ready</strong>
-                  <small>{getCreatedLabel(selectedLead)}</small>
-                </button>
-              </div>
-            </section>
-          </aside>
-        </div>
-      )}
     </div>
   );
 };

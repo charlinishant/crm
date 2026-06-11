@@ -2,6 +2,7 @@ const fs = require("fs")
 const XLSX = require("xlsx")
 const prisma = require("../lib/prisma")
 const { create } = require("domain")
+const { getVisitPayloadFromLeadUpdate, upsertScheduleVisit } = require("../services/scheduleVisit.service")
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const phoneRegex = /^\d{10}$/
@@ -220,6 +221,17 @@ exports.createLead = async (req, res) => {
       channelPartner,
       conductSiteVisit,
       conductSiteDate,
+      siteVisitProject,
+      siteVisitStatus,
+      visitStatus,
+      conductSiteStatus,
+      siteVisitLocation,
+      meetingPoint,
+      siteVisitExecutive,
+      siteVisitNote,
+      siteVisitInitiatedBy,
+      siteVisitDate,
+      siteVisitConductedOn,
       leadAddress,
       companyName,
       type,
@@ -307,6 +319,17 @@ exports.createLead = async (req, res) => {
         channelPartner,
         conductSiteVisit,
         conductSiteDate: toNullableDate(conductSiteDate),
+        siteVisitProject,
+        siteVisitStatus: siteVisitStatus || visitStatus || conductSiteStatus || undefined,
+        visitStatus: visitStatus || siteVisitStatus || conductSiteStatus || undefined,
+        conductSiteStatus: conductSiteStatus || siteVisitStatus || visitStatus || undefined,
+        siteVisitLocation,
+        meetingPoint,
+        siteVisitExecutive,
+        siteVisitNote,
+        siteVisitInitiatedBy,
+        siteVisitDate: toNullableDate(siteVisitDate),
+        siteVisitConductedOn: toNullableDate(siteVisitConductedOn),
         leadAddress: {
           create: leadAddressList,
         },
@@ -518,6 +541,15 @@ exports.updateLead = async (req, res) => {
       "interestedProjects",
       "channelPartner",
       "conductSiteVisit",
+      "siteVisitProject",
+      "siteVisitStatus",
+      "visitStatus",
+      "conductSiteStatus",
+      "siteVisitLocation",
+      "meetingPoint",
+      "siteVisitExecutive",
+      "siteVisitNote",
+      "siteVisitInitiatedBy",
       "companyName",
       "type",
       "carpetArea",
@@ -563,6 +595,8 @@ exports.updateLead = async (req, res) => {
     if (source.birthday !== undefined) data.birthday = toNullableDate(source.birthday)
     if (source.anniversary !== undefined) data.anniversary = toNullableDate(source.anniversary)
     if (source.conductSiteDate !== undefined) data.conductSiteDate = toNullableDate(source.conductSiteDate)
+    if (source.siteVisitDate !== undefined) data.siteVisitDate = toNullableDate(source.siteVisitDate)
+    if (source.siteVisitConductedOn !== undefined) data.siteVisitConductedOn = toNullableDate(source.siteVisitConductedOn)
 
     if (source.leadAddress !== undefined) {
       const leadAddress = Array.isArray(source.leadAddress)
@@ -599,6 +633,12 @@ exports.updateLead = async (req, res) => {
         },
       },
     })
+
+    const visitPayload = getVisitPayloadFromLeadUpdate(lead.id, source)
+    if (visitPayload) {
+      await upsertScheduleVisit(visitPayload)
+    }
+
     res.status(200).json(withLeadStageScore(result))
   } catch (err) {
     console.log(err)

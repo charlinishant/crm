@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
 import Breadcrumb from "../components/Breadcrumb";
-import "./addLead.css";
 
 const fallbackTowers = [
   { id: 1, name: "TOWER D", project: "Binghatti Hills" },
@@ -407,7 +406,7 @@ const AddFloorplan = () => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="lead-form">
+          <form onSubmit={handleSubmit} className="lead-form floorplan-form">
             <div className="floorplan-layout">
               <div className="floorplan-main">
               <Section title="Header / Identity">

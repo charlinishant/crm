@@ -1,6 +1,5 @@
 import React from 'react';
 import { MoreVertical, Filter } from 'lucide-react';
-import "./Reassigned.css"
 import TableHeader from './TableHeader';
 
 

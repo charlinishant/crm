@@ -1,5 +1,4 @@
 import TableHeader from "./TableHeader"
-import "./CallLater.css"
 
 const CallLater = ()=>{
     return(

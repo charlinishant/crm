@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
-import "./addLead.css";
 
 // ✅ AddSection defined OUTSIDE ADDLEAD
 const AddSection = ({ label, renderFields, defaultItem }) => {

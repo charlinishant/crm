@@ -1,5 +1,4 @@
 import React, { useMemo } from "react";
-import "./BrokerageInvoices.css";
 
 const BrokerageInvoices = () => {
   const invoices = useMemo(() => [], []);

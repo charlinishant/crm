@@ -3,33 +3,44 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const userFormStyles = `
-.add-user-panel .user-card {
-  max-width: 800px;
-  margin: auto;
-  background: #ffffff;
-  border-radius: 16px;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
-  overflow: hidden;
-}
-
-.add-user-panel .user-card-header {
-  background: linear-gradient(135deg, #0d6efd, #3b82f6);
-  color: white;
+.add-user-panel {
   padding: 20px;
 }
 
-.add-user-panel .user-card-header h5 {
-  color: white;
-  margin: 0 0 4px;
+.add-user-panel .user-card {
+  max-width: 1200px;
+  margin: auto;
+  background: #f4f8ff;
+  border: 1px solid #b6bdc4;
+  border-radius: 9px;
+  padding: 20px;
 }
 
-.add-user-panel .user-card-header p {
-  color: rgba(255, 255, 255, 0.82);
+.add-user-panel .user-card-header {
+  background: transparent;
+  color: #1e293b;
+  padding: 0;
+  margin-bottom: 20px;
+}
+
+.add-user-panel .user-card-header h5 {
+  color: #1e293b;
+  font-size: 24px;
+  font-weight: 600;
   margin: 0;
 }
 
+.add-user-panel .user-card-header p {
+  color: #64748b;
+  margin: 6px 0 0;
+  font-size: 14px;
+}
+
 .add-user-panel .user-card-body {
-  padding: 24px;
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  padding: 20px;
 }
 
 .add-user-panel .avatar-section {
@@ -46,17 +57,17 @@ const userFormStyles = `
   width: 110px;
   height: 110px;
   border-radius: 50%;
-  background-color: #f8fbff;
+  background-color: #f1f5f9;
   background-size: cover;
   background-position: center;
-  border: 4px solid #e6f0ff;
+  border: 1px solid #cbd5e1;
 }
 
 .add-user-panel .avatar-edit-btn {
   position: absolute;
   bottom: 0;
   right: 0;
-  background: #0d6efd;
+  background: #2563eb;
   color: white;
   padding: 6px;
   border-radius: 50%;
@@ -71,7 +82,7 @@ const userFormStyles = `
 .add-user-panel .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 15px;
 }
 
 .add-user-panel .form-group {
@@ -84,21 +95,24 @@ const userFormStyles = `
 }
 
 .add-user-panel label {
-  color: #25314c;
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 8px;
+  color: #334155;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 5px;
 }
 
 .add-user-panel input,
 .add-user-panel select,
 .add-user-panel textarea {
   padding: 10px;
-  border-radius: 8px;
-  border: 1px solid #dbeafe;
+  background: #ffffff;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  color: #1e293b;
   outline: none;
   transition: 0.2s;
   width: 100%;
+  font-size: 14px;
 }
 
 .add-user-panel textarea {
@@ -109,23 +123,34 @@ const userFormStyles = `
 .add-user-panel input:focus,
 .add-user-panel select:focus,
 .add-user-panel textarea:focus {
-  border-color: #0d6efd;
-  box-shadow: 0 0 0 2px rgba(13,110,253,0.1);
+  border-color: #2563eb;
+  box-shadow: none;
 }
 
 .add-user-panel .form-actions {
   grid-column: span 2;
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 10px;
+  margin-top: 5px;
 }
 
 .add-user-panel .btn-primary {
-  background: #0d6efd;
+  background: #2563eb;
   color: white;
   border: none;
   padding: 10px 20px;
-  border-radius: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  flex: 0 0 auto;
+  min-width: 108px;
+  width: auto;
+}
+
+.add-user-panel .btn-primary:hover {
+  background: #1d4ed8;
 }
 
 .add-user-panel .btn-primary:disabled {
@@ -134,11 +159,21 @@ const userFormStyles = `
 }
 
 .add-user-panel .btn-outline {
-  border: 1px solid #0d6efd;
-  color: #0d6efd;
-  background: transparent;
+  border: none;
+  color: #1e293b;
+  background: #e2e8f0;
   padding: 10px 20px;
-  border-radius: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  flex: 0 0 auto;
+  min-width: 108px;
+  width: auto;
+}
+
+.add-user-panel .btn-outline:hover {
+  background: #cbd5e1;
 }
 
 .add-user-panel .alert.success {

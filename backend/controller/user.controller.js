@@ -223,6 +223,17 @@ exports.getAccessPanel = async (req, res)=>{
                     channelPartner:true,
                     conductSiteVisit:true,
                     conductSiteDate:true,
+                    siteVisitProject:true,
+                    siteVisitStatus:true,
+                    visitStatus:true,
+                    conductSiteStatus:true,
+                    siteVisitLocation:true,
+                    meetingPoint:true,
+                    siteVisitExecutive:true,
+                    siteVisitNote:true,
+                    siteVisitInitiatedBy:true,
+                    siteVisitDate:true,
+                    siteVisitConductedOn:true,
                     companyName:true,
                     type:true,
                     carpetArea:true,
@@ -266,6 +277,7 @@ exports.getAccessPanel = async (req, res)=>{
         try {
             bookings = await prisma.booking.findMany({
                 where:{
+                    stage:"Booked",
                     leadId:{
                         in:leads.map(lead => lead.id)
                     }
@@ -316,6 +328,61 @@ exports.getAccessPanel = async (req, res)=>{
             console.log("Unable to load user tasks", error)
         }
 
+        let followupStats = {
+            today: 0,
+            missed: 0,
+            upcoming: 0,
+            highPriority: 0,
+            due: 0,
+        }
+        try {
+            const now = new Date()
+            const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+            const endToday = new Date(startToday)
+            endToday.setDate(endToday.getDate() + 1)
+
+            const [today, missed, upcoming, highPriority] = await Promise.all([
+                prisma.followUp.count({
+                    where:{
+                        salesUserId:authUserId,
+                        status:{notIn:["Done", "Cancelled"]},
+                        followUpDate:{gte:startToday, lt:endToday}
+                    }
+                }),
+                prisma.followUp.count({
+                    where:{
+                        salesUserId:authUserId,
+                        status:"Pending",
+                        followUpDate:{lt:now}
+                    }
+                }),
+                prisma.followUp.count({
+                    where:{
+                        salesUserId:authUserId,
+                        status:{notIn:["Done", "Cancelled"]},
+                        followUpDate:{gte:endToday}
+                    }
+                }),
+                prisma.followUp.count({
+                    where:{
+                        salesUserId:authUserId,
+                        status:{notIn:["Done", "Cancelled"]},
+                        priority:"High"
+                    }
+                }),
+            ])
+
+            followupStats = {
+                today,
+                missed,
+                upcoming,
+                highPriority,
+                due:today + missed,
+            }
+        } catch (error) {
+            console.log("Unable to load follow-up stats", error)
+        }
+
         const displayUser = {
             id:user.id,
             username:user.username,
@@ -332,7 +399,11 @@ exports.getAccessPanel = async (req, res)=>{
             user:displayUser,
             stats:{
                 assignedLeads:leads.length,
-                followupsDue:leads.filter(lead => lead.status === "Fresh_Lead" || lead.status === "Prospect").length,
+                followupsDue:followupStats.due,
+                followupsToday:followupStats.today,
+                missedFollowups:followupStats.missed,
+                upcomingFollowups:followupStats.upcoming,
+                highPriorityFollowups:followupStats.highPriority,
                 siteVisits:leads.filter(lead => lead.conductSiteVisit).length,
                 bookings:bookings.length,
                 tasks:tasks.length
