@@ -1,18 +1,36 @@
 import React, {useState} from "react";
 import { Icon } from "@iconify/react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 
 const SignInLayer = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+  const getInitialError = () => {
+    if (location.state?.accessDenied) {
+      return {
+        show: true,
+        message: "Access denied. Your account does not have permission to use this CRM.",
+      };
+    }
+
+    if (location.state?.sessionExpired) {
+      return {
+        show: true,
+        message: "Your session has expired. Please sign in again.",
+      };
+    }
+
+    return {
+      show: false,
+      message: "",
+    };
+  };
   const [formData, setFormData] = useState({
     email:"",
     password:""
   })
-  const [errorModal, setErrorModal] = useState({
-    show: false,
-    message: ""
-  });
+  const [errorModal, setErrorModal] = useState(getInitialError);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -54,6 +72,17 @@ const SignInLayer = () => {
       const result = await res.json();
 
       if(res.ok){
+        const role = String(result.data?.role || "").trim().toUpperCase();
+        const isSalesRole = role === "SALES" || role === "PRE_SALES" || role === "POST_SALES";
+        const isAdminRole = role === "ADMIN" || role === "SUPER_ADMIN";
+
+        if (!isSalesRole && !isAdminRole) {
+          localStorage.removeItem("authToken");
+          localStorage.removeItem("authUser");
+          showErrorModal("Access denied. Your account does not have permission to use this CRM.");
+          return;
+        }
+
         const profilePhotos = JSON.parse(localStorage.getItem("userProfilePhotos") || "{}");
         const emailKey = result.data?.email?.trim().toLowerCase();
         const loggedInUser = {
@@ -62,8 +91,7 @@ const SignInLayer = () => {
         };
         localStorage.setItem("authToken", result.token);
         localStorage.setItem("authUser", JSON.stringify(loggedInUser));
-        const role = loggedInUser?.role;
-        if (role === "SALES" || role === "PRE_SALES" || role === "POST_SALES") {
+        if (isSalesRole) {
           navigate("/user/sales");
         } else {
           navigate("/dashboard");

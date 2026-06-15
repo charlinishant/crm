@@ -110,7 +110,6 @@ import BlogDetailsPage from "./pages/BlogDetailsPage";
 import AddBlogPage from "./pages/AddBlogPage";
 import TestimonialsPage from "./pages/TestimonialsPage";
 import ComingSoonPage from "./pages/ComingSoonPage";
-import AccessDeniedPage from "./pages/AccessDeniedPage";
 import MaintenancePage from "./pages/MaintenancePage";
 import BlankPagePage from "./pages/BlankPagePage";
 import NEWPROJECT from "./pages/Newproject";
@@ -187,7 +186,7 @@ const getRoleName = (user) => String(user?.role || "").trim().toUpperCase();
 const getHomePathForRole = (role) => {
   if (salesRoles.has(role)) return salesHomePath;
   if (adminRoles.has(role)) return adminHomePath;
-  return accessDeniedPath;
+  return "/sign-in";
 };
 
 const RedirectWithSearch = ({ to }) => {
@@ -235,6 +234,11 @@ const ProtectedAppRoutes = () => {
     return <Navigate to="/sign-in" replace state={{ sessionExpired: true }} />;
   }
 
+  if (isAccessDeniedPath) {
+    clearSession();
+    return <Navigate to="/sign-in" replace state={{ accessDenied: true }} />;
+  }
+
   if (!token && !isPublicPath) {
     return <Navigate to="/sign-in" replace state={{ from: location.pathname }} />;
   }
@@ -242,6 +246,11 @@ const ProtectedAppRoutes = () => {
   if (token && isTokenExpired(token) && !isPublicPath) {
     clearSession();
     return <Navigate to="/sign-in" replace state={{ sessionExpired: true }} />;
+  }
+
+  if (token && !isTokenExpired(token) && isPublicPath && !isAdminUser && !isSalesUser) {
+    clearSession();
+    return <Navigate to="/sign-in" replace state={{ accessDenied: true }} />;
   }
 
   if (token && !isTokenExpired(token) && isPublicPath) {
@@ -257,7 +266,8 @@ const ProtectedAppRoutes = () => {
   }
 
   if (token && !isPublicPath && !isAccessDeniedPath && !isAdminUser && !isSalesUser) {
-    return <Navigate to={accessDeniedPath} replace state={{ blockedPath: location.pathname }} />;
+    clearSession();
+    return <Navigate to="/sign-in" replace state={{ accessDenied: true, blockedPath: location.pathname }} />;
   }
 
   return (
@@ -321,7 +331,7 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/add-blog' element={<AddBlogPage />} />
         <Route exact path='/testimonials' element={<TestimonialsPage />} />
         <Route exact path='/coming-soon' element={<ComingSoonPage />} />
-        <Route exact path='/access-denied' element={<AccessDeniedPage />} />
+        <Route exact path='/access-denied' element={<Navigate to="/sign-in" replace state={{ accessDenied: true }} />} />
         <Route exact path='/maintenance' element={<MaintenancePage />} />
         <Route exact path='/blank-page' element={<BlankPagePage />} />
         <Route exact path='/image-generator' element={<ImageGeneratorPage />} />
@@ -487,7 +497,7 @@ function App() {
 
         <Route exact path='/testimonials' element={<TestimonialsPage />} />
         <Route exact path='/coming-soon' element={<ComingSoonPage />} />
-        <Route exact path='/access-denied' element={<AccessDeniedPage />} />
+        <Route exact path='/access-denied' element={<Navigate to="/sign-in" replace state={{ accessDenied: true }} />} />
         <Route exact path='/maintenance' element={<MaintenancePage />} />
         <Route exact path='/blank-page' element={<BlankPagePage />} />
 

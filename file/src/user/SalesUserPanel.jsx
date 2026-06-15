@@ -1165,10 +1165,11 @@ const SalesUserPanel = () => {
     { key: "home", label: "Home", icon: Home },
     { key: "leads", label: "My Leads", icon: Users, count: panel.stats.assignedLeads },
     // { key: "calls", label: "Calls", icon: Phone, count: callQueue.length },
+    { key: "conversation", label: "Conversation", icon: MessageSquare, count: panel.leads.length },
     { key: "followups", label: "Follow-ups", icon: CalendarDays, count: panel.stats.followupsDue },
     { key: "scheduleVisit", label: "Schedule Visit", icon: CalendarDays, count: panel.stats.siteVisits },
     { key: "bookings", label: "Bookings", icon: LayoutDashboard, count: panel.stats.bookings },
-    { key: "conversation", label: "Conversation", icon: MessageSquare, count: panel.leads.length },
+   
     { key: "whatsapp", label: "WhatsApp", icon: Smartphone, count: panel.leads.filter((lead) => getActionPhone(lead).replace(/\D/g, "")).length },
     { key: "tasks", label: "Tasks", icon: LayoutDashboard, count: panel.stats.tasks },
   ];
@@ -1268,9 +1269,9 @@ const SalesUserPanel = () => {
                 <p>{formatDashboardDate()} · {panel.leads.length} assigned leads</p>
               </div>
               <div className="sales-actions">
-                <button type="button" className="sales-range-btn">
+                {/* <button type="button" className="sales-range-btn">
                   Last 7 days
-                </button>
+                </button> */}
                 <button
                   type="button"
                   className="primary"
