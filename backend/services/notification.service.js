@@ -11,8 +11,6 @@ async function sendNotification(userId, title, description=""){
     }})
 
     const socketId = connectedUser.get(String(userId))
-    console.log(`connected users -`);
-    console.log(connectedUser);
     
     if(socketId){
         io.to(socketId).emit(`newNotification-${userId}`, notification)

@@ -13,9 +13,6 @@ function initSocket(server) {
   io.on("connection", socket => {
     socket.on("register", async (userId)=>{
       connectedUser.set(userId, socket.id)
-      console.log(`intial connected users -`);
-      console.log(connectedUser);
-      
       
       const notifiactions = await prisma.notification.findMany({where:{userId:Number(userId), isRead:false}})
 
