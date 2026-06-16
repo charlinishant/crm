@@ -1,11 +1,11 @@
 const {Router} = require("express")
-const notifiaction = require("../controller/notification.controller")
+const notification = require("../controller/notification.controller")
 
 const router = Router()
 
-router.get("/get", notifiaction.getNotifications)
-router.patch("/read/:id", notifiaction.readNotification)
-router.post("/activity", notifiaction.sendActivityNotification)
-router.post("/lead-assign", notifiaction.sendLeadAssignNotification)
+router.get("/get", notification.getNotifications)
+router.patch("/read/:id", notification.readNotification)
+router.post("/activity", notification.sendActivityNotification)
+router.post("/lead-assign", notification.sendLeadAssignNotification)
 
 module.exports = router

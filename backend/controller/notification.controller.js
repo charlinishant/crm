@@ -9,7 +9,7 @@ exports.getNotifications = async (req, res)=>{
 
     if(!user) res.status(404).json({message:"User not found!"})
     
-    const notifiactions = await prisma.notifiaction.findMany({where:{userId:user.id}})
+    const notifiactions = await prisma.notification.findMany({where:{userId:user.id}})
 
     if(!notifiactions) res.status(404).json({message:"Notifications not found!"})
     
@@ -27,10 +27,10 @@ exports.readNotification = async (req, res) =>{
   try {
     const notificationId = Number(req.params.id)
 
-    const notification = await prisma.notifiaction.findUnique({where:{id:notificationId}})
+    const notification = await prisma.notification.findUnique({where:{id:notificationId}})
     if(!notification) res.status(404).json({message:"Notification not found"})
     
-    const updateNotification = await prisma.notifiaction.update({where:{id:notification.id},
+    const updateNotification = await prisma.notification.update({where:{id:notification.id},
        data:{
         isRead:true
        }})

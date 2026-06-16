@@ -378,7 +378,8 @@ exports.createLead = async (req, res) => {
     })
 
     if(teamId!==""){
-      const notifiaction = await sendNotification(userId=lead.teamId, title="New lead assinged to you")
+      const notification = await sendNotification(userId=lead.teamId, title="New lead assinged to you")
+      
     }
     res.status(201).json(lead)
   } catch (err) {

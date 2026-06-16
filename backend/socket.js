@@ -1,3 +1,4 @@
+const prisma = require("./lib/prisma")
 let io
 
 const connectedUser = new Map()
@@ -10,12 +11,15 @@ function initSocket(server) {
   })
 
   io.on("connection", socket => {
-    socket.on("notification", userId => {
+    socket.on("register", async (userId)=>{
+      connectedUser.set(userId, socket.id)
+      console.log(`intial connected users -`);
+      console.log(connectedUser);
       
-      socket.emit(`registered-${userId}`, {
-        success: true,
-        userId,
-      })
+      
+      const notifiactions = await prisma.notification.findMany({where:{userId:Number(userId), isRead:false}})
+
+      socket.emit(`notification-${userId}`, notifiactions)
     })
   })
 
