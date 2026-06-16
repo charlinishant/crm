@@ -1,9 +1,18 @@
 require("dotenv")
 
 const express = require("express")
+const http = require("http")
 const cors = require("cors")
 
 const prisma = require("./lib/prisma")
+const {initSocket} = require("./socket")
+
+const app = express()
+
+const server = http.createServer(app)
+
+initSocket(server)
+
 
 const projectRouter = require("./router/project.routes")
 const authRouter = require("./router/authentication.routes")
@@ -21,12 +30,13 @@ const whatsappRouter = require("./router/whatsapp.routes")
 const scheduleVisitRouter = require("./router/scheduleVisit.routes")
 const attendanceRouter = require("./router/attendance.routes")
 const followupRouter = require("./router/followup.routes")
+const notifiactionRouter = require("./router/notification.routes")
 
 const leadRouter = require("./router/lead.routes")
 const emailRouetr = require("./router/email.routes")
-const app = express()
 
-app.use(cors({origin:"*"}))
+
+app.use(cors({ origin: "*" }))
 app.use(express.json())
 app.use("/projects", projectRouter)
 app.use("/auth", authRouter)
@@ -50,8 +60,9 @@ app.use("/api/calls", callRouter)
 app.use("/api/whatsapp", whatsappRouter)
 app.use("/api/email", emailRouetr)
 // app.use('/all-users', userRouter)
+app.use("/notification", notifiactionRouter)
 
 const PORT = process.env.PORT || 5000
-app.listen(PORT, ()=>{
-    console.log(`Server running on ${PORT}`);
+server.listen(PORT, () => {
+  console.log(`Server running on ${PORT}`)
 })

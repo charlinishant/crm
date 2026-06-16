@@ -1,6 +1,8 @@
 const fs = require("fs")
 const XLSX = require("xlsx")
 const prisma = require("../lib/prisma")
+const {sendNotification} = require("../services/notification.service")
+
 const { create } = require("domain")
 const { getVisitPayloadFromLeadUpdate, upsertScheduleVisit } = require("../services/scheduleVisit.service")
 
@@ -374,6 +376,10 @@ exports.createLead = async (req, res) => {
         personalAddress: true,
       },
     })
+
+    if(teamId!==""){
+      const notifiaction = await sendNotification(userId=lead.teamId, title="New lead assinged to you")
+    }
     res.status(201).json(lead)
   } catch (err) {
     console.log(err)

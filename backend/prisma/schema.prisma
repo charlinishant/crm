@@ -220,6 +220,7 @@ model User{
   attendanceLogs UserAttendance[]
   followUps FollowUp[] @relation("SalesUserFollowUps")
   leadActivities LeadActivity[] @relation("UserLeadActivities")
+  notifications Notifiaction[] @relation("UserId")
   // Other settings
   pushNotification Boolean? @default(false)
   gpsTracking Boolean? @default(false)
@@ -571,3 +572,17 @@ model EmailLog{
   success Boolean @default(false)
   error String?
 }
+
+
+
+model Notifiaction{
+  id  Int @id @default(autoincrement())
+  titile String
+  description String?
+  link String? @default("")
+  isRead Boolean @default(false)
+  createdAt DateTime @default(now())
+  userId Int
+  user User @relation("UserId", fields: [userId], references: [id])
+}
+
