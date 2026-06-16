@@ -11,7 +11,7 @@ const ColumnChartPage = () => {
       <MasterLayout>
 
         {/* Breadcrumb */}
-        <Breadcrumb title="Chart / Column Chart" />
+        <Breadcrumb title="Projects" />
 
         {/* ColumnChartLayer */}
         <ColumnChartLayer />

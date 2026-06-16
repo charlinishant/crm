@@ -3,20 +3,6 @@ import { useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
 import Breadcrumb from "../components/Breadcrumb";
 
-const fallbackTowers = [
-  { id: 1, name: "TOWER D", project: "Binghatti Hills" },
-  { id: 2, name: "TOWER E", project: "Binghatti Hills" },
-  { id: 3, name: "Aa", project: "Binghatti Hills" },
-  { id: 4, name: "A", project: "Binghatti Hills" },
-  { id: 5, name: "Default Tower", project: "Nyati Baner" },
-  { id: 6, name: "Towe", project: "Binghatti Hills" },
-  { id: 7, name: "Default Tower", project: "Lodha Greens" },
-  { id: 8, name: "Default Tower", project: "ABC" },
-  { id: 9, name: "Default Tower", project: "Vasant utsav" },
-  { id: 10, name: "T1", project: "Binghatti Hills" },
-  { id: 11, name: "Default Tower", project: "Adhinn PG" },
-];
-
 const initialFormData = {
   project: "",
   projectTower: "",
@@ -102,6 +88,7 @@ const AddFloorplan = () => {
   const [projects, setProjects] = useState([]);
   const [towers, setTowers] = useState([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
+  const [loadingTowers, setLoadingTowers] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [showPreview, setShowPreview] = useState(false);
@@ -117,15 +104,6 @@ const AddFloorplan = () => {
     return Number.isNaN(number) ? null : number;
   };
 
-  const readStoredTowers = () => {
-    try {
-      const stored = JSON.parse(window.localStorage.getItem("projectTowers") || "[]");
-      return Array.isArray(stored) && stored.length ? stored : fallbackTowers;
-    } catch {
-      return fallbackTowers;
-    }
-  };
-
   const normalizeList = (data) => {
     if (Array.isArray(data)) return data;
     if (Array.isArray(data?.data)) return data.data;
@@ -139,23 +117,17 @@ const AddFloorplan = () => {
         setLoadingOptions(true);
         setError("");
 
-        const [projectResponse, towerResponse] = await Promise.all([
-          fetch(`${API_URL}/projects/list`),
-          fetch(`${API_URL}/tower/list`),
-        ]);
+        const projectResponse = await fetch(`${API_URL}/projects/list`);
 
         if (!projectResponse.ok) throw new Error("Unable to load projects");
-        if (!towerResponse.ok) throw new Error("Unable to load project towers");
 
         const projectData = await projectResponse.json();
-        const towerData = await towerResponse.json();
-        const backendTowers = normalizeList(towerData);
 
         setProjects(normalizeList(projectData));
-        setTowers(backendTowers.length ? backendTowers : readStoredTowers());
+        setTowers([]);
       } catch (err) {
         console.error(err);
-        setTowers(readStoredTowers());
+        setTowers([]);
         setError(err.message || "Unable to load form options");
       } finally {
         setLoadingOptions(false);
@@ -164,6 +136,33 @@ const AddFloorplan = () => {
 
     fetchOptions();
   }, [API_URL]);
+
+  useEffect(() => {
+    const fetchProjectTowers = async () => {
+      if (!formData.project) {
+        setTowers([]);
+        setFormData((prev) => ({ ...prev, projectTower: "" }));
+        return;
+      }
+
+      try {
+        setLoadingTowers(true);
+        const response = await fetch(`${API_URL}/tower/list?projectId=${formData.project}`);
+        if (!response.ok) throw new Error("Unable to load project towers");
+
+        const towerData = await response.json();
+        setTowers(normalizeList(towerData));
+      } catch (err) {
+        console.error(err);
+        setTowers([]);
+        setError(err.message || "Unable to load project towers");
+      } finally {
+        setLoadingTowers(false);
+      }
+    };
+
+    fetchProjectTowers();
+  }, [API_URL, formData.project]);
 
   const computed = useMemo(() => {
     const carpet = toNumberOrNull(formData.carpetArea) || 0;
@@ -255,6 +254,7 @@ const AddFloorplan = () => {
     setFormData((prev) => ({
       ...prev,
       [name]: type === "checkbox" ? checked : value,
+      ...(name === "project" ? { projectTower: "" } : {}),
     }));
   };
 
@@ -427,8 +427,14 @@ const AddFloorplan = () => {
                       <option key={project.id} value={project.id}>{project.name}</option>
                     ))}
                   </SelectField>
-                  <SelectField label="PROJECT TOWER *" name="projectTower" value={formData.projectTower} onChange={handleChange} required disabled={loadingOptions}>
-                    <option value="">{loadingOptions ? "Loading towers..." : "Select a Project Tower"}</option>
+                  <SelectField label="PROJECT TOWER *" name="projectTower" value={formData.projectTower} onChange={handleChange} required disabled={!formData.project || loadingTowers}>
+                    <option value="">
+                      {!formData.project
+                        ? "Select project first"
+                        : loadingTowers
+                          ? "Loading towers..."
+                          : "Select a Project Tower"}
+                    </option>
                     {towers.map((tower) => (
                       <option key={tower.id} value={tower.id}>{tower.name}</option>
                     ))}
@@ -450,7 +456,7 @@ const AddFloorplan = () => {
                   <InputField label="BEDROOMS *" name="bedrooms" type="number" value={formData.bedrooms} onChange={handleChange} required />
                   <InputField label="BATHROOMS *" name="bathrooms" type="number" step="0.5" value={formData.bathrooms} onChange={handleChange} required />
                   <InputField label="BALCONIES *" name="balconies" type="number" value={formData.balconies} onChange={handleChange} required />
-                  <InputField label="KITCHEN TYPE" name="kitchenType" type="number" value={formData.kitchenType} onChange={handleChange} />
+                    <InputField label="KITCHEN" name="kitchenType" type="number" value={formData.kitchenType} onChange={handleChange} />
                 </div>
               </Section>
 

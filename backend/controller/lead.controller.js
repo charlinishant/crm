@@ -73,6 +73,31 @@ const withLeadStageScore = (lead) => {
   }
 }
 
+const createLeadAssignmentActivity = async ({ leadId, assignedToId, assignedById, previousTeamId }) => {
+  if (!leadId || !assignedToId) return null
+
+  const assignedUser = await prisma.user.findUnique({
+    where: { id: Number(assignedToId) },
+    select: { id: true, firstName: true, lastName: true, username: true, email: true },
+  })
+  const assignedName =
+    [assignedUser?.firstName, assignedUser?.lastName].filter(Boolean).join(" ") ||
+    assignedUser?.username ||
+    assignedUser?.email ||
+    `User #${assignedToId}`
+
+  return prisma.leadActivity.create({
+    data: {
+      leadId: Number(leadId),
+      userId: assignedById ? Number(assignedById) : null,
+      type: "LEAD_ASSIGNED",
+      message: previousTeamId ? `Lead reassigned to ${assignedName}` : `Lead assigned to ${assignedName}`,
+      oldStatus: previousTeamId ? String(previousTeamId) : null,
+      newStatus: String(assignedToId),
+    },
+  })
+}
+
 const normalizeImportStatus = (value) => {
   const rawValue = String(value || "").trim()
   if (!rawValue) return "New"
@@ -378,6 +403,11 @@ exports.createLead = async (req, res) => {
     })
 
     if(teamId!==""){
+      await createLeadAssignmentActivity({
+        leadId: lead.id,
+        assignedToId: teamId,
+        assignedById: req.authUser?.id,
+      })
       const notification = await sendNotification(userId=lead.teamId, title="New lead assinged to you")
       
     }
@@ -640,6 +670,19 @@ exports.updateLead = async (req, res) => {
         },
       },
     })
+
+    if (
+      source.teamId !== undefined &&
+      data.teamId &&
+      String(data.teamId) !== String(lead.teamId || "")
+    ) {
+      await createLeadAssignmentActivity({
+        leadId: lead.id,
+        assignedToId: data.teamId,
+        assignedById: req.authUser?.id,
+        previousTeamId: lead.teamId,
+      })
+    }
 
     const visitPayload = getVisitPayloadFromLeadUpdate(lead.id, source)
     if (visitPayload) {

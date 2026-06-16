@@ -313,17 +313,6 @@ export default function Projecttower() {
           
           <form onSubmit={handleSubmit}>
             <div className="form-group">
-              <label>Tower Name *</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. TOWER F"
-                required
-              />
-            </div>
-            
-            <div className="form-group">
               <label>Project *</label>
               <select
                 value={projectId}
@@ -338,6 +327,17 @@ export default function Projecttower() {
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div className="form-group">
+              <label>Tower Name *</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. TOWER F"
+                required
+              />
             </div>
 
             <div className="form-row">

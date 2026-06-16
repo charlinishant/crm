@@ -34,6 +34,7 @@ const fallbackPanel = {
   },
   stats: {
     assignedLeads: 0,
+    newLeadsToday: 0,
     followupsDue: 0,
     followupsToday: 0,
     missedFollowups: 0,
@@ -112,6 +113,14 @@ const getName = (user) =>
   user?.username ||
   user?.email ||
   "Sales User";
+
+const getUserId = (user) => user?.id ?? user?._id ?? user?.userId ?? "";
+
+const getSalesExecutiveName = (value) => {
+  if (!value) return "";
+  if (typeof value !== "object") return String(value);
+  return getName(value);
+};
 
 const getProfilePhoto = (user) => {
   if (user?.profilePhoto) return user.profilePhoto;
@@ -317,6 +326,7 @@ const SalesUserPanel = () => {
     project: "",
     visitDateTime: getDefaultVisitDateTime(),
     location: "",
+    executiveId: "",
     executive: "",
     note: "",
     status: "Scheduled",
@@ -325,6 +335,8 @@ const SalesUserPanel = () => {
   const [isSavingSiteVisit, setIsSavingSiteVisit] = useState(false);
   const [projects, setProjects] = useState([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+  const [users, setUsers] = useState([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [attendance, setAttendance] = useState(null);
   const [attendanceBusy, setAttendanceBusy] = useState(false);
   // Dashboard detail pages reuse this sidebar state so focused workspaces can auto-collapse it.
@@ -511,6 +523,34 @@ const SalesUserPanel = () => {
     };
   }, [API_URL]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadUsers = async () => {
+      setIsLoadingUsers(true);
+
+      try {
+        const response = await fetch(`${API_URL}/users?limit=1000`);
+        if (!response.ok) throw new Error("Unable to load users");
+
+        const result = await response.json();
+        const userList = Array.isArray(result) ? result : result?.data || result?.users || [];
+        if (isMounted) setUsers(Array.isArray(userList) ? userList : []);
+      } catch (error) {
+        console.error("Unable to load sales executives:", error);
+        if (isMounted) setUsers([]);
+      } finally {
+        if (isMounted) setIsLoadingUsers(false);
+      }
+    };
+
+    loadUsers();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // WhatsApp UI change: browser back/forward also restores the matching sidebar state.
   useEffect(() => {
     const screenFromSearch = new URLSearchParams(location.search).get("screen");
@@ -581,6 +621,57 @@ const SalesUserPanel = () => {
       first.localeCompare(second)
     );
   }, [panel.leads, projects]);
+
+  const salesExecutiveOptions = useMemo(() => {
+    const salesUsers = users.filter((user) => {
+      if (user?.isActive === false) return false;
+      return [user?.role, user?.department, user?.designation]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes("sales");
+    });
+    const candidates = salesUsers.length ? salesUsers : [panel.user].filter(Boolean);
+    const seen = new Set();
+
+    return candidates
+      .map((user) => ({
+        id: String(getUserId(user) || user?.email || getName(user)),
+        name: getName(user),
+        role: user?.role || user?.department || "",
+      }))
+      .filter((user) => {
+        if (!user.id || seen.has(user.id)) return false;
+        seen.add(user.id);
+        return true;
+      })
+      .sort((first, second) => first.name.localeCompare(second.name));
+  }, [panel.user, users]);
+
+  const getExecutiveNameFromId = useCallback(
+    (executiveId) =>
+      salesExecutiveOptions.find((executive) => String(executive.id) === String(executiveId))?.name || "",
+    [salesExecutiveOptions]
+  );
+
+  const getExecutiveIdFromValue = useCallback(
+    (value) => {
+      if (!value) return "";
+      if (typeof value === "object") {
+        const id = getUserId(value);
+        if (id) return String(id);
+      }
+
+      const executiveName = getSalesExecutiveName(value);
+      const matchingExecutive = salesExecutiveOptions.find(
+        (executive) =>
+          String(executive.id) === String(executiveName) ||
+          executive.name.toLowerCase() === executiveName.toLowerCase()
+      );
+      return matchingExecutive?.id || "";
+    },
+    [salesExecutiveOptions]
+  );
 
   const filteredLeads = useMemo(() => {
     let leads = panel.leads;
@@ -666,6 +757,9 @@ const SalesUserPanel = () => {
     const todayKey = getDateKey(new Date());
     const currentMonthKey = todayKey.slice(0, 7);
     const todayLeads = panel.leads.filter((lead) => getDateKey(lead.createdAt || lead.received_on) === todayKey);
+    const newLeadsTodayCount = Number.isFinite(Number(panel.stats.newLeadsToday))
+      ? Number(panel.stats.newLeadsToday)
+      : todayLeads.length;
     const todaysVisits = panel.leads.filter((lead) =>
       getDateKey(lead.conductSiteDate || lead.siteVisitDate || lead.siteVisitConductedOn) === todayKey
     );
@@ -688,8 +782,8 @@ const SalesUserPanel = () => {
       {
         key: "new-leads",
         label: "New leads today",
-        value: todayLeads.length,
-        detail: todayLeads.length ? "+ from assigned leads" : "No new leads yet",
+        value: newLeadsTodayCount,
+        detail: newLeadsTodayCount ? "+ from assigned leads" : "No new leads yet",
         tone: "positive",
         onClick: () => {
           setActiveScreen("leads");
@@ -730,7 +824,7 @@ const SalesUserPanel = () => {
         },
       },
     ];
-  }, [navigate, panel.bookings, panel.leads, panel.stats.bookings, panel.stats.missedFollowups, panel.stats.siteVisits]);
+  }, [navigate, panel.bookings, panel.leads, panel.stats.bookings, panel.stats.missedFollowups, panel.stats.newLeadsToday, panel.stats.siteVisits]);
 
   const handleFunnelClick = (key) => {
     setActiveScreen("leads");
@@ -761,6 +855,8 @@ const SalesUserPanel = () => {
       siteVisitExecutive: nextLead?.siteVisitExecutive || cachedVisit?.siteVisitExecutive,
       siteVisitNote: nextLead?.siteVisitNote || cachedVisit?.siteVisitNote,
     };
+    const savedExecutive = visitData.siteVisitExecutive || nextLead?.team || getName(panel.user);
+    const savedExecutiveId = getExecutiveIdFromValue(savedExecutive);
 
     setOpenActionLeadId(null);
     setSiteVisitLead(nextLead);
@@ -772,7 +868,8 @@ const SalesUserPanel = () => {
         ? toDateTimeLocalValue(visitData.conductSiteDate)
         : getDefaultVisitDateTime(),
       location: visitData.siteVisitLocation || visitData.meetingPoint || nextLead?.locationPreferences || "",
-      executive: visitData.siteVisitExecutive || nextLead?.team || getName(panel.user),
+      executiveId: savedExecutiveId,
+      executive: savedExecutiveId ? getExecutiveNameFromId(savedExecutiveId) : getSalesExecutiveName(savedExecutive),
       note: visitData.siteVisitNote || "",
       status: visitData.siteVisitStatus || visitData.visitStatus || visitData.conductSiteStatus || "Scheduled",
     });
@@ -782,12 +879,23 @@ const SalesUserPanel = () => {
   const handleSiteVisitChange = (event) => {
     const { name, value } = event.target;
 
+    if (name === "executiveId") {
+      setSiteVisitForm((current) => ({
+        ...current,
+        executiveId: value,
+        executive: getExecutiveNameFromId(value),
+      }));
+      return;
+    }
+
     if (name !== "leadId") {
       setSiteVisitForm((current) => ({ ...current, [name]: value }));
       return;
     }
 
     const nextLead = panel.leads.find((lead) => String(getLeadId(lead)) === String(value)) || null;
+    const savedExecutive = nextLead?.siteVisitExecutive || nextLead?.team || "";
+    const savedExecutiveId = getExecutiveIdFromValue(savedExecutive);
     setSiteVisitLead(nextLead);
     setSiteVisitForm((current) => {
       return {
@@ -796,7 +904,10 @@ const SalesUserPanel = () => {
         project: nextLead?.siteVisitProject || nextLead?.conductSiteVisit || nextLead?.interestedProjects || nextLead?.propertyType || current.project,
         visitDateTime: nextLead?.conductSiteDate ? toDateTimeLocalValue(nextLead.conductSiteDate) : current.visitDateTime,
         location: nextLead?.siteVisitLocation || nextLead?.meetingPoint || nextLead?.locationPreferences || current.location,
-        executive: nextLead?.siteVisitExecutive || nextLead?.team || current.executive,
+        executiveId: savedExecutiveId || current.executiveId,
+        executive: savedExecutiveId
+          ? getExecutiveNameFromId(savedExecutiveId)
+          : getSalesExecutiveName(savedExecutive) || current.executive,
         note: nextLead?.siteVisitNote || current.note,
         status: nextLead?.siteVisitStatus || nextLead?.visitStatus || nextLead?.conductSiteStatus || current.status,
       };
@@ -806,8 +917,11 @@ const SalesUserPanel = () => {
   const saveSiteVisit = async (event) => {
     event.preventDefault();
 
-    if (!siteVisitForm.leadId || !siteVisitForm.project || !siteVisitForm.visitDateTime) {
-      setSiteVisitMessage("Select lead, project, date and time before saving.");
+    const selectedExecutiveName =
+      getExecutiveNameFromId(siteVisitForm.executiveId) || getSalesExecutiveName(siteVisitForm.executive);
+
+    if (!siteVisitForm.leadId || !siteVisitForm.project || !siteVisitForm.visitDateTime || !selectedExecutiveName) {
+      setSiteVisitMessage("Select lead, project, date, time and sales executive before saving.");
       return;
     }
 
@@ -816,7 +930,7 @@ const SalesUserPanel = () => {
       conductSiteDate: new Date(siteVisitForm.visitDateTime).toISOString(),
       siteVisitProject: siteVisitForm.project,
       siteVisitLocation: siteVisitForm.location,
-      siteVisitExecutive: siteVisitForm.executive,
+      siteVisitExecutive: selectedExecutiveName,
       siteVisitNote: siteVisitForm.note,
       siteVisitStatus: siteVisitForm.status,
       visitStatus: siteVisitForm.status,
@@ -866,7 +980,7 @@ const SalesUserPanel = () => {
             project: siteVisitForm.project,
             status: siteVisitForm.status,
             meetingPoint: siteVisitForm.location,
-            salesExecutive: siteVisitForm.executive,
+            salesExecutive: selectedExecutiveName,
             note: siteVisitForm.note,
             initiatedBy: panel.user?.firstName || panel.user?.username || panel.user?.email || "",
             scheduledOn: new Date(siteVisitForm.visitDateTime).toISOString(),
@@ -1114,15 +1228,12 @@ const SalesUserPanel = () => {
   };
 
   const openLeadPreview = (lead, openBooking = false) => {
-    const leadId = getLeadId(lead);
     setOpenActionLeadId(null);
-    window.sessionStorage.setItem("selectedLeadPreview", JSON.stringify(lead));
-    navigate(
-      leadId
-        ? `/user-preview?leadId=${leadId}${openBooking ? "&openBooking=1" : ""}`
-        : `/user-preview${openBooking ? "?openBooking=1" : ""}`,
-      { state: { lead, openBooking } }
-    );
+    if (openBooking) {
+      openBookingPage(lead);
+      return;
+    }
+    openLeadDetails(lead);
   };
 
   const openLeadDetails = (lead) => {
@@ -1591,12 +1702,31 @@ const SalesUserPanel = () => {
 
                 <label>
                   <span>Assign sales executive</span>
-                  <input
-                    name="executive"
-                    value={siteVisitForm.executive}
+                  <select
+                    name="executiveId"
+                    value={siteVisitForm.executiveId || siteVisitForm.executive}
                     onChange={handleSiteVisitChange}
-                    placeholder="Sales executive name"
-                  />
+                    required
+                  >
+                    <option value="">
+                      {isLoadingUsers ? "Loading executives..." : "Select sales executive"}
+                    </option>
+                    {siteVisitForm.executive &&
+                      !siteVisitForm.executiveId &&
+                      !salesExecutiveOptions.some(
+                        (executive) => executive.name.toLowerCase() === siteVisitForm.executive.toLowerCase()
+                      ) && (
+                        <option value={siteVisitForm.executive}>
+                          {siteVisitForm.executive}
+                        </option>
+                      )}
+                    {salesExecutiveOptions.map((executive) => (
+                      <option key={executive.id} value={executive.id}>
+                        {executive.name}
+                        {executive.role ? ` (${executive.role})` : ""}
+                      </option>
+                    ))}
+                  </select>
                 </label>
 
                 <label>

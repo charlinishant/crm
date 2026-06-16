@@ -4,7 +4,24 @@ let io
 const connectedUser = new Map()
 
 function initSocket(server) {
-  io = require("socket.io")(server, {
+  let SocketIO
+  try {
+    SocketIO = require("socket.io")
+  } catch (error) {
+    if (error.code !== "MODULE_NOT_FOUND") {
+      throw error
+    }
+
+    console.warn("socket.io is not installed. Realtime notifications are disabled until backend dependencies are installed.")
+    io = {
+      on: () => {},
+      to: () => ({ emit: () => {} }),
+      emit: () => {},
+    }
+    return io
+  }
+
+  io = SocketIO(server, {
     cors: {
       origin: "",
     },

@@ -273,6 +273,31 @@ exports.getAccessPanel = async (req, res)=>{
 
         const leads = await getAssignedLeads()
 
+        let newLeadsToday = 0
+        try {
+            const now = new Date()
+            const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+            const endToday = new Date(startToday)
+            endToday.setDate(endToday.getDate() + 1)
+
+            const assignedToday = await prisma.leadActivity.findMany({
+                where:{
+                    type:"LEAD_ASSIGNED",
+                    newStatus:String(authUserId),
+                    createdAt:{gte:startToday, lt:endToday},
+                    lead:{
+                        teamId:authUserId,
+                        is_delete:false,
+                    },
+                },
+                distinct:["leadId"],
+                select:{leadId:true},
+            })
+            newLeadsToday = assignedToday.length
+        } catch (error) {
+            console.log("Unable to load new assigned lead stats", error)
+        }
+
         let bookings = []
         try {
             bookings = await prisma.booking.findMany({
@@ -399,6 +424,7 @@ exports.getAccessPanel = async (req, res)=>{
             user:displayUser,
             stats:{
                 assignedLeads:leads.length,
+                newLeadsToday,
                 followupsDue:followupStats.due,
                 followupsToday:followupStats.today,
                 missedFollowups:followupStats.missed,

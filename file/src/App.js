@@ -126,7 +126,6 @@ import AddFloorplan from "./pages/addfloorplan";
 import Units from "./pages/Units";
 import AddUnits from "./pages/addunits";
 import SalesUserPanel from "./user/SalesUserPanel";
-import UserPreview from "./user/userPreview";
 import UserDetails from "./user/userDetails";
 import TrashPage from "./pages/TrashPage";
 
@@ -192,6 +191,13 @@ const getHomePathForRole = (role) => {
 const RedirectWithSearch = ({ to }) => {
   const location = useLocation();
   return <Navigate to={`${to}${location.search || ""}`} replace state={location.state} />;
+};
+
+const RedirectUserPreviewToSales = () => {
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const targetPath = searchParams.get("openBooking") === "1" ? "/user/sales/bookings" : "/user/sales/details";
+  return <Navigate to={`${targetPath}${location.search || ""}`} replace state={location.state} />;
 };
 
 const ProtectedAppRoutes = () => {
@@ -275,7 +281,7 @@ const ProtectedAppRoutes = () => {
          <Route exact path='/' element={<SignInPage />} />
         <Route exact path='/add-lead' element={<ADDLEAD />} />
         <Route exact path='/preview' element={<Preview />} />
-        <Route exact path='/user-preview' element={<UserPreview />} />
+        <Route exact path='/user-preview' element={<RedirectUserPreviewToSales />} />
         <Route exact path='/details' element={<Details />} />
         <Route exact path='/dashboard' element={<HomePageEleven />} />
         <Route exact path='/user/sales' element={<SalesUserPanel />} />
@@ -424,7 +430,7 @@ function App() {
          <Route exact path='/' element={<SignInPage />} />
         <Route exact path='/add-lead' element={<ADDLEAD />} />
         <Route exact path='/preview' element={<Preview />} />
-        <Route exact path='/user-preview' element={<UserPreview />} />
+        <Route exact path='/user-preview' element={<RedirectUserPreviewToSales />} />
         <Route exact path='/details' element={<Details />} />
         <Route exact path='/dashboard' element={<HomePageEleven />} />
         <Route exact path='/user/sales' element={<SalesUserPanel />} />
