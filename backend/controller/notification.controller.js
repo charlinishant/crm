@@ -25,17 +25,28 @@ exports.getNotifications = async (req, res)=>{
 
 exports.readNotification = async (req, res) =>{
   try {
-    const notificationId = Number(req.params.id)
+    const notificationId = Number(req.params.id) || null
+    const userId = Number(req.query.userId) || null
 
-    const notification = await prisma.notification.findUnique({where:{id:notificationId}})
-    if(!notification) res.status(404).json({message:"Notification not found"})
-    
-    const updateNotification = await prisma.notification.update({where:{id:notification.id},
-       data:{
+    if(notificationId){
+      const notification = await prisma.notification.findUnique({where:{id:notificationId}})
+      if(!notification) res.status(404).json({message:"Notification not found"})
+      
+      const updateNotification = await prisma.notification.update({where:{id:notification.id},
+         data:{
+          isRead:true
+         }})
+      
+      res.status(200).json({message:"Notification read successfully", notification:updateNotification})
+    }
+    else{
+
+      const updateBulk = await prisma.notification.updateMany({where:{userId:userId}, data:{
         isRead:true
-       }})
-    
-    res.status(200).json({message:"Notification read successfully", notification:updateNotification})
+      }})
+
+      res.status(200).json({message:"All notification read successfully"})
+    }
 
   } catch (error) {
     console.log(error);
