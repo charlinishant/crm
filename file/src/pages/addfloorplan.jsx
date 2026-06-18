@@ -22,6 +22,8 @@ const initialFormData = {
   additionalRooms: [],
   applicableFloorFrom: "",
   applicableFloorTo: "",
+  unitPosition: "01",
+  skippedFloors: "",
   unitNumbers: "",
   totalUnitsOfPlan: "",
   facing: "",
@@ -78,8 +80,50 @@ const categoryOptions = ["Flat", "Penthouse", "Duplex", "Row House", "Villa", "S
 const configurationLabelOptions = ["Studio", "1 BHK", "2 BHK", "3 BHK", "4 BHK", "5 BHK", "2 BHK, 3 BHK Jodi", "Shop", "Office"];
 const statusOptions = ["Draft", "Active", "On Hold", "Sold Out", "Withdrawn"];
 const unitStreamOptions = ["Sale Unit", "PAAA Member Unit", "Rehab Unit", "Investor"];
-const fallbackUnitNumberOptions = ["A-101, A-201, A-301", "B-101, B-201, B-301", "C-101, C-201, C-301"];
 const rateBasisOptions = ["On Carpet", "On Saleable", "On Built-up"];
+
+const getTowerWingPrefix = (tower) => {
+  const configuredPrefix =
+    tower?.wingCode ||
+    tower?.wing ||
+    tower?.code ||
+    tower?.prefix ||
+    tower?.towerCode ||
+    "";
+
+  if (configuredPrefix) return String(configuredPrefix).trim().toUpperCase();
+
+  const name = String(tower?.name || "A").trim();
+  const withoutTowerWord = name.replace(/\btower\b/gi, "").trim();
+  const match = withoutTowerWord.match(/[A-Z0-9]+/i) || name.match(/[A-Z0-9]+/i);
+  return (match?.[0] || "A").toUpperCase();
+};
+
+const parseSkippedFloors = (value) =>
+  String(value || "")
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isInteger(item));
+
+const getGeneratedUnitNumbers = ({ from, to, unitPosition, skippedFloors, tower }) => {
+  if (from === null || to === null || from > to) return [];
+
+  const position = Number(unitPosition);
+  if (!Number.isInteger(position) || position < 0 || position > 99) return [];
+
+  const wingPrefix = getTowerWingPrefix(tower);
+  const skippedFloorSet = new Set(parseSkippedFloors(skippedFloors));
+  const positionLabel = String(position).padStart(2, "0");
+  const units = [];
+
+  for (let floor = from; floor <= to; floor += 1) {
+    if (skippedFloorSet.has(floor)) continue;
+    units.push(`${wingPrefix}-${floor}${positionLabel}`);
+  }
+
+  return units;
+};
+
 const AddFloorplan = () => {
   const navigate = useNavigate();
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
@@ -110,6 +154,11 @@ const AddFloorplan = () => {
     if (Array.isArray(data?.value)) return data.value;
     return [];
   };
+
+  const selectedTower = useMemo(
+    () => towers.find((tower) => String(tower.id) === String(formData.projectTower)),
+    [formData.projectTower, towers]
+  );
 
   useEffect(() => {
     const fetchOptions = async () => {
@@ -208,19 +257,40 @@ const AddFloorplan = () => {
     };
   }, [formData]);
 
-  const unitNumberOptions = useMemo(() => {
+  const generatedUnitNumbers = useMemo(() => {
     const from = toNumberOrNull(formData.applicableFloorFrom);
     const to = toNumberOrNull(formData.applicableFloorTo);
+    return getGeneratedUnitNumbers({
+      from,
+      to,
+      skippedFloors: formData.skippedFloors,
+      unitPosition: formData.unitPosition,
+      tower: selectedTower,
+    });
+  }, [
+    formData.applicableFloorFrom,
+    formData.applicableFloorTo,
+    formData.skippedFloors,
+    formData.unitPosition,
+    selectedTower,
+  ]);
 
-    if (from === null || to === null || from > to) return fallbackUnitNumberOptions;
+  useEffect(() => {
+    const generatedUnitNumbersText = generatedUnitNumbers.join(", ");
+    const totalUnitsOfPlan = generatedUnitNumbers.length ? String(generatedUnitNumbers.length) : "";
 
-    const floors = [];
-    for (let floor = from; floor <= to; floor += 1) {
-      floors.push(`A-${floor}01`);
-    }
+    setFormData((prev) => {
+      if (prev.unitNumbers === generatedUnitNumbersText && prev.totalUnitsOfPlan === totalUnitsOfPlan) {
+        return prev;
+      }
 
-    return floors.length ? [floors.join(", ")] : fallbackUnitNumberOptions;
-  }, [formData.applicableFloorFrom, formData.applicableFloorTo]);
+      return {
+        ...prev,
+        unitNumbers: generatedUnitNumbersText,
+        totalUnitsOfPlan,
+      };
+    });
+  }, [generatedUnitNumbers]);
 
   const handleChange = async (event) => {
     const { name, value, type, checked, selectedOptions, files } = event.target;
@@ -276,6 +346,7 @@ const AddFloorplan = () => {
     const loading = toNumberOrNull(formData.loading);
 
     if (from !== null && to !== null && from > to) return "Applicable Floor From must be less than or equal to Applicable Floor To";
+    if (formData.projectTower && !generatedUnitNumbers.length) return "Unit numbers could not be generated. Check floor range and unit position.";
     if (loading !== null && (loading < 0 || loading > 100)) return "Loading % must be between 0 and 100";
     if (carpet !== null && builtup !== null && saleable !== null && !(carpet < builtup && builtup < saleable)) {
       return "RERA Carpet must be less than Built-up Area and Built-up Area must be less than Saleable Area";
@@ -317,8 +388,8 @@ const AddFloorplan = () => {
       additionalRooms: formData.additionalRooms,
       applicableFloorFrom: toNumberOrNull(formData.applicableFloorFrom),
       applicableFloorTo: toNumberOrNull(formData.applicableFloorTo),
-      unitNumbers: formData.unitNumbers.trim(),
-      totalUnitsOfPlan: toNumberOrNull(formData.totalUnitsOfPlan),
+      unitNumbers: generatedUnitNumbers.join(", "),
+      totalUnitsOfPlan: generatedUnitNumbers.length,
       facing: formData.facing,
       cornerUnit: formData.cornerUnit,
       view: formData.view,
@@ -427,7 +498,15 @@ const AddFloorplan = () => {
                       <option key={project.id} value={project.id}>{project.name}</option>
                     ))}
                   </SelectField>
-                  <SelectField label="PROJECT TOWER *" name="projectTower" value={formData.projectTower} onChange={handleChange} required disabled={!formData.project || loadingTowers}>
+
+                  <SelectField
+                    label="PROJECT TOWER *"
+                    name="projectTower"
+                    value={formData.projectTower}
+                    onChange={handleChange}
+                    required
+                    disabled={!formData.project || loadingTowers}
+                  >
                     <option value="">
                       {!formData.project
                         ? "Select project first"
@@ -464,8 +543,10 @@ const AddFloorplan = () => {
                 <div className="lead-grid">
                   <InputField label="APPLICABLE FLOOR FROM *" name="applicableFloorFrom" type="number" value={formData.applicableFloorFrom} onChange={handleChange} required />
                   <InputField label="APPLICABLE FLOOR TO *" name="applicableFloorTo" type="number" value={formData.applicableFloorTo} onChange={handleChange} required />
-                  <SelectField label="UNIT NUMBERS" name="unitNumbers" value={formData.unitNumbers} onChange={handleChange} options={unitNumberOptions} />
-                  <InputField label="TOTAL UNITS OF THIS PLAN *" name="totalUnitsOfPlan" type="number" value={formData.totalUnitsOfPlan} onChange={handleChange} required />
+                  <InputField label="UNIT POSITION *" name="unitPosition" type="number" value={formData.unitPosition} onChange={handleChange} required />
+                  <InputField label="SKIPPED FLOORS" name="skippedFloors" value={formData.skippedFloors} onChange={handleChange} placeholder="13, 14" />
+                  <GeneratedUnitsField units={generatedUnitNumbers} />
+                  <InputField label="TOTAL UNITS OF THIS PLAN *" name="totalUnitsOfPlan" type="number" value={formData.totalUnitsOfPlan} onChange={handleChange} required disabled />
                 </div>
               </Section>
 
@@ -647,20 +728,19 @@ const SelectField = ({ label, name, value, onChange, children, options, required
   </FieldShell>
 );
 
-const MultiSelectField = ({ label, name, value, onChange, options }) => (
-  <FieldShell label={label}>
-    <select
-      name={name}
-      value={value}
-      onChange={onChange}
-      multiple
-      style={{ minHeight: 120 }}
-    >
-      {options.map((option) => (
-        <option key={option} value={option}>{option}</option>
-      ))}
-    </select>
-  </FieldShell>
+const GeneratedUnitsField = ({ units }) => (
+  <div className="lead-group lead-full">
+    <label>UNIT NUMBERS</label>
+    <div className="floorplan-generated-units">
+      {units.length ? (
+        units.map((unit) => (
+          <span key={unit}>{unit}</span>
+        ))
+      ) : (
+        <em>Select tower, floor range, and unit position</em>
+      )}
+    </div>
+  </div>
 );
 
 const CheckboxField = ({ label, name, checked, onChange, inline = false }) => (

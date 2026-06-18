@@ -2,6 +2,7 @@ const fs = require("fs")
 const XLSX = require("xlsx")
 const prisma = require("../lib/prisma")
 const {sendNotification} = require("../services/notification.service")
+const { emitReportsUpdate } = require("../socket/socket")
 
 const { create } = require("domain")
 const { getVisitPayloadFromLeadUpdate, upsertScheduleVisit } = require("../services/scheduleVisit.service")
@@ -91,7 +92,9 @@ const createLeadAssignmentActivity = async ({ leadId, assignedToId, assignedById
       leadId: Number(leadId),
       userId: assignedById ? Number(assignedById) : null,
       type: "LEAD_ASSIGNED",
-      message: previousTeamId ? `Lead reassigned to ${assignedName}` : `Lead assigned to ${assignedName}`,
+      message: previousTeamId
+        ? `Lead reassigned to ${assignedName}`
+        : `Lead assigned to ${assignedName}`,
       oldStatus: previousTeamId ? String(previousTeamId) : null,
       newStatus: String(assignedToId),
     },
@@ -401,16 +404,21 @@ exports.createLead = async (req, res) => {
         personalAddress: true,
       },
     })
-
-    if(teamId!==""){
-      await createLeadAssignmentActivity({
+    await createLeadAssignmentActivity({
+      leadId: lead.id,
+      assignedToId: teamId,
+      assignedById: req.authUser?.id,
+    })
+    await prisma.leadActivity.create({
+      data: {
         leadId: lead.id,
-        assignedToId: teamId,
-        assignedById: req.authUser?.id,
-      })
-      const notification = await sendNotification(userId=lead.teamId, title="New lead assinged to you")
-      
-    }
+        userId: req.authUser?.id ? Number(req.authUser.id) : null,
+        type: "LEAD_CREATED",
+        message: "Lead created",
+        newStatus: lead.status || "New",
+      },
+    })
+    emitReportsUpdate("lead:created")
     res.status(201).json(lead)
   } catch (err) {
     console.log(err)
@@ -687,6 +695,17 @@ exports.updateLead = async (req, res) => {
     const visitPayload = getVisitPayloadFromLeadUpdate(lead.id, source)
     if (visitPayload) {
       await upsertScheduleVisit(visitPayload)
+    }
+
+    if (
+      source.teamId !== undefined ||
+      source.status !== undefined ||
+      source.siteVisitStatus !== undefined ||
+      source.visitStatus !== undefined ||
+      source.conductSiteStatus !== undefined ||
+      visitPayload
+    ) {
+      emitReportsUpdate("lead:updated")
     }
 
     res.status(200).json(withLeadStageScore(result))

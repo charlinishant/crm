@@ -290,6 +290,25 @@ const formatIndianCompactMoney = (value) => {
   return `Rs. ${amount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
 };
 
+const formatDuration = (seconds = 0) => {
+  const totalSeconds = Number(seconds) || 0;
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
+
+  if (hours) return `${hours}h ${minutes}m ${remainingSeconds}s`;
+  if (minutes) return `${minutes}m ${remainingSeconds}s`;
+  return `${remainingSeconds}s`;
+};
+
+const secondsSince = (timestamp, now) => {
+  if (!timestamp) return 0;
+  return Math.max(0, Math.floor((now - timestamp) / 1000));
+};
+
+const withAttendanceLoadedAt = (attendance) =>
+  attendance ? { ...attendance, loadedAt: Date.now() } : null;
+
 const getTimeGreeting = () => {
   const hour = new Date().getHours();
 
@@ -337,8 +356,10 @@ const SalesUserPanel = () => {
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [users, setUsers] = useState([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [isExecutiveDropdownOpen, setIsExecutiveDropdownOpen] = useState(false);
   const [attendance, setAttendance] = useState(null);
   const [attendanceBusy, setAttendanceBusy] = useState(false);
+  const [attendanceNow, setAttendanceNow] = useState(Date.now());
   // Dashboard detail pages reuse this sidebar state so focused workspaces can auto-collapse it.
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(
     initialScreen === "whatsapp" || initialScreen === "details"
@@ -417,8 +438,9 @@ const SalesUserPanel = () => {
         throw new Error(result?.message || "Unable to update attendance");
       }
 
-      setAttendance(result?.data || null);
-      return result?.data || null;
+      const attendanceData = withAttendanceLoadedAt(result?.data);
+      setAttendance(attendanceData);
+      return attendanceData;
     } catch (err) {
       alert(err.message || "Unable to update attendance");
       return null;
@@ -443,7 +465,7 @@ const SalesUserPanel = () => {
         const currentResult = await currentResponse.json().catch(() => ({}));
 
         if (currentResult?.data) {
-          if (isMounted) setAttendance(currentResult.data);
+          if (isMounted) setAttendance(withAttendanceLoadedAt(currentResult.data));
           return;
         }
 
@@ -454,7 +476,7 @@ const SalesUserPanel = () => {
           },
         });
         const startResult = await startResponse.json().catch(() => ({}));
-        if (isMounted) setAttendance(startResult?.data || null);
+        if (isMounted) setAttendance(withAttendanceLoadedAt(startResult?.data));
       } catch (error) {
         console.error("Unable to load attendance", error);
       }
@@ -471,6 +493,14 @@ const SalesUserPanel = () => {
     const intervalId = window.setInterval(() => {
       setTimeGreeting(getTimeGreeting());
     }, 60000);
+
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setAttendanceNow(Date.now());
+    }, 1000);
 
     return () => window.clearInterval(intervalId);
   }, []);
@@ -534,8 +564,13 @@ const SalesUserPanel = () => {
         if (!response.ok) throw new Error("Unable to load users");
 
         const result = await response.json();
-        const userList = Array.isArray(result) ? result : result?.data || result?.users || [];
-        if (isMounted) setUsers(Array.isArray(userList) ? userList : []);
+        const userList = Array.isArray(result)
+          ? result
+          : result?.data || result?.users || [];
+
+        if (isMounted) {
+          setUsers(Array.isArray(userList) ? userList : []);
+        }
       } catch (error) {
         console.error("Unable to load sales executives:", error);
         if (isMounted) setUsers([]);
@@ -625,11 +660,13 @@ const SalesUserPanel = () => {
   const salesExecutiveOptions = useMemo(() => {
     const salesUsers = users.filter((user) => {
       if (user?.isActive === false) return false;
-      return [user?.role, user?.department, user?.designation]
+
+      const roleText = [user?.role, user?.department, user?.designation]
         .filter(Boolean)
         .join(" ")
-        .toLowerCase()
-        .includes("sales");
+        .toLowerCase();
+
+      return roleText.includes("sales");
     });
     const candidates = salesUsers.length ? salesUsers : [panel.user].filter(Boolean);
     const seen = new Set();
@@ -648,12 +685,6 @@ const SalesUserPanel = () => {
       .sort((first, second) => first.name.localeCompare(second.name));
   }, [panel.user, users]);
 
-  const getExecutiveNameFromId = useCallback(
-    (executiveId) =>
-      salesExecutiveOptions.find((executive) => String(executive.id) === String(executiveId))?.name || "",
-    [salesExecutiveOptions]
-  );
-
   const getExecutiveIdFromValue = useCallback(
     (value) => {
       if (!value) return "";
@@ -668,10 +699,35 @@ const SalesUserPanel = () => {
           String(executive.id) === String(executiveName) ||
           executive.name.toLowerCase() === executiveName.toLowerCase()
       );
+
       return matchingExecutive?.id || "";
     },
     [salesExecutiveOptions]
   );
+
+  const getExecutiveNameFromId = useCallback(
+    (executiveId) =>
+      salesExecutiveOptions.find((executive) => String(executive.id) === String(executiveId))?.name || "",
+    [salesExecutiveOptions]
+  );
+
+  useEffect(() => {
+    if (!siteVisitForm.executive || siteVisitForm.executiveId) return;
+
+    const executiveId = getExecutiveIdFromValue(siteVisitForm.executive);
+    if (!executiveId) return;
+
+    setSiteVisitForm((current) => ({
+      ...current,
+      executiveId,
+      executive: getExecutiveNameFromId(executiveId) || current.executive,
+    }));
+  }, [
+    getExecutiveIdFromValue,
+    getExecutiveNameFromId,
+    siteVisitForm.executive,
+    siteVisitForm.executiveId,
+  ]);
 
   const filteredLeads = useMemo(() => {
     let leads = panel.leads;
@@ -716,7 +772,7 @@ const SalesUserPanel = () => {
       },
       {
         key: "qualified",
-        label: `Qualified · ${getPercent(qualified, totalLeads)}`,
+        label: `Qualified - ${getPercent(qualified, totalLeads)}`,
         value: qualified,
         detail: "Qualified",
         color: "#b5d4f4",
@@ -725,7 +781,7 @@ const SalesUserPanel = () => {
       },
       {
         key: "sourcing",
-        label: `Sourced · ${getPercent(sourced, qualified || totalLeads)}`,
+        label: `Sourced - ${getPercent(sourced, qualified || totalLeads)}`,
         value: sourced,
         detail: "Sourced",
         color: "#85b7eb",
@@ -734,7 +790,7 @@ const SalesUserPanel = () => {
       },
       {
         key: "visited",
-        label: `Visited · ${getPercent(visited, sourced || qualified || totalLeads)}`,
+        label: `Visited - ${getPercent(visited, sourced || qualified || totalLeads)}`,
         value: visited,
         detail: "Visited",
         color: "#378add",
@@ -743,7 +799,7 @@ const SalesUserPanel = () => {
       },
       {
         key: "booked",
-        label: `Booked · ${getPercent(booked, visited || sourced || qualified || totalLeads)}`,
+        label: `Booked - ${getPercent(booked, visited || sourced || qualified || totalLeads)}`,
         value: booked,
         detail: "Booked",
         color: "#185fa5",
@@ -794,7 +850,7 @@ const SalesUserPanel = () => {
         key: "site-visits",
         label: "Site visits today",
         value: todaysVisits.length || panel.stats.siteVisits || 0,
-        detail: `${completedVisitCount} done · ${upcomingVisitCount} upcoming`,
+        detail: `${completedVisitCount} done - ${upcomingVisitCount} upcoming`,
         onClick: () => {
           openScheduleVisit();
           navigate("/user/sales/site-visit");
@@ -859,6 +915,7 @@ const SalesUserPanel = () => {
     const savedExecutiveId = getExecutiveIdFromValue(savedExecutive);
 
     setOpenActionLeadId(null);
+    setIsExecutiveDropdownOpen(false);
     setSiteVisitLead(nextLead);
     setSiteVisitMessage("");
     setSiteVisitForm({
@@ -896,6 +953,7 @@ const SalesUserPanel = () => {
     const nextLead = panel.leads.find((lead) => String(getLeadId(lead)) === String(value)) || null;
     const savedExecutive = nextLead?.siteVisitExecutive || nextLead?.team || "";
     const savedExecutiveId = getExecutiveIdFromValue(savedExecutive);
+    setIsExecutiveDropdownOpen(false);
     setSiteVisitLead(nextLead);
     setSiteVisitForm((current) => {
       return {
@@ -1230,7 +1288,11 @@ const SalesUserPanel = () => {
   const openLeadPreview = (lead, openBooking = false) => {
     setOpenActionLeadId(null);
     if (openBooking) {
-      openBookingPage(lead);
+      const leadId = getLeadId(lead);
+      window.sessionStorage.setItem("selectedLeadPreview", JSON.stringify(lead));
+      navigate(`/preview${leadId ? `?leadId=${leadId}&openBooking=1` : "?openBooking=1"}`, {
+        state: { lead, openBooking: true },
+      });
       return;
     }
     openLeadDetails(lead);
@@ -1252,6 +1314,12 @@ const SalesUserPanel = () => {
 
   const attendanceStatus = attendance?.status || "Available";
   const isOnBreak = attendanceStatus === "On Break";
+  const liveTodayLoginSeconds =
+    (Number(attendance?.todayLoginSeconds) || 0) +
+    (attendance && !attendance.logoutAt ? secondsSince(attendance.loadedAt, attendanceNow) : 0);
+  const liveTodayBreakSeconds =
+    (Number(attendance?.todayBreakSeconds) || 0) +
+    (attendance?.breakStartedAt && !attendance?.breakEndedAt ? secondsSince(attendance.loadedAt, attendanceNow) : 0);
 
   const toggleBreak = () => {
     updateAttendance(isOnBreak ? "break/end" : "break/start");
@@ -1377,7 +1445,7 @@ const SalesUserPanel = () => {
             <div className="sales-page-head">
               <div>
                 <h1>{timeGreeting}, {panel.user?.firstName || userName}</h1>
-                <p>{formatDashboardDate()} · {panel.leads.length} assigned leads</p>
+                <p>{formatDashboardDate()} - {panel.leads.length} assigned leads</p>
               </div>
               <div className="sales-actions">
                 {/* <button type="button" className="sales-range-btn">
@@ -1503,10 +1571,11 @@ const SalesUserPanel = () => {
               <div className="sales-call-head">
                 <div>
                   <h2>Your queue</h2>
-                  <p>{callQueue.length} leads · next SLA breach in 3 min</p>
+                  <p>{callQueue.length} leads - next SLA breach in 3 min</p>
                 </div>
                 <div className="sales-call-presence">
                   <span>{attendanceStatus}</span>
+                  <small>Login {formatDuration(liveTodayLoginSeconds)} | Break {formatDuration(liveTodayBreakSeconds)}</small>
                   <button type="button" onClick={toggleBreak} disabled={attendanceBusy}>
                     {isOnBreak ? "Return" : "Take break"}
                   </button>
@@ -1515,7 +1584,7 @@ const SalesUserPanel = () => {
 
               <div className="sales-call-note">
                 <Users size={16} />
-                <span>Telecaller mode · You see only leads assigned to you. Dispose each one before moving to the next.</span>
+                <span>Telecaller mode - You see only leads assigned to you. Dispose each one before moving to the next.</span>
               </div>
 
               {currentCallLead ? (
@@ -1525,12 +1594,12 @@ const SalesUserPanel = () => {
                       <span className="sales-avatar call-avatar">{initials(getLeadName(currentCallLead))}</span>
                       <span>
                         <strong>{getLeadName(currentCallLead)}</strong>
-                        <small>{getLeadPhone(currentCallLead)} · English, Hindi</small>
+                        <small>{getLeadPhone(currentCallLead)} - English, Hindi</small>
                       </span>
                     </div>
                     <div className="sales-call-badges">
                       <span>Score {currentCallLead.score || 78}</span>
-                      <strong>Hot · 9 min left</strong>
+                      <strong>Hot - 9 min left</strong>
                     </div>
                   </div>
 
@@ -1597,8 +1666,8 @@ const SalesUserPanel = () => {
                     onClick={() => setFocusedCallLeadId(getLeadId(lead))}
                   >
                     <span>
-                      <strong>{getLeadName(lead)} · Score {lead.score || 65}</strong>
-                      <small>{lead.channelPartner || lead.tags || "Lead"} · {callDispositions[getLeadId(lead)]?.label || "new"}</small>
+                      <strong>{getLeadName(lead)} - Score {lead.score || 65}</strong>
+                      <small>{lead.channelPartner || lead.tags || "Lead"} - {callDispositions[getLeadId(lead)]?.label || "new"}</small>
                     </span>
                     <time>Today {lead.conductSiteDate ? formatTaskDate(lead.conductSiteDate) : "9:15 AM"}</time>
                   </button>
@@ -1622,7 +1691,7 @@ const SalesUserPanel = () => {
                     <div className="sales-call-next-row static" key={getLeadId(lead)}>
                       <span>
                         <strong>{getLeadName(lead)}</strong>
-                        <small>{callDispositions[getLeadId(lead)]?.label || "Connected"} · {getLeadPhone(lead)}</small>
+                        <small>{callDispositions[getLeadId(lead)]?.label || "Connected"} - {getLeadPhone(lead)}</small>
                       </span>
                       <time>{getCreatedLabel(lead)}</time>
                     </div>
@@ -1702,31 +1771,79 @@ const SalesUserPanel = () => {
 
                 <label>
                   <span>Assign sales executive</span>
-                  <select
-                    name="executiveId"
-                    value={siteVisitForm.executiveId || siteVisitForm.executive}
-                    onChange={handleSiteVisitChange}
-                    required
+                  <div
+                    className="sales-executive-dropdown"
+                    onBlur={(event) => {
+                      if (!event.currentTarget.contains(event.relatedTarget)) {
+                        setIsExecutiveDropdownOpen(false);
+                      }
+                    }}
                   >
-                    <option value="">
-                      {isLoadingUsers ? "Loading executives..." : "Select sales executive"}
-                    </option>
-                    {siteVisitForm.executive &&
-                      !siteVisitForm.executiveId &&
-                      !salesExecutiveOptions.some(
-                        (executive) => executive.name.toLowerCase() === siteVisitForm.executive.toLowerCase()
-                      ) && (
-                        <option value={siteVisitForm.executive}>
-                          {siteVisitForm.executive}
-                        </option>
-                      )}
-                    {salesExecutiveOptions.map((executive) => (
-                      <option key={executive.id} value={executive.id}>
-                        {executive.name}
-                        {executive.role ? ` (${executive.role})` : ""}
-                      </option>
-                    ))}
-                  </select>
+                    <button
+                      className="sales-executive-trigger"
+                      type="button"
+                      aria-haspopup="listbox"
+                      aria-expanded={isExecutiveDropdownOpen}
+                      onClick={() => setIsExecutiveDropdownOpen((isOpen) => !isOpen)}
+                    >
+                      <span>
+                        {getExecutiveNameFromId(siteVisitForm.executiveId) ||
+                          getSalesExecutiveName(siteVisitForm.executive) ||
+                          (isLoadingUsers ? "Loading executives..." : "Select sales executive")}
+                      </span>
+                      <ChevronDown size={16} />
+                    </button>
+
+                    {isExecutiveDropdownOpen && (
+                      <div className="sales-executive-menu" role="listbox">
+                        {siteVisitForm.executive &&
+                          !siteVisitForm.executiveId &&
+                          !salesExecutiveOptions.some(
+                            (executive) =>
+                              executive.name.toLowerCase() === siteVisitForm.executive.toLowerCase()
+                          ) && (
+                            <button
+                              type="button"
+                              role="option"
+                              aria-selected
+                              onClick={() => {
+                                setSiteVisitForm((current) => ({
+                                  ...current,
+                                  executiveId: "",
+                                  executive: siteVisitForm.executive,
+                                }));
+                                setIsExecutiveDropdownOpen(false);
+                              }}
+                            >
+                              <strong>{siteVisitForm.executive}</strong>
+                            </button>
+                          )}
+                        {salesExecutiveOptions.map((executive) => (
+                          <button
+                            key={executive.id}
+                            type="button"
+                            role="option"
+                            aria-selected={String(siteVisitForm.executiveId) === String(executive.id)}
+                            className={String(siteVisitForm.executiveId) === String(executive.id) ? "selected" : ""}
+                            onClick={() => {
+                              setSiteVisitForm((current) => ({
+                                ...current,
+                                executiveId: executive.id,
+                                executive: executive.name,
+                              }));
+                              setIsExecutiveDropdownOpen(false);
+                            }}
+                          >
+                            <strong>{executive.name}</strong>
+                            {executive.role && <small>{executive.role}</small>}
+                          </button>
+                        ))}
+                        {!isLoadingUsers && salesExecutiveOptions.length === 0 && (
+                          <div className="sales-executive-empty">No sales executives found</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </label>
 
                 <label>
