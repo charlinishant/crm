@@ -1,5 +1,3 @@
-require("dotenv").config()
-
 const {PrismaMariaDb} = require("@prisma/adapter-mariadb")
 const {PrismaClient} = require("@prisma/client")
 

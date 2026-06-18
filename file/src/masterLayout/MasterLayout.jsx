@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Icon } from "@iconify/react/dist/iconify.js";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import ThemeToggleButton from "../helper/ThemeToggleButton";
@@ -47,6 +47,8 @@ const MasterLayout = ({ children }) => {
   let [sidebarActive, seSidebarActive] = useState(false);
   let [mobileMenu, setMobileMenu] = useState(false);
   const [activityNotifications, setActivityNotifications] = useState(getActivityNotifications);
+  const [adminNotificationToast, setAdminNotificationToast] = useState(null);
+  const notificationLoadRef = useRef({ initialized: false, ids: new Set(getActivityNotifications().map((item) => item.id)) });
   const location = useLocation(); // Hook to get the current route
   const navigate = useNavigate();
   const savedUser = JSON.parse(localStorage.getItem("authUser") || "null");
@@ -83,21 +85,39 @@ const MasterLayout = ({ children }) => {
   useEffect(() => {
     const refreshNotifications = () => {
       fetchActivityNotifications()
-        .then(setActivityNotifications)
+        .then((notifications) => {
+          setActivityNotifications(notifications);
+
+          const currentIds = new Set(notifications.map((item) => item.id));
+          const newNotification = notifications.find((item) => !notificationLoadRef.current.ids.has(item.id));
+          const isAdmin = String(savedUser?.role || "").toUpperCase() === "ADMIN";
+          const isSiteVisitNotification = String(newNotification?.title || "")
+            .toLowerCase()
+            .includes("site visit");
+
+          if (notificationLoadRef.current.initialized && isAdmin && isSiteVisitNotification) {
+            setAdminNotificationToast(newNotification);
+            window.setTimeout(() => setAdminNotificationToast(null), 6000);
+          }
+
+          notificationLoadRef.current = { initialized: true, ids: currentIds };
+        })
         .catch(() => setActivityNotifications(getActivityNotifications()));
     };
 
     refreshNotifications();
+    const refreshId = window.setInterval(refreshNotifications, 15000);
     window.addEventListener("storage", refreshNotifications);
     window.addEventListener("focus", refreshNotifications);
     window.addEventListener("crmActivityNotificationsChanged", refreshNotifications);
 
     return () => {
+      window.clearInterval(refreshId);
       window.removeEventListener("storage", refreshNotifications);
       window.removeEventListener("focus", refreshNotifications);
       window.removeEventListener("crmActivityNotificationsChanged", refreshNotifications);
     };
-  }, []);
+  }, [savedUser?.role]);
 
   useEffect(() => {
     const handleDropdownClick = (event) => {
@@ -178,6 +198,22 @@ const MasterLayout = ({ children }) => {
 
   return (
     <section className={mobileMenu ? "overlay active" : "overlay "}>
+      {adminNotificationToast && (
+        <div className='admin-notification-toast' role='status' aria-live='polite'>
+          <span className='admin-notification-toast__icon'>
+            <Icon icon='iconoir:bell-notification' />
+          </span>
+          <div>
+            <strong>{adminNotificationToast.title}</strong>
+            <p>
+              {adminNotificationToast.leadName}: {adminNotificationToast.description}
+            </p>
+          </div>
+          <button type='button' onClick={() => setAdminNotificationToast(null)} aria-label='Dismiss notification'>
+            <Icon icon='radix-icons:cross-2' />
+          </button>
+        </div>
+      )}
       {/* sidebar */}
       <aside
         className={

@@ -7,6 +7,7 @@ const {
   rescheduleFollowUp,
   updateLeadStatus,
 } = require("../services/followup.service")
+const { emitReportsUpdate } = require("../socket/socket")
 
 const sendError = (res, error) => {
   console.error(error)
@@ -27,6 +28,7 @@ exports.getSalesFollowUps = async (req, res) => {
 exports.createSalesFollowUp = async (req, res) => {
   try {
     const data = await createFollowUp(req.authUser, req.body)
+    emitReportsUpdate("followup:created")
     res.status(201).json({ data, message: "Follow-up created" })
   } catch (error) {
     sendError(res, error)
@@ -36,6 +38,7 @@ exports.createSalesFollowUp = async (req, res) => {
 exports.markSalesFollowUpDone = async (req, res) => {
   try {
     const data = await markFollowUpDone(req.authUser, req.params.id, req.body)
+    emitReportsUpdate("followup:updated")
     res.status(200).json({ data, message: "Follow-up marked Done" })
   } catch (error) {
     sendError(res, error)
@@ -45,6 +48,7 @@ exports.markSalesFollowUpDone = async (req, res) => {
 exports.rescheduleSalesFollowUp = async (req, res) => {
   try {
     const data = await rescheduleFollowUp(req.authUser, req.params.id, req.body)
+    emitReportsUpdate("followup:updated")
     res.status(200).json({ data, message: "Follow-up rescheduled" })
   } catch (error) {
     sendError(res, error)
@@ -54,6 +58,7 @@ exports.rescheduleSalesFollowUp = async (req, res) => {
 exports.cancelSalesFollowUp = async (req, res) => {
   try {
     const data = await cancelFollowUp(req.authUser, req.params.id, req.body)
+    emitReportsUpdate("followup:updated")
     res.status(200).json({ data, message: "Follow-up cancelled" })
   } catch (error) {
     sendError(res, error)
@@ -63,6 +68,7 @@ exports.cancelSalesFollowUp = async (req, res) => {
 exports.updateSalesLeadStatus = async (req, res) => {
   try {
     const data = await updateLeadStatus(req.authUser, req.params.leadId, req.body)
+    emitReportsUpdate("lead:status-updated")
     res.status(200).json({ data, message: "Lead status updated" })
   } catch (error) {
     sendError(res, error)

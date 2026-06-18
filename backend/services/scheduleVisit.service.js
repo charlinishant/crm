@@ -1,4 +1,6 @@
 const prisma = require("../lib/prisma")
+const { handleSiteVisitSaved } = require("./siteVisitNotification.service")
+const { emitReportsUpdate } = require("../socket/socket")
 
 const visitStatusOptions = new Set([
   "Scheduled",
@@ -78,7 +80,7 @@ const getVisitPayloadFromLeadUpdate = (leadId, source = {}) => {
 const upsertScheduleVisit = async (payload) => {
   if (!payload?.leadId) return null
 
-  return prisma.scheduleVisit.upsert({
+  const visit = await prisma.scheduleVisit.upsert({
     where: { leadId: Number(payload.leadId) },
     create: payload,
     update: {
@@ -100,6 +102,13 @@ const upsertScheduleVisit = async (payload) => {
       },
     },
   })
+
+  handleSiteVisitSaved(visit).catch((error) => {
+    console.error("Unable to publish site visit notification:", error)
+  })
+  emitReportsUpdate("site-visit:saved")
+
+  return visit
 }
 
 module.exports = {

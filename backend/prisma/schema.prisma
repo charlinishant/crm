@@ -569,6 +569,12 @@ model EmailLog{
   createdAt DateTime @default(now())
   from String
   to String
+  subject String?
+  leadId Int?
+  leadName String?
+  sentByUserId Int?
+  sentByName String?
+  sentByEmail String?
   success Boolean @default(false)
   error String?
 }

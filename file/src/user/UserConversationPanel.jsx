@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const DEFAULT_SENDER_EMAIL = "morenishant7777@gmail.com";
 
 const conversationTabs = [
   { key: "calls", label: "Calls", icon: Phone },
@@ -46,6 +47,8 @@ const maskPhone = (phone) => {
 };
 
 const getLeadEmail = (lead) => {
+  if (lead?.email) return lead.email;
+  if (lead?.primaryEmail) return lead.primaryEmail;
   if (!lead?.emails) return "-";
   if (Array.isArray(lead.emails)) {
     const first = lead.emails[0];
@@ -90,7 +93,7 @@ const UserConversationPanel = ({
   const [activeTab, setActiveTab] = useState(requestedTab === "emails" ? "emails" : "calls");
   const [emailLead, setEmailLead] = useState(null);
   const [emailForm, setEmailForm] = useState({
-    from: user?.email || "",
+    from: DEFAULT_SENDER_EMAIL,
     to: "",
     subject: "",
     body: "",
@@ -155,10 +158,11 @@ const UserConversationPanel = ({
         const result = await response.json().catch(() => ({}));
         const senders = Array.isArray(result?.data) ? result.data : [];
         if (isMounted) {
-          setSenderEmailOptions(senders);
+          const senderList = senders.length ? senders : [DEFAULT_SENDER_EMAIL];
+          setSenderEmailOptions(senderList);
           setEmailForm((current) => ({
             ...current,
-            from: current.from && senders.includes(current.from) ? current.from : senders[0] || "",
+            from: senderList.includes(current.from) ? current.from : senderList[0],
           }));
         }
       } catch (error) {
@@ -220,7 +224,7 @@ const UserConversationPanel = ({
     setEmailLead(record);
     setEmailStatus("");
     setEmailForm({
-      from: senderEmailOptions[0] || "",
+      from: senderEmailOptions[0] || DEFAULT_SENDER_EMAIL,
       to: record.email === "-" ? "" : record.email,
       subject: `Regarding ${record.project || "your enquiry"}`,
       body: `Hi ${firstName},\n\nThank you for your interest in ${record.project || "our project"}.\n\nPlease let me know a suitable time to connect.\n\nRegards,\n${record.owner}`,
@@ -248,9 +252,13 @@ const UserConversationPanel = ({
 
     setSendingEmail(true);
     try {
+      const token = localStorage.getItem("authToken");
       const response = await fetch(`${API_URL}/api/email/send`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           leadId: emailLead.rawId,
           from: emailForm.from.trim(),
@@ -262,7 +270,6 @@ const UserConversationPanel = ({
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.message || "Unable to send email");
 
-      const token = localStorage.getItem("authToken");
       if (token && emailLead.rawId) {
         fetch(`${API_URL}/lead-activities`, {
           method: "POST",
@@ -409,6 +416,20 @@ const UserConversationPanel = ({
           opacity: 0.65;
         }
 
+        .sales-email-spinner {
+          animation: sales-email-spin 0.8s linear infinite;
+        }
+
+        @keyframes sales-email-spin {
+          from {
+            transform: rotate(0deg);
+          }
+
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
         .sales-email-status {
           align-items: center;
           color: #475569;
@@ -454,7 +475,7 @@ const UserConversationPanel = ({
         <div className="sales-email-composer">
           <div className="sales-email-composer-head">
             <div>
-              <h3>Email {emailLead.name}</h3>
+              <h6>Email {emailLead.name}</h6>
               <p>{emailLead.id} | {emailLead.project}</p>
             </div>
             <button
@@ -528,7 +549,7 @@ const UserConversationPanel = ({
               type="button"
               onClick={sendLeadEmail}
             >
-              {sendingEmail ? <Loader2 size={16} /> : <Send size={16} />}
+              {sendingEmail ? <Loader2 className="sales-email-spinner" size={16} /> : <Send size={16} />}
               {sendingEmail ? "Sending..." : "Send Email"}
             </button>
           </div>

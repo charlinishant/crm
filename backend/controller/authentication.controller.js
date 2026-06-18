@@ -30,29 +30,24 @@ const normalizeDepartment = (department, role) => {
 const startOrResumeAttendance = async (userId) => {
     const now = new Date()
     const attendance = await prisma.userAttendance.findFirst({
-        where:{userId},
+        where:{userId, logoutAt: null},
         orderBy:{loginAt:"desc"}
     })
 
-    if(!attendance){
-        return prisma.userAttendance.create({
+    if(attendance){
+        return prisma.userAttendance.update({
+            where:{id:attendance.id},
             data:{
-                userId,
-                status:"Available",
-                loginAt:now
+                status: attendance.status || "Available"
             }
         })
     }
 
-    return prisma.userAttendance.update({
-        where:{id:attendance.id},
+    return prisma.userAttendance.create({
         data:{
+            userId,
             status:"Available",
-            loginAt:now,
-            logoutAt:null,
-            breakStartedAt:null,
-            breakEndedAt:null,
-            totalBreakSeconds:0
+            loginAt:now
         }
     })
 }

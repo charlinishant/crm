@@ -186,6 +186,37 @@ exports.updateUnit = async (req, res) => {
   }
 }
 
+exports.updateUnitItem = async (req, res) => {
+  try {
+    const id = req.params.id
+    if (!id) return res.status(400).json({ message: "ID is required" })
+
+    const payload = req.body || {}
+    const data = {
+      name: payload.name,
+      floor: payload.floor,
+      unitIndex: payload.unitIndex,
+      baseRate: payload.baseRate,
+      basePrice: payload.basePrice,
+      propertyPurpose: payload.propertyPurpose,
+    }
+
+    Object.keys(data).forEach((key) => {
+      if (data[key] === undefined) delete data[key]
+    })
+
+    const result = await prisma.unitModel.update({
+      where: { id: Number(id) },
+      data,
+    })
+
+    res.status(200).json(result)
+  } catch (error) {
+    console.log(error)
+    res.status(500).json({ message: "Something went wrong" })
+  }
+}
+
 exports.deleteUnit = async (req, res) => {
   try {
     const id = req.params.id
@@ -202,6 +233,20 @@ exports.deleteUnit = async (req, res) => {
   } catch (error) {
     console.log(error)
     res.status(500).json("Something went wrong")
+  }
+}
+
+exports.deleteUnitItem = async (req, res) => {
+  try {
+    const id = req.params.id
+    if (!id) return res.status(400).json({ message: "ID is required" })
+
+    await prisma.unitModel.delete({ where: { id: Number(id) } })
+
+    res.status(200).json({ message: "Unit deleted successfully" })
+  } catch (error) {
+    console.log(error)
+    res.status(500).json({ message: "Something went wrong" })
   }
 }
 

@@ -128,6 +128,7 @@ import AddUnits from "./pages/addunits";
 import SalesUserPanel from "./user/SalesUserPanel";
 import UserDetails from "./user/userDetails";
 import TrashPage from "./pages/TrashPage";
+import AdminReports from "./pages/admin/AdminReports";
 
 const publicPaths = new Set(["/", "/sign-in", "/sign-up", "/forgot-password"]);
 const accessDeniedPath = "/access-denied";
@@ -136,6 +137,7 @@ const salesHomePath = "/user/sales";
 const adminRoles = new Set(["ADMIN", "SUPER_ADMIN"]);
 const salesRoles = new Set(["SALES", "PRE_SALES", "POST_SALES"]);
 const salesAllowedExactPaths = new Set([
+  "/preview",
   "/user-preview",
   "/user-details",
   "/user-add-lead",
@@ -297,7 +299,8 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/user-add-lead' element={<RedirectWithSearch to="/user/sales/add-lead" />} />
         <Route exact path='/import-leads' element={<HomePageTwo />} />
          <Route exact path='/svp-dashboard' element={<HomePageThree />} />
-         <Route exact path='/reports' element={<HomePageFour />} />
+        <Route exact path='/reports' element={<HomePageFour />} />
+        <Route exact path='/admin/reports' element={<AdminReports />} />
         <Route exact path='/index-5' element={<HomePageFive />} />
         <Route exact path='/index-6' element={<HomePageSix />} />
         <Route exact path='/index-7' element={<HomePageSeven />} />

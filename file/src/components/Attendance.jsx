@@ -22,10 +22,25 @@ const formatDuration = (seconds = 0) => {
   const totalSeconds = Number(seconds) || 0;
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
 
-  if (hours) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
+  if (hours) return `${hours}h ${minutes}m ${remainingSeconds}s`;
+  if (minutes) return `${minutes}m ${remainingSeconds}s`;
+  return `${remainingSeconds}s`;
 };
+
+const secondsSince = (timestamp, now) => {
+  if (!timestamp) return 0;
+  return Math.max(0, Math.floor((now - timestamp) / 1000));
+};
+
+const getLiveTodayLoginSeconds = (row, now) =>
+  (Number(row.todayLoginSeconds) || 0) +
+  (row.loginAt && !row.logoutAt && row.status !== "Logged Out" ? secondsSince(row.loadedAt, now) : 0);
+
+const getLiveTodayBreakSeconds = (row, now) =>
+  (Number(row.todayBreakSeconds) || 0) +
+  (row.breakStartedAt && !row.breakEndedAt ? secondsSince(row.loadedAt, now) : 0);
 
 const statusClass = (status) =>
   String(status || "Available")
@@ -36,8 +51,10 @@ const Attendance = () => {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [totalItems, setTotalItems] = useState(0);
   const [statusFilter, setStatusFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);
+  const [now, setNow] = useState(Date.now());
   const recordsPerPage = 10;
 
   useEffect(() => {
@@ -65,12 +82,15 @@ const Attendance = () => {
         }
 
         if (isMounted) {
-          setRows(Array.isArray(result?.data) ? result.data : []);
+          const loadedAt = Date.now();
+          setRows(Array.isArray(result?.data) ? result.data.map((row) => ({ ...row, loadedAt })) : []);
+          setTotalItems(Number(result?.totalItems) || 0);
         }
       } catch (err) {
         if (isMounted) {
           setError(err.message || "Unable to load attendance records");
           setRows([]);
+          setTotalItems(0);
         }
       } finally {
         if (isMounted) setLoading(false);
@@ -90,9 +110,14 @@ const Attendance = () => {
     setCurrentPage(1);
   }, [statusFilter]);
 
+  useEffect(() => {
+    const tickId = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(tickId);
+  }, []);
+
   const visibleRows = useMemo(() => rows, [rows]);
   const pageStartIndex = (currentPage - 1) * recordsPerPage;
-  const pageEndIndex = pageStartIndex + visibleRows.length;
+  const pageEndIndex = Math.min(pageStartIndex + visibleRows.length, totalItems);
 
   return (
     <div className="table-section attendance-section fa-2x">
@@ -115,7 +140,7 @@ const Attendance = () => {
 
           <div className="filter-badge">
             <Icon icon="mdi:account-clock-outline" width={16} height={16} />
-            {visibleRows.length > 0 && <span className="badge-count">{visibleRows.length}</span>}
+            {totalItems > 0 && <span className="badge-count">{totalItems}</span>}
           </div>
         </div>
       </div>
@@ -133,9 +158,10 @@ const Attendance = () => {
               <th>Status</th>
               <th>Login Time</th>
               <th>Logout Time</th>
+              <th>Today Login</th>
               <th>Break Start</th>
               <th>Break End</th>
-              <th>Total Break</th>
+              <th>Today Break</th>
               <th style={{ borderStartEndRadius: "8px", borderEndEndRadius: "8px" }}>Role</th>
             </tr>
           </thead>
@@ -154,15 +180,16 @@ const Attendance = () => {
                 </td>
                 <td>{formatDateTime(row.loginAt)}</td>
                 <td>{formatDateTime(row.logoutAt)}</td>
+                <td>{formatDuration(getLiveTodayLoginSeconds(row, now))}</td>
                 <td>{formatDateTime(row.breakStartedAt)}</td>
                 <td>{formatDateTime(row.breakEndedAt)}</td>
-                <td>{formatDuration(row.totalBreakSeconds)}</td>
+                <td>{formatDuration(getLiveTodayBreakSeconds(row, now))}</td>
                 <td>{row.user?.role || "-"}</td>
               </tr>
             ))}
             {!loading && visibleRows.length === 0 && (
               <tr>
-                <td colSpan="10" className="attendance-empty">
+                <td colSpan="11" className="attendance-empty">
                   No attendance records found.
                 </td>
               </tr>
@@ -174,7 +201,7 @@ const Attendance = () => {
       <div className="lead-pagination">
         <div className="lead-pagination-info">
           Showing <strong>{visibleRows.length ? pageStartIndex + 1 : 0}</strong> to{" "}
-          <strong>{pageEndIndex}</strong> attendance records
+          <strong>{pageEndIndex}</strong> of <strong>{totalItems}</strong> attendance records
         </div>
         <div className="lead-pagination-actions">
           <button
@@ -190,7 +217,7 @@ const Attendance = () => {
             type="button"
             className="lead-pagination-btn"
             onClick={() => setCurrentPage((page) => page + 1)}
-            disabled={visibleRows.length < recordsPerPage}
+            disabled={currentPage * recordsPerPage >= totalItems}
           >
             Next
           </button>

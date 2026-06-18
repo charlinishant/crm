@@ -1596,6 +1596,13 @@ img.sales-avatar {
   width: 6px;
 }
 
+.sales-call-presence small {
+  color: var(--sales-muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 .sales-call-presence button,
 .sales-call-actions a,
 .sales-call-actions button,

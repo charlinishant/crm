@@ -1,4 +1,5 @@
 const prisma = require("../lib/prisma")
+const { emitReportsUpdate } = require("../socket/socket")
 
 const toNumberOrNull = (value) => {
   if (value === "" || value === null || value === undefined) return null
@@ -92,6 +93,7 @@ exports.createBooking = async (req, res) => {
         ? { ...createdBooking, unit: data.unit || null }
         : { message: "Booking create successfully", unit: data.unit || null }
     )
+    emitReportsUpdate("booking:created")
   } catch (error) {
     console.log(error)
     res.status(500).json({ message: "Something went wrong" })
@@ -163,6 +165,7 @@ exports.updateBooking = async (req, res) => {
     })
 
     res.status(200).json(result)
+    emitReportsUpdate("booking:updated")
   } catch (error) {
     console.log(error)
     res.status(500).json({ message: "Something went wrong" })

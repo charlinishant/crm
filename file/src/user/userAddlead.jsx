@@ -406,7 +406,7 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                       {index === 0 ? (
                         <button type="button" className="lead-add" onClick={addEmail}>+ Add</button>
                       ) : (
-                        <button type="button" className="lead-remove" onClick={() => removeEmail(index)}>❌</button>
+                        <button type="button" className="lead-remove" onClick={() => removeEmail(index)}>x</button>
                       )}
                     </div>
                   ))}
@@ -426,7 +426,7 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                         <option>Personal</option>
                       </select>
                       <div className="lead-phone">
-                        <span>🇮🇳</span>
+                        <span>+91</span>
                         <input
                           placeholder={index === 0 ? "Primary Phone" : "Secondary Phone"}
                           value={phone.value}
@@ -440,7 +440,7 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                       {index === 0 ? (
                         <button type="button" className="lead-add" onClick={addPhone}>+ Add</button>
                       ) : (
-                        <button type="button" className="lead-remove" onClick={() => removePhone(index)}>❌</button>
+                        <button type="button" className="lead-remove" onClick={() => removePhone(index)}>x</button>
                       )}
                     </div>
                   ))}
@@ -722,7 +722,7 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                           className="section-delete-btn"
                           onClick={() => onRemove(index)}
                         >
-                          🗑️
+                          Delete
                         </button>
                       </div>
 
@@ -772,7 +772,7 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                         <label>URL</label>
                         <input placeholder="https://example.com" value={item.url} onChange={(e) => onChange(index, "url", e.target.value)} />
                       </div>
-                      <button type="button" className="section-delete-btn" onClick={() => onRemove(index)}>🗑️</button>
+                      <button type="button" className="section-delete-btn" onClick={() => onRemove(index)}>Delete</button>
                     </div>
                   )}
                   defaultItem={{ url: "" }}
@@ -787,7 +787,7 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                         <label>EDUCATION</label>
                         <input placeholder="Education" value={item.education} onChange={(e) => onChange(index, "education", e.target.value)} />
                       </div>
-                      <button type="button" className="section-delete-btn" onClick={() => onRemove(index)}>🗑️</button>
+                      <button type="button" className="section-delete-btn" onClick={() => onRemove(index)}>Delete</button>
                     </div>
                   )}
                   defaultItem={{ education: "" }}
@@ -805,7 +805,7 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                           <input placeholder="Company" value={item.company} onChange={(e) => onChange(index, "company", e.target.value)} />
                         </div>
                       </div>
-                      <button type="button" className="section-delete-btn" onClick={() => onRemove(index)}>🗑️</button>
+                      <button type="button" className="section-delete-btn" onClick={() => onRemove(index)}>Delete</button>
                     </div>
                   )}
                   defaultItem={{ title: "", company: "" }}
@@ -820,7 +820,7 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                         <label>INCOME</label>
                         <input placeholder="Income" value={item.income} onChange={(e) => onChange(index, "income", e.target.value)} />
                       </div>
-                      <button type="button" className="section-delete-btn" onClick={() => onRemove(index)}>🗑️</button>
+                      <button type="button" className="section-delete-btn" onClick={() => onRemove(index)}>Delete</button>
                     </div>
                   )}
                   defaultItem={{ income: "" }}
@@ -846,7 +846,7 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                       <div className="section-field">
                         <input type="text" placeholder="Amount" value={item.amount} onChange={(e) => onChange(index, "amount", e.target.value)} />
                       </div>
-                      <button type="button" className="section-delete-btn" onClick={() => onRemove(index)}>🗑️</button>
+                      <button type="button" className="section-delete-btn" onClick={() => onRemove(index)}>Delete</button>
                     </div>
                   )}
                   defaultItem={{ bankType: "", bankName: "", amount: "" }}

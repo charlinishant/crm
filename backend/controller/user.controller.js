@@ -1,5 +1,6 @@
 const bcrypt = require("bcryptjs")
 const prisma = require("../lib/prisma")
+const { emitReportsUpdate } = require("../socket/socket")
 
 
 exports.createUser = async (req, res)=>{
@@ -67,6 +68,7 @@ exports.createUser = async (req, res)=>{
             "id":user.id,
             "message":"User created successfully"
         })
+        emitReportsUpdate("user:created")
 
     } catch (error) {
         console.log(error);
@@ -165,6 +167,7 @@ exports.updateUser = async (req, res)=>{
         })
 
         res.status(200).json(userUpdate)
+        emitReportsUpdate("user:updated")
     } catch (error) {
         console.log(error);
         res.status(500).json("Something went wrong")
