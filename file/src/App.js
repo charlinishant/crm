@@ -360,6 +360,7 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/units' element={<Units />} />
         <Route exact path='/floorplans' element={<Floorplans />} />
         <Route exact path='/addfloorplan' element={<AddFloorplan />} />
+        <Route exact path='/addfloorplan/:id' element={<AddFloorplan />} />
         <Route exact path='/new-tower' element={<Newtower />} />
         <Route exact path='/project-towers' element={<Projecttower />} />
         <Route exact path='/notification' element={<NotificationPage />} />
@@ -535,6 +536,7 @@ function App() {
         <Route exact path='/units' element={<Units />} />
         <Route exact path='/floorplans' element={<Floorplans />} />
         <Route exact path='/addfloorplan' element={<AddFloorplan />} />
+        <Route exact path='/addfloorplan/:id' element={<AddFloorplan />} />
         <Route exact path='/new-tower' element={<Newtower />} />
         <Route exact path='/project-towers' element={<Projecttower />} />
         <Route exact path='/notification' element={<NotificationPage />} />

@@ -60,6 +60,9 @@ model FloorPlan{
   status String? @default("Active")
   unitStream String? @default("Sale Unit")
   reraReference String?
+  reraNumber String?
+  reraDate DateTime?
+  possessionDate DateTime?
   type String?
   category String?
   bedrooms Int?
@@ -71,6 +74,8 @@ model FloorPlan{
   // Position and inventory
   applicableFloorFrom Int?
   applicableFloorTo Int?
+  unitPosition String?
+  skippedFloors String?
   unitNumbers String? @db.Text
   totalUnitsOfPlan Int?
   facing String?
@@ -94,6 +99,7 @@ model FloorPlan{
   refugeAreaShare Float?
 
   // Parking and extras
+  parkingRequired String?
   carParkingSlots Int?
   parkingType String?
   twoWheelerSlots Int?
@@ -118,6 +124,8 @@ model FloorPlan{
   gstPercent Float? @default(5)
   stampDutyPercent Float? @default(6)
   registrationPercent Float? @default(1)
+  registrationAmount Float?
+  parkingCharges Float?
   advanceMaintenanceMonths Int?
   maintenanceRatePerSqftPerMonth Float?
   sinkingFundCorpus Float?

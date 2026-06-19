@@ -1264,7 +1264,7 @@ const UserBookingForm = ({
               label: "Campaign",
               name: "campaign",
               type: "select",
-              value: bookingForm.campaign || "walkin",
+              value: bookingForm.campaign || "walkin",  
               options: ["walkin", "Site Visit", "Digital"],
             })}
             {renderConfirmField({

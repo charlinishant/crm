@@ -4,15 +4,6 @@ import { useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
 import Breadcrumb from "../components/Breadcrumb";
 
-const emptyEditForm = {
-    name: "",
-    type: "",
-    configurationLabel: "",
-    status: "",
-    saleable: "",
-    carpet: "",
-};
-
 const Floorplans = () => {
     const navigate = useNavigate();
     const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
@@ -24,8 +15,7 @@ const Floorplans = () => {
     const [openActionId, setOpenActionId] = useState(null);
     const [modalMode, setModalMode] = useState("");
     const [selectedPlan, setSelectedPlan] = useState(null);
-    const [editForm, setEditForm] = useState(emptyEditForm);
-    const [saving, setSaving] = useState(false);
+    const [viewLoading, setViewLoading] = useState(false);
 
     const fetchFloorplans = useCallback(async () => {
         try {
@@ -60,67 +50,33 @@ const Floorplans = () => {
     }, [fetchFloorplans]);
 
     const closeModal = () => {
-        if (saving) return;
         setModalMode("");
         setSelectedPlan(null);
-        setEditForm(emptyEditForm);
     };
 
-    const openViewPlan = (plan) => {
+    const openViewPlan = async (plan) => {
         setOpenActionId(null);
-        setSelectedPlan(plan);
+        setViewLoading(true);
         setModalMode("view");
-    };
-
-    const openEditPlan = (plan) => {
-        setOpenActionId(null);
-        setSelectedPlan(plan);
-        setEditForm({
-            name: plan.name === "-" ? "" : plan.name,
-            type: plan.type || "",
-            configurationLabel: plan.configurationLabel || "",
-            status: plan.status || "",
-            saleable: plan.saleable ?? "",
-            carpet: plan.carpet ?? "",
-        });
-        setModalMode("edit");
-    };
-
-    const handleEditChange = (event) => {
-        const { name, value } = event.target;
-        setEditForm((current) => ({ ...current, [name]: value }));
-    };
-
-    const handleEditSubmit = async (event) => {
-        event.preventDefault();
-        if (!selectedPlan?.id) return;
-
-        setSaving(true);
+    
         try {
-            const response = await fetch(`${API_URL}/floor/${selectedPlan.id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    name: editForm.name.trim(),
-                    type: editForm.type,
-                    configurationLabel: editForm.configurationLabel,
-                    status: editForm.status,
-                    saleable: editForm.saleable === "" ? null : Number(editForm.saleable),
-                    carpet: editForm.carpet === "" ? null : Number(editForm.carpet),
-                }),
+            const response = await fetch(`${API_URL}/floor/${plan.id}`);
+            if (!response.ok) throw new Error("Unable to load floor plan details");      
+            const detail = await response.json();
+            setSelectedPlan({
+                ...plan,
+                ...detail,
+                projectName: detail.project?.name || plan.projectName,
+                towerName: detail.tower?.name || plan.towerName,
+                saleableArea: detail.saleable ?? plan.saleableArea,
+                carpetArea: detail.carpet ?? plan.carpetArea,
+                typeLabel: detail.type || plan.typeLabel,
             });
-
-            if (!response.ok) {
-                const result = await response.json().catch(() => ({}));
-                throw new Error(result?.message || "Unable to update floor plan");
-            }
-
-            await fetchFloorplans();
-            closeModal();
         } catch (err) {
-            alert(err.message || "Update failed");
+            alert(err.message || "Unable to load floor plan details");
+            closeModal();
         } finally {
-            setSaving(false);
+            setViewLoading(false);
         }
     };
 
@@ -212,7 +168,7 @@ const Floorplans = () => {
 
                                                 {openActionId === plan.id && (
                                                     <div className="floor-actions-dropdown">
-                                                        <button type="button" onClick={() => openEditPlan(plan)}>Edit</button>
+                                                        <button type="button" onClick={() => navigate(`/addfloorplan/${plan.id}`)}>Edit</button>
                                                         <button type="button" onClick={() => openViewPlan(plan)}>View</button>
                                                         <button type="button" className="danger" onClick={() => handleDelete(plan.id)}>Delete</button>
                                                     </div>
@@ -226,18 +182,8 @@ const Floorplans = () => {
                     </div>
                 </div>
 
-                {modalMode === "view" && selectedPlan && (
-                    <FloorPlanViewModal plan={selectedPlan} onClose={closeModal} />
-                )}
-
-                {modalMode === "edit" && selectedPlan && (
-                    <FloorPlanEditModal
-                        form={editForm}
-                        saving={saving}
-                        onChange={handleEditChange}
-                        onClose={closeModal}
-                        onSubmit={handleEditSubmit}
-                    />
+                {modalMode === "view" && (
+                    <FloorPlanViewModal plan={selectedPlan} loading={viewLoading} onClose={closeModal} />
                 )}
             </div>
         </MasterLayout>
@@ -247,81 +193,168 @@ const Floorplans = () => {
 const Detail = ({ label, value }) => (
     <div>
         <span>{label}</span>
-        <strong>{value || "-"}</strong>
+        <strong>{formatDetailValue(value)}</strong>
     </div>
 );
 
-const FloorPlanViewModal = ({ plan, onClose }) => (
+const formatDetailValue = (value) => {
+    if (value === null || value === undefined || value === "") return "-";
+    if (typeof value === "boolean") return value ? "Yes" : "No";
+    if (Array.isArray(value)) {
+        if (!value.length) return "-";
+        return value
+            .map((item) => {
+                if (typeof item === "object" && item !== null) return item.name || item.label || item.url || item.type || "File";
+                return String(item);
+            })
+            .join(", ");
+    }
+    if (typeof value === "object") return JSON.stringify(value);
+    return value;
+};
+
+const detailSections = [
+    {
+        title: "Header / Identity",
+        fields: [
+            ["Project", (plan) => plan.projectName || plan.project?.name],
+            ["Tower", (plan) => plan.towerName || plan.tower?.name],
+            ["Floor Plan Name", "name"],
+            ["Configuration", "configurationLabel"],
+            ["Status", "status"],
+            ["Unit Stream", "unitStream"],
+            ["RERA Reference", "reraReference"],
+            ["RERA Number", "reraNumber"],
+            ["RERA Date", "reraDate"],
+            ["Possession Date", "possessionDate"],
+            ["Type", "type"],
+            ["Category", "category"],
+        ],
+    },
+    {
+        title: "Details / Configuration",
+        fields: [
+            ["Bedrooms", "bedrooms"],
+            ["Bathrooms", "bathrooms"],
+            ["Balconies", "balconies"],
+            ["Kitchen", "kitchenType"],
+            ["Additional Rooms", "additionalRooms"],
+        ],
+    },
+    {
+        title: "Position & Inventory",
+        fields: [
+            ["Applicable Floor From", "applicableFloorFrom"],
+            ["Applicable Floor To", "applicableFloorTo"],
+            ["Unit Position", "unitPosition"],
+            ["Skipped Floors", "skippedFloors"],
+            ["Unit Numbers", "unitNumbers"],
+            ["Total Units", "totalUnitsOfPlan"],
+            ["Facing", "facing"],
+            ["Corner Unit", "cornerUnit"],
+            ["View", "view"],
+        ],
+    },
+    {
+        title: "Areas",
+        fields: [
+            ["Auto Calc", "autoCalc"],
+            ["Measure", "measure"],
+            ["Carpet Area", "carpet"],
+            ["Built-up Area", "builtupArea"],
+            ["Saleable Area", "saleable"],
+            ["Loading %", "loading"],
+            ["Loading Basis", "loadingBasis"],
+            ["Balcony Area", "balconyArea"],
+            ["Enclosed Balcony / Utility", "enclosedBalconyUtility"],
+            ["Terrace Area", "terraceArea"],
+            ["Flower Bed / Pocket Terrace", "flowerBedPocketTerrace"],
+            ["Service Slab / AC Ledge", "serviceSlabAcLedge"],
+            ["Refuge Area Share", "refugeAreaShare"],
+        ],
+    },
+    {
+        title: "Parking & Extras",
+        fields: [
+            ["Parking Required", "parkingRequired"],
+            ["Car Parking Slots", "carParkingSlots"],
+            ["Parking Type", "parkingType"],
+            ["Two Wheeler Slots", "twoWheelerSlots"],
+            ["Basement Storeroom", "basementStoreroom"],
+        ],
+    },
+    {
+        title: "Costing",
+        fields: [
+            ["Rate Basis", "rateBasis"],
+            ["Base Rate", "baseRate"],
+            ["Base Price", "basePrice"],
+            ["Floor Rise / Sqft", "floorRisePerSqft"],
+            ["Base Floor For Floor Rise", "baseFloorForFloorRise"],
+            ["Corner PLC %", "cornerPlcPercent"],
+            ["View PLC %", "viewPlcPercent"],
+            ["Facing PLC %", "facingPlcPercent"],
+            ["Club Membership", "clubMembership"],
+        ],
+    },
+    {
+        title: "Other Charges",
+        fields: [
+            ["Development Charges", "infrastructureDevelopmentCharges"],
+            ["Development Charge Basis", "infrastructureDevelopmentChargeBasis"],
+            ["Legal Documentation", "legalDocumentation"],
+            ["GST %", "gstPercent"],
+            ["Stamp Duty %", "stampDutyPercent"],
+            ["Registration %", "registrationPercent"],
+            ["Registration Amount", "registrationAmount"],
+            ["Parking Charges", "parkingCharges"],
+            ["Advance Maintenance Months", "advanceMaintenanceMonths"],
+            ["Maintenance Rate / Sqft / Month", "maintenanceRatePerSqftPerMonth"],
+            ["Sinking Fund Corpus", "sinkingFundCorpus"],
+            ["Society Formation Charges", "societyFormationCharges"],
+        ],
+    },
+    {
+        title: "Documents & Media",
+        fields: [
+            ["Floor Plan Images", "floorPlanImages"],
+            ["Brochure Page Reference", "brochurePageReference"],
+            ["3D Walkthrough Link", "walkthrough3dLink"],
+            ["Payment Plan", "paymentPlan"],
+            ["Allotment Letter Template", "allotmentLetterTemplate"],
+            ["Agreement Template", "agreementTemplate"],
+        ],
+    },
+];
+
+const getDetailValue = (plan, field) =>
+    typeof field === "function" ? field(plan) : plan?.[field];
+
+const FloorPlanViewModal = ({ plan, loading, onClose }) => (
     <div className="floor-modal-backdrop">
         <section className="floor-modal" role="dialog" aria-modal="true" aria-labelledby="floor-view-title">
             <div className="floor-modal-head">
                 <div>
-                    <h2 id="floor-view-title">{plan.name}</h2>
+                    <h2 id="floor-view-title">{plan?.name || "Floor Plan"}</h2>
                     <p>Floor plan details</p>
                 </div>
                 <button type="button" className="floor-modal-close" onClick={onClose}>x</button>
             </div>
 
-            <div className="floor-detail-grid">
-                <Detail label="Project" value={plan.projectName} />
-                <Detail label="Tower" value={plan.towerName} />
-                <Detail label="Type" value={plan.type || plan.typeLabel} />
-                <Detail label="Configuration" value={plan.configurationLabel} />
-                <Detail label="Status" value={plan.status} />
-                <Detail label="Saleable Area" value={plan.saleableArea} />
-                <Detail label="Carpet Area" value={plan.carpetArea} />
-                <Detail label="Bedrooms" value={plan.bedrooms} />
-                <Detail label="Bathrooms" value={plan.bathrooms} />
-                <Detail label="Balconies" value={plan.balconies} />
-            </div>
-        </section>
-    </div>
-);
-
-const FloorPlanEditModal = ({ form, saving, onChange, onClose, onSubmit }) => (
-    <div className="floor-modal-backdrop">
-        <section className="floor-modal" role="dialog" aria-modal="true" aria-labelledby="floor-edit-title">
-            <div className="floor-modal-head">
-                <div>
-                    <h2 id="floor-edit-title">Edit Floor Plan</h2>
-                    <p>Update floor plan details</p>
-                </div>
-                <button type="button" className="floor-modal-close" onClick={onClose} disabled={saving}>x</button>
-            </div>
-
-            <form className="floor-edit-form" onSubmit={onSubmit}>
-                <label>
-                    <span>Name *</span>
-                    <input name="name" value={form.name} onChange={onChange} required />
-                </label>
-                <label>
-                    <span>Type</span>
-                    <input name="type" value={form.type} onChange={onChange} />
-                </label>
-                <label>
-                    <span>Configuration</span>
-                    <input name="configurationLabel" value={form.configurationLabel} onChange={onChange} />
-                </label>
-                <label>
-                    <span>Status</span>
-                    <input name="status" value={form.status} onChange={onChange} />
-                </label>
-                <label>
-                    <span>Saleable Area</span>
-                    <input name="saleable" type="number" value={form.saleable} onChange={onChange} />
-                </label>
-                <label>
-                    <span>Carpet Area</span>
-                    <input name="carpet" type="number" value={form.carpet} onChange={onChange} />
-                </label>
-
-                <div className="floor-modal-actions">
-                    <button type="button" onClick={onClose} disabled={saving}>Cancel</button>
-                    <button type="submit" className="primary" disabled={saving}>
-                        {saving ? "Saving..." : "Save Changes"}
-                    </button>
-                </div>
-            </form>
+            {loading ? (
+                <div className="floor-empty">Loading details...</div>
+            ) : (
+                detailSections.map((section) => (
+                    <div className="floor-detail-section" key={section.title}>
+                        <div className="floor-detail-section-title">{section.title}</div>
+                        <div className="floor-detail-grid">
+                            {section.fields.map(([label, field]) => (
+                                <Detail key={label} label={label} value={getDetailValue(plan, field)} />
+                            ))}
+                        </div>
+                    </div>
+                ))
+            )}
         </section>
     </div>
 );
@@ -419,9 +452,11 @@ const floorPlanStyles = `
         padding-bottom: 14px;
     }
 
-    .floor-modal-head h2 {
+    .floor-modal .floor-modal-head h2 {
         color: #0f172a;
-        font-size: 20px;
+        font-size: 18px;
+        font-weight: 700;
+        line-height: 1.35;
         margin: 0 0 4px;
     }
 
@@ -442,8 +477,19 @@ const floorPlanStyles = `
         width: 36px;
     }
 
-    .floor-detail-grid,
-    .floor-edit-form {
+    .floor-detail-section {
+        margin-top: 18px;
+    }
+
+    .floor-modal .floor-detail-section-title {
+        color: #0f172a;
+        font-size: 15px;
+        font-weight: 700;
+        line-height: 1.35;
+        margin: 0 0 10px;
+    }
+
+    .floor-detail-grid {
         display: grid;
         gap: 14px;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -456,8 +502,7 @@ const floorPlanStyles = `
         padding: 12px;
     }
 
-    .floor-detail-grid span,
-    .floor-edit-form span {
+    .floor-detail-grid span {
         color: #64748b;
         display: block;
         font-size: 12px;
@@ -465,49 +510,17 @@ const floorPlanStyles = `
         margin-bottom: 6px;
     }
 
-    .floor-detail-grid strong {
+    .floor-modal .floor-detail-grid strong {
         color: #1e293b;
         display: block;
+        font-size: 15px;
+        font-weight: 700;
+        line-height: 1.35;
         overflow-wrap: anywhere;
     }
 
-    .floor-edit-form input {
-        border: 1px solid #d6dee9;
-        border-radius: 8px;
-        color: #1e293b;
-        font: inherit;
-        min-height: 40px;
-        padding: 0 12px;
-        width: 100%;
-    }
-
-    .floor-modal-actions {
-        display: flex;
-        gap: 10px;
-        grid-column: 1 / -1;
-        justify-content: flex-end;
-    }
-
-    .floor-modal-actions button {
-        background: #ffffff;
-        border: 1px solid #d6dee9;
-        border-radius: 8px;
-        color: #334155;
-        cursor: pointer;
-        font-weight: 700;
-        min-height: 40px;
-        padding: 0 16px;
-    }
-
-    .floor-modal-actions .primary {
-        background: #487fff;
-        border-color: #487fff;
-        color: #ffffff;
-    }
-
     @media (max-width: 768px) {
-        .floor-detail-grid,
-        .floor-edit-form {
+        .floor-detail-grid {
             grid-template-columns: 1fr;
         }
     }

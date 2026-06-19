@@ -4,3 +4,7 @@ node_modules
 
 /generated/prisma
 migrations
+!prisma/migrations/
+prisma/migrations/*
+!prisma/migrations/20260619150000_add_floorplan_full_form_fields/
+!prisma/migrations/20260619150000_add_floorplan_full_form_fields/migration.sql

@@ -17,6 +17,12 @@ const toBoolean = (value) => {
     return false
 }
 
+const toDateOrNull = (value) => {
+    if (!value) return null
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? null : date
+}
+
 const toArray = (value) => {
     if (Array.isArray(value)) return value
     if (!value) return []
@@ -93,6 +99,9 @@ const normalizeFloorPlanPayload = (body) => {
         status: body.status || "Active",
         unitStream: body.unitStream || "Sale Unit",
         reraReference: body.reraReference || null,
+        reraNumber: body.reraNumber || body.reraReference || null,
+        reraDate: toDateOrNull(body.reraDate),
+        possessionDate: toDateOrNull(body.possessionDate),
         type: body.type || null,
         category: body.category || null,
         bedrooms: toIntOrNull(body.bedrooms),
@@ -102,6 +111,8 @@ const normalizeFloorPlanPayload = (body) => {
         additionalRooms: toArray(body.additionalRooms),
         applicableFloorFrom: toIntOrNull(body.applicableFloorFrom),
         applicableFloorTo: toIntOrNull(body.applicableFloorTo),
+        unitPosition: body.unitPosition || null,
+        skippedFloors: body.skippedFloors || null,
         unitNumbers: body.unitNumbers || null,
         totalUnitsOfPlan: toIntOrNull(body.totalUnitsOfPlan),
         facing: body.facing || null,
@@ -119,6 +130,7 @@ const normalizeFloorPlanPayload = (body) => {
         flowerBedPocketTerrace: toNumberOrNull(body.flowerBedPocketTerrace),
         serviceSlabAcLedge: toNumberOrNull(body.serviceSlabAcLedge),
         refugeAreaShare: toNumberOrNull(body.refugeAreaShare),
+        parkingRequired: body.parkingRequired || null,
         carParkingSlots: toIntOrNull(body.carParkingSlots),
         parkingType: body.parkingType || null,
         twoWheelerSlots: toIntOrNull(body.twoWheelerSlots),
@@ -137,6 +149,8 @@ const normalizeFloorPlanPayload = (body) => {
         gstPercent: toNumberOrNull(body.gstPercent) ?? 5,
         stampDutyPercent: toNumberOrNull(body.stampDutyPercent) ?? 6,
         registrationPercent: toNumberOrNull(body.registrationPercent) ?? 1,
+        registrationAmount: toNumberOrNull(body.registrationAmount),
+        parkingCharges: toNumberOrNull(body.parkingCharges),
         advanceMaintenanceMonths: toIntOrNull(body.advanceMaintenanceMonths),
         maintenanceRatePerSqftPerMonth: toNumberOrNull(body.maintenanceRatePerSqftPerMonth),
         sinkingFundCorpus: toNumberOrNull(body.sinkingFundCorpus),

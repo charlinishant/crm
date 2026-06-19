@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
 import Breadcrumb from "../components/Breadcrumb";
 
@@ -154,7 +154,9 @@ const getGeneratedUnitNumbers = ({ from, to, unitPosition, skippedFloors, tower 
 
 const AddFloorplan = () => {
   const navigate = useNavigate();
+  const { id } = useParams();
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+  const isEditMode = Boolean(id);
 
   const [formData, setFormData] = useState(initialFormData);
   const [projects, setProjects] = useState([]);
@@ -162,6 +164,7 @@ const AddFloorplan = () => {
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [loadingTowers, setLoadingTowers] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loadingFloorPlan, setLoadingFloorPlan] = useState(false);
   const [error, setError] = useState("");
   const [showPreview, setShowPreview] = useState(false);
 
@@ -182,6 +185,86 @@ const AddFloorplan = () => {
     if (Array.isArray(data?.value)) return data.value;
     return [];
   };
+
+  const formatDateForInput = (value) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toISOString().slice(0, 10);
+  };
+
+  const mapFloorPlanToFormData = (plan) => ({
+    ...initialFormData,
+    project: plan.projectId ?? plan.project?.id ?? "",
+    projectTower: plan.towerId ?? plan.tower?.id ?? "",
+    floorPlanName: plan.name || "",
+    configurationLabel: plan.configurationLabel || "",
+    status: plan.status || "Draft",
+    unitStream: plan.unitStream || "Sale Unit",
+    reraReference: plan.reraReference || plan.reraNumber || "",
+    reraDate: formatDateForInput(plan.reraDate),
+    possessionDate: formatDateForInput(plan.possessionDate),
+    type: plan.type || "",
+    category: plan.category || "",
+    bedrooms: plan.bedrooms ?? "",
+    bathrooms: plan.bathrooms ?? "",
+    balconies: plan.balconies ?? "0",
+    kitchenType: plan.kitchenType || "1",
+    additionalRooms: normalizeList(plan.additionalRooms),
+    applicableFloorFrom: plan.applicableFloorFrom ?? "",
+    applicableFloorTo: plan.applicableFloorTo ?? "",
+    unitPosition: plan.unitPosition || "01",
+    skippedFloors: plan.skippedFloors || "",
+    unitNumbers: plan.unitNumbers || "",
+    totalUnitsOfPlan: plan.totalUnitsOfPlan ?? "",
+    facing: plan.facing || "",
+    cornerUnit: Boolean(plan.cornerUnit),
+    view: normalizeList(plan.view),
+    autoCalc: plan.autoCalc ?? true,
+    measure: plan.measure || "sqft",
+    carpetArea: plan.carpet ?? "",
+    builtupArea: plan.builtupArea ?? "",
+    saleableArea: plan.saleable ?? "",
+    loading: plan.loading ?? "",
+    loadingBasis: plan.loadingBasis || "On Carpet",
+    balconyArea: plan.balconyArea ?? "",
+    enclosedBalconyUtility: plan.enclosedBalconyUtility ?? "",
+    terraceArea: plan.terraceArea ?? "",
+    flowerBedPocketTerrace: plan.flowerBedPocketTerrace ?? "",
+    serviceSlabAcLedge: plan.serviceSlabAcLedge ?? "",
+    refugeAreaShare: plan.refugeAreaShare ?? "",
+    parkingRequired: plan.parkingRequired || "No",
+    carParkingSlots: plan.carParkingSlots ?? "0",
+    parkingType: plan.parkingType || "",
+    twoWheelerSlots: plan.twoWheelerSlots ?? "",
+    basementStoreroom: plan.basementStoreroom ?? "",
+    rateBasis: plan.rateBasis || "On Carpet",
+    baseRate: plan.baseRate ?? "",
+    basePrice: plan.basePrice ?? "",
+    floorRisePerSqft: plan.floorRisePerSqft ?? "",
+    baseFloorForFloorRise: plan.baseFloorForFloorRise ?? "",
+    cornerPlcPercent: plan.cornerPlcPercent ?? "",
+    viewPlcPercent: plan.viewPlcPercent ?? "",
+    facingPlcPercent: plan.facingPlcPercent ?? "",
+    clubMembership: plan.clubMembership ?? "",
+    infrastructureDevelopmentCharges: plan.infrastructureDevelopmentCharges ?? "",
+    infrastructureDevelopmentChargeBasis: plan.infrastructureDevelopmentChargeBasis || "Lump Sum",
+    legalDocumentation: plan.legalDocumentation ?? "",
+    gstPercent: plan.gstPercent ?? "5",
+    stampDutyPercent: plan.stampDutyPercent ?? "6",
+    registrationAmount: plan.registrationAmount ?? "",
+    parkingCharges: plan.parkingCharges ?? "",
+    advanceMaintenanceMonths: plan.advanceMaintenanceMonths ?? "",
+    maintenanceRatePerSqftPerMonth: plan.maintenanceRatePerSqftPerMonth ?? "",
+    sinkingFundCorpus: plan.sinkingFundCorpus ?? "",
+    societyFormationCharges: plan.societyFormationCharges ?? "",
+    floorPlanImages: normalizeList(plan.floorPlanImages),
+    brochurePageReference: plan.brochurePageReference || "",
+    walkthrough3dLink: plan.walkthrough3dLink || "",
+    paymentPlan: plan.paymentPlan || "",
+    allotmentLetterTemplate: plan.allotmentLetterTemplate || "",
+    agreementTemplate: plan.agreementTemplate || "",
+  });
 
   const selectedTower = useMemo(
     () => towers.find((tower) => String(tower.id) === String(formData.projectTower)),
@@ -240,6 +323,39 @@ const AddFloorplan = () => {
 
     fetchProjectTowers();
   }, [API_URL, formData.project]);
+
+  useEffect(() => {
+    const fetchFloorPlan = async () => {
+      if (!id) {
+        setFormData(initialFormData);
+        return;
+      }
+
+      try {
+        setLoadingFloorPlan(true);
+        setError("");
+        const response = await fetch(`${API_URL}/floor/${id}`);
+        if (!response.ok) {
+          const message = await readApiErrorMessage(response, "Unable to load floor plan");
+          throw new Error(message);
+        }
+
+        const plan = await response.json();
+        if (!plan || typeof plan === "string") throw new Error("Floor plan not found");
+        setFormData(mapFloorPlanToFormData(plan));
+      } catch (err) {
+        console.error(err);
+        setError(err.message || "Unable to load floor plan");
+      } finally {
+        setLoadingFloorPlan(false);
+      }
+    };
+
+    fetchFloorPlan();
+  // The mapper only normalizes the fetched record into form state; rerunning this
+  // effect for its function identity would refetch on every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [API_URL, id]);
 
   const computed = useMemo(() => {
     const carpet = toNumberOrNull(formData.carpetArea) || 0;
@@ -434,6 +550,8 @@ const AddFloorplan = () => {
       additionalRooms: formData.additionalRooms,
       applicableFloorFrom: toNumberOrNull(formData.applicableFloorFrom),
       applicableFloorTo: toNumberOrNull(formData.applicableFloorTo),
+      unitPosition: formData.unitPosition,
+      skippedFloors: formData.skippedFloors.trim(),
       unitNumbers: generatedUnitNumbers.join(", "),
       totalUnitsOfPlan: generatedUnitNumbers.length,
       facing: formData.facing,
@@ -486,8 +604,8 @@ const AddFloorplan = () => {
     };
 
     try {
-      const response = await fetch(`${API_URL}/floor`, {
-        method: "POST",
+      const response = await fetch(isEditMode ? `${API_URL}/floor/${id}` : `${API_URL}/floor`, {
+        method: isEditMode ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
@@ -497,7 +615,7 @@ const AddFloorplan = () => {
       if (!response.ok) {
         const message = await readApiErrorMessage(
           response,
-          `Failed to create floor plan (${response.status})`
+          `Failed to ${isEditMode ? "update" : "create"} floor plan (${response.status})`
         );
         throw new Error(message);
       }
@@ -515,7 +633,7 @@ const AddFloorplan = () => {
     <MasterLayout>
       <div className="lead-page">
         <div className="lead-container">
-          <Breadcrumb title="Add Floor Plan" />
+          <Breadcrumb title={isEditMode ? "Edit Floor Plan" : "Add Floor Plan"} />
           {/* <p className="lead-title">Add Floor Plan</p> */}
 
           <div className="lead-tabs">
@@ -530,6 +648,9 @@ const AddFloorplan = () => {
             </div>
           )}
 
+          {loadingFloorPlan ? (
+            <div className="section-card">Loading floor plan...</div>
+          ) : (
           <form onSubmit={handleSubmit} className="lead-form floorplan-form">
             <div className="floorplan-layout">
               <div className="floorplan-main">
@@ -641,7 +762,7 @@ const AddFloorplan = () => {
 
               <Section title="Documents & Media">
                 <div className="lead-grid">
-                  <FileField label="FLOOR PLAN IMAGE" name="floorPlanImages" onChange={handleChange} required={formData.status === "Active"} />
+                  <FileField label="FLOOR PLAN IMAGE" name="floorPlanImages" onChange={handleChange} required={formData.status === "Active" && !formData.floorPlanImages.length} />
                   <InputField label="BROCHURE PAGE REFERENCE" name="brochurePageReference" value={formData.brochurePageReference} onChange={handleChange} />
                   <InputField label="3D WALKTHROUGH LINK" name="walkthrough3dLink" type="url" value={formData.walkthrough3dLink} onChange={handleChange} />
                 </div>
@@ -655,7 +776,7 @@ const AddFloorplan = () => {
                   Preview Cost Sheet
                 </button>
                 <button type="submit" className="lead-save" disabled={saving}>
-                  {saving ? "Saving..." : "Save Floor Plan"}
+                  {saving ? "Saving..." : isEditMode ? "Update Floor Plan" : "Save Floor Plan"}
                 </button>
                 <button type="button" className="lead-cancel" onClick={() => navigate("/floorplans")}>
                   Cancel
@@ -674,6 +795,7 @@ const AddFloorplan = () => {
               </aside>
             </div>
           </form>
+          )}
         </div>
 
         {showPreview && (
