@@ -389,6 +389,7 @@ const NEWPROJECT = () => {
                     <option value="" disabled>Select</option>
                     <option value="residential">Residential</option>
                     <option value="commercial">Commercial</option>
+                    <option value="residential_commercial">Residential + Commercial</option>
                   </select>
                 </div>
               </div>

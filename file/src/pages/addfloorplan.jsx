@@ -78,6 +78,24 @@ const initialFormData = {
 const typeOptions = ["Residential", "Commercial", "Retail", "Office", "Mixed-Use"];
 const categoryOptions = ["Flat", "Penthouse", "Duplex", "Row House", "Villa", "Studio", "Shop", "Showroom", "Office Unit"];
 const configurationLabelOptions = ["Studio", "1 BHK", "2 BHK", "3 BHK", "4 BHK", "5 BHK", "2 BHK, 3 BHK Jodi", "Shop", "Office"];
+
+const readApiErrorMessage = async (response, fallback) => {
+  const text = await response.text();
+  if (!text) return fallback;
+
+  try {
+    const result = JSON.parse(text);
+
+    if (typeof result === "string") return result;
+    if (result?.message) return result.message;
+    if (result?.error) return result.error;
+    if (result?.detail) return result.detail;
+
+    return fallback;
+  } catch {
+    return text;
+  }
+};
 const statusOptions = ["Draft", "Active", "On Hold", "Sold Out", "Withdrawn"];
 const unitStreamOptions = ["Sale Unit", "PAAA Member Unit", "Rehab Unit", "Investor"];
 const rateBasisOptions = ["On Carpet", "On Saleable", "On Built-up"];
@@ -227,7 +245,7 @@ const AddFloorplan = () => {
         : formData.rateBasis === "On Built-up"
           ? builtup
           : carpet;
-    const basePrice = formData.autoCalc && rateArea ? baseRate * rateArea : toNumberOrNull(formData.basePrice) || 0;
+    const basePrice = baseRate && rateArea ? baseRate * rateArea : 0;
     const plcPercent =
       (formData.cornerUnit ? toNumberOrNull(formData.cornerPlcPercent) || 0 : 0) +
       (toNumberOrNull(formData.viewPlcPercent) || 0) +
@@ -413,7 +431,7 @@ const AddFloorplan = () => {
       basementStoreroom: toNumberOrNull(formData.basementStoreroom),
       rateBasis: formData.rateBasis,
       baseRate: toNumberOrNull(formData.baseRate),
-      basePrice: formData.autoCalc ? computed.basePrice : toNumberOrNull(formData.basePrice),
+      basePrice: computed.basePrice,
       floorRisePerSqft: toNumberOrNull(formData.floorRisePerSqft),
       baseFloorForFloorRise: toNumberOrNull(formData.baseFloorForFloorRise),
       cornerPlcPercent: toNumberOrNull(formData.cornerPlcPercent),
@@ -448,15 +466,12 @@ const AddFloorplan = () => {
         body: JSON.stringify(payload),
       });
 
-      let result = {};
-      try {
-        result = await response.json();
-      } catch {
-        result = {};
-      }
-
       if (!response.ok) {
-        throw new Error(result?.message || "Failed to create floor plan");
+        const message = await readApiErrorMessage(
+          response,
+          `Failed to create floor plan (${response.status})`
+        );
+        throw new Error(message);
       }
 
       navigate("/floorplans", { replace: true });
@@ -578,7 +593,7 @@ const AddFloorplan = () => {
                 <div className="lead-grid">
                   <SelectField label="RATE BASIS *" name="rateBasis" value={formData.rateBasis} onChange={handleChange} required options={rateBasisOptions} />
                   <InputField label="BASE RATE *" name="baseRate" type="number" value={formData.baseRate} onChange={handleChange} required />
-                  <InputField label="BASE PRICE" name="basePrice" type="number" value={formData.autoCalc ? computed.basePrice : formData.basePrice} onChange={handleChange} disabled={formData.autoCalc} />
+                  <InputField label="BASE PRICE" name="basePrice" type="number" value={computed.basePrice} onChange={handleChange} disabled />
                   <InputField label="FLOOR RISE / SQFT" name="floorRisePerSqft" type="number" value={formData.floorRisePerSqft} onChange={handleChange} />
                   <InputField label="BASE FLOOR FOR FLOOR RISE" name="baseFloorForFloorRise" type="number" value={formData.baseFloorForFloorRise} onChange={handleChange} />
                 </div>

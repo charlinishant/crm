@@ -28,6 +28,11 @@ import {
   markFollowupDone,
   rescheduleFollowup,
 } from "../services/followupApi";
+import {
+  activityNotificationStorageKey,
+  dedupeActivityNotifications,
+  getActivityNotificationDedupeKey,
+} from "../utils/activityNotifications";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
@@ -196,6 +201,30 @@ const formatMoney = (value) => {
   }).format(amount);
 };
 
+const formatNumber = (value, fallback = "-") => {
+  if (value === undefined || value === null || value === "") return fallback;
+  const amount = Number(String(value ?? "").replace(/[^\d.-]/g, ""));
+  if (!Number.isFinite(amount)) return fallback;
+  return amount.toLocaleString("en-IN");
+};
+
+const formatArea = (value) => {
+  const formatted = formatNumber(value);
+  return formatted === "-" ? "-" : `${formatted} sq_ft`;
+};
+
+const formatCompactMoney = (value) => {
+  const amount = Number(String(value ?? "").replace(/[^\d.-]/g, ""));
+  if (!Number.isFinite(amount) || amount <= 0) return "-";
+  if (amount >= 10000000) {
+    return `₹ ${(amount / 10000000).toFixed(1).replace(/\.0$/, "")}Cr (${amount.toLocaleString("en-IN")})`;
+  }
+  if (amount >= 100000) {
+    return `₹ ${(amount / 100000).toFixed(1).replace(/\.0$/, "")}L (${amount.toLocaleString("en-IN")})`;
+  }
+  return formatMoney(amount);
+};
+
 const normalizeText = (value) => String(value || "").toLowerCase();
 
 const getCrmStatusFromLead = (lead) => {
@@ -274,18 +303,16 @@ const mergeNoteUiState = (leadId, notes) => {
     }));
 };
 
-const activityNotificationStorageKey = "crmActivityNotifications";
-
 const getStoredActivityNotifications = () => {
   try {
-    return JSON.parse(localStorage.getItem(activityNotificationStorageKey) || "[]");
+    return dedupeActivityNotifications(JSON.parse(localStorage.getItem(activityNotificationStorageKey) || "[]"));
   } catch {
     return [];
   }
 };
 
 const saveActivityNotifications = (notifications) => {
-  localStorage.setItem(activityNotificationStorageKey, JSON.stringify(notifications));
+  localStorage.setItem(activityNotificationStorageKey, JSON.stringify(dedupeActivityNotifications(notifications)));
   window.dispatchEvent(new Event("crmActivityNotificationsChanged"));
 };
 
@@ -317,7 +344,11 @@ const publishSalesActivityNotification = ({
   };
   const notifications = [
     notification,
-    ...getStoredActivityNotifications().filter((item) => item.id !== notification.id),
+    ...getStoredActivityNotifications().filter(
+      (item) =>
+        item.id !== notification.id &&
+        getActivityNotificationDedupeKey(item) !== getActivityNotificationDedupeKey(notification)
+    ),
   ]
     .sort((first, second) => {
       const firstTime = toDate(first.createdAt)?.getTime() || 0;
@@ -506,7 +537,7 @@ const UserDetails = ({
       const response = await fetch(`${API_URL}/bookings?leadId=${leadId}&limit=100`);
       if (!response.ok) return;
       const result = await response.json();
-      setBookings(Array.isArray(result?.data) ? result.data : []);
+      setBookings(Array.isArray(result) ? result : result?.data || []);
     } catch (error) {
       console.error("Unable to load bookings:", error);
     }
@@ -914,10 +945,16 @@ const UserDetails = ({
     if (leadNotifications.length === 0) return;
     const leadNotificationIds = new Set(leadNotifications.map((item) => item.id));
     const storedNotifications = getStoredActivityNotifications();
+    const leadNotificationDedupeKeys = new Set(leadNotifications.map(getActivityNotificationDedupeKey));
     const storedNotificationIds = new Set(storedNotifications.map((item) => item.id));
-    const newLeadNotifications = leadNotifications.filter((item) => !storedNotificationIds.has(item.id));
-    const existingNotifications = storedNotifications.filter((item) => !leadNotificationIds.has(item.id));
-    const nextNotifications = [...leadNotifications, ...existingNotifications]
+    const storedNotificationDedupeKeys = new Set(storedNotifications.map(getActivityNotificationDedupeKey));
+    const newLeadNotifications = leadNotifications.filter(
+      (item) => !storedNotificationIds.has(item.id) && !storedNotificationDedupeKeys.has(getActivityNotificationDedupeKey(item))
+    );
+    const existingNotifications = storedNotifications.filter(
+      (item) => !leadNotificationIds.has(item.id) && !leadNotificationDedupeKeys.has(getActivityNotificationDedupeKey(item))
+    );
+    const nextNotifications = dedupeActivityNotifications([...leadNotifications, ...existingNotifications])
       .sort((first, second) => {
         const firstTime = toDate(first.createdAt)?.getTime() || 0;
         const secondTime = toDate(second.createdAt)?.getTime() || 0;
@@ -980,6 +1017,44 @@ const UserDetails = ({
   const cancelledVisits = visits.filter((visit) => normalizeText(visit.status).includes("cancel"));
   const scheduledVisits = visits.filter((visit) => !completedVisits.includes(visit) && !cancelledVisits.includes(visit));
   const lastActivity = activities[0]?.createdAt || createdDate;
+  const latestBooking = useMemo(() => {
+    const bookingRows = bookings.length ? bookings : lead?.bookings || [];
+    return [...bookingRows].sort((first, second) => {
+      const firstTime = toDate(first?.bookedOn || first?.createdAt)?.getTime() || 0;
+      const secondTime = toDate(second?.bookedOn || second?.createdAt)?.getTime() || 0;
+      return secondTime - firstTime;
+    })[0];
+  }, [bookings, lead?.bookings]);
+  const bookingUnitFields = latestBooking
+    ? [
+        ["Name", valueOf(latestBooking, ["unit", "unitName", "name"], "-")],
+        ["Status", valueOf(latestBooking, ["unitStatus", "projectUnitStatus", "status"], "Available")],
+        ["Floor", valueOf(latestBooking, ["floor", "floorName"], "-")],
+        ["Project Tower Name", valueOf(latestBooking, ["towerName", "projectTowerName", "tower"], "-")],
+        ["Bedrooms", valueOf(latestBooking, ["bedrooms", "bedroom"], "-")],
+        ["Bathrooms", valueOf(latestBooking, ["bathrooms", "bathroom"], "-")],
+        ["Carpet", formatNumber(valueOf(latestBooking, ["carpetArea", "carpet"], ""))],
+        ["Saleable", formatArea(valueOf(latestBooking, ["saleableArea", "saleable"], ""))],
+        ["Base Rate", formatCompactMoney(valueOf(latestBooking, ["baseRate"], ""))],
+        ["Floor Rise", valueOf(latestBooking, ["floorRise"], "0")],
+        ["Effective Rate", formatNumber(valueOf(latestBooking, ["effectiveRate", "baseRate"], ""))],
+        ["Total Price", formatCompactMoney(valueOf(latestBooking, ["totalPrice", "totalAmount", "basePrice"], ""))],
+        ["Agreement Value", formatCompactMoney(valueOf(latestBooking, ["agreementValue", "basePrice"], ""))],
+        ["Booking Name", valueOf(latestBooking, ["bookingName", "customerName"], leadName)],
+        ["Booking Date", formatDateOnly(valueOf(latestBooking, ["bookingDate", "bookedOn", "createdAt"], ""))],
+      ]
+    : [];
+  const bookingApplicantFields = latestBooking
+    ? [
+        ["Name", valueOf(latestBooking, ["customerName", "bookingName"], leadName)],
+        ["Lead Name", leadName],
+        ["Phone", valueOf(latestBooking, ["phone", "mobile"], primaryPhone || "-")],
+        ["DOB", valueOf(latestBooking, ["dob", "dateOfBirth"], valueOf(lead, ["birthday", "dob", "dateOfBirth"], "-"))],
+        ["PAN Number", valueOf(latestBooking, ["panNumber", "pan"], valueOf(lead, ["panNumber", "pan"], "-"))],
+        ["Aadhaar Number", valueOf(latestBooking, ["aadhaarNumber", "aadharNumber", "aadhaar", "aadhar"], valueOf(lead, ["aadhaarNumber", "aadharNumber", "aadhaar", "aadhar"], "-"))],
+        ["Email", valueOf(latestBooking, ["email"], primaryEmail || "-")],
+      ]
+    : [];
 
   return (
     <>
@@ -1522,6 +1597,84 @@ const UserDetails = ({
           grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
+        .crm-booking-confirmation {
+          display: grid;
+          gap: 16px;
+        }
+
+        .crm-booking-title {
+          color: #666666;
+          font-size: 15px;
+          font-weight: 700;
+          margin: 0;
+        }
+
+        .crm-booking-card {
+          background: #ffffff;
+          border: 1px solid #cfd6df;
+          border-radius: 3px;
+          overflow: hidden;
+        }
+
+        .crm-booking-card-head {
+          align-items: center;
+          background: #673ab7;
+          color: #ffffff;
+          display: flex;
+          font-size: 14px;
+          font-weight: 700;
+          min-height: 38px;
+          padding: 0 8px;
+        }
+
+        .crm-booking-grid,
+        .crm-applicant-grid {
+          display: grid;
+          gap: 18px 28px;
+          grid-template-columns: repeat(4, minmax(0, 1fr));
+          padding: 14px 16px 28px;
+        }
+
+        .crm-applicant-grid {
+          border-bottom: 1px solid #e3e7ee;
+        }
+
+        .crm-booking-field {
+          display: grid;
+          gap: 5px;
+          min-width: 0;
+        }
+
+        .crm-booking-field span {
+          color: #7b8794;
+          font-size: 11px;
+          font-weight: 600;
+          text-transform: uppercase;
+        }
+
+        .crm-booking-field strong {
+          color: #4b5563;
+          font-size: 15px;
+          font-weight: 500;
+          min-height: 18px;
+          overflow-wrap: anywhere;
+        }
+
+        .crm-add-coapplicant {
+          align-items: center;
+          background: #ffffff;
+          border: 0;
+          color: #5528d8;
+          cursor: pointer;
+          display: flex;
+          font: inherit;
+          font-size: 14px;
+          font-weight: 700;
+          justify-content: center;
+          min-height: 52px;
+          width: 100%;
+        }
+
         .crm-empty {
           color: var(--neutral-500, #6b7280);
           padding: 18px;
@@ -1536,6 +1689,8 @@ const UserDetails = ({
           .crm-main-grid,
           .crm-bottom-grid,
           .crm-header-grid,
+          .crm-booking-grid,
+          .crm-applicant-grid,
           .crm-overview-grid {
             grid-template-columns: 1fr;
           }
@@ -1888,6 +2043,39 @@ const UserDetails = ({
               </div>
             </section>
           </div>
+
+          {latestBooking && (
+            <section className="crm-booking-confirmation">
+              <h2 className="crm-booking-title">Booking Confirmation</h2>
+
+              <div className="crm-booking-card">
+                <div className="crm-booking-card-head">Unit Details</div>
+                <div className="crm-booking-grid">
+                  {bookingUnitFields.map(([label, value]) => (
+                    <div className="crm-booking-field" key={label}>
+                      <span>{label}</span>
+                      <strong>{value || "-"}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="crm-booking-card">
+                <div className="crm-booking-card-head">Applicant Details</div>
+                <div className="crm-applicant-grid">
+                  {bookingApplicantFields.map(([label, value]) => (
+                    <div className="crm-booking-field" key={label}>
+                      <span>{label}</span>
+                      <strong>{value || "-"}</strong>
+                    </div>
+                  ))}
+                </div>
+                <button className="crm-add-coapplicant" type="button">
+                  + Add New Co-Applicant
+                </button>
+              </div>
+            </section>
+          )}
 
           <section className="crm-bottom-grid">
             <div className="crm-panel">

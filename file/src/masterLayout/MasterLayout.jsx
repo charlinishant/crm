@@ -2,20 +2,24 @@ import React, { useEffect, useRef, useState } from "react";
 import { Icon } from "@iconify/react/dist/iconify.js";
 import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
 import ThemeToggleButton from "../helper/ThemeToggleButton";
+import {
+  activityNotificationStorageKey,
+  dedupeActivityNotifications,
+} from "../utils/activityNotifications";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
-const activityNotificationStorageKey = "crmActivityNotifications";
+const adminNotificationSoundSrc = "assets/sounds/notification.mp3";
 
 const getActivityNotifications = () => {
   try {
-    return JSON.parse(localStorage.getItem(activityNotificationStorageKey) || "[]");
+    return dedupeActivityNotifications(JSON.parse(localStorage.getItem(activityNotificationStorageKey) || "[]"));
   } catch {
     return [];
   }
 };
 
 const saveActivityNotifications = (notifications) => {
-  localStorage.setItem(activityNotificationStorageKey, JSON.stringify(notifications));
+  localStorage.setItem(activityNotificationStorageKey, JSON.stringify(dedupeActivityNotifications(notifications)));
 };
 
 const fetchActivityNotifications = async () => {
@@ -27,8 +31,9 @@ const fetchActivityNotifications = async () => {
   });
   if (!response.ok) throw new Error("Unable to load activity notifications");
   const notifications = await response.json();
-  saveActivityNotifications(Array.isArray(notifications) ? notifications : []);
-  return Array.isArray(notifications) ? notifications : [];
+  const dedupedNotifications = dedupeActivityNotifications(Array.isArray(notifications) ? notifications : []);
+  saveActivityNotifications(dedupedNotifications);
+  return dedupedNotifications;
 };
 
 const formatNotificationTime = (value) => {
@@ -49,6 +54,7 @@ const MasterLayout = ({ children }) => {
   const [activityNotifications, setActivityNotifications] = useState(getActivityNotifications);
   const [adminNotificationToast, setAdminNotificationToast] = useState(null);
   const notificationLoadRef = useRef({ initialized: false, ids: new Set(getActivityNotifications().map((item) => item.id)) });
+  const notificationSoundRef = useRef(null);
   const location = useLocation(); // Hook to get the current route
   const navigate = useNavigate();
   const savedUser = JSON.parse(localStorage.getItem("authUser") || "null");
@@ -118,6 +124,17 @@ const MasterLayout = ({ children }) => {
       window.removeEventListener("crmActivityNotificationsChanged", refreshNotifications);
     };
   }, [savedUser?.role]);
+
+  useEffect(() => {
+    if (!adminNotificationToast) return;
+
+    const sound = notificationSoundRef.current || new Audio(adminNotificationSoundSrc);
+    notificationSoundRef.current = sound;
+    sound.currentTime = 0;
+    sound.play().catch((error) => {
+      console.warn("Unable to play notification sound:", error);
+    });
+  }, [adminNotificationToast]);
 
   useEffect(() => {
     const handleDropdownClick = (event) => {
@@ -2035,8 +2052,8 @@ const MasterLayout = ({ children }) => {
                       className='text-primary-light text-xl'
                     />
                   </button>
-                  <div className='dropdown-menu to-top dropdown-menu-lg p-0'>
-                    <div className='m-16 py-12 px-16 radius-8 bg-primary-50 mb-16 d-flex align-items-center justify-content-between gap-2'>
+                  <div className='dropdown-menu to-top dropdown-menu-lg p-0 admin-notifications-menu'>
+                    <div className='admin-notifications-head'>
                       <div>
                         <h6 className='text-lg text-primary-light fw-semibold mb-0'>
                           Notifications
@@ -2046,7 +2063,7 @@ const MasterLayout = ({ children }) => {
                         {activityNotifications.length.toString().padStart(2, "0")}
                       </span>
                     </div>
-                    <div className='max-h-400-px overflow-y-auto scroll-sm pe-4'>
+                    <div className='admin-notifications-list scroll-sm'>
                       {recentActivityNotifications.length === 0 ? (
                         <div className='px-24 py-24 text-center text-secondary-light'>
                           No activity notifications
@@ -2055,28 +2072,28 @@ const MasterLayout = ({ children }) => {
                         recentActivityNotifications.map((notification, index) => (
                           <Link
                             to='/activity-notifications'
-                            className={`px-24 py-12 d-flex align-items-start gap-3 mb-2 justify-content-between ${
+                            className={`admin-notification-item ${
                               index % 2 ? "bg-neutral-50" : ""
                             }`}
                             key={notification.id}
                           >
-                            <div className='text-black hover-bg-transparent hover-text-primary d-flex align-items-center gap-3'>
+                            <div className='admin-notification-content text-black hover-bg-transparent hover-text-primary'>
                               <span className='w-44-px h-44-px bg-info-subtle text-info-main rounded-circle d-flex justify-content-center align-items-center flex-shrink-0'>
                                 <Icon icon='iconoir:activity' className='icon text-xxl' />
                               </span>
-                              <div>
-                                <h6 className='text-md fw-semibold mb-4'>
+                              <div className='admin-notification-copy'>
+                                <h6 className='admin-notification-title'>
                                   {notification.title}
                                 </h6>
-                                <p className='mb-0 text-sm text-secondary-light text-w-200-px'>
+                                <p className='admin-notification-message'>
                                   {notification.leadName}: {notification.description}
                                 </p>
-                                <p className='mb-0 text-xs text-secondary-light text-w-200-px'>
+                                <p className='admin-notification-meta'>
                                   {notification.meta || `Done by ${notification.actorName || "Sales User"}`}
                                 </p>
                               </div>
                             </div>
-                            <span className='text-sm text-secondary-light flex-shrink-0'>
+                            <span className='admin-notification-time'>
                               {formatNotificationTime(notification.createdAt)}
                             </span>
                           </Link>

@@ -3,7 +3,10 @@ const { sendNotification } = require("./notification.service")
 
 const immediateNotificationKeys = new Map()
 const reminderTimers = new Map()
+const reminderInFlight = new Set()
 const immediateDedupeMs = 60 * 1000
+const minuteMs = 60 * 1000
+const reminderOffsetsMinutes = [60, 15]
 
 const getLeadName = (lead) =>
   [lead?.firstName, lead?.lastName].filter(Boolean).join(" ") ||
@@ -22,6 +25,43 @@ const formatVisitDateTime = (value) => {
     hour: "numeric",
     minute: "2-digit",
   })
+}
+
+const getReminderTimerKey = (visitId, offsetMinutes) => `${visitId}:${offsetMinutes}`
+
+const clearVisitReminderTimers = (visitId) => {
+  reminderOffsetsMinutes.forEach((offsetMinutes) => {
+    const timerKey = getReminderTimerKey(visitId, offsetMinutes)
+    const existingTimer = reminderTimers.get(timerKey)
+
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+      reminderTimers.delete(timerKey)
+    }
+  })
+}
+
+const getVisitReminderAt = (scheduledOn, offsetMinutes) => {
+  const scheduledTime = new Date(scheduledOn).getTime()
+  if (Number.isNaN(scheduledTime)) return null
+  return new Date(scheduledTime - offsetMinutes * minuteMs)
+}
+
+const getRemainingVisitTimeLabel = (scheduledOn, now = new Date()) => {
+  const scheduledTime = new Date(scheduledOn).getTime()
+  const nowTime = now.getTime()
+  if (Number.isNaN(scheduledTime) || Number.isNaN(nowTime)) return "soon"
+
+  const remainingMinutes = Math.max(0, Math.round((scheduledTime - nowTime) / (60 * 1000)))
+  if (remainingMinutes >= 55 && remainingMinutes <= 65) return "in 1 hour"
+  if (remainingMinutes >= 60) {
+    const hours = Math.floor(remainingMinutes / 60)
+    const minutes = remainingMinutes % 60
+    return minutes ? `in ${hours} hr ${minutes} min` : `in ${hours} hr`
+  }
+  if (remainingMinutes > 1) return `in ${remainingMinutes} minutes`
+  if (remainingMinutes === 1) return "in 1 minute"
+  return "now"
 }
 
 const getNotificationRecipients = async (visit) => {
@@ -67,6 +107,17 @@ const getAdminIds = async () => {
 
 const createSiteVisitActivity = async (visit, type, message) => {
   if (!visit?.leadId || !message) return null
+
+  const existingActivity = await prisma.leadActivity.findFirst({
+    where: {
+      leadId: Number(visit.leadId),
+      type,
+      message,
+    },
+    select: { id: true },
+  })
+
+  if (existingActivity) return existingActivity
 
   return prisma.leadActivity.create({
     data: {
@@ -118,7 +169,12 @@ const sendSiteVisitSavedNotification = async (visit) => {
   ])
 }
 
-const sendSiteVisitReminder = async (visitId) => {
+const sendSiteVisitReminder = async (visitId, offsetMinutes = 60) => {
+  const reminderKey = getReminderTimerKey(visitId, offsetMinutes)
+  if (reminderInFlight.has(reminderKey)) return
+  reminderInFlight.add(reminderKey)
+
+  try {
   const visit = await prisma.scheduleVisit.findUnique({
     where: { id: Number(visitId) },
     include: {
@@ -132,39 +188,62 @@ const sendSiteVisitReminder = async (visitId) => {
 
   if (!visit || !shouldNotifySavedVisit(visit)) return
 
+  const scheduledTime = new Date(visit.scheduledOn).getTime()
+  if (Number.isNaN(scheduledTime) || scheduledTime <= Date.now()) return
+
   const leadName = getLeadName(visit.lead)
   const scheduledFor = formatVisitDateTime(visit.scheduledOn)
   const title = "Site visit reminder"
-  const description = `${leadName} has a site visit in 1 hour at ${scheduledFor}.`
+  const description = `${leadName} has a site visit ${getRemainingVisitTimeLabel(visit.scheduledOn)} at ${scheduledFor}.`
+  const existingActivity = await prisma.leadActivity.findFirst({
+    where: {
+      leadId: Number(visit.leadId),
+      type: title,
+      message: description,
+    },
+    select: { id: true },
+  })
+
+  if (existingActivity) return
+
   const recipientIds = await getNotificationRecipients(visit)
 
   await Promise.allSettled([
     notifyUsers(recipientIds, title, description),
     createSiteVisitActivity(visit, title, description),
   ])
+  } finally {
+    reminderInFlight.delete(reminderKey)
+  }
 }
 
 const scheduleSiteVisitReminder = (visit) => {
+  if (!visit?.id) return
+
+  clearVisitReminderTimers(visit.id)
+
   if (!shouldNotifySavedVisit(visit)) return
 
   const scheduledTime = new Date(visit.scheduledOn).getTime()
   if (Number.isNaN(scheduledTime) || scheduledTime <= Date.now()) return
 
-  const reminderDelay = Math.max(0, scheduledTime - Date.now() - 60 * 60 * 1000)
-  const existingTimer = reminderTimers.get(visit.id)
+  reminderOffsetsMinutes.forEach((offsetMinutes) => {
+    const reminderAt = getVisitReminderAt(visit.scheduledOn, offsetMinutes)
+    if (!reminderAt) return
 
-  if (existingTimer) {
-    clearTimeout(existingTimer)
-  }
+    const reminderDelay = reminderAt.getTime() - Date.now()
+    if (reminderDelay <= 0) return
 
-  const timer = setTimeout(() => {
-    reminderTimers.delete(visit.id)
-    sendSiteVisitReminder(visit.id).catch((error) => {
-      console.error("Unable to send site visit reminder:", error)
-    })
-  }, reminderDelay)
+    const timerKey = getReminderTimerKey(visit.id, offsetMinutes)
+    const timer = setTimeout(() => {
+      reminderTimers.delete(timerKey)
+      sendSiteVisitReminder(visit.id, offsetMinutes).catch((error) => {
+        console.error("Unable to send site visit reminder:", error)
+      })
+    }, reminderDelay)
 
-  reminderTimers.set(visit.id, timer)
+    reminderTimers.set(timerKey, timer)
+  })
 }
 
 const handleSiteVisitSaved = async (visit) => {

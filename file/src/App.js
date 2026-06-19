@@ -197,9 +197,7 @@ const RedirectWithSearch = ({ to }) => {
 
 const RedirectUserPreviewToSales = () => {
   const location = useLocation();
-  const searchParams = new URLSearchParams(location.search);
-  const targetPath = searchParams.get("openBooking") === "1" ? "/user/sales/bookings" : "/user/sales/details";
-  return <Navigate to={`${targetPath}${location.search || ""}`} replace state={location.state} />;
+  return <Navigate to={`/user/sales/details${location.search || ""}`} replace state={location.state} />;
 };
 
 const ProtectedAppRoutes = () => {

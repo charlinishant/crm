@@ -102,6 +102,19 @@ const toCleanNumber = (value) => {
   return Number.isNaN(number) ? 0 : number;
 };
 
+const getRateBasisArea = ({ rateBasis, carpet, builtupArea, saleable }) => {
+  if (rateBasis === "On Built-up") return toCleanNumber(builtupArea);
+  if (rateBasis === "On Saleable") return toCleanNumber(saleable);
+  return toCleanNumber(carpet);
+};
+
+const calculateBasePriceForRateBasis = ({ baseRate, rateBasis, carpet, builtupArea, saleable }) => {
+  const rate = toCleanNumber(baseRate);
+  const area = getRateBasisArea({ rateBasis, carpet, builtupArea, saleable });
+  if (!rate || !area) return 0;
+  return rate * area;
+};
+
 const calculateCostNewValue = (row) => {
   const original = toCleanNumber(row.originalValue);
   const input = toCleanNumber(row.inputField);
@@ -192,6 +205,10 @@ const UserPreview = () => {
       new URLSearchParams(location.search).get("openBooking") === "1",
     [location.search, location.state]
   );
+  const requestedBookingStep = useMemo(() => {
+    const step = location.state?.bookingStep || new URLSearchParams(location.search).get("bookingStep");
+    return step === "confirm" ? 3 : 0;
+  }, [location.search, location.state]);
 
   useEffect(() => {
     if (!isBookingFormOpen) return undefined;
@@ -314,8 +331,10 @@ const UserPreview = () => {
           type: group.type,
           bedrooms: group.bedrooms,
           bathrooms: group.bathrooms,
-          carpet: group.carpet,
-          saleable: group.saleable,
+          carpet: group.carpet || group.floor?.carpet,
+          builtupArea: group.builtupArea || group.floor?.builtupArea,
+          saleable: group.saleable || group.floor?.saleable,
+          rateBasis: group.rateBasis || group.floor?.rateBasis || "On Carpet",
         }))
       ),
     [bookingProjectUnits]
@@ -639,6 +658,13 @@ const UserPreview = () => {
   const handleBookingUnitSelect = (unit) => {
     const unitName = getBookingUnitOptionLabel(unit);
     const unitId = unit.id || unit.groupId || "";
+    const unitBasePrice = calculateBasePriceForRateBasis({
+      baseRate: unit.baseRate,
+      rateBasis: unit.rateBasis,
+      carpet: unit.carpet,
+      builtupArea: unit.builtupArea,
+      saleable: unit.saleable,
+    });
 
     setBookingProjectMessage("");
     setEditableCostRows([]);
@@ -649,10 +675,12 @@ const UserPreview = () => {
       unitId,
       projectId: unit.project?.id || prev.projectId,
       projectDetails: unit.project?.name || prev.projectDetails,
-      basePrice: unit.basePrice || "",
+      basePrice: unitBasePrice || "",
       baseRate: unit.baseRate || "",
       saleableArea: unit.saleable || prev.saleableArea,
       carpetArea: unit.carpet || prev.carpetArea,
+      builtupArea: unit.builtupArea || prev.builtupArea,
+      rateBasis: unit.rateBasis || prev.rateBasis || "On Carpet",
     }));
   };
 
@@ -794,8 +822,8 @@ const UserPreview = () => {
       customerName: leadName,
       projectDetails: projectName,
     });
-    setBookingMessage(".");
-    setBookingStepIndex(0);
+    setBookingMessage(requestedBookingStep === 3 ? "Complete the booking confirmation details." : "");
+    setBookingStepIndex(requestedBookingStep);
     setBookingFilters(defaultBookingFilters);
     setSelectedBookingTowerId("");
     setQuotationTab("unit");
@@ -806,7 +834,7 @@ const UserPreview = () => {
     setBookingUnitView("listing");
     setShouldCheckAvailability(true);
     setIsBookingFormOpen(true);
-  }, [shouldOpenBookingForm, leadName, projectName]);
+  }, [requestedBookingStep, shouldOpenBookingForm, leadName, projectName]);
 
   const formatBookingDate = (value) => {
     if (!value) return "-";
@@ -847,9 +875,13 @@ const UserPreview = () => {
   const quotationBaseRate =
     bookingForm.baseRate || selectedBookingUnit?.baseRate || "7.8K (7,750)";
   const quotationName = `${quotationProjectName} - ${quotationTowerName} - ${quotationUnitName}`;
-  const baseAgreementValue =
-    toCleanNumber(bookingForm.basePrice || selectedBookingUnit?.basePrice) ||
-    toCleanNumber(selectedBookingUnit?.saleable) * toCleanNumber(selectedBookingUnit?.baseRate);
+  const baseAgreementValue = calculateBasePriceForRateBasis({
+    baseRate: bookingForm.baseRate || selectedBookingUnit?.baseRate,
+    rateBasis: bookingForm.rateBasis || selectedBookingUnit?.rateBasis,
+    carpet: bookingForm.carpetArea || selectedBookingUnit?.carpet,
+    builtupArea: bookingForm.builtupArea || selectedBookingUnit?.builtupArea,
+    saleable: bookingForm.saleableArea || selectedBookingUnit?.saleable,
+  });
   const defaultQuotationCostRows = useMemo(() => [
     { type: "section", serial: "1.", name: "Basic Details" },
     { serial: "1.a", name: "Base Rate", originalValue: toCleanNumber(selectedBookingUnit?.baseRate || bookingForm.baseRate || 7750), costType: "Discount", inputField: 0, highlight: true },
@@ -1020,9 +1052,11 @@ const UserPreview = () => {
         ...prev,
         stage: "Booked",
         bookedOn: prev.bookedOn || bookingConfirmationDate,
-        basePrice: prev.basePrice || quotationAgreementValue || "",
+        basePrice: baseAgreementValue || quotationAgreementValue || "",
         saleableArea: prev.saleableArea || selectedBookingUnit?.saleable || "",
         baseRate: prev.baseRate || selectedBookingUnit?.baseRate || "",
+        builtupArea: prev.builtupArea || selectedBookingUnit?.builtupArea || "",
+        rateBasis: prev.rateBasis || selectedBookingUnit?.rateBasis || "On Carpet",
       }));
       setBookingStepIndex(3);
       return;
@@ -4029,7 +4063,7 @@ const UserPreview = () => {
                         <>
                           <span>{selectedBookingUnit.tower?.name || activeTowerName} | Floor {selectedBookingUnit.floor || quotationFloor}</span>
                           <span>Carpet {selectedBookingUnit.carpet || "-"} Sq. Ft. | Saleable {selectedBookingUnit.saleable || "-"} Sq. Ft.</span>
-                          <span>Base price Rs. {Number(selectedBookingUnit.basePrice || 0).toLocaleString("en-IN")}</span>
+                          <span>Base price Rs. {Number(baseAgreementValue || 0).toLocaleString("en-IN")}</span>
                         </>
                       )}
                     </div>

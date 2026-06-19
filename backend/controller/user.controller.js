@@ -2,6 +2,17 @@ const bcrypt = require("bcryptjs")
 const prisma = require("../lib/prisma")
 const { emitReportsUpdate } = require("../socket/socket")
 
+const normalizeLeadStageText = (value) =>
+    String(value || "")
+        .toLowerCase()
+        .replace(/[_-]/g, " ")
+        .trim()
+
+const isNewAssignedLead = (lead) => {
+    const status = normalizeLeadStageText(lead?.status || lead?.stage || lead?.leadStage || lead?.tags)
+    return !status || status === "new" || status === "fresh lead" || status.includes("fresh")
+}
+
 
 exports.createUser = async (req, res)=>{
     try {
@@ -297,8 +308,13 @@ exports.getAccessPanel = async (req, res)=>{
                 select:{leadId:true},
             })
             newLeadsToday = assignedToday.length
+
+            if (newLeadsToday === 0) {
+                newLeadsToday = leads.filter(isNewAssignedLead).length
+            }
         } catch (error) {
             console.log("Unable to load new assigned lead stats", error)
+            newLeadsToday = leads.filter(isNewAssignedLead).length
         }
 
         let bookings = []

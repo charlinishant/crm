@@ -35,6 +35,22 @@ const AddUnits = () => {
     return Number.isNaN(number) ? null : number;
   };
 
+  const selectedFloorPlan = floorPlans.find((plan) => String(plan.id) === String(formData.floorId));
+
+  const getRateBasisArea = (floorPlan) => {
+    if (!floorPlan) return 0;
+    if (floorPlan.rateBasis === "On Built-up") return toNumberOrNull(floorPlan.builtupArea) || 0;
+    if (floorPlan.rateBasis === "On Saleable") return toNumberOrNull(floorPlan.saleable) || 0;
+    return toNumberOrNull(floorPlan.carpet) || 0;
+  };
+
+  const calculateUnitBasePrice = (baseRate) => {
+    const rate = toNumberOrNull(baseRate) || 0;
+    const area = getRateBasisArea(selectedFloorPlan);
+    if (!rate || !area) return "";
+    return Number((rate * area).toFixed(2));
+  };
+
   useEffect(() => {
     const fetchProjects = async () => {
       try {
@@ -130,7 +146,7 @@ const AddUnits = () => {
         floor: toNumberOrNull(unit.floor),
         unitIndex: toNumberOrNull(unit.unitIndex),
         baseRate: toNumberOrNull(unit.baseRate),
-        basePrice: toNumberOrNull(unit.basePrice),
+        basePrice: calculateUnitBasePrice(unit.baseRate) || 0,
       })),
       projectId: toNumberOrNull(formData.projectId),
       towerId: toNumberOrNull(formData.towerId),
@@ -239,6 +255,13 @@ const AddUnits = () => {
                   <option value="Investment">Investment</option>
                   <option value="Self Use">Self Use</option>
                 </SelectField>
+                <FormField
+                  label="RATE BASIS"
+                  name="rateBasis"
+                  value={selectedFloorPlan?.rateBasis || ""}
+                  placeholder="Select floor plan"
+                  disabled
+                />
               </div>
             </Section>
 
@@ -265,7 +288,7 @@ const AddUnits = () => {
                     <FormField label="FLOOR *" name="floor" type="number" value={unit.floor} onChange={(event) => handleUnitChange(index, event)} placeholder="0" required />
                     <FormField label="UNIT INDEX *" name="unitIndex" type="number" value={unit.unitIndex} onChange={(event) => handleUnitChange(index, event)} placeholder="0" required />
                     <FormField label="BASE RATE *" name="baseRate" type="number" value={unit.baseRate} onChange={(event) => handleUnitChange(index, event)} required />
-                    <FormField label="BASE PRICE *" name="basePrice" type="number" value={unit.basePrice} onChange={(event) => handleUnitChange(index, event)} required />
+                    <FormField label="BASE PRICE *" name="basePrice" type="number" value={calculateUnitBasePrice(unit.baseRate)} disabled required />
                   </div>
                 </div>
               ))}
@@ -310,7 +333,7 @@ const Section = ({ title, action, children }) => (
   </div>
 );
 
-const FormField = ({ label, name, value, onChange, placeholder, type = "text", required = false }) => (
+const FormField = ({ label, name, value, onChange, placeholder, type = "text", required = false, disabled = false }) => (
   <div className="lead-group">
     <label>{label}</label>
     <input
@@ -320,6 +343,7 @@ const FormField = ({ label, name, value, onChange, placeholder, type = "text", r
       onChange={onChange}
       placeholder={placeholder}
       required={required}
+      disabled={disabled}
     />
   </div>
 );

@@ -1,5 +1,25 @@
 const prisma = require("../lib/prisma")
 
+const toNumberOrNull = (value) => {
+  if (value === "" || value === null || value === undefined) return null
+  const number = Number(value)
+  return Number.isNaN(number) ? null : number
+}
+
+const getAreaForRateBasis = (floor, basis) => {
+  if (basis === "On Built-up") return toNumberOrNull(floor?.builtupArea)
+  if (basis === "On Saleable") return toNumberOrNull(floor?.saleable)
+  return toNumberOrNull(floor?.carpet)
+}
+
+const calculateBasePrice = (baseRate, floor) => {
+  const rate = toNumberOrNull(baseRate)
+  const area = getAreaForRateBasis(floor, floor?.rateBasis || "On Carpet")
+
+  if (!rate || !area) return 0
+  return Number((rate * area).toFixed(2))
+}
+
 exports.createUnit = async (req, res) => {
   try {
     const {
@@ -22,6 +42,24 @@ exports.createUnit = async (req, res) => {
       return res.status(400).json({ message: "Unit list is required" })
     }
 
+    const floorPlan = floorId
+      ? await prisma.floorPlan.findUnique({
+          where: { id: Number(floorId) },
+          select: {
+            type: true,
+            category: true,
+            bedrooms: true,
+            bathrooms: true,
+            measure: true,
+            carpet: true,
+            builtupArea: true,
+            saleable: true,
+            loading: true,
+            rateBasis: true,
+          },
+        })
+      : null
+
     const record = await prisma.unit.create({ data: {
       unitList:{
         create:unitList.map(unit=>({
@@ -29,21 +67,21 @@ exports.createUnit = async (req, res) => {
             floor:unit.floor,
             unitIndex:unit.unitIndex,
             baseRate:unit.baseRate,
-            basePrice:unit.basePrice,
+            basePrice:calculateBasePrice(unit.baseRate, floorPlan),
             propertyPurpose:unit.propertyPurpose
         }))
       },
       projectId,
       towerId,
       floorId,
-      type,
-      category,
-      bedrooms,
-      bathrooms,
-      measure,
-      carpet,
-      saleable,
-      loading,
+      type: type ?? floorPlan?.type,
+      category: category ?? floorPlan?.category,
+      bedrooms: bedrooms ?? floorPlan?.bedrooms,
+      bathrooms: bathrooms ?? floorPlan?.bathrooms,
+      measure: measure ?? floorPlan?.measure,
+      carpet: carpet ?? floorPlan?.carpet,
+      saleable: saleable ?? floorPlan?.saleable,
+      loading: loading ?? floorPlan?.loading,
       description,
     } })
 
@@ -83,6 +121,11 @@ exports.getUnit = async (req, res) => {
             select: {
               id: true,
               name: true,
+              floorPlanImages: true,
+              rateBasis: true,
+              carpet: true,
+              builtupArea: true,
+              saleable: true,
             },
           },
         },
@@ -93,6 +136,12 @@ exports.getUnit = async (req, res) => {
       }
     } else {
       let conditions = {}
+      if (req.query.projectId) {
+        conditions.projectId = parseInt(req.query.projectId)
+      }
+      if (req.query.towerId) {
+        conditions.towerId = parseInt(req.query.towerId)
+      }
       const page = parseInt(req.query.page) || 1
       const limit = parseInt(req.query.limit) || 10
 
@@ -132,7 +181,12 @@ exports.getUnit = async (req, res) => {
           floor:{
             select:{
               id:true,
-              name:true
+              name:true,
+              floorPlanImages:true,
+              rateBasis:true,
+              carpet:true,
+              builtupArea:true,
+              saleable:true
             }
           },
 
@@ -192,12 +246,33 @@ exports.updateUnitItem = async (req, res) => {
     if (!id) return res.status(400).json({ message: "ID is required" })
 
     const payload = req.body || {}
+    const existingUnit = await prisma.unitModel.findUnique({
+      where: { id: Number(id) },
+      include: {
+        unit: {
+          include: {
+            floor: {
+              select: {
+                carpet: true,
+                builtupArea: true,
+                saleable: true,
+                rateBasis: true,
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (!existingUnit) return res.status(404).json({ message: "Unit not found" })
+
+    const baseRate = payload.baseRate ?? existingUnit.baseRate
     const data = {
       name: payload.name,
       floor: payload.floor,
       unitIndex: payload.unitIndex,
       baseRate: payload.baseRate,
-      basePrice: payload.basePrice,
+      basePrice: calculateBasePrice(baseRate, existingUnit.unit?.floor),
       propertyPurpose: payload.propertyPurpose,
     }
 

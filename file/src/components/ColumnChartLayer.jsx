@@ -363,6 +363,7 @@ const ProjectEditModal = ({ form, isSaving, onChange, onClose, onSubmit }) => (
             <option value="">Select</option>
             <option value="residential">Residential</option>
             <option value="commercial">Commercial</option>
+            <option value="residential_commercial">Residential + Commercial</option>
           </select>
         </label>
 

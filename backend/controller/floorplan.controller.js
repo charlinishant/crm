@@ -32,6 +32,17 @@ const getAreaForBasis = (data, basis) => {
     return data.carpet
 }
 
+const getFloorPlanErrorMessage = (error, fallback = "Something went wrong") => {
+    if (!error) return fallback
+
+    if (error.meta?.cause) return error.meta.cause
+    if (error.meta?.field_name) return `${error.meta.field_name} is invalid`
+    if (error.code) return `${error.code}: ${error.message || fallback}`
+    if (error.message) return error.message
+
+    return fallback
+}
+
 const validateFloorPlan = (data) => {
     if (
         data.applicableFloorFrom !== null &&
@@ -150,10 +161,10 @@ const normalizeFloorPlanPayload = (body) => {
     }
 
     const rateArea = getAreaForBasis(data, data.rateBasis)
-    if (autoCalc && data.baseRate !== null && rateArea !== null) {
+    if (data.baseRate !== null && rateArea !== null) {
         data.basePrice = Number((data.baseRate * rateArea).toFixed(2))
     } else {
-        data.basePrice = toNumberOrNull(body.basePrice)
+        data.basePrice = 0
     }
 
     data.coverArea = data.builtupArea
@@ -179,8 +190,10 @@ exports.createFloor = async (req, res)=>{
 
     } catch (error) {
         console.log(error);
-        
-        res.status(500).json("Something went wrong")
+
+        res.status(500).json({
+            message: getFloorPlanErrorMessage(error, "Failed to create floor plan"),
+        })
     }
 }
 
@@ -237,6 +250,7 @@ exports.getFloor  = async (req, res)=>{
                     saleable:true,
                     loading:true,
                     loadingBasis:true,
+                    rateBasis:true,
                     measure:true,
                     baseRate:true,
                     basePrice:true,
@@ -281,7 +295,9 @@ exports.updateFloor = async (req, res)=>{
         res.status(200).json(result)
     } catch (error) {
         console.log(error);
-        res.status(500).json("Something went wrong")
+        res.status(500).json({
+            message: getFloorPlanErrorMessage(error, "Failed to update floor plan"),
+        })
     }
 }
 

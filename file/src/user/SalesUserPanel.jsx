@@ -21,6 +21,7 @@ import UserConversationPanel from "./UserConversationPanel";
 import UserDetails from "./userDetails";
 import UserWhatsAppPage from "./UserWhatsAppPage";
 import SalesFollowups from "../pages/sales/SalesFollowups";
+import UserBookingForm from "./UserBookingForm";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
@@ -202,6 +203,47 @@ const siteVisitStatusOptions = [
   "Rescheduled",
 ];
 
+const emptyBookingForm = {
+  projectId: "",
+  unit: "",
+  unitId: "",
+  customerName: "",
+  phone: "",
+  email: "",
+  dob: "",
+  panNumber: "",
+  aadhaarNumber: "",
+  stage: "Booked",
+  projectDetails: "",
+  bookedOn: "",
+  saleableArea: "",
+  basePrice: "",
+  baseRate: "",
+  campaign: "walkin",
+  source: "",
+  subSource: "",
+  channelPartner: "",
+  companyName: "",
+  numberOfSeats: "",
+  physicalSeats: "",
+  carpetArea: "",
+  tenureMonths: "",
+  perSeatPrice: "",
+  monthlyRevenue: "",
+  noticePeriodMonths: "",
+  lockInPeriod: "",
+  securityDeposit: "",
+  leaseStartDate: "",
+  leaseEndDate: "",
+};
+
+const bookingSteps = [
+  "Filter Project",
+  "Select Unit",
+  "Quotation",
+  "Booking Confirmation",
+];
+
 const getDefaultVisitDateTime = () => {
   const date = new Date();
   date.setHours(date.getHours() + 2, 0, 0, 0);
@@ -352,6 +394,14 @@ const SalesUserPanel = () => {
   });
   const [siteVisitMessage, setSiteVisitMessage] = useState("");
   const [isSavingSiteVisit, setIsSavingSiteVisit] = useState(false);
+  const [bookingLead, setBookingLead] = useState(null);
+  const [bookingForm, setBookingForm] = useState(emptyBookingForm);
+  const [isBookingFormOpen, setIsBookingFormOpen] = useState(false);
+  const [isSavingBooking, setIsSavingBooking] = useState(false);
+  const [bookingMessage, setBookingMessage] = useState("");
+  const [bookingProjectMessage, setBookingProjectMessage] = useState("");
+  const [bookingStepIndex, setBookingStepIndex] = useState(0);
+  const [isBookingSuccess, setIsBookingSuccess] = useState(false);
   const [projects, setProjects] = useState([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [users, setUsers] = useState([]);
@@ -813,9 +863,11 @@ const SalesUserPanel = () => {
     const todayKey = getDateKey(new Date());
     const currentMonthKey = todayKey.slice(0, 7);
     const todayLeads = panel.leads.filter((lead) => getDateKey(lead.createdAt || lead.received_on) === todayKey);
-    const newLeadsTodayCount = Number.isFinite(Number(panel.stats.newLeadsToday))
-      ? Number(panel.stats.newLeadsToday)
-      : todayLeads.length;
+    const assignedNewLeads = panel.leads.filter((lead) => getLeadStage(lead) === "new");
+    const backendNewLeadsToday = Number(panel.stats.newLeadsToday);
+    const newLeadsTodayCount = Number.isFinite(backendNewLeadsToday) && backendNewLeadsToday > 0
+      ? backendNewLeadsToday
+      : todayLeads.length || assignedNewLeads.length;
     const todaysVisits = panel.leads.filter((lead) =>
       getDateKey(lead.conductSiteDate || lead.siteVisitDate || lead.siteVisitConductedOn) === todayKey
     );
@@ -843,6 +895,7 @@ const SalesUserPanel = () => {
         tone: "positive",
         onClick: () => {
           setActiveScreen("leads");
+          setActiveLeadStage("new");
           navigate("/user/sales/leads");
         },
       },
@@ -1285,14 +1338,186 @@ const SalesUserPanel = () => {
     }
   };
 
+  const openBookingForm = (lead) => {
+    const today = new Date();
+    const localDate = new Date(today.getTime() - today.getTimezoneOffset() * 60000)
+      .toISOString()
+      .slice(0, 10);
+    const leadProject =
+      lead?.interestedProjects ||
+      lead?.siteVisitProject ||
+      lead?.conductSiteVisit ||
+      lead?.projectName ||
+      lead?.project_name ||
+      lead?.propertyType ||
+      "";
+    const leadSource =
+      lead?.source ||
+      lead?.leadSource ||
+      lead?.campaign ||
+      lead?.tags ||
+      "";
+
+    setOpenActionLeadId(null);
+    setBookingLead(lead);
+    setBookingMessage("");
+    setBookingProjectMessage("");
+    setBookingStepIndex(0);
+    setIsBookingSuccess(false);
+    setBookingForm({
+      ...emptyBookingForm,
+      customerName: lead ? getLeadName(lead) : "",
+      phone: lead ? getLeadPhone(lead) : "",
+      email: lead?.email || lead?.emailAddress || lead?.primaryEmail || "",
+      dob: lead?.birthday || lead?.dob || lead?.dateOfBirth || "",
+      panNumber: lead?.panNumber || lead?.pan || lead?.panCard || lead?.pan_card || "",
+      aadhaarNumber: lead?.aadhaarNumber || lead?.aadharNumber || lead?.aadhaar || lead?.aadhar || lead?.aadhaarCard || lead?.aadharCard || "",
+      projectDetails: leadProject,
+      source: leadSource,
+      companyName: lead?.companyName || "",
+      bookedOn: localDate,
+    });
+    setIsBookingFormOpen(true);
+  };
+
+  const closeBookingForm = () => {
+    setIsBookingFormOpen(false);
+    setBookingLead(null);
+    setBookingMessage("");
+    setBookingProjectMessage("");
+    setBookingStepIndex(0);
+    setIsBookingSuccess(false);
+  };
+
+  const handleBookingFieldChange = (event) => {
+    const { name, value } = event.target;
+    setBookingForm((current) => ({ ...current, [name]: value }));
+  };
+
+  const handleSaveBooking = async (event) => {
+    event.preventDefault();
+
+    const leadId = bookingLead ? getLeadId(bookingLead) : "";
+    if (!leadId) {
+      setBookingMessage("Select a lead before confirming the booking.");
+      return;
+    }
+
+    if (bookingStepIndex === 0) {
+      if (!bookingForm.projectDetails.trim()) {
+        setBookingMessage("Select a project before continuing.");
+        return;
+      }
+      setBookingMessage("");
+      setBookingProjectMessage("");
+      setBookingStepIndex(1);
+      return;
+    }
+
+    if (bookingStepIndex === 1) {
+      if (!bookingForm.unit.trim()) {
+        setBookingProjectMessage("Select a unit before continuing.");
+        return;
+      }
+      setBookingMessage("");
+      setBookingProjectMessage("");
+      setBookingStepIndex(2);
+      return;
+    }
+
+    if (bookingStepIndex === 2) {
+      setBookingMessage("");
+      setBookingProjectMessage("");
+      setBookingStepIndex(3);
+      return;
+    }
+
+    if (!bookingForm.customerName.trim() || !bookingForm.projectDetails.trim()) {
+      setBookingMessage("Customer name and project details are required.");
+      return;
+    }
+
+    setIsSavingBooking(true);
+    setBookingMessage("");
+
+    try {
+      const response = await fetch(`${API_URL}/bookings`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          ...bookingForm,
+          leadId: Number(leadId),
+          stage: "Booked",
+          unitId: bookingForm.unitId ? Number(bookingForm.unitId) : undefined,
+          bookedBy: userName,
+          bookedOn: bookingForm.bookedOn || new Date().toISOString().slice(0, 10),
+          saleableArea: bookingForm.saleableArea || bookingForm.carpetArea,
+          source: bookingForm.source || bookingForm.campaign,
+        }),
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || "Unable to create booking");
+
+      const savedBooking = {
+        ...bookingForm,
+        ...result,
+        leadId: Number(leadId),
+        unit: result?.unit || bookingForm.unit,
+        stage: "Booked",
+      };
+      const updatedLead = {
+        ...bookingLead,
+        status: "Booked",
+        lead_status: "Booked",
+        stage: "Booked",
+        bookings: [savedBooking, ...(bookingLead?.bookings || [])],
+      };
+
+      setPanel((current) => ({
+        ...current,
+        stats: {
+          ...current.stats,
+          bookings: (current.stats.bookings || 0) + 1,
+        },
+        leads: current.leads.map((lead) =>
+          String(getLeadId(lead)) === String(leadId) ? { ...lead, ...updatedLead } : lead
+        ),
+        bookings: [savedBooking, ...(current.bookings || [])],
+      }));
+
+      try {
+        const cachedUpdates = JSON.parse(localStorage.getItem("leadStatusUpdates") || "{}");
+        cachedUpdates[String(leadId)] = {
+          status: "Booked",
+          crmStatus: "Booked",
+          score: 100,
+          backendStatus: "Booked",
+          updatedAt: new Date().toISOString(),
+        };
+        localStorage.setItem("leadStatusUpdates", JSON.stringify(cachedUpdates));
+      } catch (error) {
+        console.error("Unable to cache booked lead status:", error);
+      }
+
+      setBookingMessage("Booking confirmed successfully.");
+      setIsBookingSuccess(true);
+      await loadPanel(false);
+      return true;
+    } catch (error) {
+      console.error("Unable to save booking:", error);
+      setBookingMessage(error.message || "Booking could not be saved. Please check backend and database.");
+    } finally {
+      setIsSavingBooking(false);
+    }
+  };
+
   const openLeadPreview = (lead, openBooking = false) => {
     setOpenActionLeadId(null);
     if (openBooking) {
-      const leadId = getLeadId(lead);
-      window.sessionStorage.setItem("selectedLeadPreview", JSON.stringify(lead));
-      navigate(`/preview${leadId ? `?leadId=${leadId}&openBooking=1` : "?openBooking=1"}`, {
-        state: { lead, openBooking: true },
-      });
+      openBookingForm(lead);
       return;
     }
     openLeadDetails(lead);
@@ -2002,7 +2227,17 @@ const SalesUserPanel = () => {
                   const leadId = getLeadId(lead);
 
                   return (
-                  <div className="sales-row" key={leadId || lead.email}>
+                  <div
+                    className="sales-row"
+                    key={leadId || lead.email}
+                    onClick={() => {
+                      if (isBookedLead(lead)) {
+                        openBookingForm(lead);
+                        return;
+                      }
+                      openLeadDetails(lead);
+                    }}
+                  >
                     <span className="sales-lead-name">
                       <span className="sales-avatar small">{initials(getLeadName(lead))}</span>
                       <span>
@@ -2077,6 +2312,32 @@ const SalesUserPanel = () => {
           )}
         </section>
       </main>
+
+      <UserBookingForm
+        isOpen={isBookingFormOpen}
+        bookingSteps={bookingSteps}
+        bookingStepIndex={bookingStepIndex}
+        bookingMessage={bookingMessage}
+        bookingProjectMessage={bookingProjectMessage}
+        bookingForm={bookingForm}
+        leadName={bookingLead ? getLeadName(bookingLead) : "Selected lead"}
+        isSavingBooking={isSavingBooking}
+        isLoadingBookingProject={false}
+        bookingSuccess={isBookingSuccess}
+        onClose={closeBookingForm}
+        onSubmit={handleSaveBooking}
+        onPrevious={() => {
+          setBookingMessage("");
+          setBookingProjectMessage("");
+          setBookingStepIndex((current) => Math.max(0, current - 1));
+        }}
+        onFieldChange={handleBookingFieldChange}
+        onMarkInterested={() =>
+          setBookingProjectMessage(
+            bookingForm.unit ? `${bookingForm.unit} marked as interested.` : "Select a unit before marking interest."
+          )
+        }
+      />
 
     </div>
   );

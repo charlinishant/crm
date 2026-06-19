@@ -2,20 +2,23 @@ import React, { useEffect, useState } from "react";
 import { Icon } from "@iconify/react/dist/iconify.js";
 import MasterLayout from "../masterLayout/MasterLayout";
 import Breadcrumb from "../components/Breadcrumb";
+import {
+  activityNotificationStorageKey,
+  dedupeActivityNotifications,
+} from "../utils/activityNotifications";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
-const activityNotificationStorageKey = "crmActivityNotifications";
 
 const getActivityNotifications = () => {
   try {
-    return JSON.parse(localStorage.getItem(activityNotificationStorageKey) || "[]");
+    return dedupeActivityNotifications(JSON.parse(localStorage.getItem(activityNotificationStorageKey) || "[]"));
   } catch {
     return [];
   }
 };
 
 const saveActivityNotifications = (notifications) => {
-  localStorage.setItem(activityNotificationStorageKey, JSON.stringify(notifications));
+  localStorage.setItem(activityNotificationStorageKey, JSON.stringify(dedupeActivityNotifications(notifications)));
 };
 
 const fetchActivityNotifications = async () => {
@@ -27,8 +30,9 @@ const fetchActivityNotifications = async () => {
   });
   if (!response.ok) throw new Error("Unable to load activity notifications");
   const notifications = await response.json();
-  saveActivityNotifications(Array.isArray(notifications) ? notifications : []);
-  return Array.isArray(notifications) ? notifications : [];
+  const dedupedNotifications = dedupeActivityNotifications(Array.isArray(notifications) ? notifications : []);
+  saveActivityNotifications(dedupedNotifications);
+  return dedupedNotifications;
 };
 
 const formatDateTime = (value) => {

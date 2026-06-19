@@ -18,6 +18,19 @@ const toNumberOrNull = (value) => {
   return Number.isNaN(number) ? null : number;
 };
 
+const getRateBasisArea = (unit) => {
+  if (unit?.rateBasis === "On Built-up") return toNumberOrNull(unit.builtupArea) || 0;
+  if (unit?.rateBasis === "On Saleable") return toNumberOrNull(unit.saleableValue) || 0;
+  return toNumberOrNull(unit?.carpetValue) || 0;
+};
+
+const calculateBasePrice = (baseRate, unit) => {
+  const rate = toNumberOrNull(baseRate) || 0;
+  const area = getRateBasisArea(unit);
+  if (!rate || !area) return 0;
+  return Number((rate * area).toFixed(2));
+};
+
 const Units = () => {
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const [data, setData] = useState([]);
@@ -48,9 +61,7 @@ const Units = () => {
           groupId: group.id,
           name: unit.name || "-",
           floor: unit.floor ?? "-",
-          price: unit.basePrice ?? "-",
           baseRate: unit.baseRate ?? "",
-          basePrice: unit.basePrice ?? "",
           propertyPurpose: unit.propertyPurpose || "",
           unitIndex: unit.unitIndex ?? "-",
           tower: group.tower?.name || "-",
@@ -58,17 +69,25 @@ const Units = () => {
           project: group.project?.name || "-",
           bedrooms: group.bedrooms ?? "-",
           bathrooms: group.bathrooms ?? "-",
-          saleable: group.saleable
-            ? `${group.saleable} ${group.measure === "sqm" ? "Sq. M." : "Sq. Ft."}`
+          rateBasis: group.floor?.rateBasis || "On Carpet",
+          builtupArea: group.floor?.builtupArea ?? "",
+          saleableValue: group.saleable || group.floor?.saleable || "",
+          carpetValue: group.carpet || group.floor?.carpet || "",
+          saleable: group.saleable || group.floor?.saleable
+            ? `${group.saleable || group.floor?.saleable} ${group.measure === "sqm" ? "Sq. M." : "Sq. Ft."}`
             : "-",
-          carpet: group.carpet
-            ? `${group.carpet} ${group.measure === "sqm" ? "Sq. M." : "Sq. Ft."}`
+          carpet: group.carpet || group.floor?.carpet
+            ? `${group.carpet || group.floor?.carpet} ${group.measure === "sqm" ? "Sq. M." : "Sq. Ft."}`
             : "-",
           facing: "-",
           leads: "-",
           updated: "-",
         }))
       );
+      mapped.forEach((unit) => {
+        unit.basePrice = calculateBasePrice(unit.baseRate, unit);
+        unit.price = unit.basePrice || "-";
+      });
 
       setData(mapped);
       setTotalItems(json?.totalItems ?? mapped.length);
@@ -105,7 +124,7 @@ const Units = () => {
       floor: unit.floor === "-" ? "" : unit.floor,
       unitIndex: unit.unitIndex === "-" ? "" : unit.unitIndex,
       baseRate: unit.baseRate ?? "",
-      basePrice: unit.basePrice ?? "",
+      basePrice: calculateBasePrice(unit.baseRate, unit) || "",
       propertyPurpose: unit.propertyPurpose || "",
     });
     setModalMode("edit");
@@ -113,7 +132,13 @@ const Units = () => {
 
   const handleEditChange = (event) => {
     const { name, value } = event.target;
-    setEditForm((current) => ({ ...current, [name]: value }));
+    setEditForm((current) => {
+      const next = { ...current, [name]: value };
+      if (name === "baseRate") {
+        next.basePrice = calculateBasePrice(value, selectedUnit) || "";
+      }
+      return next;
+    });
   };
 
   const handleEditSubmit = async (event) => {
@@ -130,7 +155,7 @@ const Units = () => {
           floor: toNumberOrNull(editForm.floor),
           unitIndex: toNumberOrNull(editForm.unitIndex),
           baseRate: toNumberOrNull(editForm.baseRate),
-          basePrice: toNumberOrNull(editForm.basePrice),
+          basePrice: calculateBasePrice(editForm.baseRate, selectedUnit),
           propertyPurpose: editForm.propertyPurpose,
         }),
       });
@@ -306,6 +331,7 @@ const UnitViewModal = ({ unit, onClose }) => (
         <Detail label="Unit Config" value={unit.config} />
         <Detail label="Live Price" value={unit.price} />
         <Detail label="Base Rate" value={unit.baseRate} />
+        <Detail label="Rate Basis" value={unit.rateBasis} />
         <Detail label="Bedrooms" value={unit.bedrooms} />
         <Detail label="Bathrooms" value={unit.bathrooms} />
         <Detail label="Saleable Area" value={unit.saleable} />
@@ -346,7 +372,7 @@ const UnitEditModal = ({ form, saving, onChange, onClose, onSubmit }) => (
         </label>
         <label>
           <span>Base Price</span>
-          <input name="basePrice" type="number" value={form.basePrice} onChange={onChange} />
+          <input name="basePrice" type="number" value={form.basePrice} readOnly />
         </label>
         <label>
           <span>Purpose</span>
