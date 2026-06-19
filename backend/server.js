@@ -8,6 +8,7 @@ const prisma = require("./lib/prisma")
 const {initSocket} = require("./socket")
 
 const app = express()
+const BODY_LIMIT = process.env.BODY_LIMIT || "25mb"
 
 const server = http.createServer(app)
 
@@ -38,7 +39,8 @@ const emailRouetr = require("./router/email.routes")
 
 
 app.use(cors({ origin: "*" }))
-app.use(express.json())
+app.use(express.json({ limit: BODY_LIMIT }))
+app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }))
 app.use("/projects", projectRouter)
 app.use("/auth", authRouter)
 app.use("/lead-notes", leadNoteRouter)
@@ -63,6 +65,16 @@ app.use("/api/whatsapp", whatsappRouter)
 app.use("/api/email", emailRouetr)
 // app.use('/all-users', userRouter)
 app.use("/notification", notifiactionRouter)
+
+app.use((error, req, res, next) => {
+  if (error?.type === "entity.too.large") {
+    return res.status(413).json({
+      message: `Uploaded floor plan data is too large. Current request limit is ${BODY_LIMIT}.`,
+    })
+  }
+
+  return next(error)
+})
 
 const PORT = process.env.PORT || 5000
 server.listen(PORT, () => {
