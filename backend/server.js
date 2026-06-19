@@ -8,7 +8,7 @@ const prisma = require("./lib/prisma")
 const {initSocket} = require("./socket")
 
 const app = express()
-const BODY_LIMIT = process.env.BODY_LIMIT || "25mb"
+const BODY_LIMIT = process.env.BODY_LIMIT || "100mb"
 
 const server = http.createServer(app)
 

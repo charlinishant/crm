@@ -78,10 +78,16 @@ const initialFormData = {
 const typeOptions = ["Residential", "Commercial", "Retail", "Office", "Mixed-Use"];
 const categoryOptions = ["Flat", "Penthouse", "Duplex", "Row House", "Villa", "Studio", "Shop", "Showroom", "Office Unit"];
 const configurationLabelOptions = ["Studio", "1 BHK", "2 BHK", "3 BHK", "4 BHK", "5 BHK", "2 BHK, 3 BHK Jodi", "Shop", "Office"];
+const MAX_FLOOR_PLAN_FILE_BYTES = 20 * 1024 * 1024;
+const MAX_FLOOR_PLAN_UPLOAD_BYTES = 60 * 1024 * 1024;
 
 const readApiErrorMessage = async (response, fallback) => {
   const text = await response.text();
-  if (!text) return fallback;
+  if (!text) {
+    return response.status === 413
+      ? "Floor plan upload is too large. Please choose a smaller image/PDF."
+      : fallback;
+  }
 
   try {
     const result = JSON.parse(text);
@@ -93,6 +99,10 @@ const readApiErrorMessage = async (response, fallback) => {
 
     return fallback;
   } catch {
+    if (response.status === 413 || text.includes("PayloadTooLargeError")) {
+      return "Floor plan upload is too large. Please choose a smaller image/PDF.";
+    }
+
     return text;
   }
 };
@@ -315,6 +325,24 @@ const AddFloorplan = () => {
 
     if (type === "file") {
       const selectedFiles = Array.from(files || []);
+      const oversizedFile = selectedFiles.find((file) => file.size > MAX_FLOOR_PLAN_FILE_BYTES);
+      const totalFileSize = selectedFiles.reduce((total, file) => total + file.size, 0);
+
+      if (oversizedFile || totalFileSize > MAX_FLOOR_PLAN_UPLOAD_BYTES) {
+        event.target.value = "";
+        setFormData((prev) => ({
+          ...prev,
+          [name]: [],
+        }));
+        setError(
+          oversizedFile
+            ? `${oversizedFile.name} is too large. Maximum file size is ${formatFileSize(MAX_FLOOR_PLAN_FILE_BYTES)}.`
+            : `Selected files are too large. Maximum total upload size is ${formatFileSize(MAX_FLOOR_PLAN_UPLOAD_BYTES)}.`
+        );
+        return;
+      }
+
+      setError("");
       const encodedFiles = await Promise.all(
         selectedFiles.map(async (file) => ({
           name: file.name,
@@ -673,6 +701,8 @@ const AddFloorplan = () => {
 };
 
 const areaSuffix = (measure) => (measure === "sqm" ? "Sq. m." : "Sq. ft.");
+
+const formatFileSize = (bytes) => `${Math.round(bytes / (1024 * 1024))} MB`;
 
 const readFileAsDataUrl = (file) =>
   new Promise((resolve, reject) => {
