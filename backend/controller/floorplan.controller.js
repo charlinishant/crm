@@ -186,6 +186,24 @@ const normalizeFloorPlanPayload = (body) => {
     return data
 }
 
+const buildFloorPlanMutationData = (data, { allowDisconnect = false } = {}) => {
+    const { projectId, towerId, ...payload } = data
+
+    if (projectId !== null) {
+        payload.project = { connect: { id: projectId } }
+    } else if (allowDisconnect) {
+        payload.project = { disconnect: true }
+    }
+
+    if (towerId !== null) {
+        payload.tower = { connect: { id: towerId } }
+    } else if (allowDisconnect) {
+        payload.tower = { disconnect: true }
+    }
+
+    return payload
+}
+
 
 exports.createFloor = async (req, res)=>{
     try {
@@ -195,7 +213,9 @@ exports.createFloor = async (req, res)=>{
             return res.status(400).json({ message: validationError })
         }
 
-        const record = await prisma.floorPlan.create({data:data})
+        const record = await prisma.floorPlan.create({
+            data: buildFloorPlanMutationData(data),
+        })
 
         res.status(201).json({
             "id":record.id,
@@ -294,16 +314,18 @@ exports.updateFloor = async (req, res)=>{
             return res.status(400).json({ message: validationError })
         }
         const id = req.params.id
-        if(!id)
-            res.status(400).json("ID is required")    
+        if(!id) {
+            return res.status(400).json("ID is required")
+        }
 
         const record = await prisma.floorPlan.findUnique({where:{id:parseInt(id)}})
-        if(!record)
-            res.status(400).json("Floor plan not found")    
+        if(!record) {
+            return res.status(400).json("Floor plan not found")
+        }
 
         const result = await  prisma.floorPlan.update({
             where:{id:parseInt(record.id)},
-            data:data
+            data: buildFloorPlanMutationData(data, { allowDisconnect: true })
         })
 
         res.status(200).json(result)
