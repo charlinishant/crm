@@ -7,6 +7,7 @@ import {
   Menu,
   MoreVertical,
   Home,
+  History,
   LayoutDashboard,
   LogOut,
   MessageSquare,
@@ -22,6 +23,8 @@ import UserDetails from "./userDetails";
 import UserWhatsAppPage from "./UserWhatsAppPage";
 import SalesFollowups from "../pages/sales/SalesFollowups";
 import UserBookingForm from "./UserBookingForm";
+import CallDispositionModal from "./CallDispositionModal";
+import CallLogsTable from "../components/CallLogsTable";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
@@ -64,6 +67,8 @@ const getScreenFromPath = (pathname) =>
         ? "whatsapp"
         : pathname.endsWith("/calls")
           ? "calls"
+          : pathname.endsWith("/my-call-logs") || pathname === "/my-call-logs"
+            ? "callLogs"
           : pathname.endsWith("/followups")
             ? "followups"
           : pathname.endsWith("/site-visit")
@@ -381,6 +386,10 @@ const SalesUserPanel = () => {
   const [callDispositions, setCallDispositions] = useState({});
   const [callLogsByLead, setCallLogsByLead] = useState({});
   const [callingLeadId, setCallingLeadId] = useState(null);
+  const [disposedLeadIds, setDisposedLeadIds] = useState([]);
+  const [dispositionTarget, setDispositionTarget] = useState(null);
+  const [dispositionInitialValue, setDispositionInitialValue] = useState("");
+  const [callNow, setCallNow] = useState(Date.now());
   const [siteVisitLead, setSiteVisitLead] = useState(null);
   const [siteVisitForm, setSiteVisitForm] = useState({
     leadId: "",
@@ -665,12 +674,48 @@ const SalesUserPanel = () => {
   const userName = getName(panel.user);
   const userProfilePhoto = getProfilePhoto(panel.user);
   const callQueue = useMemo(() => {
-    return panel.leads.filter((lead) => {
-      const leadId = getLeadId(lead);
-      const disposition = callDispositions[leadId]?.type;
-      return disposition !== "connected" && disposition !== "qualified" && disposition !== "junk";
-    });
-  }, [callDispositions, panel.leads]);
+    return panel.leads.filter((lead) => !disposedLeadIds.includes(String(getLeadId(lead))));
+  }, [disposedLeadIds, panel.leads]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setCallNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const activeLogs = Object.values(callLogsByLead).filter(
+      (log) => log?.id && !["completed", "failed", "no-answer", "busy", "canceled"].includes(String(log.status).toLowerCase())
+    );
+    if (!activeLogs.length) return undefined;
+
+    const poll = async () => {
+      const token = localStorage.getItem("authToken");
+      await Promise.all(activeLogs.map(async (log) => {
+        try {
+          const response = await fetch(`${API_URL}/api/calls/status/${log.id}`, {
+            headers:token ? { Authorization:`Bearer ${token}` } : {},
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result.callLog) return;
+          const nextLog = result.callLog;
+          setCallLogsByLead((current) => ({ ...current, [nextLog.leadId]:nextLog }));
+          if (["completed", "failed", "no-answer", "busy", "canceled"].includes(String(nextLog.status).toLowerCase()) && !nextLog.disposition) {
+            const lead = panel.leads.find((item) => String(getLeadId(item)) === String(nextLog.leadId));
+            if (lead) {
+              setDispositionInitialValue(nextLog.status === "no-answer" ? "No Answer" : nextLog.status === "busy" ? "Busy" : "");
+              setDispositionTarget((current) => current || { lead, callLog:nextLog });
+            }
+          }
+        } catch (pollError) {
+          console.error("Unable to refresh call status:", pollError);
+        }
+      }));
+    };
+
+    poll();
+    const interval = window.setInterval(poll, 3000);
+    return () => window.clearInterval(interval);
+  }, [callLogsByLead, panel.leads]);
 
   const connectedCallLeads = useMemo(() => {
     return panel.leads.filter((lead) => {
@@ -1207,7 +1252,7 @@ const SalesUserPanel = () => {
         body: JSON.stringify({
           leadId: Number(leadId),
           agentId: panel.user?.id || savedUser?.id,
-          phone: leadPhone,
+          leadPhone,
           agentPhone,
         }),
       });
@@ -1221,14 +1266,6 @@ const SalesUserPanel = () => {
         ...current,
         [leadId]: result.callLog,
       }));
-      setCallDispositions((current) => ({
-        ...current,
-        [leadId]: {
-          type: "connected",
-          label: "Connected",
-          time: new Date().toISOString(),
-        },
-      }));
       return result.callLog;
     } catch (error) {
       alert(error.message || "Unable to start call");
@@ -1238,70 +1275,28 @@ const SalesUserPanel = () => {
     }
   };
 
-  const markCallDisposition = async (lead, type, activeCallLog = null) => {
+  const openCallDisposition = (lead, type = "") => {
     const leadId = getLeadId(lead);
     if (!leadId) return;
 
     const dispositionLabels = {
-      connected: "Connected",
       qualified: "Qualified",
-      callback: "Callback later",
-      notInterested: "Not interested",
-      wrongNumber: "Wrong number",
+      callback: "Callback Later",
+      siteVisit: "Site Visit Scheduled",
+      notInterested: "Not Interested",
+      wrongNumber: "Wrong Number",
       junk: "Junk",
+      noAnswer: "No Answer",
+      busy: "Busy",
+      followUp: "Follow-up Required",
     };
-
-    setCallDispositions((current) => ({
-      ...current,
-      [leadId]: {
-        type,
-        label: dispositionLabels[type] || type,
-        time: new Date().toISOString(),
-      },
-    }));
-
-    const callLog = activeCallLog || callLogsByLead[leadId];
-    if (callLog?.id) {
-      try {
-        const token = localStorage.getItem("authToken");
-        await fetch(`${API_URL}/api/calls/disposition/${callLog.id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-          body: JSON.stringify({ disposition: dispositionLabels[type] || type }),
-        });
-      } catch (error) {
-        console.error("Unable to save call disposition:", error);
-      }
+    const callLog = callLogsByLead[leadId];
+    if (!callLog?.id) {
+      alert("Start the call before selecting a disposition.");
+      return;
     }
-
-    if (type === "qualified") {
-      try {
-        const response = await fetch(`${API_URL}/leads/${leadId}`, {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ status: "Qualified" }),
-        });
-        const updatedLead = await response.json().catch(() => ({}));
-        if (response.ok) {
-          setPanel((current) => ({
-            ...current,
-            leads: current.leads.map((item) =>
-              String(getLeadId(item)) === String(leadId) ? { ...item, ...updatedLead } : item
-            ),
-          }));
-        }
-      } catch (error) {
-        console.error("Unable to update qualified lead:", error);
-      }
-    }
-
-    const nextLead = callQueue.find((item) => getLeadId(item) !== leadId);
-    setFocusedCallLeadId(nextLead ? getLeadId(nextLead) : null);
+    setDispositionInitialValue(dispositionLabels[type] || type);
+    setDispositionTarget({ lead, callLog });
   };
 
   const updateTaskStatus = async (taskId, status) => {
@@ -1561,6 +1556,12 @@ const SalesUserPanel = () => {
   const currentCallLead = useMemo(() => {
     return panel.leads.find((lead) => String(getLeadId(lead)) === String(focusedCallLeadId)) || callQueue[0] || null;
   }, [callQueue, focusedCallLeadId, panel.leads]);
+  const currentCallLog = currentCallLead ? callLogsByLead[getLeadId(currentCallLead)] : null;
+  const currentCallStatus = String(currentCallLog?.status || "").toLowerCase();
+  const isCurrentCallActive = currentCallLog?.id && !["completed", "failed", "no-answer", "busy", "canceled"].includes(currentCallStatus) && !currentCallLog.disposition;
+  const currentCallDuration = currentCallStatus === "connected"
+    ? Math.max(0, Math.floor((callNow - new Date(currentCallLog.connectedAt || currentCallLog.startedAt).getTime()) / 1000))
+    : Number(currentCallLog?.duration) || 0;
   const upNextLeads = callQueue.filter((lead) => getLeadId(lead) !== getLeadId(currentCallLead)).slice(0, 3);
   const todayDialCount = Object.keys(callDispositions).length;
   const qualifiedCount = Object.values(callDispositions).filter((item) => item?.type === "qualified").length;
@@ -1570,6 +1571,7 @@ const SalesUserPanel = () => {
     { key: "leads", label: "My Leads", icon: Users, count: panel.stats.assignedLeads },
     // { key: "calls", label: "Calls", icon: Phone, count: callQueue.length },
     { key: "conversation", label: "Conversation", icon: MessageSquare, count: panel.leads.length },
+    { key: "callLogs", label: "My Call Logs", icon: History },
     { key: "followups", label: "Follow-ups", icon: CalendarDays, count: panel.stats.followupsDue },
     { key: "scheduleVisit", label: "Schedule Visit", icon: CalendarDays, count: panel.stats.siteVisits },
     { key: "bookings", label: "Bookings", icon: LayoutDashboard, count: panel.stats.bookings },
@@ -1594,7 +1596,7 @@ const SalesUserPanel = () => {
     >
       <aside className="sales-sidebar">
         <div className="sales-brand">
-          <img className="sales-logo" src="/assets/images/logo.png" alt="Ajwani CRM" />
+          <img className="sales-logo" src="/assets/images/logo.png" alt="Insitearc" />
           
         </div>
 
@@ -1611,6 +1613,7 @@ const SalesUserPanel = () => {
                   setActiveScreen(item.key);
                   if (item.key === "bookings") setActiveLeadStage("all");
                   if (item.key === "calls") navigate("/user/sales/calls");
+                  if (item.key === "callLogs") navigate("/my-call-logs");
                   if (item.key === "followups") openFollowups(activeFollowupFilter);
                   if (item.key === "conversation") navigate("/user/sales/conversation");
                   if (item.key === "whatsapp") navigate("/user/sales/whatsapp");
@@ -1791,6 +1794,8 @@ const SalesUserPanel = () => {
               onScheduleVisitLead={openSalesSiteVisitPage}
               onRefreshPanel={() => loadPanel(false)}
             />
+          ) : activeScreen === "callLogs" ? (
+            <CallLogsTable scope="sales" />
           ) : activeScreen === "calls" ? (
             <section className="sales-call-workspace">
               <div className="sales-call-head">
@@ -1839,38 +1844,46 @@ const SalesUserPanel = () => {
                     SLA breach in 3 min. {currentCallLead.tags || "Assigned lead"}.
                   </div>
 
+                  {currentCallLog && (
+                    <div className="sales-live-call-status">
+                      <span className={`status ${currentCallStatus}`}>{currentCallStatus.replace("-", " ")}</span>
+                      {currentCallStatus === "connected" && <strong>{formatDuration(currentCallDuration)}</strong>}
+                      <small>Call #{currentCallLog.id}</small>
+                    </div>
+                  )}
+
                   <div className="sales-call-actions">
                     <button
                       className="primary"
                       type="button"
-                      disabled={String(callingLeadId) === String(getLeadId(currentCallLead))}
-                      onClick={async () => {
-                        const callLog = await startLeadCall(currentCallLead);
-                        if (callLog) markCallDisposition(currentCallLead, "connected", callLog);
-                      }}
+                      disabled={String(callingLeadId) === String(getLeadId(currentCallLead)) || isCurrentCallActive}
+                      onClick={() => startLeadCall(currentCallLead)}
                     >
-                      {String(callingLeadId) === String(getLeadId(currentCallLead)) ? "Connecting..." : `Call ${getLeadPhone(currentCallLead)}`}
+                      {String(callingLeadId) === String(getLeadId(currentCallLead)) || isCurrentCallActive
+                        ? currentCallStatus === "connected" ? `Connected · ${formatDuration(currentCallDuration)}` : "Calling..."
+                        : `Call ${getLeadPhone(currentCallLead)}`}
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        markCallDisposition(currentCallLead, "connected");
-                        openWhatsAppPage(currentCallLead);
-                      }}
+                      onClick={() => openWhatsAppPage(currentCallLead)}
                     >
                       WhatsApp
                     </button>
-                    <button type="button" onClick={() => markCallDisposition(currentCallLead, "callback")}>
+                    <button type="button" onClick={() => openCallDisposition(currentCallLead, "callback")}>
                       Skip
                     </button>
                   </div>
 
                   <div className="sales-call-dispositions">
-                    <button type="button" className="qualified" onClick={() => markCallDisposition(currentCallLead, "qualified")}>Qualified -></button>
-                    <button type="button" onClick={() => markCallDisposition(currentCallLead, "callback")}>Callback later</button>
-                    <button type="button" onClick={() => markCallDisposition(currentCallLead, "notInterested")}>Not interested</button>
-                    <button type="button" onClick={() => markCallDisposition(currentCallLead, "wrongNumber")}>Wrong number</button>
-                    <button type="button" className="danger" onClick={() => markCallDisposition(currentCallLead, "junk")}>Junk</button>
+                    <button type="button" className="qualified" onClick={() => openCallDisposition(currentCallLead, "qualified")}>Qualified →</button>
+                    <button type="button" onClick={() => openCallDisposition(currentCallLead, "callback")}>Callback later</button>
+                    <button type="button" onClick={() => openCallDisposition(currentCallLead, "siteVisit")}>Site visit scheduled</button>
+                    <button type="button" onClick={() => openCallDisposition(currentCallLead, "notInterested")}>Not interested</button>
+                    <button type="button" onClick={() => openCallDisposition(currentCallLead, "wrongNumber")}>Wrong number</button>
+                    <button type="button" onClick={() => openCallDisposition(currentCallLead, "noAnswer")}>No answer</button>
+                    <button type="button" onClick={() => openCallDisposition(currentCallLead, "busy")}>Busy</button>
+                    <button type="button" onClick={() => openCallDisposition(currentCallLead, "followUp")}>Follow-up required</button>
+                    <button type="button" className="danger" onClick={() => openCallDisposition(currentCallLead, "junk")}>Junk</button>
                   </div>
                 </div>
               ) : (
@@ -2337,6 +2350,34 @@ const SalesUserPanel = () => {
             bookingForm.unit ? `${bookingForm.unit} marked as interested.` : "Select a unit before marking interest."
           )
         }
+      />
+
+      <CallDispositionModal
+        lead={dispositionTarget?.lead || null}
+        callLog={dispositionTarget?.callLog || null}
+        projects={projects}
+        initialDisposition={dispositionInitialValue}
+        onClose={() => {
+          setDispositionTarget(null);
+          setDispositionInitialValue("");
+        }}
+        onSaved={(savedCallLog) => {
+          const leadId = String(savedCallLog.leadId);
+          setCallLogsByLead((current) => ({ ...current, [leadId]:savedCallLog }));
+          setCallDispositions((current) => ({
+            ...current,
+            [leadId]:{
+              type:savedCallLog.disposition,
+              label:savedCallLog.disposition,
+              time:new Date().toISOString(),
+            },
+          }));
+          setDisposedLeadIds((current) => current.includes(leadId) ? current : [...current, leadId]);
+          const nextLead = panel.leads.find((item) => String(getLeadId(item)) !== leadId && !disposedLeadIds.includes(String(getLeadId(item))));
+          setFocusedCallLeadId(nextLead ? getLeadId(nextLead) : null);
+          setDispositionTarget(null);
+          setDispositionInitialValue("");
+        }}
       />
 
     </div>

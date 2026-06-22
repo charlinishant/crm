@@ -36,6 +36,19 @@ model Project{
   tower Tower[] @relation("Project")
   floor FloorPlan[] @relation("Project")
   unit Unit[] @relation("Project")
+  salesUsers ProjectSalesUser[]
+}
+
+model ProjectSalesUser {
+  projectId Int
+  userId Int
+  assignedAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId])
 }
 
 model Tower{
@@ -186,6 +199,7 @@ enum Role{
   ADMIN
   AGENCY_USER
   AGENT
+  CHANNEL_PARTNER
 }
 
 enum Department{
@@ -229,6 +243,7 @@ model User{
   followUps FollowUp[] @relation("SalesUserFollowUps")
   leadActivities LeadActivity[] @relation("UserLeadActivities")
   notifications Notification[] @relation("UserId")
+  salesProjects ProjectSalesUser[]
   // Other settings
   pushNotification Boolean? @default(false)
   gpsTracking Boolean? @default(false)
@@ -438,13 +453,21 @@ model CallLog {
   agentId      Int?
   agent        User?    @relation("AgentCallLogs", fields: [agentId], references: [id])
   phone        String
+  leadPhone    String?
   agentPhone   String?
-  provider     String
+  provider     String   @default("exotel")
   callId       String?  @unique
-  status       String
+  providerCallId String? @unique
+  status       String   @default("initiated")
   duration     Int?
   recordingUrl String?
   disposition  String?
+  notes        String?  @db.Text
+  connectedAt  DateTime?
+  nextFollowUpAt DateTime?
+  interestedProject String?
+  budget       String?
+  visitDateTime DateTime?
   startedAt    DateTime?
   endedAt      DateTime?
   createdAt    DateTime @default(now())
@@ -578,6 +601,7 @@ model EmailLog{
   from String
   to String
   subject String?
+  body String? @db.Text
   leadId Int?
   leadName String?
   sentByUserId Int?

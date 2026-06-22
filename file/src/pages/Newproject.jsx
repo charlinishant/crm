@@ -72,8 +72,11 @@ const NEWPROJECT = () => {
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [isSalesOpen, setIsSalesOpen] = useState(false);
+  const [salesSearch, setSalesSearch] = useState("");
 
   const editorRef = useRef(null);
+  const salesDropdownRef = useRef(null);
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -96,22 +99,20 @@ const NEWPROJECT = () => {
     fetchUsers();
   }, [API_URL]);
 
+  useEffect(() => {
+    const closeSalesDropdown = (event) => {
+      if (salesDropdownRef.current && !salesDropdownRef.current.contains(event.target)) {
+        setIsSalesOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", closeSalesDropdown);
+    return () => document.removeEventListener("mousedown", closeSalesDropdown);
+  }, []);
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
-  };
-
-  const handleSalesChange = (e) => {
-    const selectedSalesIds = Array.from(e.target.selectedOptions)
-      .map((option) => option.value)
-      .filter(Boolean)
-      .slice(0, 3);
-
-    setFormData({
-      ...formData,
-      salesId: selectedSalesIds[0] || null,
-      salesIds: selectedSalesIds,
-    });
   };
 
   const getUserName = (user) =>
@@ -119,6 +120,30 @@ const NEWPROJECT = () => {
     user?.username ||
     user?.email ||
     (user?.id ? `User #${user.id}` : "");
+
+  const selectedSalesUsers = formData.salesIds
+    .map((id) => users.find((user) => String(user.id) === String(id)))
+    .filter(Boolean);
+
+  const filteredSalesUsers = users.filter((user) =>
+    getUserName(user).toLowerCase().includes(salesSearch.trim().toLowerCase())
+  );
+
+  const toggleSalesUser = (userId) => {
+    const id = String(userId);
+    setFormData((current) => {
+      const isSelected = current.salesIds.includes(id);
+      const salesIds = isSelected
+        ? current.salesIds.filter((selectedId) => selectedId !== id)
+        : [...current.salesIds, id];
+
+      return {
+        ...current,
+        salesIds,
+        salesId: salesIds[0] || null,
+      };
+    });
+  };
 
   const handleFormat = (command, value = null) => {
     document.execCommand(command, false, value);
@@ -160,6 +185,7 @@ const NEWPROJECT = () => {
       description,
       reraProjectId: formData.reraProjectId ? Number(formData.reraProjectId) : null,
       salesId: formData.salesIds.length ? Number(formData.salesIds[0]) : null,
+      salesIds: formData.salesIds.map(Number),
       projectType: formData.projectType,
       possession: parseBoolean(formData.possession),
       address: formData.address,
@@ -258,14 +284,127 @@ const NEWPROJECT = () => {
             border-radius: 6px;
           }
 
-          .np-field select[multiple] {
-            min-height: 118px;
-          }
-
           .np-help-text {
             color: #64748b;
             font-size: 12px;
             margin-top: 6px;
+          }
+
+          .np-multi-select {
+            position: relative;
+          }
+
+          .np-multi-control {
+            min-height: 48px;
+            width: 100%;
+            padding: 7px 38px 7px 8px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background: #fff;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 6px;
+            cursor: pointer;
+            text-align: left;
+          }
+
+          .np-multi-control:focus,
+          .np-multi-control.open {
+            border-color: #7c3aed;
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+            outline: none;
+          }
+
+          .np-multi-placeholder {
+            color: #94a3b8;
+          }
+
+          .np-sales-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 8px;
+            border-radius: 5px;
+            background: #ede9fe;
+            color: #6d28d9;
+            font-size: 12px;
+            font-weight: 600;
+          }
+
+          .np-chip-remove {
+            border: 0;
+            padding: 0;
+            background: transparent;
+            color: #6d28d9;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+          }
+
+          .np-multi-arrow {
+            position: absolute;
+            right: 13px;
+            top: 14px;
+            color: #64748b;
+            pointer-events: none;
+          }
+
+          .np-multi-menu {
+            position: absolute;
+            z-index: 20;
+            top: calc(100% + 6px);
+            left: 0;
+            right: 0;
+            padding: 8px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+          }
+
+          .np-sales-search {
+            width: 100%;
+            margin-bottom: 7px;
+            padding: 9px 10px !important;
+          }
+
+          .np-sales-options {
+            max-height: 210px;
+            overflow-y: auto;
+          }
+
+          .np-sales-option {
+            display: flex !important;
+            align-items: center;
+            gap: 9px;
+            margin: 0 !important;
+            padding: 9px 8px;
+            border-radius: 5px;
+            color: #334155 !important;
+            cursor: pointer;
+          }
+
+          .np-sales-option:hover {
+            background: #f5f3ff;
+          }
+
+          .np-sales-option.disabled {
+            opacity: 0.48;
+            cursor: not-allowed;
+          }
+
+          .np-sales-option input {
+            width: 16px;
+            height: 16px;
+            accent-color: #7c3aed;
+          }
+
+          .np-sales-empty {
+            padding: 12px;
+            color: #64748b;
+            text-align: center;
+            font-size: 13px;
           }
 
           .np-row {
@@ -355,21 +494,70 @@ const NEWPROJECT = () => {
 
                 <div className="np-field">
                   <label>SALES</label>
-                  <select
-                    name="salesIds"
-                    value={formData.salesIds}
-                    onChange={handleSalesChange}
-                    disabled={isLoadingUsers}
-                    multiple
-                  >
-                    {isLoadingUsers && <option value="">Loading users...</option>}
-                    {users.map((user) => (
-                      <option key={user.id || user.email} value={user.id}>
-                        {getUserName(user)}
-                      </option>
-                    ))}
-                  </select>
-                  <span className="np-help-text">Select up to 3 users.</span>
+                  <div className="np-multi-select" ref={salesDropdownRef}>
+                    <button
+                      type="button"
+                      className={`np-multi-control ${isSalesOpen ? "open" : ""}`}
+                      onClick={() => !isLoadingUsers && setIsSalesOpen((open) => !open)}
+                      disabled={isLoadingUsers}
+                    >
+                      {selectedSalesUsers.length ? selectedSalesUsers.map((user) => (
+                        <span className="np-sales-chip" key={user.id}>
+                          {getUserName(user)}
+                          <span
+                            className="np-chip-remove"
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`Remove ${getUserName(user)}`}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleSalesUser(user.id);
+                            }}
+                          >×</span>
+                        </span>
+                      )) : (
+                        <span className="np-multi-placeholder">
+                          {isLoadingUsers ? "Loading users..." : "Select sales users"}
+                        </span>
+                      )}
+                    </button>
+                    <span className="np-multi-arrow">⌄</span>
+
+                    {isSalesOpen && (
+                      <div className="np-multi-menu">
+                        <input
+                          type="search"
+                          className="np-sales-search"
+                          placeholder="Search users..."
+                          value={salesSearch}
+                          onChange={(event) => setSalesSearch(event.target.value)}
+                          autoFocus
+                        />
+                        <div className="np-sales-options">
+                          {filteredSalesUsers.length ? filteredSalesUsers.map((user) => {
+                            const id = String(user.id);
+                            const isSelected = formData.salesIds.includes(id);
+                            return (
+                              <label
+                                className="np-sales-option"
+                                key={user.id || user.email}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => toggleSalesUser(id)}
+                                />
+                                <span>{getUserName(user)}</span>
+                              </label>
+                            );
+                          }) : (
+                            <div className="np-sales-empty">No users found</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <span className="np-help-text">Select multiple sales users.</span>
                 </div>
               </div>
 

@@ -496,6 +496,7 @@ const AddUserLayer = () => {
                                     <option value="ADMIN">Admin</option>
                                     <option value="AGENCY_USER">Agency User</option>
                                     <option value="AGENT">Agent</option>
+                                    <option value="CHANNEL_PARTNER">Channel Partner</option>
                                 </select>
                             </div>
                             <div className="form-group full">

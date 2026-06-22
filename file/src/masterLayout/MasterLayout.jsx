@@ -251,18 +251,18 @@ const MasterLayout = ({ children }) => {
         <div>
           <Link to='/' className='sidebar-logo'>
             <img
-              src='assets/images/logo.png'
-              alt='site logo'
+              src='/assets/images/logo.png'
+              alt='Insitearc'
               className='light-logo'
             />
             <img
-              src='assets/images/logo-light.png'
-              alt='site logo'
+              src='/assets/images/logo.png'
+              alt='Insitearc'
               className='dark-logo'
             />
             <img
-              src='assets/images/logo-icon.png'
-              alt='site logo'
+              src='/assets/images/logo-icon.png'
+              alt='Insitearc'
               className='logo-icon'
             />
           </Link>
@@ -840,7 +840,7 @@ const MasterLayout = ({ children }) => {
               <ul className='sidebar-submenu'>
                 <li>
                   <NavLink
-                    to='/calls'
+                    to='/admin/call-logs'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }

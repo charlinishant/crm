@@ -302,7 +302,9 @@ exports.getFloor  = async (req, res)=>{
     }
     catch(error){
         console.log(error);
-        res.status(500).json("something went wrong")
+        res.status(500).json({
+            message: getFloorPlanErrorMessage(error, "Failed to load floor plan"),
+        })
     }
 }
 

@@ -6,5 +6,13 @@ node_modules
 migrations
 !prisma/migrations/
 prisma/migrations/*
+!prisma/migrations/20260622120000_add_channel_partner_role/
+!prisma/migrations/20260622120000_add_channel_partner_role/migration.sql
 !prisma/migrations/20260619150000_add_floorplan_full_form_fields/
 !prisma/migrations/20260619150000_add_floorplan_full_form_fields/migration.sql
+!prisma/migrations/20260622153000_add_project_sales_users/
+!prisma/migrations/20260622153000_add_project_sales_users/migration.sql
+!prisma/migrations/20260622170000_add_email_log_body/
+!prisma/migrations/20260622170000_add_email_log_body/migration.sql
+!prisma/migrations/20260622200000_extend_call_logs_for_exotel/
+!prisma/migrations/20260622200000_extend_call_logs_for_exotel/migration.sql

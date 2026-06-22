@@ -132,6 +132,24 @@ const SignInLayer = () => {
           .signin-blue-input:focus {
             border-bottom-color: rgba(255, 255, 255, 0.9) !important;
           }
+
+          .signin-project-logo-wrap {
+            align-items: center;
+            background: #ffffff;
+            border-radius: 12px;
+            display: inline-flex;
+            justify-content: center;
+            margin-bottom: 28px;
+            padding: 12px 18px;
+          }
+
+          .signin-project-logo {
+            display: block;
+            height: auto;
+            max-width: 100%;
+            object-fit: contain;
+            width: 260px;
+          }
         `}
       </style>
       <div
@@ -147,6 +165,9 @@ const SignInLayer = () => {
       >
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: "42px" }}>
+          <div className="signin-project-logo-wrap">
+            <img className="signin-project-logo" src="/assets/images/logo.png" alt="Insitearc" />
+          </div>
           <h2
             style={{
               color: "#fff",

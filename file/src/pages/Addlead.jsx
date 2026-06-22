@@ -330,6 +330,10 @@ const ADDLEAD = () => {
     user?.email ||
     `User #${user?.id}`;
 
+  const channelPartners = users.filter(
+    (user) => String(user?.role || "").toUpperCase() === "CHANNEL_PARTNER"
+  );
+
   useEffect(() => {
     const fetchProjects = async () => {
       try {
@@ -357,7 +361,7 @@ const ADDLEAD = () => {
     const fetchUsers = async () => {
       try {
         setLoadingUsers(true);
-        const response = await fetch(`${API_URL}/users`);
+        const response = await fetch(`${API_URL}/users?limit=1000`);
 
         if (!response.ok) {
           throw new Error("Unable to load users");
@@ -754,8 +758,28 @@ const ADDLEAD = () => {
                 <div className="lead-group lead-full">
                   <label>CHANNEL PARTNER</label>
                   <div className="lead-row-action">
-                    <select name="channelPartner" value={formData.channelPartner} onChange={handleChange}>
-                      <option>Select Channel Partner</option>
+                    <select
+                      name="channelPartner"
+                      value={formData.channelPartner}
+                      onChange={handleChange}
+                      disabled={loadingUsers}
+                    >
+                      <option value="">
+                        {loadingUsers ? "Loading channel partners..." : "Select Channel Partner"}
+                      </option>
+                      {formData.channelPartner && !channelPartners.some(
+                        (user) => getUserName(user) === formData.channelPartner
+                      ) && (
+                        <option value={formData.channelPartner}>{formData.channelPartner}</option>
+                      )}
+                      {channelPartners.map((user) => {
+                        const name = getUserName(user);
+                        return (
+                          <option key={user.id || user.email} value={name}>
+                            {name}
+                          </option>
+                        );
+                      })}
                     </select>
                     <button type="button" className="lead-add">
                       + Add Channel Partner

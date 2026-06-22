@@ -69,6 +69,7 @@
 
 .sales-brand {
   gap: 10px;
+  justify-content: center;
   padding: 4px 8px 24px;
 }
 
@@ -95,9 +96,11 @@ img.sales-avatar {
   background: transparent;
   border-radius: 0;
   color: inherit;
-  height: 48px;
+  height: auto;
+  max-height: 58px;
+  max-width: 100%;
   object-fit: contain;
-  width: 110px;
+  width: 210px;
 }
 
 .sales-avatar.small {
@@ -2930,6 +2933,115 @@ img.sales-avatar {
   .booking-modal-footer-actions button {
     width: 100%;
   }
+}
+
+.sales-live-call-status {
+  align-items: center;
+  background: #f8fbff;
+  border: 1px solid #cfe3f8;
+  border-radius: 8px;
+  display: flex;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 10px 12px;
+}
+
+.sales-live-call-status .status {
+  background: #eaf3ff;
+  border-radius: 999px;
+  color: #185fa5;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 5px 9px;
+  text-transform: capitalize;
+}
+
+.sales-live-call-status .status.connected,
+.sales-live-call-status .status.completed {
+  background: #e8f6df;
+  color: #356b00;
+}
+
+.sales-live-call-status .status.failed,
+.sales-live-call-status .status.no-answer,
+.sales-live-call-status .status.busy {
+  background: #fff0ee;
+  color: #b42318;
+}
+
+.sales-live-call-status strong { color: #0f172a; font-variant-numeric: tabular-nums; }
+.sales-live-call-status small { color: var(--sales-muted); margin-left: auto; }
+
+.call-disposition-backdrop {
+  align-items: center;
+  background: rgba(15, 23, 42, 0.55);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 1000;
+}
+
+.call-disposition-modal {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+  max-height: 92vh;
+  max-width: 720px;
+  overflow-y: auto;
+  width: 100%;
+}
+
+.call-disposition-head {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--sales-line);
+  display: flex;
+  justify-content: space-between;
+  padding: 20px 22px;
+}
+
+.call-disposition-head h3 { color: #0f172a; font-size: 18px; margin: 0 0 4px; }
+.call-disposition-head p { color: var(--sales-muted); font-size: 12px; margin: 0; }
+.call-disposition-head button {
+  align-items: center; background: #f8fafc; border: 1px solid #e2e8f0;
+  border-radius: 7px; color: #475569; display: flex; height: 36px;
+  justify-content: center; width: 36px;
+}
+
+.call-disposition-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 20px 22px;
+}
+
+.call-disposition-grid label { display: grid; gap: 6px; margin: 0; }
+.call-disposition-grid label.wide { grid-column: 1 / -1; }
+.call-disposition-grid label > span { color: #475569; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.call-disposition-grid input,
+.call-disposition-grid select,
+.call-disposition-grid textarea {
+  background: #ffffff; border: 1px solid #cbd5e1; border-radius: 7px;
+  color: #0f172a; font: inherit; min-height: 42px; padding: 9px 11px; width: 100%;
+}
+.call-disposition-grid textarea { resize: vertical; }
+.call-disposition-grid input:focus,
+.call-disposition-grid select:focus,
+.call-disposition-grid textarea:focus { border-color: #2f86ed; box-shadow: 0 0 0 3px rgba(47, 134, 237, .1); }
+.call-disposition-error { color: #b42318; font-size: 12px; padding: 0 22px 12px; }
+.call-disposition-footer {
+  border-top: 1px solid var(--sales-line); display: flex; gap: 10px;
+  justify-content: flex-end; padding: 14px 22px;
+}
+.call-disposition-footer button { border-radius: 7px; font-weight: 700; min-width: 120px; padding: 10px 14px; }
+.call-disposition-footer .secondary { background:#fff; border:1px solid #cbd5e1; color:#475569; }
+.call-disposition-footer .primary { background:var(--sales-blue); border:1px solid var(--sales-blue); color:#fff; }
+.call-disposition-footer button:disabled { cursor:not-allowed; opacity:.6; }
+
+@media (max-width: 640px) {
+  .call-disposition-grid { grid-template-columns: 1fr; }
+  .call-disposition-grid label.wide { grid-column: auto; }
 }
 
 @media (max-width: 640px) {

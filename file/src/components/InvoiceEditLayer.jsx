@@ -44,9 +44,9 @@ const InvoiceEditLayer = () => {
                                     </div>
                                     <div className="col-sm-4">
                                         <img
-                                            src="assets/images/logo.png"
-                                            alt="image_icon"
-                                            className="mb-8"
+                                            src="/assets/images/logo.png"
+                                            alt="Insitearc"
+                                            className="brand-logo-full mb-8"
                                         />
                                         <p className="mb-1 text-sm">
                                             4517 Washington Ave. Manchester, Kentucky 39495

@@ -15,6 +15,7 @@ const normalizeRole = (role) => {
         "ADMIN",
         "AGENCY_USER",
         "AGENT",
+        "CHANNEL_PARTNER",
     ])
 
     return allowedRoles.has(value) ? value : "SALES"

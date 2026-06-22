@@ -21,6 +21,7 @@ let emailLogColumnNames = null
 
 const emailLogOptionalColumns = [
   ["subject", "VARCHAR(255) NULL"],
+  ["body", "TEXT NULL"],
   ["leadId", "INT NULL"],
   ["leadName", "VARCHAR(255) NULL"],
   ["sentByUserId", "INT NULL"],
@@ -61,6 +62,7 @@ const createEmailLog = async (data) => {
     from: String(logData.from || getConfiguredSenderEmail()),
     to: String(logData.to || ""),
     subject: logData.subject || null,
+    body: logData.body || null,
     leadId: logData.leadId ? Number(logData.leadId) : null,
     leadName: logData.leadName || null,
     sentByUserId: logData.sentByUserId ? Number(logData.sentByUserId) : null,
@@ -154,6 +156,7 @@ exports.getEmailLogs = async (req, res) => {
       "from",
       "to",
       "subject",
+      "body",
       "leadId",
       "leadName",
       "sentByUserId",
@@ -171,6 +174,7 @@ exports.getEmailLogs = async (req, res) => {
       from: row.from,
       to: row.to,
       subject: row.subject || null,
+      body: row.body || null,
       leadId: row.leadId || null,
       leadName: row.leadName || null,
       sentByUserId: row.sentByUserId || null,
@@ -192,6 +196,7 @@ exports.sendLeadEmail = async (req, res) => {
     from: req.body?.from || getConfiguredSenderEmail(),
     to: req.body?.to || "",
     subject: req.body?.subject || "",
+    body: req.body?.body || "",
     success: false,
   }
 
@@ -225,6 +230,7 @@ exports.sendLeadEmail = async (req, res) => {
       from: senderEmail || getConfiguredSenderEmail(),
       to: receiverEmail,
       subject: String(subject).trim(),
+      body: String(body).trim(),
       leadId: lead?.id || null,
       leadName: getLeadName(lead) || null,
       sentByUserId: authUser?.id || null,

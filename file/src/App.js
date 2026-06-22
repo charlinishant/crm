@@ -34,7 +34,6 @@ import FaqPage from "./pages/FaqPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import FormLayoutPage from "./pages/FormLayoutPage";
 import SmsPage from "./pages/SmsPage";
-import FormPage from "./pages/CallsPage";
 import GalleryPage from "./pages/GalleryPage";
 import ImageGeneratorPage from "./pages/ImageGeneratorPage";
 import ImageUploadPage from "./pages/ImageUploadPage";
@@ -129,6 +128,8 @@ import SalesUserPanel from "./user/SalesUserPanel";
 import UserDetails from "./user/userDetails";
 import TrashPage from "./pages/TrashPage";
 import AdminReports from "./pages/admin/AdminReports";
+import AdminCallLogs from "./pages/admin/AdminCallLogs";
+import MyCallLogs from "./pages/sales/MyCallLogs";
 
 const publicPaths = new Set(["/", "/sign-in", "/sign-up", "/forgot-password"]);
 const accessDeniedPath = "/access-denied";
@@ -142,6 +143,7 @@ const salesAllowedExactPaths = new Set([
   "/user-details",
   "/user-add-lead",
   "/user-attendance",
+  "/my-call-logs",
 ]);
 const adminAllowedExactPaths = new Set([
   "/user-attendance",
@@ -287,6 +289,8 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/user/sales' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/leads' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/calls' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/my-call-logs' element={<MyCallLogs />} />
+        <Route exact path='/my-call-logs' element={<MyCallLogs />} />
         <Route exact path='/user/sales/followups' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/conversation' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/whatsapp' element={<SalesUserPanel />} />
@@ -328,7 +332,8 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/forgot-password' element={<ForgotPasswordPage />} />
         <Route exact path='/emails' element={<FormLayoutPage />} />
         <Route exact path='/SmsPage' element={<SmsPage />} />
-        <Route exact path='/calls' element={<FormPage />} />
+        <Route exact path='/calls' element={<AdminCallLogs />} />
+        <Route exact path='/admin/call-logs' element={<AdminCallLogs />} />
         <Route exact path='/gallery' element={<GalleryPage />} />
         <Route exact path='/gallery-grid' element={<GalleryGridPage />} />
         <Route exact path='/gallery-masonry' element={<GalleryMasonryPage />} />
@@ -492,7 +497,8 @@ function App() {
         <Route exact path='/forgot-password' element={<ForgotPasswordPage />} />
         <Route exact path='/emails' element={<FormLayoutPage />} />
         <Route exact path='/SmsPage' element={<SmsPage />} />
-        <Route exact path='/calls' element={<FormPage />} />
+        <Route exact path='/calls' element={<AdminCallLogs />} />
+        <Route exact path='/admin/call-logs' element={<AdminCallLogs />} />
 
         <Route exact path='/gallery' element={<GalleryPage />} />
         <Route exact path='/gallery-grid' element={<GalleryGridPage />} />
