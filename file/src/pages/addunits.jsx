@@ -175,6 +175,7 @@ const AddUnits = () => {
         throw new Error(result?.message || "Failed to create unit");
       }
 
+      window.alert("Unit created successfully!");
       navigate("/units", { replace: true });
     } catch (err) {
       console.error(err);

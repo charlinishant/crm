@@ -328,6 +328,7 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
         await onLeadCreated(result);
       }
 
+      window.alert("Lead created successfully!");
       navigate("/user/sales/leads", { state: { refreshLeads: Date.now() } });
     } catch (err) {
       alert(err.message || "Unable to add lead");

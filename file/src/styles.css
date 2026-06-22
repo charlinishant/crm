@@ -2,6 +2,87 @@
 @import "react-quill-new/dist/quill.snow.css";
 @import "jsvectormap/dist/css/jsvectormap.css";
 @import "react-toastify/dist/ReactToastify.css";
+
+.app-alert-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.58);
+  backdrop-filter: blur(2px);
+}
+
+.app-alert-dialog {
+  width: min(430px, 100%);
+  padding: 30px 28px 24px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+  text-align: center;
+  animation: app-alert-in 160ms ease-out;
+}
+
+.app-alert-icon {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  margin: 0 auto 18px;
+  border-radius: 50%;
+  color: #fff;
+  background: #487fff;
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.app-alert-icon-error {
+  background: #e74c3c;
+}
+
+.app-alert-dialog h2 {
+  margin: 0 0 10px;
+  color: #111827;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.app-alert-dialog p {
+  margin: 0 0 24px;
+  color: #4b5563;
+  font-size: 16px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.app-alert-dialog button {
+  min-width: 112px;
+  padding: 11px 28px;
+  border: 0;
+  border-radius: 9px;
+  color: #fff;
+  background: #487fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease, transform 150ms ease;
+}
+
+.app-alert-dialog button:hover {
+  background: #3568df;
+  transform: translateY(-1px);
+}
+
+.app-alert-dialog button:focus-visible {
+  outline: 3px solid rgba(72, 127, 255, 0.3);
+  outline-offset: 3px;
+}
+
+@keyframes app-alert-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
 @import "react-modal-video/css/modal-video.min.css";
 @import "flatpickr/dist/flatpickr.min.css";
 @import "highlight.js/styles/github.css";
@@ -21841,7 +21922,10 @@ th{
 }
 
 .admin-notifications-menu {
-  width: min(420px, calc(100vw - 24px)) !important;
+  border: 0 !important;
+  border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.14);
+  width: min(330px, calc(100vw - 20px)) !important;
   max-width: calc(100vw - 24px);
   overflow: hidden;
 }
@@ -21851,14 +21935,24 @@ th{
   background: var(--primary-50);
   border-radius: 8px;
   display: flex;
-  gap: 12px;
+  gap: 8px;
   justify-content: space-between;
-  margin: 14px 14px 12px;
-  padding: 10px 14px;
+  margin: 8px;
+  padding: 7px 10px;
+}
+
+.admin-notifications-head h6 {
+  font-size: 15px !important;
+}
+
+.admin-notifications-head > span {
+  font-size: 13px !important;
+  height: 28px !important;
+  width: 28px !important;
 }
 
 .admin-notifications-list {
-  max-height: 350px;
+  max-height: 260px;
   overflow-x: hidden;
   overflow-y: auto;
   padding-right: 4px;
@@ -21868,19 +21962,28 @@ th{
   align-items: flex-start;
   color: inherit;
   display: grid;
-  gap: 10px;
+  gap: 7px;
   grid-template-columns: minmax(0, 1fr) auto;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   min-width: 0;
-  padding: 10px 16px;
+  padding: 7px 10px;
   text-decoration: none;
 }
 
 .admin-notification-content {
   align-items: flex-start;
   display: flex;
-  gap: 12px;
+  gap: 8px;
   min-width: 0;
+}
+
+.admin-notification-content > span {
+  height: 34px !important;
+  width: 34px !important;
+}
+
+.admin-notification-content > span .icon {
+  font-size: 18px !important;
 }
 
 .admin-notification-copy {
@@ -21889,18 +21992,18 @@ th{
 
 .admin-notification-title {
   color: var(--neutral-900, #111827);
-  font-size: 15px !important;
+  font-size: 13px !important;
   font-weight: 700;
   line-height: 1.3;
-  margin: 0 0 4px;
+  margin: 0 0 2px;
   overflow-wrap: anywhere;
 }
 
 .admin-notification-message,
 .admin-notification-meta {
   color: var(--neutral-600, #4b5563);
-  font-size: 13px;
-  line-height: 1.35;
+  font-size: 11px;
+  line-height: 1.3;
   margin: 0;
   overflow-wrap: anywhere;
   white-space: normal;
@@ -21915,18 +22018,26 @@ th{
 
 .admin-notification-meta {
   color: var(--neutral-500, #6b7280);
-  font-size: 12px;
-  margin-top: 3px;
+  font-size: 10px;
+  margin-top: 2px;
 }
 
 .admin-notification-time {
   color: var(--neutral-500, #6b7280);
   flex-shrink: 0;
-  font-size: 12px;
-  line-height: 1.35;
-  max-width: 76px;
+  font-size: 10px;
+  line-height: 1.3;
+  max-width: 60px;
   overflow-wrap: anywhere;
   text-align: right;
+}
+
+.admin-notifications-menu > .text-center {
+  padding: 7px 10px !important;
+}
+
+.admin-notifications-menu > .text-center a {
+  font-size: 12px !important;
 }
 
 @media (max-width: 575px) {

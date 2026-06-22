@@ -24,6 +24,7 @@ import UserWhatsAppPage from "./UserWhatsAppPage";
 import SalesFollowups from "../pages/sales/SalesFollowups";
 import UserBookingForm from "./UserBookingForm";
 import CallDispositionModal from "./CallDispositionModal";
+import StartCallModal from "./StartCallModal";
 import CallLogsTable from "../components/CallLogsTable";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
@@ -386,6 +387,7 @@ const SalesUserPanel = () => {
   const [callDispositions, setCallDispositions] = useState({});
   const [callLogsByLead, setCallLogsByLead] = useState({});
   const [callingLeadId, setCallingLeadId] = useState(null);
+  const [callTarget, setCallTarget] = useState(null);
   const [disposedLeadIds, setDisposedLeadIds] = useState([]);
   const [dispositionTarget, setDispositionTarget] = useState(null);
   const [dispositionInitialValue, setDispositionInitialValue] = useState("");
@@ -1220,24 +1222,13 @@ const SalesUserPanel = () => {
     });
   };
 
-  const startLeadCall = async (lead) => {
+  const startLeadCall = async (lead, agentPhone) => {
     const leadId = getLeadId(lead);
     const leadPhone = getActionPhone(lead);
     const savedUser = JSON.parse(localStorage.getItem("authUser") || "null");
-    let agentPhone = String(panel.user?.phone || savedUser?.phone || "").replace(/\D/g, "");
 
     if (!leadId || !leadPhone) {
-      alert("Lead phone number is missing.");
-      return null;
-    }
-
-    if (!agentPhone) {
-      agentPhone = window.prompt("Enter your agent phone number for IVR bridge call", "")?.replace(/\D/g, "") || "";
-    }
-
-    if (!agentPhone) {
-      alert("Agent phone number is required to start a cloud call.");
-      return null;
+      throw new Error("Lead phone number is missing.");
     }
 
     try {
@@ -1268,8 +1259,7 @@ const SalesUserPanel = () => {
       }));
       return result.callLog;
     } catch (error) {
-      alert(error.message || "Unable to start call");
-      return null;
+      throw new Error(error.message || "Unable to start call");
     } finally {
       setCallingLeadId(null);
     }
@@ -1292,7 +1282,7 @@ const SalesUserPanel = () => {
     };
     const callLog = callLogsByLead[leadId];
     if (!callLog?.id) {
-      alert("Start the call before selecting a disposition.");
+      setCallTarget(lead);
       return;
     }
     setDispositionInitialValue(dispositionLabels[type] || type);
@@ -1857,7 +1847,7 @@ const SalesUserPanel = () => {
                       className="primary"
                       type="button"
                       disabled={String(callingLeadId) === String(getLeadId(currentCallLead)) || isCurrentCallActive}
-                      onClick={() => startLeadCall(currentCallLead)}
+                      onClick={() => setCallTarget(currentCallLead)}
                     >
                       {String(callingLeadId) === String(getLeadId(currentCallLead)) || isCurrentCallActive
                         ? currentCallStatus === "connected" ? `Connected · ${formatDuration(currentCallDuration)}` : "Calling..."
@@ -2378,6 +2368,14 @@ const SalesUserPanel = () => {
           setDispositionTarget(null);
           setDispositionInitialValue("");
         }}
+      />
+
+      <StartCallModal
+        lead={callTarget}
+        leadPhone={callTarget ? getActionPhone(callTarget) : ""}
+        initialAgentPhone={panel.user?.phone || JSON.parse(localStorage.getItem("authUser") || "null")?.phone || ""}
+        onClose={() => setCallTarget(null)}
+        onStart={(agentPhone) => startLeadCall(callTarget, agentPhone)}
       />
 
     </div>

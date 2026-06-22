@@ -620,6 +620,7 @@ const AddFloorplan = () => {
         throw new Error(message);
       }
 
+      window.alert(`Floor plan ${isEditMode ? "updated" : "created"} successfully!`);
       navigate("/floorplans", { replace: true });
     } catch (err) {
       console.error(err);

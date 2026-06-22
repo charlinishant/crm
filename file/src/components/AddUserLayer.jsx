@@ -328,7 +328,7 @@ const AddUserLayer = () => {
             }
 
             saveProfilePhoto(payload.email, imagePreviewUrl);
-            setMessage(isEditMode ? 'User updated successfully.' : 'User created successfully. They can now sign in with this email and password.');
+            window.alert(isEditMode ? 'User updated successfully!' : 'User created successfully! They can now sign in with this email and password.');
             setFormData(emptyUserFormData);
             setImagePreviewUrl('');
             if (isEditMode) {

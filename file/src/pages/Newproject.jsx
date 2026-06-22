@@ -230,6 +230,7 @@ const NEWPROJECT = () => {
         "savedProjects",
         JSON.stringify([...savedProjects, projectToStore])
       );
+      window.alert("Project created successfully!");
       navigate("/projects");
     } catch (error) {
       console.error("Unable to save project to database:", error);

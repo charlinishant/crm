@@ -205,8 +205,8 @@ const ColumnChartLayer = () => {
           String(project.id) === String(selectedProject.id) ? { ...project, ...result } : project
         )
       );
-      setMessage("Project updated successfully.");
       closeModal();
+      window.alert("Project updated successfully!");
     } catch (error) {
       console.error(error);
       setMessage(error.message || "Unable to update project.");
@@ -228,7 +228,7 @@ const ColumnChartLayer = () => {
       }
 
       setProjects((current) => current.filter((item) => String(item.id) !== String(project.id)));
-      setMessage("Project deleted successfully.");
+      window.alert("Project deleted successfully!");
     } catch (error) {
       console.error(error);
       setMessage(error.message || "Unable to delete project. Remove linked towers, floor plans or units first.");

@@ -6,7 +6,6 @@ const requiredEnvironment = [
   "EXOTEL_ACCOUNT_SID",
   "EXOTEL_SUBDOMAIN",
   "EXOTEL_CALLER_ID",
-  "BACKEND_URL",
 ]
 
 const getMissingConfiguration = () =>
@@ -31,6 +30,12 @@ const getProviderCallId = (data) =>
   data?.id ||
   null
 
+const normalizePhoneForExotel = (value) => {
+  const digits = String(value || "").replace(/\D/g, "")
+  const defaultCountryCode = String(process.env.EXOTEL_DEFAULT_COUNTRY_CODE || "91").replace(/\D/g, "")
+  return digits.length === 10 && defaultCountryCode ? `${defaultCountryCode}${digits}` : digits
+}
+
 const connectTwoNumbers = async ({ agentPhone, leadPhone }) => {
   const missing = getMissingConfiguration()
   if (missing.length) {
@@ -39,10 +44,12 @@ const connectTwoNumbers = async ({ agentPhone, leadPhone }) => {
     throw error
   }
 
-  const callbackBase = String(process.env.BACKEND_URL).replace(/\/$/, "")
+  const callbackBase = String(
+    process.env.BACKEND_URL || "https://realestatebe.wivexa.com"
+  ).replace(/\/$/, "")
   const form = new URLSearchParams()
-  form.set("From", agentPhone)
-  form.set("To", leadPhone)
+  form.set("From", normalizePhoneForExotel(agentPhone))
+  form.set("To", normalizePhoneForExotel(leadPhone))
   form.set("CallerId", String(process.env.EXOTEL_CALLER_ID).trim())
   form.set("Record", "true")
   form.set("StatusCallback", `${callbackBase}/api/calls/webhook`)

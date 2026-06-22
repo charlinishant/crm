@@ -165,6 +165,7 @@ const Units = () => {
 
       await fetchUnits();
       closeModal();
+      window.alert("Unit updated successfully!");
     } catch (err) {
       alert(err.message || "Update failed");
     } finally {
