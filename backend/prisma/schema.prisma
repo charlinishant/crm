@@ -244,6 +244,7 @@ model User{
   leadActivities LeadActivity[] @relation("UserLeadActivities")
   notifications Notification[] @relation("UserId")
   salesProjects ProjectSalesUser[]
+  whatsAppMessages WhatsAppMessage[]
   // Other settings
   pushNotification Boolean? @default(false)
   gpsTracking Boolean? @default(false)
@@ -362,6 +363,7 @@ model Lead{
   scheduleVisits ScheduleVisit[]
   followUps FollowUp[]
   activities LeadActivity[]
+  whatsAppMessages WhatsAppMessage[]
 
 }
 
@@ -455,12 +457,12 @@ model CallLog {
   phone        String
   leadPhone    String?
   agentPhone   String?
-  provider     String   @default("exotel")
+  provider     String   @default("twilio")
   callId       String?  @unique
   providerCallId String? @unique
   status       String   @default("initiated")
   duration     Int?
-  recordingUrl String?
+  recordingUrl String?  @db.Text
   disposition  String?
   notes        String?  @db.Text
   connectedAt  DateTime?
@@ -478,6 +480,32 @@ model CallLog {
   @@index([status])
   @@index([disposition])
   @@index([createdAt])
+}
+
+model WhatsAppMessage {
+  id                Int      @id @default(autoincrement())
+  leadId            Int
+  lead              Lead     @relation(fields: [leadId], references: [id])
+  userId            Int?
+  user              User?    @relation(fields: [userId], references: [id])
+  direction         String
+  from              String
+  to                String
+  body              String   @db.Text
+  provider          String   @default("twilio")
+  providerMessageId String?  @unique
+  status            String   @default("queued")
+  errorCode         String?
+  errorMessage      String?  @db.Text
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([leadId, createdAt])
+  @@index([userId])
+  @@index([status])
 }
 
 model Booking{

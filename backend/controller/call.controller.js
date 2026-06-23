@@ -1,5 +1,10 @@
 const prisma = require("../lib/prisma")
 const { startProviderCall } = require("../services/callProvider.service")
+const {
+  buildBridgeTwiml,
+  getRecordingStream,
+  verifyWebhookToken,
+} = require("../services/twilioVoice.service")
 
 const allowedDispositions = new Set([
   "Qualified",
@@ -28,6 +33,16 @@ const toDateOrNull = (value) => {
 }
 
 const cleanPhone = (value) => String(value || "").replace(/\D/g, "")
+
+const isSamePhone = (first, second) => {
+  const firstDigits = cleanPhone(first)
+  const secondDigits = cleanPhone(second)
+  if (!firstDigits || !secondDigits) return false
+  if (firstDigits === secondDigits) return true
+  return firstDigits.length >= 10 &&
+    secondDigits.length >= 10 &&
+    firstDigits.slice(-10) === secondDigits.slice(-10)
+}
 
 const getUserName = (user) =>
   [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
@@ -65,6 +80,7 @@ const callInclude = {
       lastName:true,
       companyName:true,
       phones:true,
+      status:true,
       interestedProjects:true,
       propertyType:true,
       budget:true,
@@ -147,6 +163,11 @@ exports.startCall = async (req, res) => {
     if (!agentPhone || agentPhone.length < 10) {
       return res.status(400).json({ message:"Agent phone is required before starting call" })
     }
+    if (isSamePhone(agentPhone, leadPhone)) {
+      return res.status(400).json({
+        message:"Agent and lead phone numbers must be different. Enter your own phone as the agent number.",
+      })
+    }
 
     pendingCallLog = await prisma.callLog.create({
       data:{
@@ -155,26 +176,40 @@ exports.startCall = async (req, res) => {
         phone:leadPhone,
         leadPhone,
         agentPhone,
-        provider:"exotel",
+        provider:"twilio",
         status:"initiated",
         startedAt:new Date(),
       },
     })
 
-    const providerResult = await startProviderCall({ lead, agent, phone:leadPhone, agentPhone })
-    const callLog = await prisma.callLog.update({
+    const providerResult = await startProviderCall({
+      lead,
+      agent,
+      phone:leadPhone,
+      agentPhone,
+      callLogId:pendingCallLog.id,
+    })
+    await prisma.callLog.update({
       where:{ id:pendingCallLog.id },
       data:{
         callId:providerResult.providerCallId,
         providerCallId:providerResult.providerCallId,
         provider:providerResult.provider,
-        status:normalizeCallStatus(providerResult.status || "initiated"),
       },
+    })
+    // Do not overwrite a newer status if Twilio's callback arrived before its
+    // connect API response was persisted.
+    await prisma.callLog.updateMany({
+      where:{ id:pendingCallLog.id, status:"initiated" },
+      data:{ status:normalizeCallStatus(providerResult.status || "initiated") },
+    })
+    const callLog = await prisma.callLog.findUnique({
+      where:{ id:pendingCallLog.id },
       include:callInclude,
     })
 
     res.status(201).json({
-      message:"Call initiated. Exotel will call the agent first.",
+      message:"Call initiated. Twilio will call the agent first.",
       callLog,
       provider:providerResult.provider,
       providerCallId:providerResult.providerCallId,
@@ -400,24 +435,50 @@ const firstWebhookValue = (body, keys) => {
   return null
 }
 
+const getVerifiedTwilioCallLogId = (req) => {
+  const callLogId = toNumberOrNull(req.query.callLogId)
+  return verifyWebhookToken(callLogId, req.query.token) ? callLogId : null
+}
+
+exports.twilioVoice = async (req, res) => {
+  try {
+    const callLogId = getVerifiedTwilioCallLogId(req)
+    if (!callLogId) return res.status(403).type("text/plain").send("Invalid callback signature")
+    const callLog = await prisma.callLog.findUnique({ where:{ id:callLogId } })
+    if (!callLog || callLog.provider !== "twilio") {
+      return res.status(404).type("text/plain").send("Call log not found")
+    }
+    res.type("text/xml").send(buildBridgeTwiml({ callLogId, leadPhone:callLog.leadPhone || callLog.phone }))
+  } catch (error) {
+    console.error("Twilio voice webhook error:", error.message)
+    res.status(500).type("text/xml").send("<Response><Hangup/></Response>")
+  }
+}
+
 exports.webhook = async (req, res) => {
   try {
+    const verifiedCallLogId = getVerifiedTwilioCallLogId(req)
+    if (!verifiedCallLogId) return res.status(403).json({ message:"Invalid callback signature" })
     const providerCallId = firstWebhookValue(req.body, ["CallSid", "DialCallSid", "callId", "call_id", "sid", "Sid"])
-    if (!providerCallId) return res.status(400).json({ message:"CallSid is required" })
+    const callbackCallLogId = verifiedCallLogId
+    if (!providerCallId && !callbackCallLogId) {
+      return res.status(400).json({ message:"CallSid or callLogId is required" })
+    }
 
-    const status = normalizeCallStatus(firstWebhookValue(req.body, ["DialCallStatus", "CallStatus", "Status", "status"]))
-    const duration = toNumberOrNull(firstWebhookValue(req.body, ["ConversationDuration", "DialCallDuration", "CallDuration", "Duration", "duration"]))
+    const rawStatus = firstWebhookValue(req.body, ["DialCallStatus", "CallStatus", "Status", "status"])
+    const status = rawStatus ? normalizeCallStatus(rawStatus) : null
+    const duration = toNumberOrNull(firstWebhookValue(req.body, ["RecordingDuration", "DialCallDuration", "CallDuration", "Duration", "duration"]))
     const recordingUrl = firstWebhookValue(req.body, ["RecordingUrl", "RecordingURL", "recordingUrl", "recording_url"])
     const startedAt = toDateOrNull(firstWebhookValue(req.body, ["StartTime", "startTime", "start_time"]))
     const endedAtFromProvider = toDateOrNull(firstWebhookValue(req.body, ["EndTime", "endTime", "end_time"]))
-    const connectedAt = status === "connected" ? new Date() : undefined
-    const endedAt = terminalCallStatuses.has(status) ? endedAtFromProvider || new Date() : undefined
-
     const existingCall = await prisma.callLog.findFirst({
       where:{
         OR:[
-          { providerCallId:String(providerCallId) },
-          { callId:String(providerCallId) },
+          ...(providerCallId ? [
+            { providerCallId:String(providerCallId) },
+            { callId:String(providerCallId) },
+          ] : []),
+          ...(callbackCallLogId ? [{ id:callbackCallLogId }] : []),
         ],
       },
     })
@@ -425,12 +486,45 @@ exports.webhook = async (req, res) => {
       return res.status(200).json({ message:"Webhook accepted; call log not found yet" })
     }
 
+    const normalizedRawStatus = String(rawStatus || "").toLowerCase().replace(/[_\s]+/g, "-")
+    const isLeadLeg = Boolean(
+      providerCallId &&
+      existingCall.providerCallId &&
+      String(providerCallId) !== String(existingCall.providerCallId)
+    )
+    let effectiveStatus = status
+    // The first Twilio leg calls the agent. The conversation is only connected
+    // after the second (lead) leg answers.
+    if (!isLeadLeg && ["answered", "in-progress"].includes(normalizedRawStatus)) {
+      effectiveStatus = "calling"
+    }
+    // Keep the lead-leg outcome when the parent agent leg reports completed
+    // afterwards (for example, do not turn no-answer into completed).
+    if (
+      effectiveStatus === "completed" &&
+      ["failed", "no-answer", "busy", "canceled"].includes(existingCall.status)
+    ) {
+      effectiveStatus = existingCall.status
+    }
+    if (
+      (existingCall.status === "connected" && ["initiated", "calling"].includes(effectiveStatus)) ||
+      (terminalCallStatuses.has(existingCall.status) && !terminalCallStatuses.has(effectiveStatus))
+    ) {
+      effectiveStatus = existingCall.status
+    }
+    const connectedAt = effectiveStatus === "connected" ? new Date() : undefined
+    const endedAt = effectiveStatus && terminalCallStatuses.has(effectiveStatus)
+      ? endedAtFromProvider || new Date()
+      : undefined
+
     const callLog = await prisma.callLog.update({
       where:{ id:existingCall.id },
       data:{
-        providerCallId:String(providerCallId),
-        callId:String(providerCallId),
-        status,
+        ...(providerCallId && !existingCall.providerCallId ? {
+          providerCallId:String(providerCallId),
+          callId:String(providerCallId),
+        } : {}),
+        ...(effectiveStatus ? { status:effectiveStatus } : {}),
         ...(duration !== null ? { duration } : {}),
         ...(recordingUrl ? { recordingUrl:String(recordingUrl) } : {}),
         ...(startedAt ? { startedAt } : {}),
@@ -447,6 +541,33 @@ exports.webhook = async (req, res) => {
 }
 
 exports.recordingWebhook = exports.webhook
+
+exports.getRecording = async (req, res) => {
+  try {
+    const id = toNumberOrNull(req.params.id)
+    const callLog = await prisma.callLog.findUnique({ where:{ id } })
+    if (!callLog) return res.status(404).json({ message:"Call log not found" })
+    if (!isAdminUser(req) && callLog.agentId !== toNumberOrNull(req.authUser?.id)) {
+      return res.status(403).json({ message:"Access denied" })
+    }
+    if (!callLog.recordingUrl) return res.status(404).json({ message:"Recording is not available" })
+
+    const recording = await getRecordingStream(callLog.recordingUrl)
+    res.setHeader("Content-Type", recording.headers["content-type"] || "audio/mpeg")
+    if (recording.headers["content-length"]) {
+      res.setHeader("Content-Length", recording.headers["content-length"])
+    }
+    recording.data.on("error", (error) => {
+      console.error("Twilio recording stream error:", error.message)
+      if (!res.headersSent) res.status(502).end()
+      else res.destroy(error)
+    })
+    recording.data.pipe(res)
+  } catch (error) {
+    console.error("Load recording error:", error.message)
+    if (!res.headersSent) res.status(error.response?.status || 502).json({ message:"Unable to load recording" })
+  }
+}
 
 exports.getAnalytics = async (req, res) => {
   try {

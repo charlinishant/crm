@@ -1179,6 +1179,7 @@ const SalesUserPanel = () => {
   const openCallPage = (lead = null) => {
     if (lead) {
       setFocusedCallLeadId(getLeadId(lead));
+      setCallTarget(lead);
     }
     setOpenActionLeadId(null);
     setActiveScreen("calls");

@@ -1,8 +1,15 @@
 const { Router } = require("express")
-const { sendWhatsAppMessage } = require("../controller/whatsapp.controller")
+const authenticate = require("../middleware/auth.middleware")
+const {
+  sendWhatsAppMessage,
+  listLeadMessages,
+  updateMessageStatus,
+} = require("../controller/whatsapp.controller")
 
 const router = Router()
 
-router.post("/send", sendWhatsAppMessage)
+router.post("/send", authenticate, sendWhatsAppMessage)
+router.get("/lead/:leadId", authenticate, listLeadMessages)
+router.post("/status", updateMessageStatus)
 
 module.exports = router

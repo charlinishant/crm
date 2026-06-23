@@ -5,6 +5,15 @@ import countryCallingCodes from "./countryCallingCodes";
 const cleanPhone = (value) => String(value || "").replace(/\D/g, "");
 const DEFAULT_COUNTRY_CODE = "91";
 
+const isSamePhone = (first, second) => {
+  const firstDigits = cleanPhone(first);
+  const secondDigits = cleanPhone(second);
+  if (!firstDigits || !secondDigits) return false;
+  if (firstDigits === secondDigits) return true;
+  return firstDigits.length >= 10 && secondDigits.length >= 10 &&
+    firstDigits.slice(-10) === secondDigits.slice(-10);
+};
+
 const splitPhoneNumber = (value) => {
   const digits = cleanPhone(value);
   if (digits.length <= 10) return { countryCode: DEFAULT_COUNTRY_CODE, nationalNumber: digits };
@@ -22,6 +31,13 @@ const getLeadName = (lead) =>
   [lead?.firstName, lead?.lastName].filter(Boolean).join(" ") ||
   lead?.companyName ||
   (lead?.id ? `Lead #${lead.id}` : "Selected lead");
+
+const getStatusLabel = (value) => {
+  const status = String(value || "initiated").toLowerCase();
+  if (["initiated", "queued"].includes(status)) return "queued";
+  if (["calling", "ringing", "connected", "in-progress"].includes(status)) return "in progress";
+  return status.replace(/-/g, " ");
+};
 
 const StartCallModal = ({ lead, leadPhone, initialAgentPhone, onClose, onStart }) => {
   const [countryCode, setCountryCode] = useState(DEFAULT_COUNTRY_CODE);
@@ -53,6 +69,10 @@ const StartCallModal = ({ lead, leadPhone, initialAgentPhone, onClose, onStart }
       setError("Enter a valid phone number for the selected country code.");
       return;
     }
+    if (isSamePhone(normalizedAgentPhone, leadPhone)) {
+      setError("Agent and lead phone numbers must be different. Enter your own phone number here.");
+      return;
+    }
 
     setStarting(true);
     setError("");
@@ -74,7 +94,7 @@ const StartCallModal = ({ lead, leadPhone, initialAgentPhone, onClose, onStart }
           <div className="start-call-brand"><Phone size={20} /></div>
           <div>
             <h3 id="start-call-title">{callLog ? "Call initiated" : "Start cloud call"}</h3>
-            <p>Secure Exotel bridge call</p>
+            <p>Secure Twilio bridge call</p>
           </div>
           <button type="button" className="start-call-close" onClick={onClose} disabled={starting} aria-label="Close">
             <X size={19} />
@@ -85,9 +105,9 @@ const StartCallModal = ({ lead, leadPhone, initialAgentPhone, onClose, onStart }
           <div className="start-call-success">
             <CheckCircle2 size={54} />
             <h4>Check your phone</h4>
-            <p>Exotel will call your agent number first. Answer it to connect with {getLeadName(lead)}.</p>
+            <p>Twilio will call your agent number first. Answer it to connect with {getLeadName(lead)}.</p>
             <div className="start-call-reference">
-              <span>Status <strong>{String(callLog.status || "initiated").replace("-", " ")}</strong></span>
+              <span>Status <strong>{getStatusLabel(callLog.status)}</strong></span>
               <span>Call reference <strong>#{callLog.id}</strong></span>
             </div>
             <button type="button" className="start-call-primary full" onClick={onClose}>OK, continue</button>
@@ -103,7 +123,7 @@ const StartCallModal = ({ lead, leadPhone, initialAgentPhone, onClose, onStart }
               <div className="start-call-flow" aria-label="Call connection flow">
                 <div><Smartphone size={18} /><span>Your phone</span></div>
                 <i />
-                <div><ShieldCheck size={18} /><span>Exotel</span></div>
+                <div><ShieldCheck size={18} /><span>Twilio</span></div>
                 <i />
                 <div><Phone size={18} /><span>Lead</span></div>
               </div>
@@ -124,7 +144,7 @@ const StartCallModal = ({ lead, leadPhone, initialAgentPhone, onClose, onStart }
               </label>
 
               <div className="start-call-info">
-                The lead sees your configured Exophone number. Calls may be recorded for CRM history and quality purposes.
+              The lead sees your configured Twilio number. Calls may be recorded for CRM history and quality purposes.
               </div>
               {error && <div className="start-call-error" role="alert">{error}</div>}
             </div>

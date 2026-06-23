@@ -136,7 +136,7 @@ const UserWhatsAppPage = ({
     new URLSearchParams(window.location.search).get("leadId") || ""
   );
   const [drafts, setDrafts] = useState({});
-  const [sentMessages, setSentMessages] = useState({});
+  const [serverMessages, setServerMessages] = useState({});
   const [sendStatus, setSendStatus] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -233,9 +233,9 @@ const UserWhatsAppPage = ({
 
   const selectedConversation = conversations.find((item) => item.id === selectedLeadId) || conversations[0] || null;
   const currentDraft = selectedConversation ? drafts[selectedConversation.id] ?? selectedConversation.message : "";
-  const selectedSentMessages = selectedConversation ? sentMessages[selectedConversation.id] || [] : [];
-  const visibleMessages = selectedConversation?.history?.length || selectedSentMessages.length
-    ? [...(selectedConversation?.history || []), ...selectedSentMessages]
+  const selectedServerMessages = selectedConversation ? serverMessages[selectedConversation.id] || [] : [];
+  const visibleMessages = selectedConversation?.history?.length || selectedServerMessages.length
+    ? [...(selectedConversation?.history || []), ...selectedServerMessages]
     : selectedConversation
       ? [{
           id: `${selectedConversation.id}-draft-preview`,
@@ -245,6 +245,39 @@ const UserWhatsAppPage = ({
           direction: "outgoing",
         }]
       : [];
+
+  useEffect(() => {
+    if (!selectedConversation?.id) return undefined;
+    let active = true;
+    const loadMessages = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+        const response = await fetch(`${API_URL}/api/whatsapp/lead/${selectedConversation.id}`, {
+          headers:token ? { Authorization:`Bearer ${token}` } : {},
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !active) return;
+        const messages = (result.data || []).map((message) => ({
+          id:message.id,
+          author:message.direction === "incoming" ? selectedConversation.name : selectedConversation.owner,
+          body:message.body,
+          createdAt:message.createdAt,
+          direction:message.direction,
+          status:message.status,
+          providerMessageId:message.providerMessageId,
+        }));
+        setServerMessages((current) => ({ ...current, [selectedConversation.id]:messages }));
+      } catch (historyError) {
+        console.error("Unable to refresh WhatsApp history:", historyError);
+      }
+    };
+    loadMessages();
+    const interval = window.setInterval(loadMessages, 5000);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [selectedConversation?.id, selectedConversation?.name, selectedConversation?.owner]);
   const issueCount = conversations.filter((item) => {
     const status = String(item.status).toLowerCase();
     return status.includes("fail") || status.includes("error");
@@ -287,15 +320,15 @@ const UserWhatsAppPage = ({
           ? `Twilio response: ${twilioResponse.label}`
           : "Message sent through Twilio WhatsApp API."
       );
-      setSentMessages((current) => ({
+      setServerMessages((current) => ({
         ...current,
         [selectedConversation.id]: [
           ...(current[selectedConversation.id] || []),
           {
-            id: result?.providerMessageId || `${selectedConversation.id}-${Date.now()}`,
+            id: result?.data?.id || result?.providerMessageId || `${selectedConversation.id}-${Date.now()}`,
             author: selectedConversation.owner,
             body: currentDraft.trim(),
-            createdAt: new Date().toISOString(),
+            createdAt: result?.data?.createdAt || new Date().toISOString(),
             direction: "outgoing",
             status: twilioResponse.deliveryStatus || "sent",
             providerCode: twilioResponse.code,

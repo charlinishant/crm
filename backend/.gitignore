@@ -16,3 +16,9 @@ prisma/migrations/*
 !prisma/migrations/20260622170000_add_email_log_body/migration.sql
 !prisma/migrations/20260622200000_extend_call_logs_for_exotel/
 !prisma/migrations/20260622200000_extend_call_logs_for_exotel/migration.sql
+!prisma/migrations/20260623120000_expand_call_recording_url/
+!prisma/migrations/20260623120000_expand_call_recording_url/migration.sql
+!prisma/migrations/20260623150000_set_twilio_call_provider/
+!prisma/migrations/20260623150000_set_twilio_call_provider/migration.sql
+!prisma/migrations/20260623180000_add_twilio_whatsapp_messages/
+!prisma/migrations/20260623180000_add_twilio_whatsapp_messages/migration.sql

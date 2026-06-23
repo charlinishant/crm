@@ -12,6 +12,8 @@ const {
   webhook,
   recordingWebhook,
   getAnalytics,
+  twilioVoice,
+  getRecording,
 } = require("../controller/call.controller")
 
 const router = Router()
@@ -25,7 +27,9 @@ router.get("/agent/:agentId", authenticate, getAgentCalls)
 router.get("/my", authenticate, getMyCalls)
 router.get("/admin/all", authenticate, getAdminCalls)
 router.get("/admin/analytics", authenticate, getAnalytics)
-router.post("/webhook", webhook)
-router.post("/recording-webhook", recordingWebhook)
+router.get("/recording/:id", authenticate, getRecording)
+router.post("/twilio/voice", twilioVoice)
+router.post("/twilio/status", webhook)
+router.post("/twilio/recording", recordingWebhook)
 
 module.exports = router
