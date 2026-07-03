@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { MoreVertical } from 'lucide-react';
+import BookingPreviewModal from '../user/BookingPreviewModal';
 
 const Booking = () => {
     const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
@@ -11,6 +12,7 @@ const Booking = () => {
     const [updatingBookingId, setUpdatingBookingId] = useState(null);
     const [statusMessage, setStatusMessage] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
+    const [previewBooking, setPreviewBooking] = useState(null);
 
     const formatMoney = (value) => {
         if (value === undefined || value === null || value === "") return "Rs. 0";
@@ -68,7 +70,8 @@ const Booking = () => {
         actualDemanded: "Rs. 0",
         overdue: "Rs. 0",
         receipts: "Rs. 0",
-        creditNotes: "Rs. 0"
+        creditNotes: "Rs. 0",
+        rawBooking: booking,
     })), [bookings]);
 
     const handleStageChange = async (bookingId, stage) => {
@@ -251,17 +254,28 @@ const Booking = () => {
                                             )}
                                         </td>
                                         <td>
-                                            <select
-                                                className={`booking-stage-select booking-stage-${String(item.stage).toLowerCase()}`}
-                                                value={item.stage}
-                                                onChange={(event) => handleStageChange(item.id, event.target.value)}
-                                                disabled={updatingBookingId === item.id}
-                                                aria-label={`Update booking ${item.id} stage`}
-                                            >
-                                                <option value="Tentative">Tentative</option>
-                                                <option value="Booked">Booked</option>
-                                                <option value="Cancelled">Cancelled</option>
-                                            </select>
+                                            {item.stage === "Booked" ? (
+                                                <button
+                                                    type="button"
+                                                    className="booking-stage-preview booking-stage-booked"
+                                                    onClick={() => setPreviewBooking(item.rawBooking)}
+                                                    aria-label={`Preview booking ${item.id}`}
+                                                >
+                                                    Booked
+                                                </button>
+                                            ) : (
+                                                <select
+                                                    className={`booking-stage-select booking-stage-${String(item.stage).toLowerCase()}`}
+                                                    value={item.stage}
+                                                    onChange={(event) => handleStageChange(item.id, event.target.value)}
+                                                    disabled={updatingBookingId === item.id}
+                                                    aria-label={`Update booking ${item.id} stage`}
+                                                >
+                                                    <option value="Tentative">Tentative</option>
+                                                    <option value="Booked">Booked</option>
+                                                    <option value="Cancelled">Cancelled</option>
+                                                </select>
+                                            )}
                                         </td>
                                         <td>{item.source}</td>
                                         <td>{item.bookedBy}</td>
@@ -277,6 +291,7 @@ const Booking = () => {
                                                 type="button"
                                                 className="booking-action-button"
                                                 aria-label={`Open actions for booking ${item.id}`}
+                                                onClick={() => setPreviewBooking(item.rawBooking)}
                                             >
                                                 <MoreVertical size={16} strokeWidth={2.2} />
                                             </button>
@@ -314,6 +329,7 @@ const Booking = () => {
                     </div>
                 </div>
             </div>
+            <BookingPreviewModal booking={previewBooking} onClose={() => setPreviewBooking(null)} />
         </div>
     );
 };

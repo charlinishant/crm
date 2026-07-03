@@ -23,6 +23,7 @@ import UserDetails from "./userDetails";
 import UserWhatsAppPage from "./UserWhatsAppPage";
 import SalesFollowups from "../pages/sales/SalesFollowups";
 import UserBookingForm from "./UserBookingForm";
+import BookingPreviewModal from "./BookingPreviewModal";
 import CallDispositionModal from "./CallDispositionModal";
 import StartCallModal from "./StartCallModal";
 import CallLogsTable from "../components/CallLogsTable";
@@ -246,7 +247,6 @@ const emptyBookingForm = {
 const bookingSteps = [
   "Filter Project",
   "Select Unit",
-  "Quotation",
   "Booking Confirmation",
 ];
 
@@ -413,6 +413,7 @@ const SalesUserPanel = () => {
   const [bookingProjectMessage, setBookingProjectMessage] = useState("");
   const [bookingStepIndex, setBookingStepIndex] = useState(0);
   const [isBookingSuccess, setIsBookingSuccess] = useState(false);
+  const [bookingPreview, setBookingPreview] = useState(null);
   const [projects, setProjects] = useState([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [users, setUsers] = useState([]);
@@ -1366,6 +1367,32 @@ const SalesUserPanel = () => {
     setIsBookingFormOpen(true);
   };
 
+  const getLeadBookingPreview = (lead) => {
+    const leadId = getLeadId(lead);
+    return (
+      (lead?.bookings || [])[0] ||
+      (panel.bookings || []).find((booking) => String(booking.leadId) === String(leadId)) ||
+      {
+        id: leadId,
+        leadId,
+        customerName: getLeadName(lead),
+        phone: getLeadPhone(lead),
+        projectDetails: lead?.interestedProjects || lead?.projectDetails || lead?.projectName || "-",
+        unit: lead?.unit || "-",
+        stage: "Booked",
+        source: lead?.source || "-",
+      }
+    );
+  };
+
+  const openBookingPreview = (lead) => {
+    setOpenActionLeadId(null);
+    setBookingPreview({
+      booking: getLeadBookingPreview(lead),
+      lead,
+    });
+  };
+
   const closeBookingForm = () => {
     setIsBookingFormOpen(false);
     setBookingLead(null);
@@ -1408,13 +1435,6 @@ const SalesUserPanel = () => {
       setBookingMessage("");
       setBookingProjectMessage("");
       setBookingStepIndex(2);
-      return;
-    }
-
-    if (bookingStepIndex === 2) {
-      setBookingMessage("");
-      setBookingProjectMessage("");
-      setBookingStepIndex(3);
       return;
     }
 
@@ -1503,6 +1523,10 @@ const SalesUserPanel = () => {
   const openLeadPreview = (lead, openBooking = false) => {
     setOpenActionLeadId(null);
     if (openBooking) {
+      if (isBookedLead(lead)) {
+        openBookingPreview(lead);
+        return;
+      }
       openBookingForm(lead);
       return;
     }
@@ -2236,7 +2260,7 @@ const SalesUserPanel = () => {
                     key={leadId || lead.email}
                     onClick={() => {
                       if (isBookedLead(lead)) {
-                        openBookingForm(lead);
+                        openBookingPreview(lead);
                         return;
                       }
                       openLeadDetails(lead);
@@ -2273,7 +2297,7 @@ const SalesUserPanel = () => {
                             Preview
                           </button>
                            <button type="button" onClick={() => openLeadPreview(lead, true)}>
-                            Booked Lead
+                            {isBookedLead(lead) ? "Preview Booking" : "Booked Lead"}
                           </button>
                         </div>
                       )}
@@ -2341,6 +2365,12 @@ const SalesUserPanel = () => {
             bookingForm.unit ? `${bookingForm.unit} marked as interested.` : "Select a unit before marking interest."
           )
         }
+      />
+
+      <BookingPreviewModal
+        booking={bookingPreview?.booking}
+        lead={bookingPreview?.lead}
+        onClose={() => setBookingPreview(null)}
       />
 
       <CallDispositionModal

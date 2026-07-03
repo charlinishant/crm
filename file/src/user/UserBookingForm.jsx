@@ -16,7 +16,6 @@ const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 const defaultSteps = [
   "Filter Project",
   "Select Unit",
-  "Quotation",
   "Booking Confirmation",
 ];
 
@@ -203,9 +202,22 @@ const flattenDatabaseUnits = (unitGroups = []) =>
           group?.images ||
           group?.floor?.floorPlanImages
       ),
-      status: "available",
+      status:
+        String(unit?.status || group?.status || unit?.unitStatus || group?.unitStatus || "")
+          .toLowerCase()
+          .replace(/\s+/g, "-") || "available",
     }));
   });
+
+const normalizeUnitStatus = (status) => {
+  const value = String(status || "available").toLowerCase();
+  if (["booked", "sold", "unavailable"].includes(value)) return "booked";
+  if (["blocked", "block"].includes(value)) return "blocked";
+  if (value === "refuge") return "refuge";
+  if (value === "investor") return "investor";
+  if (value === "selected") return "selected";
+  return "available";
+};
 
 const UserBookingForm = ({
   isOpen,
@@ -224,14 +236,13 @@ const UserBookingForm = ({
   onMarkInterested,
   onFieldChange,
 }) => {
+  const [interestedUnits, setInterestedUnits] = useState(new Set());
   const [filters, setFilters] = useState({
     propertyPurpose: "Sale",
     unitType: "Residential",
     propertyType: "Apartment",
   });
-  const [unitView, setUnitView] = useState("grid");
-  const [activeQuoteTab, setActiveQuoteTab] = useState("unit");
-  const [interestedUnits, setInterestedUnits] = useState(new Set());
+  const [completionActionMessage, setCompletionActionMessage] = useState("");
   const [bookingProjects, setBookingProjects] = useState([]);
   const [projectTowers, setProjectTowers] = useState([]);
   const [databaseUnitGroups, setDatabaseUnitGroups] = useState([]);
@@ -433,7 +444,7 @@ const UserBookingForm = ({
   };
 
   const selectUnit = (unit) => {
-    if (unit.status === "unavailable") return;
+    if (["booked", "blocked", "refuge", "investor"].includes(normalizeUnitStatus(unit.status))) return;
     updateField("unit", unit.name);
     updateField("unitId", unit.id || unit.name);
     updateField("saleableArea", unit.saleable);
@@ -468,17 +479,15 @@ const UserBookingForm = ({
       : bookingStepIndex === 0
         ? "Next"
         : bookingStepIndex === 1
-          ? "Select Unit"
-          : bookingStepIndex === 2
-            ? "Generate Quote"
-            : "Confirm Booking";
+          ? "Continue to Confirmation"
+          : "Confirm Booking";
 
   const isSubmitDisabled =
     isSavingBooking ||
     isLoadingBookingProject ||
     (bookingStepIndex === 0 && !bookingForm.projectDetails) ||
     (bookingStepIndex === 1 && !bookingForm.unit) ||
-    (bookingStepIndex === 3 && !bookingForm.customerName && !leadName);
+    (bookingStepIndex === 2 && !bookingForm.customerName && !leadName);
 
   const floorGroups = Array.from(new Set(filteredCatalogUnits.map((unit) => unit.floor))).sort((a, b) => Number(b) - Number(a));
   const quotationName = [
@@ -486,9 +495,6 @@ const UserBookingForm = ({
     selectedTowerName || selectedUnit.towerName,
     selectedUnit.name,
   ].filter(Boolean).join(" - ");
-  const quoteSchemeName = bookingForm.schemeName || bookingForm.scheme || "Default Scheme";
-  const quotePaymentScheduleName = bookingForm.paymentScheduleName || "Payment Schedule";
-  const quoteStatus = bookingForm.quoteStatus || "Approved";
   const baseRateValue = toNumber(bookingForm.baseRate, toNumber(selectedUnit.baseRate, 7750));
   const saleableValue = toNumber(bookingForm.saleableArea, toNumber(selectedUnit.saleable, 0));
   const carpetValue = toNumber(bookingForm.carpetArea, toNumber(selectedUnit.carpet, 0));
@@ -598,6 +604,14 @@ const UserBookingForm = ({
       .filter((row) => !["Base Rate", "Floor Rise", "Total Price"].includes(row.name))
       .reduce((total, row) => total + toNumber(row.newValue, 0), 0) ||
     agreementValue;
+  const unitStatusCounts = filteredCatalogUnits.reduce(
+    (counts, unit) => {
+      const status = normalizeUnitStatus(unit.status);
+      counts[status] = (counts[status] || 0) + 1;
+      return counts;
+    },
+    { all: filteredCatalogUnits.length, available: 0, booked: 0, blocked: 0, refuge: 0, investor: 0 }
+  );
   const effectiveRate = saleableValue ? Math.round(agreementValue / saleableValue) : baseRateValue;
   const selectedProject = bookingProjects.find((project) => String(project.id) === selectedProjectId);
   const hasLeadProjectOption =
@@ -646,18 +660,6 @@ const UserBookingForm = ({
   };
 
   if (!isOpen) return null;
-
-  const renderProjectIllustration = () => (
-    <div className="ubf-project-illustration" aria-hidden="true">
-      <div className="ubf-tower one" />
-      <div className="ubf-tower two" />
-      <div className="ubf-tower three" />
-      <div className="ubf-house" />
-      <div className="ubf-phone">
-        <span />
-      </div>
-    </div>
-  );
 
   const renderUnitGallery = () => (
     <aside className="ubf-side-panel">
@@ -819,69 +821,70 @@ const UserBookingForm = ({
                 ))}
               </select>
             </label>
-            <div className="ubf-view-toggle">
-              <button type="button" className={unitView === "grid" ? "active" : ""} onClick={() => setUnitView("grid")}>
-                Grid View
-              </button>
-              <button type="button" className={unitView === "list" ? "active" : ""} onClick={() => setUnitView("list")}>
-                List View
-              </button>
-            </div>
           </div>
         </div>
-        <div className="ubf-legend">
-          <span className="available" /> Available
-          <span className="interested" /> Interested
-          <span className="selected" /> Selected
-          <span className="unavailable" /> Unavailable
+        <div className="ubf-status-counters">
+          {[
+            ["all", "All"],
+            ["available", "Available"],
+            ["booked", "Booked"],
+            ["blocked", "Blocked"],
+            ["refuge", "Refuge"],
+            ["investor", "Investor"],
+          ].map(([key, label]) => (
+            <span key={key}>
+              <b>{unitStatusCounts[key] || 0}</b> {label}
+            </span>
+          ))}
         </div>
 
-        {unitView === "grid" ? (
-          <div className="ubf-floor-grid">
-            {filteredCatalogUnits.length === 0 && (
-              <div className="ubf-unit-empty">No units found for this project tower.</div>
-            )}
-            {floorGroups.map((floor) => (
-              <React.Fragment key={floor}>
-                <div className="ubf-floor-label">{floor}th Floor</div>
-                <div className="ubf-floor-no">{floor}</div>
-                <div className="ubf-units-line">
-                  {filteredCatalogUnits.filter((unit) => unit.floor === floor).map((unit) => {
-                    const tone = bookingForm.unit === unit.name ? "selected" : interestedUnits.has(unit.name) ? "interested" : unit.status;
-                    return (
-                      <button type="button" key={unit.name} className={`ubf-unit-cell ${tone}`} onClick={() => selectUnit(unit)}>
-                        {unit.name}
-                      </button>
-                    );
-                  })}
-                </div>
-              </React.Fragment>
-            ))}
-          </div>
-        ) : (
-          <div className="ubf-unit-list">
-            {filteredCatalogUnits.length === 0 && (
-              <div className="ubf-unit-empty">No units found for this project tower.</div>
-            )}
-            {filteredCatalogUnits.map((unit) => {
-              const tone = bookingForm.unit === unit.name ? "selected" : interestedUnits.has(unit.name) ? "interested" : unit.status;
-              return (
-                <button type="button" key={unit.name} className={`ubf-unit-list-row ${tone}`} onClick={() => selectUnit(unit)}>
-                  <strong>{unit.name}</strong>
-                  <span>Floor: {unit.floor}</span>
-                  <span>Carpet Area: {unit.carpet} Sq. Ft.</span>
-                  <span>Saleable Area: {unit.saleable} Sq. Ft.</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
+        <div className="ubf-floor-grid">
+          {filteredCatalogUnits.length === 0 && (
+            <div className="ubf-unit-empty">No units found for this project tower.</div>
+          )}
+          {floorGroups.map((floor) => (
+            <React.Fragment key={floor}>
+              <div className="ubf-floor-label">Floor {floor}</div>
+              <div className="ubf-units-line">
+                {filteredCatalogUnits.filter((unit) => unit.floor === floor).map((unit) => {
+                  const status = normalizeUnitStatus(unit.status);
+                  const tone = bookingForm.unit === unit.name ? "selected" : interestedUnits.has(unit.name) ? "interested" : status;
+                  const isLocked = ["booked", "blocked", "refuge", "investor"].includes(status);
+                  return (
+                    <button
+                      type="button"
+                      key={`${unit.id}-${unit.name}`}
+                      className={`ubf-unit-cell ${tone}`}
+                      onClick={() => selectUnit(unit)}
+                      disabled={isLocked}
+                      title={`Flat no: ${unit.name}`}
+                    >
+                      {unit.image ? (
+                        <img src={unit.image} alt="" />
+                      ) : (
+                        <span className="ubf-unit-plan" aria-hidden="true">
+                          <i />
+                          <i />
+                          <i />
+                          <i />
+                        </span>
+                      )}
+                      <b>Flat no : {unit.name}</b>
+                      <FaEllipsisV aria-hidden="true" />
+                    </button>
+                  );
+                })}
+              </div>
+            </React.Fragment>
+          ))}
+        </div>
       </section>
 
       {renderUnitGallery()}
     </div>
   );
 
+  // eslint-disable-next-line no-unused-vars
   const renderCostSheet = () => (
     <div className="ubf-cost-table">
       <h6>Cost Sheet</h6>
@@ -929,6 +932,7 @@ const UserBookingForm = ({
     </div>
   );
 
+  // eslint-disable-next-line no-unused-vars
   const renderPaymentSchedule = () => {
     const totalPercentage = paymentRows.reduce((sum, row) => sum + row.percentage, 0);
     const totalAmount = paymentRows.reduce((sum, row) => sum + row.amount, 0);
@@ -988,105 +992,6 @@ const UserBookingForm = ({
       </div>
     );
   };
-
-  const renderStepThree = () => (
-    <div className="ubf-step ubf-quote-step">
-      <div className="ubf-tabs">
-        {[
-          ["unit", "Unit Details"],
-          ["cost", "Cost Sheet"],
-          ["payment", "Payment Schedule"],
-        ].map(([key, label]) => (
-          <button type="button" key={key} className={activeQuoteTab === key ? "active" : ""} onClick={() => setActiveQuoteTab(key)}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {activeQuoteTab === "unit" && (
-        <div className="ubf-unit-detail-strip">
-          {[
-            [
-              ["Name", selectedUnit.name],
-              ["Bedrooms", selectedUnit.bedrooms],
-              ["Base Rate", bookingForm.baseRate || "Rs. 7.8K (7,750)"],
-              ["Agreement Value", bookingForm.agreementValue || ""],
-            ],
-            [
-              ["Status", selectedUnit.status === "unavailable" ? "Unavailable" : "Available"],
-              ["Bathrooms", selectedUnit.bathrooms],
-              ["Floor Rise", bookingForm.floorRise || ""],
-            ],
-            [
-              ["Floor", selectedUnit.floor],
-              ["Carpet", Number(selectedUnit.carpet || 0).toLocaleString("en-IN")],
-              ["Effective Rate", bookingForm.effectiveRate || ""],
-            ],
-            [
-              ["Project Tower Name", selectedTowerName || selectedUnit.towerName || "Tower"],
-              ["Saleable", `${Number(selectedUnit.saleable || 0).toLocaleString("en-IN")} sq_ft`],
-              ["Total Price", bookingForm.totalPrice || ""],
-            ],
-          ].map((column, index) => (
-            <div className="ubf-unit-detail-column" key={`unit-detail-${index}`}>
-              {column.map(([label, value]) => (
-                <div key={label}>
-                  <span>{label}</span>
-                  <strong>{value}</strong>
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-      {activeQuoteTab === "cost" && renderCostSheet()}
-      {activeQuoteTab === "payment" && renderPaymentSchedule()}
-
-      {activeQuoteTab === "unit" && <div className="ubf-quote-controls">
-        <label className="ubf-field">
-          <span>Select Scheme</span>
-          <select defaultValue="Default Scheme">
-            <option>Default Scheme</option>
-            <option>Construction Linked Scheme</option>
-            <option>Custom Scheme</option>
-          </select>
-        </label>
-        <label className="ubf-field">
-          <span>Select Payment Schedule</span>
-          <select defaultValue="Payment Schedule">
-            <option>Payment Schedule</option>
-            <option>80:20 Payment Schedule</option>
-            <option>100% Agreement Payment</option>
-          </select>
-        </label>
-        <label className="ubf-field">
-          <span>Quotation Name</span>
-          <input value={bookingForm.quotationName || quotationName} onChange={(event) => updateField("quotationName", event.target.value)} />
-        </label>
-        <label className="ubf-field">
-          <span>Payment Schedule Name</span>
-          <input value={bookingForm.paymentScheduleName || quotationName} onChange={(event) => updateField("paymentScheduleName", event.target.value)} />
-        </label>
-        <div className="ubf-quote-inventory-row">
-          <label className="ubf-field">
-            <span>Additional Inventory Configuration</span>
-            <select defaultValue="">
-              <option value="">Choose Inventory Configuration</option>
-            </select>
-          </label>
-          <label className="ubf-field">
-            <span>Additional Inventory</span>
-            <select defaultValue="">
-              <option value="">Choose Additional Inventory</option>
-            </select>
-          </label>
-          <button type="button" className="ubf-apply-btn">
-            Apply
-          </button>
-        </div>
-      </div>}
-    </div>
-  );
 
   const renderConfirmField = ({ label, name, value, type = "input", options = [], placeholder = "", disabled = false, clearable = false }) => (
     <label className="ubf-confirm-field" key={name || label}>
@@ -1194,50 +1099,6 @@ const UserBookingForm = ({
         )}
 
         {renderConfirmSection(
-          "View Quotes",
-          <>
-            <div className="ubf-quotes-table">
-              <div className="ubf-quotes-head">
-                <span />
-                <span>Name</span>
-                <span>Status</span>
-                <span>Scheme</span>
-                <span>Payment Schedule</span>
-                <span>Actions</span>
-              </div>
-              <div className="ubf-quotes-row">
-                <input type="checkbox" defaultChecked />
-                <span>{quotationName}</span>
-                <span>{quoteStatus}</span>
-                <span>{quoteSchemeName}</span>
-                <span>{quotePaymentScheduleName}</span>
-                <FaEllipsisV />
-              </div>
-            </div>
-            <div className="ubf-add-row">+ Add New Quotes</div>
-          </>
-        )}
-
-        {renderConfirmSection(
-          "Cost Details",
-          <div className="ubf-cost-detail-grid">
-            {[
-              ["Scheme", quoteSchemeName],
-              ["Payment Schedule", quotePaymentScheduleName],
-              ["Original Agreement Value", confirmCurrency(agreementValue)],
-              ["Final Agreement Value", confirmCurrency(agreementValue)],
-              ["Original All Inclusive Value", confirmCurrency(allInclusiveValue)],
-              ["Final All Inclusive Value", confirmCurrency(allInclusiveValue)],
-            ].map(([label, value]) => (
-              <div className="ubf-confirm-fact" key={label}>
-                <span>{label}</span>
-                <strong>{value}</strong>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {renderConfirmSection(
           "Hold/Book Unit",
           <div className="ubf-confirm-form-grid">
             {renderConfirmField({
@@ -1314,6 +1175,121 @@ const UserBookingForm = ({
     );
   };
 
+  const getBookingDocumentHtml = () => {
+    const rows = [
+      ["Booking Reference", bookingForm.bookingName || quotationName || "Booking"],
+      ["Customer", bookingForm.customerName || leadName || "-"],
+      ["Project", bookingForm.projectDetails || selectedUnit.projectName || "-"],
+      ["Tower", selectedTowerName || selectedUnit.towerName || "-"],
+      ["Unit", bookingForm.unit || selectedUnit.name || "-"],
+      ["Floor", selectedUnit.floor || "-"],
+      ["Booking Date", bookingForm.bookedOn || bookingForm.bookingDate || new Date().toLocaleDateString("en-IN")],
+      ["Saleable Area", bookingForm.saleableArea || selectedUnit.saleable || "-"],
+      ["Base Rate", bookingForm.baseRate || selectedUnit.baseRate || "-"],
+      ["Final Price", bookingForm.totalPrice || bookingForm.basePrice || allInclusiveValue || "-"],
+    ];
+
+    return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Booking Confirmation</title>
+  <style>
+    body { color: #172033; font-family: Arial, sans-serif; margin: 32px; }
+    h1 { font-size: 24px; margin: 0 0 4px; }
+    p { color: #64748b; margin: 0 0 24px; }
+    table { border-collapse: collapse; width: 100%; }
+    td { border: 1px solid #d7dde7; padding: 10px 12px; }
+    td:first-child { background: #f4f7fb; color: #526070; font-weight: 700; width: 34%; }
+  </style>
+</head>
+<body>
+  <h1>Booking Confirmation</h1>
+  <p>Booking Confirmed Successfully</p>
+  <table>${rows.map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`).join("")}</table>
+</body>
+</html>`;
+  };
+
+  const escapePdfText = (value) => String(value ?? "-").replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+
+  const getBookingPdfBlob = () => {
+    const rows = [
+      "Booking Confirmation",
+      "Booking Confirmed Successfully",
+      "",
+      `Booking Reference: ${bookingForm.bookingName || quotationName || "Booking"}`,
+      `Customer: ${bookingForm.customerName || leadName || "-"}`,
+      `Project: ${bookingForm.projectDetails || selectedUnit.projectName || "-"}`,
+      `Tower: ${selectedTowerName || selectedUnit.towerName || "-"}`,
+      `Unit: ${bookingForm.unit || selectedUnit.name || "-"}`,
+      `Floor: ${selectedUnit.floor || "-"}`,
+      `Booking Date: ${bookingForm.bookedOn || bookingForm.bookingDate || new Date().toLocaleDateString("en-IN")}`,
+      `Saleable Area: ${bookingForm.saleableArea || selectedUnit.saleable || "-"}`,
+      `Base Rate: ${bookingForm.baseRate || selectedUnit.baseRate || "-"}`,
+      `Final Price: ${bookingForm.totalPrice || bookingForm.basePrice || allInclusiveValue || "-"}`,
+    ];
+    const content = [
+      "BT",
+      "/F1 18 Tf",
+      "50 790 Td",
+      `(${escapePdfText(rows[0])}) Tj`,
+      "/F1 11 Tf",
+      ...rows.slice(1).flatMap((line, index) => [
+        `0 -${index === 0 ? 26 : 18} Td`,
+        `(${escapePdfText(line)}) Tj`,
+      ]),
+      "ET",
+    ].join("\n");
+    const objects = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+      `<< /Length ${content.length} >>\nstream\n${content}\nendstream`,
+    ];
+    let pdf = "%PDF-1.4\n";
+    const offsets = [0];
+    objects.forEach((object, index) => {
+      offsets.push(pdf.length);
+      pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+    });
+    const xrefOffset = pdf.length;
+    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+    offsets.slice(1).forEach((offset) => {
+      pdf += `${String(offset).padStart(10, "0")} 00000 n \n`;
+    });
+    pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+    return new Blob([pdf], { type: "application/pdf" });
+  };
+
+  const downloadBookingPdf = () => {
+    setCompletionActionMessage("");
+    const blob = getBookingPdfBlob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `booking-${bookingForm.unit || selectedUnit.name || Date.now()}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const printBooking = () => {
+    setCompletionActionMessage("");
+    const printWindow = window.open("", "_blank", "noopener,noreferrer");
+    if (!printWindow) return;
+    printWindow.document.write(getBookingDocumentHtml());
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
+  };
+
+  const showDeferredAction = (channel) => {
+    setCompletionActionMessage(`${channel} API will be connected later.`);
+  };
+
   const renderSuccess = () => (
     <div className="ubf-success">
       <div className="ubf-success-illustration">
@@ -1322,19 +1298,19 @@ const UserBookingForm = ({
       <h3>Booking Completed</h3>
       <p>Booking Confirmed Successfully</p>
       <div className="ubf-success-actions">
-        <button type="button"><FaRegFilePdf /> Download Booking PDF</button>
-        <button type="button"><FaPrint /> Print Booking</button>
-        <button type="button"><FaWhatsapp /> Send WhatsApp</button>
-        <button type="button"><FaEnvelope /> Send Email</button>
+        <button type="button" onClick={downloadBookingPdf}><FaRegFilePdf /> Download Booking PDF</button>
+        <button type="button" onClick={printBooking}><FaPrint /> Print Booking</button>
+        <button type="button" onClick={() => showDeferredAction("WhatsApp")}><FaWhatsapp /> Send WhatsApp</button>
+        <button type="button" onClick={() => showDeferredAction("Email")}><FaEnvelope /> Send Email</button>
         <button type="button" className="primary" onClick={onClose}>Close</button>
       </div>
+      {completionActionMessage && <div className="ubf-success-note">{completionActionMessage}</div>}
     </div>
   );
 
   const stepContent = [
     renderStepOne,
     renderStepTwo,
-    renderStepThree,
     renderStepFour,
   ][bookingStepIndex] || renderStepOne;
 

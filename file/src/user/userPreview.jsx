@@ -86,7 +86,6 @@ const leadStatusOptions = [
 const bookingSteps = [
   "Filter Project",
   "Select A Unit",
-  "Quotation",
   "Booking Confirmation",
 ];
 
@@ -192,6 +191,7 @@ const UserPreview = () => {
   const [editablePaymentRows, setEditablePaymentRows] = useState([]);
   const [shouldCheckAvailability, setShouldCheckAvailability] = useState(true);
   const [isSavingBooking, setIsSavingBooking] = useState(false);
+  const [isBookingSuccess, setIsBookingSuccess] = useState(false);
   const [bookingMessage, setBookingMessage] = useState("");
   const bookingSectionRef = useRef(null);
   const bookingOpenRequestedRef = useRef(false);
@@ -207,7 +207,7 @@ const UserPreview = () => {
   );
   const requestedBookingStep = useMemo(() => {
     const step = location.state?.bookingStep || new URLSearchParams(location.search).get("bookingStep");
-    return step === "confirm" ? 3 : 0;
+    return step === "confirm" ? 2 : 0;
   }, [location.search, location.state]);
 
   useEffect(() => {
@@ -797,6 +797,7 @@ const UserPreview = () => {
     setEditablePaymentRows([]);
     setBookingUnitView("listing");
     setShouldCheckAvailability(true);
+    setIsBookingSuccess(false);
     setBookingStepIndex(0);
     setIsBookingFormOpen(true);
   };
@@ -804,11 +805,13 @@ const UserPreview = () => {
   const handleCloseBookingForm = () => {
     setIsBookingFormOpen(false);
     setBookingStepIndex(0);
+    setIsBookingSuccess(false);
   };
 
   const showUserDetails = () => {
     setIsBookingFormOpen(false);
     setBookingStepIndex(0);
+    setIsBookingSuccess(false);
     setIsLeadEditOpen(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -822,7 +825,7 @@ const UserPreview = () => {
       customerName: leadName,
       projectDetails: projectName,
     });
-    setBookingMessage(requestedBookingStep === 3 ? "Complete the booking confirmation details." : "");
+    setBookingMessage(requestedBookingStep === 2 ? "Complete the booking confirmation details." : "");
     setBookingStepIndex(requestedBookingStep);
     setBookingFilters(defaultBookingFilters);
     setSelectedBookingTowerId("");
@@ -833,6 +836,7 @@ const UserPreview = () => {
     setEditablePaymentRows([]);
     setBookingUnitView("listing");
     setShouldCheckAvailability(true);
+    setIsBookingSuccess(false);
     setIsBookingFormOpen(true);
   }, [requestedBookingStep, shouldOpenBookingForm, leadName, projectName]);
 
@@ -1037,11 +1041,6 @@ const UserPreview = () => {
     if (bookingStepIndex === 1) {
       setBookingProjectMessage("");
       setBookingMessage("");
-      setEditableCostRows(defaultQuotationCostRows);
-      setEditablePaymentRows([
-        { name: "Agreement", towerMilestone: "Agreement", value: 80, taxes: 0, tds: 0 },
-        { name: "Possession", towerMilestone: "Possession", value: 20, taxes: 0, tds: 0 },
-      ]);
       setBookingStepIndex(2);
       return;
     }
@@ -1058,30 +1057,12 @@ const UserPreview = () => {
         builtupArea: prev.builtupArea || selectedBookingUnit?.builtupArea || "",
         rateBasis: prev.rateBasis || selectedBookingUnit?.rateBasis || "On Carpet",
       }));
-      setBookingStepIndex(3);
-      return;
     }
 
     setIsSavingBooking(true);
     setBookingMessage("");
 
     try {
-      const costSheet = quotationLineRows.map((row) => ({
-        fieldName: row.name,
-        orignalValue: toCleanNumber(row.originalValue),
-        costType: row.costType || "Discount",
-        inputField: toCleanNumber(row.inputField),
-        newValue: toCleanNumber(row.newValue),
-      }));
-      const paymentSchedule = calculatedPaymentRows.map((row) => ({
-        name: row.name || quotationPaymentPlan,
-        towerMilestone: row.towerMilestone || quotationTowerName,
-        value: toCleanNumber(row.value),
-        amount: toCleanNumber(row.amount),
-        taxes: toCleanNumber(row.taxes),
-        tds: toCleanNumber(row.tds),
-        grandTotal: toCleanNumber(row.grandTotal),
-      }));
       const response = await fetch(`${API_URL}/bookings`, {
         method: "POST",
         headers: {
@@ -1095,8 +1076,6 @@ const UserPreview = () => {
           source: bookingForm.source || leadSource,
           bookedBy: owner,
           bookedOn: bookingForm.bookedOn || bookingConfirmationDate,
-          costSheet,
-          paymentSchedule,
         }),
       });
 
@@ -1151,9 +1130,8 @@ const UserPreview = () => {
         })
       );
       setBookings((current) => [savedBooking, ...current]);
-      setIsBookingFormOpen(false);
-      setBookingMessage("Booking saved successfully");
-      showUserDetails();
+      setBookingMessage("Booking confirmed successfully.");
+      setIsBookingSuccess(true);
     } catch (error) {
       console.error("Unable to save booking:", error);
       setBookingMessage("Booking could not be saved. Please check backend and database.");
@@ -3827,6 +3805,7 @@ const UserPreview = () => {
               leadName={leadName}
               isSavingBooking={isSavingBooking}
               isLoadingBookingProject={isLoadingBookingProject}
+              bookingSuccess={isBookingSuccess}
               onClose={handleCloseBookingForm}
               onSubmit={handleSaveBooking}
               onPrevious={() => setBookingStepIndex((current) => Math.max(0, current - 1))}
