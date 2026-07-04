@@ -708,12 +708,6 @@ const UsersListLayer = () => {
           <h2>Admin Access Users</h2>
           <p>View all users, roles, departments, and access status in one clean admin view.</p>
         </div>
-        <input
-          className="admin-users-search"
-          value={searchTerm}
-          onChange={(event) => setSearchTerm(event.target.value)}
-          placeholder="Search users, roles, status..."
-        />
       </div>
 
       <div className="admin-users-stats">
@@ -755,6 +749,17 @@ const UsersListLayer = () => {
         </div>
 
         {statusMessage && <div className="admin-user-message">{statusMessage}</div>}
+
+        <label className="crm-table-search">
+          <span aria-hidden="true">🔍</span>
+          <input
+            type="search"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search users, roles, status..."
+            aria-label="Search users"
+          />
+        </label>
 
         <div className="admin-users-table-wrap">
           <table className="admin-users-table">

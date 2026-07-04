@@ -849,7 +849,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-primary-600 w-auto' />
-                    Dashboard
+                    Booking Details
                   </NavLink>
                 </li>
                 <li>

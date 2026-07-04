@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Icon } from "@iconify/react";
 import { useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
@@ -16,6 +16,7 @@ const Floorplans = () => {
     const [modalMode, setModalMode] = useState("");
     const [selectedPlan, setSelectedPlan] = useState(null);
     const [viewLoading, setViewLoading] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
 
     const fetchFloorplans = useCallback(async () => {
         try {
@@ -48,6 +49,26 @@ const Floorplans = () => {
     useEffect(() => {
         fetchFloorplans();
     }, [fetchFloorplans]);
+
+    const filteredFloorplans = useMemo(() => {
+        const query = searchQuery.trim().toLowerCase();
+        if (!query) return floorplans;
+
+        return floorplans.filter((plan) =>
+            [
+                plan.name,
+                plan.saleableArea,
+                plan.carpetArea,
+                plan.projectName,
+                plan.towerName,
+                plan.typeLabel,
+                plan.status,
+                plan.unitStream,
+            ]
+                .filter(Boolean)
+                .some((value) => String(value).toLowerCase().includes(query))
+        );
+    }, [floorplans, searchQuery]);
 
     const closeModal = () => {
         setModalMode("");
@@ -121,6 +142,16 @@ const Floorplans = () => {
                     </div>
 
                     <div className="table-responsive">
+                        <label className="crm-table-search">
+                            <span aria-hidden="true">🔍</span>
+                            <input
+                                type="search"
+                                value={searchQuery}
+                                onChange={(event) => setSearchQuery(event.target.value)}
+                                placeholder="Search floor plan..."
+                                aria-label="Search floor plans"
+                            />
+                        </label>
                         <table className="floor-table">
                             <thead>
                                 <tr>
@@ -143,12 +174,12 @@ const Floorplans = () => {
                                     <tr>
                                         <td colSpan="7" className="floor-empty text-danger">{error}</td>
                                     </tr>
-                                ) : floorplans.length === 0 ? (
+                                ) : filteredFloorplans.length === 0 ? (
                                     <tr>
-                                        <td colSpan="7" className="floor-empty">No Data Found</td>
+                                        <td colSpan="7" className="floor-empty">{searchQuery ? "No matching floor plans found" : "No Data Found"}</td>
                                     </tr>
                                 ) : (
-                                    floorplans.map((plan) => (
+                                    filteredFloorplans.map((plan) => (
                                         <tr key={plan.id}>
                                             <td className="fw-bold">{plan.name}</td>
                                             <td>{plan.saleableArea}</td>

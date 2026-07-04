@@ -880,6 +880,16 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
 
       <div  className="table-section fa-2x">
         <p>{trashMode ? "Trash" : "Lead Data"}</p>
+        <label className="crm-table-search">
+          <span aria-hidden="true">🔍</span>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search customer, project, unit..."
+            aria-label="Search leads"
+          />
+        </label>
 
         <table border="1" cellPadding="0" cellSpacing="0">
           <thead>

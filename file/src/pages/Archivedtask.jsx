@@ -55,6 +55,7 @@ const normalizeTask = (task, index) => ({
 
 const Archivedtask = () => {
   const [tasks, setTasks] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState("");
@@ -100,13 +101,37 @@ const Archivedtask = () => {
     };
   }, []);
 
-  const totalPages = Math.max(1, Math.ceil(tasks.length / TASKS_PER_PAGE));
+  const filteredTasks = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return tasks;
+
+    return tasks.filter((task) =>
+      [
+        task.title,
+        task.subtitle,
+        task.assignedTo,
+        task.assignedBy,
+        task.status,
+        task.priority,
+        task.createdOn,
+        task.dueOn,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query))
+    );
+  }, [searchQuery, tasks]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredTasks.length / TASKS_PER_PAGE));
   const paginatedTasks = useMemo(() => {
     const startIndex = (currentPage - 1) * TASKS_PER_PAGE;
-    return tasks.slice(startIndex, startIndex + TASKS_PER_PAGE);
-  }, [currentPage, tasks]);
-  const firstTaskNumber = tasks.length === 0 ? 0 : (currentPage - 1) * TASKS_PER_PAGE + 1;
-  const lastTaskNumber = Math.min(currentPage * TASKS_PER_PAGE, tasks.length);
+    return filteredTasks.slice(startIndex, startIndex + TASKS_PER_PAGE);
+  }, [currentPage, filteredTasks]);
+  const firstTaskNumber = filteredTasks.length === 0 ? 0 : (currentPage - 1) * TASKS_PER_PAGE + 1;
+  const lastTaskNumber = Math.min(currentPage * TASKS_PER_PAGE, filteredTasks.length);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
@@ -145,6 +170,16 @@ const Archivedtask = () => {
 
         <div className="status-task-table-wrap">
           {/* <p>Archived Task Data</p> */}
+          <label className="crm-table-search">
+            <span aria-hidden="true">🔍</span>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search archived task..."
+              aria-label="Search archived tasks"
+            />
+          </label>
           <table className="status-task-table">
             <thead>
               <tr>
@@ -158,10 +193,10 @@ const Archivedtask = () => {
               </tr>
             </thead>
             <tbody>
-              {tasks.length === 0 ? (
+              {filteredTasks.length === 0 ? (
                 <tr>
                   <td colSpan="7" className="status-task-empty">
-                    {isLoading ? "Loading tasks..." : "No saved archived tasks found."}
+                    {isLoading ? "Loading tasks..." : searchQuery ? "No matching archived tasks found." : "No saved archived tasks found."}
                   </td>
                 </tr>
               ) : paginatedTasks.map((task) => (
@@ -189,11 +224,11 @@ const Archivedtask = () => {
           </table>
         </div>
 
-        {tasks.length > 0 && (
+        {filteredTasks.length > 0 && (
           <div className="status-task-pagination">
             <div className="status-task-page-info">
               Showing <strong>{firstTaskNumber}</strong> to <strong>{lastTaskNumber}</strong> of{" "}
-              <strong>{tasks.length}</strong> tasks
+              <strong>{filteredTasks.length}</strong> tasks
             </div>
             <div className="status-task-page-actions">
               <button

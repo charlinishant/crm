@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Filter, MoreVertical, Layers, Building, Trash2, Pencil, X } from 'lucide-react';
 
 const initialTowerData = [
@@ -44,8 +44,24 @@ export default function Projecttower() {
   const [error, setError] = useState('');
   const [editingTowerId, setEditingTowerId] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const isEditing = editingTowerId !== null;
+  const filteredTowers = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return towers;
+
+    return towers.filter((tower) =>
+      [
+        tower.name,
+        tower.project,
+        tower.floorPlans,
+        tower.totalFloors,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query))
+    );
+  }, [searchQuery, towers]);
 
   useEffect(() => {
     const fetchOptions = async () => {
@@ -230,7 +246,7 @@ export default function Projecttower() {
             <div>
               <h2>Towers</h2>
               <span className="item-count">
-                {loading ? "Loading towers..." : `${towers.length} active projects and towers available.`}
+                {loading ? "Loading towers..." : `${filteredTowers.length} active projects and towers available.`}
               </span>
             </div>
             <div className="action-wrapper">
@@ -241,8 +257,21 @@ export default function Projecttower() {
           </div>
 
           <div className="tower-grid">
+            <label className="crm-table-search" style={{ gridColumn: "1 / -1" }}>
+              <span aria-hidden="true">🔍</span>
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search tower..."
+                aria-label="Search towers"
+              />
+            </label>
             {error && <div className="tower-alert">{error}</div>}
-            {towers.map((tower) => (
+            {filteredTowers.length === 0 && !error && (
+              <div className="tower-alert">{searchQuery ? "No matching towers found." : "No towers found."}</div>
+            )}
+            {filteredTowers.map((tower) => (
               <div key={tower.id} className="tower-item-card">
                 <div className="tower-item-header">
                   <div className="tower-title-section">

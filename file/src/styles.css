@@ -23309,3 +23309,31 @@ th{
   max-width: 360px;
   width: 100%;
 }
+/* Shared CRM table search bar */
+.crm-table-search {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dbe4f0;
+  border-radius: 8px;
+  color: #64748b;
+  display: flex;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 0 16px;
+  width: 100%;
+}
+
+.crm-table-search:focus-within {
+  border-color: #487fff;
+  box-shadow: 0 0 0 3px rgba(72, 127, 255, 0.12);
+}
+
+.crm-table-search input {
+  background: transparent;
+  border: 0;
+  color: #1f2937;
+  font: inherit;
+  height: 48px;
+  outline: 0;
+  width: 100%;
+}

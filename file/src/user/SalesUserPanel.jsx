@@ -249,6 +249,7 @@ const bookingSteps = [
   "Select Unit",
   "Booking Confirmation",
 ];
+const salesTablePageSize = 10;
 
 const getDefaultVisitDateTime = () => {
   const date = new Date();
@@ -414,6 +415,8 @@ const SalesUserPanel = () => {
   const [bookingStepIndex, setBookingStepIndex] = useState(0);
   const [isBookingSuccess, setIsBookingSuccess] = useState(false);
   const [bookingPreview, setBookingPreview] = useState(null);
+  const [leadTableSearch, setLeadTableSearch] = useState("");
+  const [leadTablePage, setLeadTablePage] = useState(1);
   const [projects, setProjects] = useState([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [users, setUsers] = useState([]);
@@ -838,17 +841,63 @@ const SalesUserPanel = () => {
     }
 
     if (activeScreen === "bookings") {
-      leads = leads.filter(isBookedLead);
+      leads = leads.filter((lead) => normalizeStageText(lead.status) === "booked");
     }
 
-    if (activeLeadStage === "visited") {
-      leads = leads.filter((lead) => lead.conductSiteVisit || lead.conductSiteDate);
-    } else if (activeLeadStage !== "all") {
-      leads = leads.filter((lead) => getLeadStage(lead) === activeLeadStage);
+    if (activeScreen !== "bookings") {
+      if (activeLeadStage === "visited") {
+        leads = leads.filter((lead) => lead.conductSiteVisit || lead.conductSiteDate);
+      } else if (activeLeadStage !== "all") {
+        leads = leads.filter((lead) => getLeadStage(lead) === activeLeadStage);
+      }
     }
 
     return leads;
   }, [activeLeadStage, activeScreen, callbackLeadIds, panel.leads]);
+
+  const isPaginatedLeadTable = activeScreen === "leads" || activeScreen === "bookings";
+
+  const searchedLeads = useMemo(() => {
+    if (!isPaginatedLeadTable) return filteredLeads;
+
+    const query = leadTableSearch.trim().toLowerCase();
+    if (!query) return filteredLeads;
+
+    return filteredLeads.filter((lead) =>
+      [
+        getLeadName(lead),
+        getLeadPhone(lead),
+        lead.email,
+        lead.companyName,
+        lead.interestedProjects,
+        lead.propertyType,
+        lead.configration,
+        lead.budget,
+        lead.status,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query))
+    );
+  }, [filteredLeads, isPaginatedLeadTable, leadTableSearch]);
+
+  const leadTableTotalPages = Math.max(1, Math.ceil(searchedLeads.length / salesTablePageSize));
+  const tableLeads =
+    isPaginatedLeadTable
+      ? searchedLeads.slice((leadTablePage - 1) * salesTablePageSize, leadTablePage * salesTablePageSize)
+      : filteredLeads;
+  const visibleRecordCount = isPaginatedLeadTable ? searchedLeads.length : filteredLeads.length;
+
+  useEffect(() => {
+    if (!isPaginatedLeadTable) return;
+
+    setLeadTablePage(1);
+  }, [activeLeadStage, activeScreen, isPaginatedLeadTable, leadTableSearch]);
+
+  useEffect(() => {
+    if (!isPaginatedLeadTable) return;
+
+    setLeadTablePage((currentPage) => Math.min(currentPage, leadTableTotalPages));
+  }, [activeScreen, isPaginatedLeadTable, leadTableTotalPages]);
 
   const funnelData = useMemo(() => {
     const leads = panel.leads;
@@ -1659,9 +1708,13 @@ const SalesUserPanel = () => {
           >
             <Menu size={18} />
           </button>
-          <div className="sales-search">
-            <Search size={15} />
-            <input placeholder="Search leads, projects, units..." />
+          <div className="sales-topbar-spacer" />
+          <div className="sales-call-presence sales-header-presence">
+            <span>{attendanceStatus}</span>
+            <small>Login {formatDuration(liveTodayLoginSeconds)} | Break {formatDuration(liveTodayBreakSeconds)}</small>
+            <button type="button" onClick={toggleBreak} disabled={attendanceBusy}>
+              {isOnBreak ? "Return" : "Take break"}
+            </button>
           </div>
           <button className="sales-icon-btn" type="button" title="Notifications">
             <Bell size={17} />
@@ -1817,13 +1870,6 @@ const SalesUserPanel = () => {
                 <div>
                   <h2>Your queue</h2>
                   <p>{callQueue.length} leads - next SLA breach in 3 min</p>
-                </div>
-                <div className="sales-call-presence">
-                  <span>{attendanceStatus}</span>
-                  <small>Login {formatDuration(liveTodayLoginSeconds)} | Break {formatDuration(liveTodayBreakSeconds)}</small>
-                  <button type="button" onClick={toggleBreak} disabled={attendanceBusy}>
-                    {isOnBreak ? "Return" : "Take break"}
-                  </button>
                 </div>
               </div>
 
@@ -2224,9 +2270,24 @@ const SalesUserPanel = () => {
               <div className="sales-card-head">
                 <div>
                   <h2>{activeScreen === "home" ? "My active leads" : navItems.find((item) => item.key === activeScreen)?.label}</h2>
-                  <p>{filteredLeads.length} records available</p>
+                  <p>{visibleRecordCount} records available</p>
                 </div>
               </div>
+
+              {isPaginatedLeadTable && (
+                <div className="sales-table-toolbar">
+                  <label className="sales-table-search">
+                    <Search size={15} />
+                    <input
+                      type="search"
+                      value={leadTableSearch}
+                      onChange={(event) => setLeadTableSearch(event.target.value)}
+                      placeholder={activeScreen === "bookings" ? "Search booked leads..." : "Search leads..."}
+                      aria-label={activeScreen === "bookings" ? "Search booked leads" : "Search leads"}
+                    />
+                  </label>
+                </div>
+              )}
 
               <div className="sales-stage-tabs" aria-label="Lead stage filters">
                 {visibleLeadStageFilters.map((stage) => (
@@ -2248,10 +2309,18 @@ const SalesUserPanel = () => {
                   <span>Status</span>
                   <span>Action</span>
                 </div>
-                {filteredLeads.length === 0 && (
-                  <div className="sales-empty">No leads available for this sales user yet.</div>
+                {tableLeads.length === 0 && (
+                  <div className="sales-empty">
+                    {activeScreen === "bookings"
+                      ? leadTableSearch.trim()
+                        ? "No booked leads match your search."
+                        : "No booked leads available for this sales user yet."
+                      : leadTableSearch.trim() && isPaginatedLeadTable
+                        ? "No leads match your search."
+                        : "No leads available for this sales user yet."}
+                  </div>
                 )}
-                {filteredLeads.map((lead) => {
+                {tableLeads.map((lead) => {
                   const leadId = getLeadId(lead);
 
                   return (
@@ -2306,6 +2375,30 @@ const SalesUserPanel = () => {
                   );
                 })}
               </div>
+              {isPaginatedLeadTable && searchedLeads.length > 0 && (
+                <div className="sales-table-pagination">
+                  <span>
+                    Showing {(leadTablePage - 1) * salesTablePageSize + 1}-
+                    {Math.min(leadTablePage * salesTablePageSize, searchedLeads.length)} of {searchedLeads.length}
+                  </span>
+                  <div>
+                    <button
+                      type="button"
+                      disabled={leadTablePage === 1}
+                      onClick={() => setLeadTablePage((current) => Math.max(1, current - 1))}
+                    >
+                      Previous
+                    </button>
+                    <button
+                      type="button"
+                      disabled={leadTablePage >= leadTableTotalPages}
+                      onClick={() => setLeadTablePage((current) => Math.min(leadTableTotalPages, current + 1))}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </section>
 
             <aside className="sales-card">

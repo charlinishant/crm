@@ -58,6 +58,7 @@ const Alltask = () => {
   const [users, setUsers] = useState([]);
   const [statusFilter, setStatusFilter] = useState("All");
   const [assigneeFilter, setAssigneeFilter] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState("");
@@ -130,13 +131,29 @@ const Alltask = () => {
   }, []);
 
   const filteredTasks = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+
     return tasks.filter((task) => {
       const matchesStatus = statusFilter === "All" || task.status === statusFilter;
       const matchesAssignee = assigneeFilter === "All" || task.assignedTo === assigneeFilter;
+      const matchesSearch =
+        !query ||
+        [
+          task.title,
+          task.subtitle,
+          task.assignedTo,
+          task.assignedBy,
+          task.status,
+          task.priority,
+          task.createdOn,
+          task.dueOn,
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(query));
 
-      return matchesStatus && matchesAssignee;
+      return matchesStatus && matchesAssignee && matchesSearch;
     });
-  }, [assigneeFilter, statusFilter, tasks]);
+  }, [assigneeFilter, searchQuery, statusFilter, tasks]);
 
   const totalPages = Math.max(1, Math.ceil(filteredTasks.length / TASKS_PER_PAGE));
   const paginatedTasks = useMemo(() => {
@@ -149,7 +166,7 @@ const Alltask = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [assigneeFilter, statusFilter]);
+  }, [assigneeFilter, searchQuery, statusFilter]);
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
@@ -238,6 +255,16 @@ const Alltask = () => {
 
         <div className="all-task-table-wrap">
           {/* <p>Task Data</p> */}
+          <label className="crm-table-search">
+            <span aria-hidden="true">🔍</span>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search task..."
+              aria-label="Search all tasks"
+            />
+          </label>
           <table className="all-task-table">
             <thead>
               <tr>
@@ -254,7 +281,7 @@ const Alltask = () => {
               {filteredTasks.length === 0 ? (
                 <tr>
                   <td colSpan="7" className="all-task-empty">
-                    {isLoading ? "Loading tasks..." : "No saved tasks found."}
+                    {isLoading ? "Loading tasks..." : searchQuery ? "No matching tasks found." : "No saved tasks found."}
                   </td>
                 </tr>
               ) : paginatedTasks.map((task) => (

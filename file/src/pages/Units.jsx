@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import MasterLayout from "../masterLayout/MasterLayout";
 import { FaEllipsisV } from "react-icons/fa";
 
@@ -42,6 +42,7 @@ const Units = () => {
   const [selectedUnit, setSelectedUnit] = useState(null);
   const [editForm, setEditForm] = useState(emptyEditForm);
   const [saving, setSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const fetchUnits = useCallback(async () => {
     try {
@@ -102,6 +103,33 @@ const Units = () => {
   useEffect(() => {
     fetchUnits();
   }, [fetchUnits]);
+
+  const filteredData = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return data;
+
+    return data.filter((unit) =>
+      [
+        unit.price,
+        unit.unitIndex,
+        unit.tower,
+        unit.config,
+        unit.project,
+        unit.bedrooms,
+        unit.bathrooms,
+        unit.saleable,
+        unit.carpet,
+        unit.facing,
+        unit.leads,
+        unit.updated,
+        unit.name,
+        unit.floor,
+        unit.propertyPurpose,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query))
+    );
+  }, [data, searchQuery]);
 
   const closeModal = () => {
     if (saving) return;
@@ -208,6 +236,16 @@ const Units = () => {
           </div>
 
           <div className="table-responsive">
+            <label className="crm-table-search">
+              <span aria-hidden="true">🔍</span>
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search unit..."
+                aria-label="Search units"
+              />
+            </label>
             <table className="floor-table">
               <thead>
                 <tr>
@@ -240,12 +278,12 @@ const Units = () => {
                   <tr>
                     <td colSpan="13" className="floor-empty text-danger">{error}</td>
                   </tr>
-                ) : data.length === 0 ? (
+                ) : filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan="13" className="floor-empty">No units found.</td>
+                    <td colSpan="13" className="floor-empty">{searchQuery ? "No matching units found." : "No units found."}</td>
                   </tr>
                 ) : (
-                  data.map((item) => (
+                  filteredData.map((item) => (
                     <tr key={item.id}>
                       <td className="fw-bold">{item.price}</td>
                       <td>{item.unitIndex}</td>

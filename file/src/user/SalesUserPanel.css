@@ -204,6 +204,10 @@ img.sales-avatar {
   z-index: 5;
 }
 
+.sales-topbar-spacer {
+  flex: 1 1 auto;
+}
+
 .sales-search {
   align-items: center;
   background: var(--sales-bg);
@@ -248,7 +252,7 @@ img.sales-avatar {
   background: var(--sales-bg);
   border-radius: 8px;
   gap: 8px;
-  margin-left: auto;
+  margin-left: 0;
   padding: 5px 8px;
 }
 
@@ -514,6 +518,47 @@ img.sales-avatar {
   color: #0058a8;
 }
 
+.sales-table-toolbar {
+  align-items: center;
+  display: flex;
+  justify-content: flex-end;
+  margin: 2px 0 14px;
+}
+
+.sales-table-search {
+  align-items: center;
+  background: #f6f8fb;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  color: var(--sales-muted);
+  display: flex;
+  gap: 8px;
+  max-width: 340px;
+  padding: 0 11px;
+  width: 100%;
+}
+
+.sales-table-search:focus-within {
+  background: #ffffff;
+  border-color: #9ac8f4;
+  box-shadow: 0 0 0 4px rgba(55, 138, 221, 0.1);
+}
+
+.sales-table-search input {
+  background: transparent;
+  border: 0;
+  color: var(--sales-text);
+  font: inherit;
+  height: 36px;
+  outline: 0;
+  width: 100%;
+}
+
+.sales-conversation-search {
+  flex: 0 1 360px;
+  margin-left: 16px;
+}
+
 .sales-table {
   overflow-x: auto;
 }
@@ -641,6 +686,43 @@ img.sales-avatar {
 
 .sales-empty.compact {
   padding: 8px 0;
+}
+
+.sales-table-pagination {
+  align-items: center;
+  color: var(--sales-muted);
+  display: flex;
+  font-size: 12px;
+  gap: 12px;
+  justify-content: space-between;
+  padding-top: 14px;
+}
+
+.sales-table-pagination > div {
+  display: flex;
+  gap: 8px;
+}
+
+.sales-table-pagination button {
+  background: #ffffff;
+  border: 1px solid var(--sales-line-strong);
+  border-radius: 8px;
+  color: var(--sales-text);
+  cursor: pointer;
+  font: inherit;
+  min-height: 34px;
+  padding: 0 13px;
+}
+
+.sales-table-pagination button:hover:not(:disabled) {
+  background: var(--sales-blue-soft);
+  border-color: #9ac8f4;
+  color: #185fa5;
+}
+
+.sales-table-pagination button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
 }
 
 .sales-action-list {
@@ -1846,6 +1928,10 @@ img.sales-avatar {
   gap: 8px;
 }
 
+.sales-header-presence {
+  flex: 0 0 auto;
+}
+
 .sales-call-presence span {
   background: #e8f4d7;
   border-radius: 8px;
@@ -2857,6 +2943,18 @@ img.sales-avatar {
     grid-template-columns: 1fr;
   }
 
+  .sales-card-head {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .sales-conversation-search {
+    flex-basis: auto;
+    margin-left: 0;
+    max-width: none;
+  }
+
   .sales-sidebar {
     height: auto;
     position: static;
@@ -3162,6 +3260,14 @@ img.sales-avatar {
 
   .sales-topbar {
     padding: 12px;
+  }
+
+  .sales-topbar-spacer {
+    display: none;
+  }
+
+  .sales-header-presence {
+    flex-wrap: wrap;
   }
 
   .sales-role {

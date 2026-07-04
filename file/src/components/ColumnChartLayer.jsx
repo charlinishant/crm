@@ -52,6 +52,7 @@ const ColumnChartLayer = () => {
   const [selectedProject, setSelectedProject] = useState(null);
   const [projectForm, setProjectForm] = useState(emptyProjectForm);
   const [isSaving, setIsSaving] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [viewData, setViewData] = useState({
     towers: [],
     floorPlans: [],
@@ -84,6 +85,28 @@ const ColumnChartLayer = () => {
     }),
     [projects.length]
   );
+  const filteredProjects = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) return projects;
+
+    return projects.filter((project) =>
+      [
+        project.name,
+        project.description,
+        project.projectType,
+        project.reraProjectId,
+        project.address,
+        project.city,
+        project.state,
+        project.country,
+        project.noOfTowers,
+        project.sales,
+        project.integratedPortals,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query))
+    );
+  }, [projects, searchQuery]);
 
   const openEditProject = (project) => {
     setOpenMenuId(null);
@@ -253,6 +276,16 @@ const ColumnChartLayer = () => {
         {message && <div className="project-message">{message}</div>}
 
         <div className="project-table-container">
+          <label className="crm-table-search">
+            <span aria-hidden="true">🔍</span>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search project..."
+              aria-label="Search projects"
+            />
+          </label>
           <table className="project-table">
             <thead>
               <tr>
@@ -272,12 +305,12 @@ const ColumnChartLayer = () => {
                 <tr>
                   <td colSpan="8" className="project-empty text-danger">{loadError}</td>
                 </tr>
-              ) : projects.length === 0 ? (
+              ) : filteredProjects.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="project-empty">No Data Available</td>
+                  <td colSpan="8" className="project-empty">{searchQuery ? "No matching projects found" : "No Data Available"}</td>
                 </tr>
               ) : (
-                projects.map((project) => (
+                filteredProjects.map((project) => (
                   <ProjectRow
                     key={project.id}
                     project={project}

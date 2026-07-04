@@ -8,6 +8,7 @@ import {
   MessageSquare,
   MoreVertical,
   Phone,
+  Search,
   Send,
   Smartphone,
   X,
@@ -15,6 +16,7 @@ import {
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 const DEFAULT_SENDER_EMAIL = "morenishant7777@gmail.com";
+const conversationPageSize = 10;
 
 const conversationTabs = [
   { key: "calls", label: "Calls", icon: Phone },
@@ -102,6 +104,8 @@ const UserConversationPanel = ({
   const [sendingEmail, setSendingEmail] = useState(false);
   const [senderEmailOptions, setSenderEmailOptions] = useState([]);
   const [loadingSenders, setLoadingSenders] = useState(false);
+  const [conversationSearch, setConversationSearch] = useState("");
+  const [conversationPage, setConversationPage] = useState(1);
 
   const records = useMemo(() => {
     const owner =
@@ -132,21 +136,61 @@ const UserConversationPanel = ({
     }));
   }, [leads, user]);
 
-  const rowsByTab = {
-    calls: records,
-    emails: records.filter((record) => record.email !== "-"),
-    sms: records.filter((record) => record.phone !== "-"),
-    siteVisits: records,
-    whatsapp: records.filter((record) => record.phone !== "-"),
-  };
+  const rowsByTab = useMemo(
+    () => ({
+      calls: records,
+      emails: records.filter((record) => record.email !== "-"),
+      sms: records.filter((record) => record.phone !== "-"),
+      siteVisits: records,
+      whatsapp: records.filter((record) => record.phone !== "-"),
+    }),
+    [records]
+  );
 
-  const visibleRows = rowsByTab[activeTab] || [];
+  const visibleRows = useMemo(() => rowsByTab[activeTab] || [], [activeTab, rowsByTab]);
+  const searchedRows = useMemo(() => {
+    const query = conversationSearch.trim().toLowerCase();
+    if (!query) return visibleRows;
+
+    return visibleRows.filter((record) =>
+      [
+        record.id,
+        record.name,
+        record.phone,
+        record.email,
+        record.owner,
+        record.project,
+        record.status,
+        record.date,
+        record.visitStatus,
+        record.visitLocation,
+        record.visitExecutive,
+        record.message,
+        record.whatsappMessage,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query))
+    );
+  }, [conversationSearch, visibleRows]);
+  const conversationTotalPages = Math.max(1, Math.ceil(searchedRows.length / conversationPageSize));
+  const paginatedRows = searchedRows.slice(
+    (conversationPage - 1) * conversationPageSize,
+    conversationPage * conversationPageSize
+  );
 
   React.useEffect(() => {
     if (requestedTab && conversationTabs.some((tab) => tab.key === requestedTab)) {
       setActiveTab(requestedTab);
     }
   }, [requestedTab]);
+
+  React.useEffect(() => {
+    setConversationPage(1);
+  }, [activeTab, conversationSearch]);
+
+  React.useEffect(() => {
+    setConversationPage((currentPage) => Math.min(currentPage, conversationTotalPages));
+  }, [conversationTotalPages]);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -449,6 +493,16 @@ const UserConversationPanel = ({
           <h2>Conversation</h2>
           <p>Calls, emails, SMS, site visits and WhatsApp for assigned leads</p>
         </div>
+        <label className="sales-table-search sales-conversation-search">
+          <Search size={15} />
+          <input
+            type="search"
+            value={conversationSearch}
+            onChange={(event) => setConversationSearch(event.target.value)}
+            placeholder="Search lead from table..."
+            aria-label="Search lead from conversation table"
+          />
+        </label>
       </div>
 
       <div className="sales-conversation-tabs">
@@ -566,13 +620,17 @@ const UserConversationPanel = ({
           <span>Action</span>
         </div>
 
-        {visibleRows.length === 0 && (
+        {paginatedRows.length === 0 && (
           <div className="sales-empty">
-            {loading ? "Loading conversations..." : "No conversation records found for this tab."}
+            {loading
+              ? "Loading conversations..."
+              : conversationSearch.trim()
+                ? "No conversation records match your search."
+                : "No conversation records found for this tab."}
           </div>
         )}
 
-        {visibleRows.map((record, index) => {
+        {paginatedRows.map((record, index) => {
           const isEmail = activeTab === "emails";
           const isCall = activeTab === "calls";
           const isWhatsapp = activeTab === "whatsapp";
@@ -646,6 +704,30 @@ const UserConversationPanel = ({
           );
         })}
       </div>
+      {searchedRows.length > 0 && (
+        <div className="sales-table-pagination">
+          <span>
+            Showing {(conversationPage - 1) * conversationPageSize + 1}-
+            {Math.min(conversationPage * conversationPageSize, searchedRows.length)} of {searchedRows.length}
+          </span>
+          <div>
+            <button
+              type="button"
+              disabled={conversationPage === 1}
+              onClick={() => setConversationPage((current) => Math.max(1, current - 1))}
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={conversationPage >= conversationTotalPages}
+              onClick={() => setConversationPage((current) => Math.min(conversationTotalPages, current + 1))}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 };
