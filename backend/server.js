@@ -33,6 +33,8 @@ const attendanceRouter = require("./router/attendance.routes")
 const followupRouter = require("./router/followup.routes")
 const notifiactionRouter = require("./router/notification.routes")
 const adminReportRouter = require("./router/adminReport.routes")
+const demandRouter = require("./controller/demands")
+const postSalesRouter = require("./router/postSales.routes")
 
 const leadRouter = require("./router/lead.routes")
 const emailRouetr = require("./router/email.routes")
@@ -63,8 +65,10 @@ app.use("/calls", callRouter)
 app.use("/api/calls", callRouter)
 app.use("/api/whatsapp", whatsappRouter)
 app.use("/api/email", emailRouetr)
+app.use("/api/demands", demandRouter)
 // app.use('/all-users', userRouter)
 app.use("/notification", notifiactionRouter)
+app.use("/post-sales", postSalesRouter)
 
 app.use((error, req, res, next) => {
   if (error?.type === "entity.too.large") {

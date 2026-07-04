@@ -35,7 +35,8 @@ const Booking = () => {
         const fetchBookings = async () => {
             try {
                 setLoading(true);
-                const response = await fetch(`${API_URL}/bookings?limit=100&stage=Booked`);
+                // Fetch all bookings so we can filter and transition them
+                const response = await fetch(`${API_URL}/bookings?limit=100`);
                 if (!response.ok) throw new Error("Unable to load bookings");
 
                 const result = await response.json();
@@ -156,8 +157,6 @@ const Booking = () => {
     };
 
     return (
-
-
         <div className="floor-dashboard">
             <div className="floor-card">
                 <div className="floor-header d-flex justify-content-between align-items-center">
@@ -171,6 +170,7 @@ const Booking = () => {
                             <option>All Bookings</option>
                             <option>Tentative</option>
                             <option>Booked</option>
+                            <option>Confirmed</option>
                             <option>Cancelled</option>
                         </select>
                         <span className="item-count">{filteredBookings.length} items.</span>
@@ -185,7 +185,6 @@ const Booking = () => {
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                             />
-                            {/* SVG icon remains untouched */}
                             <span className="search-icon">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                     <circle cx="11" cy="11" r="8"></circle>
@@ -222,7 +221,6 @@ const Booking = () => {
                         </thead>
 
                         <tbody>
-                           
                             {filteredBookings.length === 0 ? (
                                 <tr>
                                     <td colSpan="17" className="text-center py-4">
@@ -232,50 +230,29 @@ const Booking = () => {
                             ) : (
                                 currentBookings.map((item) => (
                                     <tr key={item.id}>
-                                        {/* <td>{item.id}</td> */}
                                         <td className="text-muted">{item.leadId}</td>
                                         <td>
                                             <strong>{item.bookingName}</strong>
-                                            <br />
-                                            {/* <span className="text-muted">{item.bookingSales}</span> */}
                                         </td>
                                         <td>
                                             <strong>{item.applicantName}</strong>
-                                            <br />
-                                            {/* <span className="text-muted">{item.applicantSales}</span> */}
                                         </td>
                                         <td>
                                             {item.projectUnit}
-                                            {item.projectSales && (
-                                                <>
-                                                    <br />
-                                                    {/* <span className="text-muted">{item.projectSales}</span> */}
-                                                </>
-                                            )}
                                         </td>
                                         <td>
-                                            {item.stage === "Booked" ? (
-                                                <button
-                                                    type="button"
-                                                    className="booking-stage-preview booking-stage-booked"
-                                                    onClick={() => setPreviewBooking(item.rawBooking)}
-                                                    aria-label={`Preview booking ${item.id}`}
-                                                >
-                                                    Booked
-                                                </button>
-                                            ) : (
-                                                <select
-                                                    className={`booking-stage-select booking-stage-${String(item.stage).toLowerCase()}`}
-                                                    value={item.stage}
-                                                    onChange={(event) => handleStageChange(item.id, event.target.value)}
-                                                    disabled={updatingBookingId === item.id}
-                                                    aria-label={`Update booking ${item.id} stage`}
-                                                >
-                                                    <option value="Tentative">Tentative</option>
-                                                    <option value="Booked">Booked</option>
-                                                    <option value="Cancelled">Cancelled</option>
-                                                </select>
-                                            )}
+                                            <select
+                                                className={`booking-stage-select booking-stage-${String(item.stage).toLowerCase()}`}
+                                                value={item.stage}
+                                                onChange={(event) => handleStageChange(item.id, event.target.value)}
+                                                disabled={updatingBookingId === item.id}
+                                                aria-label={`Update booking ${item.id} stage`}
+                                            >
+                                                <option value="Tentative">Tentative</option>
+                                                <option value="Booked">Booked</option>
+                                                <option value="Confirmed">Confirmed</option>
+                                                <option value="Cancelled">Cancelled</option>
+                                            </select>
                                         </td>
                                         <td>{item.source}</td>
                                         <td>{item.bookedBy}</td>

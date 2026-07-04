@@ -529,6 +529,92 @@ model Booking{
 
   costSheet CostSheet[]
   paymentSchedule PaymentSchedule[]
+  demands Demand[]
+  receipts Receipt[]
+  ledgerEntries LedgerEntry[]
+  generatedDocuments GeneratedDocument[]
+  documentAuditLogs DocumentAuditLog[]
+}
+
+model Demand{
+  id Int @id @default(autoincrement())
+  demandNo String @unique
+  bookingId Int
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  description String? @db.Text
+  amount Float @default(0)
+  principal Float @default(0)
+  gst Float @default(0)
+  paidAmount Float @default(0)
+  outstandingAmount Float @default(0)
+  status String @default("DRAFT")
+  dueDate DateTime?
+  issuedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  receipts Receipt[]
+
+  @@index([bookingId])
+  @@index([status])
+}
+
+model Receipt{
+  id Int @id @default(autoincrement())
+  receiptNo String @unique
+  bookingId Int
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  demandId Int?
+  demand Demand? @relation(fields: [demandId], references: [id], onDelete: SetNull)
+  amount Float @default(0)
+  mode String @default("CASH")
+  status String @default("POSTED")
+  referenceNumber String?
+  receivedAt DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([demandId])
+}
+
+model LedgerEntry{
+  id Int @id @default(autoincrement())
+  bookingId Int
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  type String
+  amount Float @default(0)
+  description String? @db.Text
+  date DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([date])
+}
+
+model GeneratedDocument{
+  id Int @id @default(autoincrement())
+  bookingId Int
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  type String
+  title String?
+  htmlContent String? @db.Text
+  pdfUrl String?
+  createdAt DateTime @default(now())
+
+  @@index([bookingId])
+}
+
+model DocumentAuditLog {
+  id          Int      @id @default(autoincrement())
+  bookingId   Int
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  type        String   // Document type: WELCOME_LETTER, etc.
+  action      String   // Action: GENERATE, PREVIEW, DOWNLOAD, PRINT
+  details     String   @db.Text
+  performedBy String?
+  createdAt   DateTime @default(now())
+
+  @@index([bookingId])
 }
 
 model CostSheet{

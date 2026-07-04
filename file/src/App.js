@@ -130,6 +130,18 @@ import TrashPage from "./pages/TrashPage";
 import AdminReports from "./pages/admin/AdminReports";
 import AdminCallLogs from "./pages/admin/AdminCallLogs";
 import MyCallLogs from "./pages/sales/MyCallLogs";
+import { ToastContainer } from "react-toastify";
+import PostSalesDashboard from "./pages/post sales/PostSalesDashboard";
+import PostSalesBookingList from "./pages/post sales/PostSalesBookingList";
+import PostSalesDocuments from "./pages/post sales/PostSalesDocuments";
+import PostSalesDetailsPage from "./pages/post sales/PostSalesDetailsPage";
+import {
+  PostSalesPaymentPlans,
+  PostSalesDemands,
+  PostSalesCollections,
+  PostSalesLedger,
+  PostSalesReports
+} from "./pages/post sales/Placeholders";
 
 const publicPaths = new Set(["/", "/sign-in", "/sign-up", "/forgot-password"]);
 const accessDeniedPath = "/access-denied";
@@ -279,6 +291,7 @@ const ProtectedAppRoutes = () => {
   }
 
   return (
+    <>
       <Routes>
          <Route exact path='/' element={<SignInPage />} />
         <Route exact path='/add-lead' element={<ADDLEAD />} />
@@ -396,6 +409,18 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/theme' element={<ThemePage />} />
         <Route exact path='/tooltip' element={<TooltipPage />} />
         <Route exact path='/bookings' element={<TypographyPage />} />
+        
+        {/* Admin Post-Sales Routes */}
+        <Route exact path='/post-sales/dashboard' element={<PostSalesDashboard />} />
+        <Route exact path='/post-sales/booking-list' element={<PostSalesBookingList />} />
+        <Route exact path='/post-sales/documents' element={<PostSalesDocuments />} />
+        <Route exact path='/post-sales/details/:bookingId' element={<PostSalesDetailsPage />} />
+        <Route exact path='/post-sales/payment-plans' element={<PostSalesPaymentPlans />} />
+        <Route exact path='/post-sales/demands' element={<PostSalesDemands />} />
+        <Route exact path='/post-sales/collections' element={<PostSalesCollections />} />
+        <Route exact path='/post-sales/customer-ledger' element={<PostSalesLedger />} />
+        <Route exact path='/post-sales/reports' element={<PostSalesReports />} />
+
         <Route exact path='/users-grid' element={<UsersGridPage />} />
         <Route exact path='/all-users' element={<UsersListPage />} />
         <Route exact path='/view-details' element={<ViewDetailsPage />} />
@@ -423,6 +448,8 @@ const ProtectedAppRoutes = () => {
          <Route exact path='/BlukClickToCalls' element={< BlukClickPage />} />
         <Route exact path='*' element={<ErrorPage />} />
       </Routes>
+      <ToastContainer />
+    </>
   );
 };
 

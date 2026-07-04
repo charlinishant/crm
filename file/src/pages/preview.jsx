@@ -385,6 +385,12 @@ const Preview = () => {
       setBookings((current) => [result, ...current]);
       setIsBookingFormOpen(false);
       setBookingMessage("Booking saved successfully");
+      navigate("/post-sales", {
+        state: {
+          booking: result,
+          lead,
+        },
+      });
     } catch (error) {
       console.error("Unable to save booking:", error);
       setBookingMessage("Booking could not be saved. Please check backend and database.");

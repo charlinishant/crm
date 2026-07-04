@@ -18970,6 +18970,11 @@ table.dataTable td.dt-type-date {
   color: #185fa5;
 }
 
+.booking-stage-confirmed {
+  background-color: #eff6ff;
+  color: #1e40af;
+}
+
 .status-visit-missed,
 .status-cancelled {
   background-color: #fdecec;

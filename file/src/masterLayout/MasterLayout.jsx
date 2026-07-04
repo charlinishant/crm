@@ -831,6 +831,107 @@ const MasterLayout = ({ children }) => {
               </ul>
             </li>
 
+            {/* Post Sales dropdown */}
+            <li className='dropdown'>
+              <Link to='#'>
+                <Icon
+                  icon='solar:card-transfer-outline'
+                  className='menu-icon'
+                />
+                <span>Post Sales</span>
+              </Link>
+              <ul className='sidebar-submenu'>
+                <li>
+                  <NavLink
+                    to='/post-sales/dashboard'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-primary-600 w-auto' />
+                    Dashboard
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to='/post-sales/booking-list'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-warning-main w-auto' />
+                    Booking List
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to='/post-sales/documents'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />
+                    Documents
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to='/post-sales/payment-plans'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-success-main w-auto' />
+                    Payment Plans
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to='/post-sales/demands'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-danger-main w-auto' />
+                    Demands
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to='/post-sales/collections'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-primary-600 w-auto' />
+                    Collections
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to='/post-sales/customer-ledger'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-warning-main w-auto' />
+                    Customer Ledger
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
+                    to='/post-sales/reports'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />
+                    Reports
+                  </NavLink>
+                </li>
+              </ul>
+            </li>
+
             {/* Control Center */}
             <li className='dropdown'>
               <Link to='#'>
@@ -1022,7 +1123,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-warning-main w-auto' />{" "}
-                    open
+                    Open
                   </NavLink>
                 </li>
                 <li>
