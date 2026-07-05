@@ -24655,3 +24655,464 @@ th{
     width: 100%;
   }
 }
+
+/* Custom screens: light/dark theme tokens and overrides. */
+:root {
+  --crm-page-bg: #f5f6fa;
+  --crm-card-bg: #ffffff;
+  --crm-card-muted-bg: #f8fafc;
+  --crm-card-hover-bg: #f1f5f9;
+  --crm-card-active-bg: #eaf2ff;
+  --crm-border: #e2e8f0;
+  --crm-input-border: #cbd5e1;
+  --crm-text: #0f172a;
+  --crm-text-soft: #334155;
+  --crm-muted: #64748b;
+  --crm-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+}
+
+[data-theme="dark"] {
+  --crm-page-bg: #1b2431;
+  --crm-card-bg: #273142;
+  --crm-card-muted-bg: #323d4e;
+  --crm-card-hover-bg: #36445a;
+  --crm-card-active-bg: rgba(72, 127, 255, 0.16);
+  --crm-border: rgba(209, 213, 219, 0.2);
+  --crm-input-border: rgba(209, 213, 219, 0.32);
+  --crm-text: #f8fafc;
+  --crm-text-soft: #e2e8f0;
+  --crm-muted: #cbd5e1;
+  --crm-shadow: none;
+}
+
+[data-theme="dark"] .dashboard-main-body {
+  background: var(--crm-page-bg);
+}
+
+[data-theme="dark"] .dashboard-main-body > .d-flex h6,
+[data-theme="dark"] .dashboard-main-body > .d-flex li,
+[data-theme="dark"] .dashboard-main-body > .d-flex a {
+  color: var(--crm-text) !important;
+}
+
+.admin-email-panel,
+.company-settings-brand,
+.company-settings-card,
+.profile-modern-summary,
+.profile-modern-card,
+.sales-performance-table-card.admin-report-table-card,
+.attendance-section.table-section,
+.all-task-table-wrap,
+.open-task-table-wrap,
+.completed-task-table-wrap,
+.archived-task-table-wrap,
+.status-task-table-wrap {
+  background: var(--crm-card-bg) !important;
+  border-color: var(--crm-border) !important;
+  box-shadow: var(--crm-shadow) !important;
+}
+
+.admin-email-header h3,
+.admin-email-stats button strong,
+.admin-email-user,
+.company-settings-brand h3,
+.company-settings-meta strong,
+.company-settings-header h3,
+.company-settings-section h4,
+.company-settings-form label,
+.profile-modern-summary h3,
+.profile-modern-info strong,
+.profile-modern-header h4,
+.profile-modern-form label,
+.sales-performance-table-card h6,
+.sales-performance-user {
+  color: var(--crm-text) !important;
+}
+
+.admin-email-header p,
+.admin-email-stats button span,
+.admin-email-secondary,
+.admin-email-empty,
+.company-settings-brand p,
+.company-settings-meta span,
+.company-settings-header p,
+.profile-modern-summary p,
+.profile-modern-info span,
+.profile-modern-header p {
+  color: var(--crm-muted) !important;
+}
+
+.admin-email-stats button,
+.company-settings-logo,
+.company-settings-meta div,
+.profile-modern-secondary,
+.company-settings-secondary {
+  background: var(--crm-card-muted-bg) !important;
+  border-color: var(--crm-border) !important;
+  color: var(--crm-text-soft) !important;
+}
+
+.admin-email-stats button.active,
+.admin-email-stats button:hover {
+  background: var(--crm-card-active-bg) !important;
+  border-color: #487fff !important;
+}
+
+.admin-email-toolbar select,
+.company-settings-form input,
+.company-settings-form textarea,
+.profile-modern-form input,
+.profile-modern-password input,
+.crm-table-search {
+  background: var(--crm-card-bg) !important;
+  border-color: var(--crm-input-border) !important;
+  color: var(--crm-text) !important;
+}
+
+.admin-email-toolbar select,
+.admin-email-toolbar select option,
+.company-settings-form input::placeholder,
+.company-settings-form textarea::placeholder,
+.profile-modern-form input::placeholder,
+.profile-modern-password input::placeholder,
+.crm-table-search input::placeholder {
+  color: var(--crm-muted) !important;
+}
+
+.crm-table-search input {
+  color: var(--crm-text) !important;
+}
+
+.admin-email-table-card {
+  background: var(--crm-card-bg) !important;
+  border-color: var(--crm-border) !important;
+}
+
+.admin-email-table-card tbody tr,
+.sales-performance-table-card table tbody tr,
+.attendance-section table tbody tr,
+.all-task-table tbody tr,
+.open-task-table tbody tr,
+.completed-task-table tbody tr,
+.archived-task-table tbody tr,
+.status-task-table tbody tr {
+  background: var(--crm-card-bg) !important;
+  border-color: var(--crm-border) !important;
+}
+
+.admin-email-table-card tbody tr:nth-child(even),
+.sales-performance-table-card table tbody tr:nth-child(even),
+.attendance-section table tbody tr:nth-child(even),
+.all-task-table tbody tr:nth-child(even),
+.open-task-table tbody tr:nth-child(even),
+.completed-task-table tbody tr:nth-child(even),
+.archived-task-table tbody tr:nth-child(even),
+.status-task-table tbody tr:nth-child(even) {
+  background: var(--crm-card-muted-bg) !important;
+}
+
+.admin-email-table-card tbody tr:hover,
+.admin-email-table-card tbody tr:nth-child(even):hover,
+.sales-performance-table-card table tbody tr:hover,
+.sales-performance-table-card table tbody tr:nth-child(even):hover,
+.attendance-section table tbody tr:hover,
+.attendance-section table tbody tr:nth-child(even):hover,
+.all-task-table tbody tr:hover,
+.all-task-table tbody tr:nth-child(even):hover,
+.open-task-table tbody tr:hover,
+.open-task-table tbody tr:nth-child(even):hover,
+.completed-task-table tbody tr:hover,
+.completed-task-table tbody tr:nth-child(even):hover,
+.archived-task-table tbody tr:hover,
+.archived-task-table tbody tr:nth-child(even):hover,
+.status-task-table tbody tr:hover,
+.status-task-table tbody tr:nth-child(even):hover {
+  background: var(--crm-card-hover-bg) !important;
+}
+
+.admin-email-table-card tbody td,
+.sales-performance-table-card table tbody td,
+.attendance-section table tbody td,
+.all-task-table tbody td,
+.open-task-table tbody td,
+.completed-task-table tbody td,
+.archived-task-table tbody td,
+.status-task-table tbody td {
+  color: var(--crm-text-soft) !important;
+}
+
+[data-theme="dark"] .admin-email-status.sent {
+  background: rgba(34, 197, 94, 0.16);
+  color: #86efac;
+}
+
+[data-theme="dark"] .admin-email-status.failed {
+  background: rgba(239, 68, 68, 0.16);
+  color: #fca5a5;
+}
+
+[data-theme="dark"] .admin-email-error {
+  color: #f87171;
+}
+
+/* Admin-wide theme coverage for legacy and custom screens. */
+.dashboard-main {
+  background: var(--crm-page-bg);
+}
+
+.dashboard-main-body {
+  background: var(--crm-page-bg);
+  color: var(--crm-text-soft);
+}
+
+.dashboard-main-body h1,
+.dashboard-main-body h2,
+.dashboard-main-body h3,
+.dashboard-main-body h4,
+.dashboard-main-body h5,
+.dashboard-main-body h6,
+.dashboard-main-body .fw-semibold,
+.dashboard-main-body .fw-bold,
+.dashboard-main-body strong {
+  color: var(--crm-text);
+}
+
+.dashboard-main-body p,
+.dashboard-main-body span,
+.dashboard-main-body li,
+.dashboard-main-body label {
+  color: inherit;
+}
+
+[data-theme="dark"] .navbar-header,
+[data-theme="dark"] .sidebar,
+[data-theme="dark"] .sidebar-menu-area {
+  background: var(--crm-card-bg);
+  border-color: var(--crm-border);
+}
+
+[data-theme="dark"] .sidebar-logo {
+  background: #ffffff;
+  border-color: var(--crm-border);
+}
+
+[data-theme="dark"] .sidebar-menu li a {
+  color: var(--crm-text-soft);
+}
+
+[data-theme="dark"] .sidebar-menu li a:hover,
+[data-theme="dark"] .sidebar-menu .sidebar-submenu li.active-page a {
+  background: var(--crm-card-muted-bg);
+  color: var(--crm-text);
+}
+
+[data-theme="dark"] .sidebar-menu li > a.active-page,
+[data-theme="dark"] .sidebar-menu li.dropdown.open > a,
+[data-theme="dark"] .sidebar-menu li.dropdown.dropdown-open > a {
+  background: #487fff;
+  color: #ffffff;
+}
+
+[data-theme="dark"] .navbar-search input {
+  background: #1b2431;
+  border-color: var(--crm-input-border);
+  color: var(--crm-text);
+}
+
+[data-theme="dark"] .navbar-search input::placeholder {
+  color: var(--crm-muted);
+}
+
+[data-theme="dark"] .navbar-search .icon,
+[data-theme="dark"] .sidebar-toggle,
+[data-theme="dark"] .sidebar-mobile-toggle {
+  color: var(--crm-text);
+}
+
+[data-theme="dark"] [data-theme-toggle],
+[data-theme="dark"] .navbar-header .w-40-px.h-40-px {
+  background: var(--crm-card-muted-bg) !important;
+  color: var(--crm-text) !important;
+}
+
+.dashboard-main-body .card,
+.dashboard-main-body .modal-content,
+.dashboard-main-body .dropdown-menu,
+.dashboard-main-body .accordion .accordion-item,
+.dashboard-main-body .table-section,
+.dashboard-main-body .table-container,
+.dashboard-main-body .table-wrapper,
+.dashboard-main-body .project-table-container,
+.dashboard-main-body .card-header,
+.dashboard-main-body .card-body {
+  background-color: var(--crm-card-bg) !important;
+  border-color: var(--crm-border) !important;
+  color: var(--crm-text-soft) !important;
+}
+
+.dashboard-main-body .card,
+.dashboard-main-body .table-section,
+.dashboard-main-body .table-container,
+.dashboard-main-body .table-wrapper,
+.dashboard-main-body .project-table-container {
+  box-shadow: var(--crm-shadow) !important;
+}
+
+.dashboard-main-body .bg-base,
+.dashboard-main-body .bg-white,
+.dashboard-main-body .bg-neutral-50,
+.dashboard-main-body .bg-neutral-100,
+.dashboard-main-body .bg-light,
+.dashboard-main-body .bg-light-50,
+.dashboard-main-body .bg-light-100 {
+  background-color: var(--crm-card-bg) !important;
+}
+
+.dashboard-main-body .bg-base-50,
+.dashboard-main-body .bg-neutral-200,
+.dashboard-main-body .bg-hover-primary-50:hover {
+  background-color: var(--crm-card-muted-bg) !important;
+}
+
+.dashboard-main-body .text-primary-light,
+.dashboard-main-body .text-dark,
+.dashboard-main-body .card-title,
+.dashboard-main-body .table-title,
+.dashboard-main-body .table-header-info h1,
+.dashboard-main-body .table-header-info h2,
+.dashboard-main-body .table-header-info h3,
+.dashboard-main-body .table-header-info h4,
+.dashboard-main-body .table-header-info h5,
+.dashboard-main-body .table-header-info h6,
+.dashboard-main-body .site-visits-title-row p,
+.dashboard-main-body .lead-name-main {
+  color: var(--crm-text) !important;
+}
+
+.dashboard-main-body .text-secondary-light,
+.dashboard-main-body .text-muted,
+.dashboard-main-body .card-sub,
+.dashboard-main-body .table-header-info p {
+  color: var(--crm-muted) !important;
+}
+
+.dashboard-main-body .border,
+.dashboard-main-body .border-bottom,
+.dashboard-main-body .border-top,
+.dashboard-main-body .border-start,
+.dashboard-main-body .border-end {
+  border-color: var(--crm-border) !important;
+}
+
+.dashboard-main-body .form-control,
+.dashboard-main-body .form-select,
+.dashboard-main-body textarea,
+.dashboard-main-body input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.dashboard-main-body select {
+  background-color: var(--crm-card-bg) !important;
+  border-color: var(--crm-input-border) !important;
+  color: var(--crm-text) !important;
+}
+
+.dashboard-main-body .form-control::placeholder,
+.dashboard-main-body textarea::placeholder,
+.dashboard-main-body input::placeholder {
+  color: var(--crm-muted) !important;
+}
+
+.dashboard-main-body .form-control:focus,
+.dashboard-main-body .form-select:focus,
+.dashboard-main-body textarea:focus,
+.dashboard-main-body input:focus,
+.dashboard-main-body select:focus {
+  background-color: var(--crm-card-bg) !important;
+  border-color: #487fff !important;
+  box-shadow: 0 0 0 3px rgba(72, 127, 255, 0.14) !important;
+  color: var(--crm-text) !important;
+}
+
+.dashboard-main-body table:not(.fc-scrollgrid):not(.fc-col-header):not(.fc-daygrid-body):not(.fc-timegrid-slots) {
+  background: var(--crm-card-bg) !important;
+  color: var(--crm-text-soft) !important;
+}
+
+.dashboard-main-body table:not(.fc-scrollgrid):not(.fc-col-header):not(.fc-daygrid-body):not(.fc-timegrid-slots) tbody tr {
+  background: var(--crm-card-bg) !important;
+  border-color: var(--crm-border) !important;
+}
+
+.dashboard-main-body table:not(.fc-scrollgrid):not(.fc-col-header):not(.fc-daygrid-body):not(.fc-timegrid-slots) tbody tr:nth-child(even) {
+  background: var(--crm-card-muted-bg) !important;
+}
+
+.dashboard-main-body table:not(.fc-scrollgrid):not(.fc-col-header):not(.fc-daygrid-body):not(.fc-timegrid-slots) tbody tr:hover,
+.dashboard-main-body table:not(.fc-scrollgrid):not(.fc-col-header):not(.fc-daygrid-body):not(.fc-timegrid-slots) tbody tr:nth-child(even):hover {
+  background: var(--crm-card-hover-bg) !important;
+}
+
+.dashboard-main-body table:not(.fc-scrollgrid):not(.fc-col-header):not(.fc-daygrid-body):not(.fc-timegrid-slots) tbody td,
+.dashboard-main-body table:not(.fc-scrollgrid):not(.fc-col-header):not(.fc-daygrid-body):not(.fc-timegrid-slots) tbody th {
+  border-color: var(--crm-border) !important;
+  color: var(--crm-text-soft) !important;
+}
+
+.dashboard-main-body .custom-table th,
+.dashboard-main-body .leads-table th,
+.dashboard-main-body .lead-table th,
+.dashboard-main-body .floor-table th,
+.dashboard-main-body .table-th,
+.dashboard-main-body .table-header-cell,
+.dashboard-main-body .table-header-row,
+.dashboard-main-body .site-visits-section table thead th,
+.dashboard-main-body .svp-container th {
+  background: #487fff !important;
+  border-color: #487fff !important;
+  color: #ffffff !important;
+}
+
+.dashboard-main-body .custom-table td,
+.dashboard-main-body .leads-table td,
+.dashboard-main-body .lead-table td,
+.dashboard-main-body .floor-table td,
+.dashboard-main-body .table-td,
+.dashboard-main-body .table-data-row,
+.dashboard-main-body .site-visits-section table tbody td,
+.dashboard-main-body .svp-container td {
+  color: var(--crm-text-soft) !important;
+  border-color: var(--crm-border) !important;
+}
+
+.dashboard-main-body .lead-action-btn,
+.dashboard-main-body .action-btn,
+.dashboard-main-body .filter-badge,
+.dashboard-main-body .lead-pagination-btn,
+.dashboard-main-body .dropdown > button,
+.dashboard-main-body .btn-light,
+.dashboard-main-body .btn-outline-light {
+  background: var(--crm-card-muted-bg) !important;
+  border-color: var(--crm-border) !important;
+  color: var(--crm-text) !important;
+}
+
+.dashboard-main-body .lead-action-btn:hover,
+.dashboard-main-body .action-btn:hover,
+.dashboard-main-body .lead-pagination-btn:hover:not(:disabled) {
+  background: var(--crm-card-hover-bg) !important;
+}
+
+.dashboard-main-body .dropdown-menu a,
+.dashboard-main-body .dropdown-menu button,
+.dashboard-main-body .dropdown-menu li {
+  color: var(--crm-text-soft) !important;
+}
+
+.dashboard-main-body .dropdown-menu a:hover,
+.dashboard-main-body .dropdown-menu button:hover {
+  background: var(--crm-card-muted-bg) !important;
+  color: var(--crm-text) !important;
+}
+
+[data-theme="dark"] .status-pill,
+[data-theme="dark"] .badge {
+  border-color: transparent;
+}
