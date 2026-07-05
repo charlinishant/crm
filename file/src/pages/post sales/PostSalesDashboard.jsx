@@ -57,10 +57,21 @@ const actionIconMap = {
   PRINT:    { icon: "🖨️", color: theme.brand },
 };
 
+const emptyStats = {
+  totalBookings: 0,
+  documentsGenerated: 0,
+  pendingDocuments: 0,
+  totalDemands: 0,
+  outstandingAmount: 0,
+  collectionsReceived: 0,
+  recentActivities: [],
+  upcomingDemands: [],
+  latestDocuments: [],
+};
+
 const PostSalesDashboard = () => {
-  const [stats, setStats] = useState(null);
+  const [stats, setStats] = useState(emptyStats);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -68,9 +79,11 @@ const PostSalesDashboard = () => {
         setLoading(true);
         const r = await fetch(`${API_URL}/post-sales/dashboard-stats`, { headers: authHeaders() });
         if (!r.ok) throw new Error("API error");
-        setStats(await r.json());
-      } catch {
-        setError("Could not load dashboard. Please refresh or check the server.");
+        const data = await r.json();
+        setStats({ ...emptyStats, ...data });
+      } catch (error) {
+        console.error("Unable to load post-sales dashboard stats:", error);
+        setStats(emptyStats);
       } finally {
         setLoading(false);
       }
@@ -85,14 +98,6 @@ const PostSalesDashboard = () => {
           <div className="spinner-border text-primary mb-3" />
           <div style={{ color: theme.muted, fontSize: 13 }}>Loading Booking Details…</div>
         </div>
-      </div>
-    </MasterLayout>
-  );
-
-  if (error) return (
-    <MasterLayout>
-      <div className="p-4">
-        <div className="alert alert-danger">{error}</div>
       </div>
     </MasterLayout>
   );

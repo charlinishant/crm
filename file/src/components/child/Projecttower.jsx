@@ -1,20 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Filter, MoreVertical, Layers, Building, Trash2, Pencil, X } from 'lucide-react';
 
-const initialTowerData = [
-  { id: 1, name: 'TOWER D', project: 'Binghatti Hills', floorPlans: 27, totalFloors: 36 },
-  { id: 2, name: 'TOWER E', project: 'Binghatti Hills', floorPlans: 5, totalFloors: 30 },
-  { id: 3, name: 'Aa', project: 'Binghatti Hills', floorPlans: 2, totalFloors: 1 },
-  { id: 4, name: 'A', project: 'Binghatti Hills', floorPlans: 3, totalFloors: 1 },
-  { id: 5, name: 'Default Tower', project: 'Nyati Baner', floorPlans: 1, totalFloors: 1 },
-  { id: 6, name: 'Towe', project: 'Binghatti Hills', floorPlans: 1, totalFloors: 1 },
-  { id: 7, name: 'Default Tower', project: 'Lodha Greens', floorPlans: 2, totalFloors: 1 },
-  { id: 8, name: 'Default Tower', project: 'ABC', floorPlans: 1, totalFloors: 1 },
-  { id: 9, name: 'Default Tower', project: 'Vasant utsav', floorPlans: 1, totalFloors: 1 },
-  { id: 10, name: 'T1', project: 'Binghatti Hills', floorPlans: 1, totalFloors: 22 },
-  { id: 11, name: 'Default Tower', project: 'Adhinn PG', floorPlans: 2, totalFloors: 1 },
-];
-
 export default function Projecttower() {
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const normalizeList = (data) => {
@@ -24,16 +10,7 @@ export default function Projecttower() {
     return [];
   };
 
-  const readStoredTowers = () => {
-    try {
-      const stored = JSON.parse(window.localStorage.getItem("projectTowers") || "[]");
-      return Array.isArray(stored) && stored.length ? stored : initialTowerData;
-    } catch {
-      return initialTowerData;
-    }
-  };
-
-  const [towers, setTowers] = useState(readStoredTowers);
+  const [towers, setTowers] = useState([]);
   const [projects, setProjects] = useState([]);
   const [name, setName] = useState('');
   const [projectId, setProjectId] = useState('');
@@ -82,20 +59,17 @@ export default function Projecttower() {
         const towerList = normalizeList(towerResult);
 
         setProjects(projectList);
-        if (!towerList.length) return;
-
         const mapped = towerList.map((tower) => ({
           id: tower.id,
           name: tower.name,
           project: tower.project?.name || tower.project || "-",
           projectId: tower.project?.id,
-          floorPlans: tower.floorPlans || 0,
+          floorPlans: tower._count?.floors || tower.floorPlans || 0,
           totalFloors: tower.totalFloor || tower.totalFloors || 0,
           source: "backend",
         }));
 
         setTowers(mapped);
-        window.localStorage.setItem("projectTowers", JSON.stringify(mapped));
       } catch (error) {
         console.error("Unable to load project towers:", error);
         setError(error.message || "Unable to load project towers");
@@ -106,10 +80,6 @@ export default function Projecttower() {
 
     fetchOptions();
   }, [API_URL]);
-
-  useEffect(() => {
-    window.localStorage.setItem("projectTowers", JSON.stringify(towers));
-  }, [towers]);
 
   const fetchTowers = async () => {
     const response = await fetch(`${API_URL}/tower?limit=100`);
@@ -122,12 +92,12 @@ export default function Projecttower() {
       name: tower.name,
       project: tower.project?.name || tower.project || "-",
       projectId: tower.project?.id,
-      floorPlans: tower.floorPlans || 0,
+      floorPlans: tower._count?.floors || tower.floorPlans || 0,
       totalFloors: tower.totalFloor || tower.totalFloors || 0,
       source: "backend",
     }));
 
-    setTowers(mapped.length ? mapped : readStoredTowers());
+    setTowers(mapped);
   };
 
   const resetForm = () => {

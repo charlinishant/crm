@@ -54,6 +54,11 @@ exports.getTower  = async (req, res)=>{
                     id:true,
                     name:true
                     }
+                 },
+                 _count:{
+                    select:{
+                    floors:true
+                    }
                  }
                 }
             })
