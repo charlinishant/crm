@@ -70,7 +70,7 @@
 .sales-brand {
   gap: 10px;
   justify-content: center;
-  padding: 4px 8px 24px;
+  padding: 4px 8px 22px;
 }
 
 .sales-logo,
@@ -97,10 +97,10 @@ img.sales-avatar {
   border-radius: 0;
   color: inherit;
   height: auto;
-  max-height: 58px;
+  max-height: 76px;
   max-width: 100%;
   object-fit: contain;
-  width: 210px;
+  width: 76px;
 }
 
 .sales-avatar.small {

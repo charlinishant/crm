@@ -34,6 +34,11 @@ const getDisplayValue = (value, fallback = "-") => {
 
 const getUserName = (user) => getDisplayValue(user);
 
+const escapeCsvValue = (value) => {
+  const text = String(value ?? "");
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
 const formatVisitDate = (value) => {
   if (!value) return "-";
   const date = new Date(value);
@@ -197,11 +202,62 @@ const SVPDashboard = () => {
     navigate(leadId ? `/add-lead?editLeadId=${leadId}` : "/add-lead", { state: { lead } });
   };
 
+  const handleExport = () => {
+    const headers = [
+      "Lead ID",
+      "Lead Name",
+      "Project",
+      "Status",
+      "Scheduled Date",
+      "Day",
+      "Time",
+      "Sales Executive",
+      "Location",
+    ];
+
+    const rows = scheduledVisits.map((visit) => {
+      const lead = visit.lead || {};
+      const leadId = getLeadId(lead);
+
+      return [
+        leadId ? `#${leadId}` : "-",
+        getLeadName(lead),
+        visit.project,
+        visit.status,
+        formatVisitDate(visit.scheduledOn),
+        formatVisitDay(visit.scheduledOn),
+        formatVisitTime(visit.scheduledOn),
+        getUserName(visit.salesExecutive),
+        visit.location,
+      ];
+    });
+
+    const csv = [headers, ...rows]
+      .map((row) => row.map(escapeCsvValue).join(","))
+      .join("\r\n");
+    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const dateStamp = new Date().toISOString().slice(0, 10);
+
+    link.href = url;
+    link.download = `svp-scheduled-visits-${dateStamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="table-section site-visits-section">
       <div className="site-visits-title-row">
         <p>Scheduled Visit Planned</p>
-        <button className="btn btn-primary svp-export-btn text-sm btn-sm px-16 py-8 radius-8" type="button">
+        <button
+          className="btn btn-primary svp-export-btn text-sm btn-sm px-16 py-8 radius-8"
+          type="button"
+          onClick={handleExport}
+          disabled={scheduledVisits.length === 0}
+        >
           Export
         </button>
       </div>

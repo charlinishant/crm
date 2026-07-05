@@ -40,7 +40,7 @@ const ComingSoonLayer = () => {
       <div className='container container--xl'>
         <div className='d-flex align-items-center justify-content-between py-24'>
           <Link to='/'>
-            <img className='brand-logo-full' src='/assets/images/logo.png' alt='Insitearc' />
+            <img className='brand-logo-full' src='/assets/images/logo.png' alt='SWAMI' />
           </Link>
           <Link to='/' className='btn btn-outline-primary-600 text-sm'>
             Go To Home

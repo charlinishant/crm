@@ -50,7 +50,7 @@ const SignUpLayer = () => {
       <div className="auth-box py-32 px-24 w-100" style={{ maxWidth: "420px" }}>
         <div className="text-center">
           <Link to="/" className="mb-40 d-inline-block">
-            <img className="brand-logo-full" src="/assets/images/logo.png" alt="Insitearc" />
+            <img className="brand-logo-full" src="/assets/images/logo.png" alt="SWAMI" />
           </Link>
 
           <h4 className="mb-12">Sign Up to your Account</h4>

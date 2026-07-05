@@ -13,6 +13,23 @@ const getCustomerName = (b) =>
   (b?.lead?.firstName && b?.lead?.lastName ? `${b.lead.firstName} ${b.lead.lastName}` : null) ||
   b?.lead?.firstName || "Customer";
 
+const getBrandedDocumentHtml = (html = "") => {
+  const logoUrl = `${window.location.origin}/assets/images/logo.png`;
+  return String(html)
+    .replace(
+      /<div class="brand-name">Insite<span>Arc<\/span><\/div>/g,
+      `<img class="brand-logo" src="${logoUrl}" alt="SWAMI" />`
+    )
+    .replace(
+      /<\/style>/,
+      `.brand-logo{display:block;height:auto;max-height:92px;object-fit:contain;width:92px;}</style>`
+    )
+    .replace(/src="\/assets\/images\/logo\.png"/g, `src="${logoUrl}"`)
+    .replace(/Insite Arc Developers Pvt\. Ltd\./g, "SWAMI Developers Pvt. Ltd.")
+    .replace(/Insite Arc CRM\s*·\s*Premium Post-Sales Housing Solutions/g, "SWAMI CRM - Premium Post-Sales Housing Solutions")
+    .replace(/Insite Arc/g, "SWAMI");
+};
+
 const DOC_TYPES = [
   { type: "WELCOME_LETTER",      icon: "🏠", label: "Welcome Letter",          desc: "First letter sent on booking confirmation",     color: "#3b82f6", bg: "#eff6ff" },
   { type: "ALLOTMENT_LETTER",    icon: "📋", label: "Allotment Letter",         desc: "Formal unit allotment confirmation letter",     color: "#10b981", bg: "#f0fdf4" },
@@ -99,12 +116,12 @@ const PostSalesDocuments = () => {
   const handlePreview = (doc) => setPreviewDoc(doc);
   const handlePrint = (doc) => {
     const w = window.open("", "_blank");
-    w.document.write(doc.htmlContent);
+    w.document.write(getBrandedDocumentHtml(doc.htmlContent));
     w.document.close();
     setTimeout(() => w.print(), 500);
   };
   const handleDownload = (doc) => {
-    const blob = new Blob([doc.htmlContent], { type: "text/html" });
+    const blob = new Blob([getBrandedDocumentHtml(doc.htmlContent)], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -131,7 +148,7 @@ const PostSalesDocuments = () => {
           <div>
             <h4 style={{ fontWeight: 800, color: "#1e293b", marginBottom: 4 }}>Document Generation</h4>
             <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
-              Select a customer booking to generate Insite Arc branded letters and documents
+              Select a customer booking to generate SWAMI branded letters and documents
             </p>
           </div>
           <div style={{ fontSize: 12, color: "#94a3b8" }}>Post Sales &gt; <span style={{ color: "#3b82f6" }}>Documents</span></div>
@@ -316,7 +333,7 @@ const PostSalesDocuments = () => {
               </div>
             </div>
             <div style={{ flex: 1, overflow: "auto" }}>
-              <iframe srcDoc={previewDoc.htmlContent} style={{ width: "100%", height: "100%", minHeight: "70vh", border: "none" }} title="Document Preview" />
+              <iframe srcDoc={getBrandedDocumentHtml(previewDoc.htmlContent)} style={{ width: "100%", height: "100%", minHeight: "70vh", border: "none" }} title="Document Preview" />
             </div>
           </div>
         </div>

@@ -14,13 +14,69 @@ const getCustomerName = (b) =>
   (b?.lead?.firstName && b?.lead?.lastName ? `${b.lead.firstName} ${b.lead.lastName}` : null) ||
   b?.lead?.firstName || "Customer";
 
+const parseMaybeJson = (value) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (!["[", "{"].includes(trimmed.charAt(0))) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
+const getContactValue = (value, keys) => {
+  const parsed = parseMaybeJson(value);
+  if (parsed === undefined || parsed === null || parsed === "") return "";
+  if (typeof parsed === "string" || typeof parsed === "number") return String(parsed);
+  if (Array.isArray(parsed)) {
+    return parsed.map((item) => getContactValue(item, keys)).filter(Boolean).join(", ");
+  }
+  if (typeof parsed === "object") {
+    for (const key of keys) {
+      const nested = getContactValue(parsed[key], keys);
+      if (nested) return nested;
+    }
+    return Object.values(parsed).map((item) => getContactValue(item, keys)).filter(Boolean).join(", ");
+  }
+  return "";
+};
+
 const getPhone = (lead) => {
-  const p = lead?.phones; if (!p) return "—";
-  try { const a = JSON.parse(p); return Array.isArray(a) ? a.join(", ") || "—" : String(p); } catch { return String(p); }
+  return getContactValue(lead?.phones || lead?.phone || lead?.mobile || lead?.mobileNumber, [
+    "number",
+    "phone",
+    "mobile",
+    "mobileNumber",
+    "value",
+    "label",
+  ]) || "-";
 };
 const getEmail = (lead) => {
-  const e = lead?.emails; if (!e) return "—";
-  try { const a = JSON.parse(e); return Array.isArray(a) ? a.join(", ") || "—" : String(e); } catch { return String(e); }
+  return getContactValue(lead?.emails || lead?.email || lead?.emailAddress, [
+    "email",
+    "emailAddress",
+    "value",
+    "label",
+  ]) || "-";
+};
+
+const getBrandedDocumentHtml = (html = "") => {
+  const logoUrl = `${window.location.origin}/assets/images/logo.png`;
+  return String(html)
+    .replace(
+      /<div class="brand-name">Insite<span>Arc<\/span><\/div>/g,
+      `<img class="brand-logo" src="${logoUrl}" alt="SWAMI" />`
+    )
+    .replace(
+      /<\/style>/,
+      `.brand-logo{display:block;height:auto;max-height:92px;object-fit:contain;width:92px;}</style>`
+    )
+    .replace(/src="\/assets\/images\/logo\.png"/g, `src="${logoUrl}"`)
+    .replace(/Insite Arc Developers Pvt\. Ltd\./g, "SWAMI Developers Pvt. Ltd.")
+    .replace(/Insite Arc CRM\s*·\s*Premium Post-Sales Housing Solutions/g, "SWAMI CRM - Premium Post-Sales Housing Solutions")
+    .replace(/Insite Arc/g, "SWAMI");
 };
 
 const DOC_META = {
@@ -112,7 +168,7 @@ const PostSalesDetailsPage = () => {
   const handlePreview = (doc) => setPreviewDoc(doc);
   const handlePrint = (doc) => {
     const w = window.open("", "_blank");
-    w.document.write(doc.htmlContent);
+    w.document.write(getBrandedDocumentHtml(doc.htmlContent));
     w.document.close();
     setTimeout(() => w.print(), 500);
   };
@@ -565,7 +621,7 @@ const PostSalesDetailsPage = () => {
               </div>
             </div>
             <div style={{ flex: 1, overflow: "auto" }}>
-              <iframe srcDoc={previewDoc.htmlContent} style={{ width: "100%", height: "100%", minHeight: "70vh", border: "none" }} title="Document Preview" />
+              <iframe srcDoc={getBrandedDocumentHtml(previewDoc.htmlContent)} style={{ width: "100%", height: "100%", minHeight: "70vh", border: "none" }} title="Document Preview" />
             </div>
           </div>
         </div>
@@ -576,3 +632,4 @@ const PostSalesDetailsPage = () => {
 };
 
 export default PostSalesDetailsPage;
+

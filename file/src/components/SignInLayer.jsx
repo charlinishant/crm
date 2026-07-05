@@ -139,16 +139,17 @@ const SignInLayer = () => {
             border-radius: 12px;
             display: inline-flex;
             justify-content: center;
-            margin-bottom: 28px;
-            padding: 12px 18px;
+            margin-bottom: 22px;
+            padding: 8px 12px;
           }
 
           .signin-project-logo {
             display: block;
             height: auto;
-            max-width: 100%;
+            max-height: 170px;
+            max-width: 170px;
             object-fit: contain;
-            width: 260px;
+            width: 170px;
           }
         `}
       </style>
@@ -166,7 +167,7 @@ const SignInLayer = () => {
         {/* Header */}
         <div style={{ textAlign: "center", marginBottom: "42px" }}>
           <div className="signin-project-logo-wrap">
-            <img className="signin-project-logo" src="/assets/images/logo.png" alt="Insitearc" />
+            <img className="signin-project-logo" src="/assets/images/logo.png" alt="SWAMI" />
           </div>
           <h2
             style={{

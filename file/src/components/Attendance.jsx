@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Icon } from "@iconify/react";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 const statusOptions = ["All", "Available", "On Break", "Logged Out"];
@@ -138,10 +137,6 @@ const Attendance = () => {
             </select>
           </div>
 
-          <div className="filter-badge">
-            <Icon icon="mdi:account-clock-outline" width={16} height={16} />
-            {totalItems > 0 && <span className="badge-count">{totalItems}</span>}
-          </div>
         </div>
       </div>
 

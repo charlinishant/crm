@@ -1660,7 +1660,7 @@ const SalesUserPanel = () => {
     >
       <aside className="sales-sidebar">
         <div className="sales-brand">
-          <img className="sales-logo" src="/assets/images/logo.png" alt="Insitearc" />
+          <img className="sales-logo" src="/assets/images/logo.png" alt="SWAMI" />
           
         </div>
 

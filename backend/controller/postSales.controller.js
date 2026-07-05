@@ -13,6 +13,35 @@ const docTypes = [
   "CANCELLATION_LETTER"
 ];
 
+const parseMaybeJson = (value) => {
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  if (!["[", "{"].includes(trimmed.charAt(0))) return value;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+};
+
+const getContactValue = (value, keys) => {
+  const parsed = parseMaybeJson(value);
+  if (parsed === undefined || parsed === null || parsed === "") return "";
+  if (typeof parsed === "string" || typeof parsed === "number") return String(parsed);
+  if (Array.isArray(parsed)) {
+    return parsed.map((item) => getContactValue(item, keys)).filter(Boolean).join(", ");
+  }
+  if (typeof parsed === "object") {
+    for (const key of keys) {
+      const nested = getContactValue(parsed[key], keys);
+      if (nested) return nested;
+    }
+    return Object.values(parsed).map((item) => getContactValue(item, keys)).filter(Boolean).join(", ");
+  }
+  return "";
+};
+
 // ─── Letterhead CSS (shared across all templates) ────────────────────────────
 const LETTERHEAD_CSS = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -33,13 +62,13 @@ const LETTERHEAD_CSS = `
     padding-bottom: 20px;
     margin-bottom: 32px;
   }
-  .brand-name {
-    font-size: 26px;
-    font-weight: 800;
-    color: #1d4ed8;
-    letter-spacing: -0.5px;
+  .brand-logo {
+    display: block;
+    height: auto;
+    max-height: 92px;
+    object-fit: contain;
+    width: 92px;
   }
-  .brand-name span { color: #0ea5e9; }
   .brand-tagline { font-size: 11px; color: #64748b; margin-top: 3px; letter-spacing: 0.5px; text-transform: uppercase; }
   .ref-block { text-align: right; font-size: 12px; color: #64748b; }
   .ref-block .ref-no { font-weight: 700; color: #1e293b; font-size: 13px; }
@@ -141,7 +170,7 @@ const LETTERHEAD_CSS = `
 const headerHTML = (refNo, date) => `
   <div class="letterhead">
     <div>
-      <div class="brand-name">Insite<span>Arc</span></div>
+      <img class="brand-logo" src="/assets/images/logo.png" alt="SWAMI" />
       <div class="brand-tagline">Premium Real Estate CRM · Post-Sales Division</div>
     </div>
     <div class="ref-block">
@@ -156,13 +185,13 @@ const signatureHTML = (sigName = "Authorized Signatory", dept = "Post-Sales Depa
     <div></div>
     <div class="signature-block">
       <div class="signature-line">
-        <strong>${sigName}</strong><br>${dept}<br>Insite Arc
+        <strong>${sigName}</strong><br>${dept}<br>SWAMI
       </div>
     </div>
   </div>
   <div class="footer-note">
     This is a computer-generated document. For queries contact your Relationship Manager.<br>
-    Insite Arc CRM · Premium Post-Sales Housing Solutions
+    SWAMI CRM - Premium Post-Sales Housing Solutions
   </div>
 `;
 
@@ -173,7 +202,7 @@ const documentTemplates = {
 ${headerHTML("WEL-BKG-{{bookingId}}", "{{bookingDate}}")}
 <div class="doc-title">Welcome Letter</div>
 <p class="salutation">Dear <strong>{{customerName}}</strong>,</p>
-<p class="body-text">Congratulations on your decision to invest in your dream home with <strong>Insite Arc</strong>! We are delighted to welcome you to our growing community of home-owners at <strong>{{projectName}}</strong>.</p>
+<p class="body-text">Congratulations on your decision to invest in your dream home with <strong>SWAMI</strong>! We are delighted to welcome you to our growing community of home-owners at <strong>{{projectName}}</strong>.</p>
 <p class="body-text">Your booking has been successfully confirmed, and our dedicated Post-Sales Relationship Manager will guide you through every step — from document execution to final possession handover.</p>
 <table class="data-table">
   <tr><td class="label">Booking Reference</td><td><strong>BKG-{{bookingId}}</strong></td><td class="label">Booking Date</td><td>{{bookingDate}}</td></tr>
@@ -184,7 +213,7 @@ ${headerHTML("WEL-BKG-{{bookingId}}", "{{bookingDate}}")}
   <tr><td class="label">Booked By</td><td>{{bookedBy}}</td><td class="label">Source</td><td>{{source}}</td></tr>
 </table>
 <p class="body-text">We are currently preparing your Allotment Letter and Agreement for Sale. Our team will contact you shortly to schedule document signing. For any immediate queries, please reach out to your Relationship Manager at <strong>{{rmContact}}</strong>.</p>
-<p class="body-text">Thank you for choosing Insite Arc as your trusted partner in building your future.</p>
+<p class="body-text">Thank you for choosing SWAMI as your trusted partner in building your future.</p>
 <p class="body-text">With warm regards,</p>
 ${signatureHTML("Post-Sales Head", "Post-Sales Department")}
 </body></html>`,
@@ -214,7 +243,7 @@ ${headerHTML("ATS-BKG-{{bookingId}}", "{{bookingDate}}")}
 <div class="doc-title">Agreement for Sale — Summary Sheet</div>
 <p class="body-text">This document summarises the fundamental terms agreed upon for execution of the formal Agreement for Sale (ATS) between the parties described below:</p>
 <table class="data-table">
-  <tr><td class="label">Promoter / Developer</td><td colspan="3">Insite Arc Developers Pvt. Ltd.</td></tr>
+  <tr><td class="label">Promoter / Developer</td><td colspan="3">SWAMI Developers Pvt. Ltd.</td></tr>
   <tr><td class="label">Allottee (Buyer)</td><td>{{customerName}}</td><td class="label">Contact</td><td>{{customerPhone}}</td></tr>
   <tr><td class="label">PAN Number</td><td>{{customerPAN}}</td><td class="label">Aadhaar (Masked)</td><td>{{customerAadhaar}}</td></tr>
   <tr><td class="label">Project</td><td>{{projectName}}</td><td class="label">Unit</td><td>{{unitNo}} — {{towerName}}</td></tr>
@@ -276,7 +305,7 @@ ${headerHTML("DEM-{{bookingId}}-{{demandNo}}", "{{issueDate}}")}
 <div class="amount-words">Amount in Words: <strong>{{amountInWords}}</strong></div>
 <div class="bank-box">
   <strong>Payment Instructions:</strong><br>
-  Account Name: Insite Arc Developers Pvt. Ltd.<br>
+  Account Name: SWAMI Developers Pvt. Ltd.<br>
   Bank: HDFC Bank · IFSC: HDFC0001234 · A/c No: 50200012345678<br>
   UPI / NEFT / RTGS accepted. Please quote your Booking Reference <strong>BKG-{{bookingId}}</strong> in the transaction remarks.
 </div>
@@ -342,7 +371,7 @@ ${signatureHTML("Post-Sales Head", "Possession & Handover Team")}
 ${headerHTML("NOC-BKG-{{bookingId}}", "{{bookingDate}}")}
 <div class="doc-title">No Objection Certificate (NOC)</div>
 <div style="text-align:center"><div class="noc-stamp">NO OBJECTION CERTIFICATE</div></div>
-<p class="body-text">This is to certify that <strong>Insite Arc Developers Pvt. Ltd.</strong> has <strong>NO OBJECTION</strong> to:</p>
+<p class="body-text">This is to certify that <strong>SWAMI Developers Pvt. Ltd.</strong> has <strong>NO OBJECTION</strong> to:</p>
 <p class="body-text">1. The Allottee, <strong>{{customerName}}</strong>, securing a home loan or mortgage against the residential unit number <strong>{{unitNo}}</strong>, {{towerName}}, <strong>{{projectName}}</strong> from any scheduled bank or housing finance company.</p>
 <p class="body-text">2. The registration of the above property in the name of the Allottee(s) before the Sub-Registrar of Assurances, subject to the fulfillment of all payment obligations under the Agreement for Sale.</p>
 <table class="data-table">
@@ -353,7 +382,7 @@ ${headerHTML("NOC-BKG-{{bookingId}}", "{{bookingDate}}")}
   <tr><td class="label">NOC Issued On</td><td>{{bookingDate}}</td></tr>
 </table>
 <p class="body-text">This NOC is valid for 90 days from the date of issue and is issued solely for the purpose stated above.</p>
-${signatureHTML("Director — Finance & Accounts", "Insite Arc Developers Pvt. Ltd.")}
+${signatureHTML("Director - Finance & Accounts", "SWAMI Developers Pvt. Ltd.")}
 </body></html>`,
 
   CANCELLATION_LETTER: `<!doctype html><html><head><meta charset="utf-8"><style>${LETTERHEAD_CSS}.cancel-banner { background:#fef2f2; border:1px solid #fecaca; border-radius:8px; padding:16px 20px; margin-bottom:20px; } .cancel-banner h3 { color:#b91c1c; font-size:16px; margin-bottom:4px; } .cancel-banner p { color:#991b1b; font-size:12px; }</style></head><body>
@@ -393,21 +422,23 @@ const buildRichContext = (booking, type) => {
     lead.firstName ||
     "Customer";
 
-  const customerPhone = (() => {
-    const p = lead.phones;
-    if (!p) return "-";
-    if (Array.isArray(p)) return p[0] || "-";
-    try { const arr = JSON.parse(p); return Array.isArray(arr) ? arr[0] || "-" : String(p); }
-    catch { return String(p); }
-  })();
+  const customerPhone =
+    getContactValue(lead.phones || lead.phone || lead.mobile || lead.mobileNumber, [
+      "number",
+      "phone",
+      "mobile",
+      "mobileNumber",
+      "value",
+      "label",
+    ]) || "-";
 
-  const customerEmail = (() => {
-    const e = lead.emails;
-    if (!e) return "-";
-    if (Array.isArray(e)) return e[0] || "-";
-    try { const arr = JSON.parse(e); return Array.isArray(arr) ? arr[0] || "-" : String(e); }
-    catch { return String(e); }
-  })();
+  const customerEmail =
+    getContactValue(lead.emails || lead.email || lead.emailAddress, [
+      "email",
+      "emailAddress",
+      "value",
+      "label",
+    ]) || "-";
 
   const customerPAN = lead.panNumber || lead.pan || "—";
   const customerAadhaar = lead.aadhaarNumber ? `****${String(lead.aadhaarNumber).slice(-4)}` : "—";

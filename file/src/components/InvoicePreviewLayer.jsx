@@ -49,7 +49,7 @@ const InvoicePreviewLayer = () => {
                                     <p className="mb-0 text-sm">Date Due: 29/08/2020</p>
                                 </div>
                                 <div>
-                                    <img src="/assets/images/logo.png" alt="Insitearc" className="brand-logo-full mb-8" />
+                                    <img src="/assets/images/logo.png" alt="SWAMI" className="brand-logo-full mb-8" />
                                     <p className="mb-1 text-sm">
                                         4517 Washington Ave. Manchester, Kentucky 39495
                                     </p>

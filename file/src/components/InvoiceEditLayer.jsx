@@ -45,7 +45,7 @@ const InvoiceEditLayer = () => {
                                     <div className="col-sm-4">
                                         <img
                                             src="/assets/images/logo.png"
-                                            alt="Insitearc"
+                                            alt="SWAMI"
                                             className="brand-logo-full mb-8"
                                         />
                                         <p className="mb-1 text-sm">
