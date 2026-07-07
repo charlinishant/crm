@@ -144,7 +144,7 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
     setCurrentPage(1);
     setOpenMenu(null);
     setMenuPosition(null);
-  }, [leadData, searchQuery, trashMode]);
+  }, [searchQuery, trashMode]);
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
