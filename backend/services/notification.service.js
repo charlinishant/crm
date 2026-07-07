@@ -1,8 +1,6 @@
 const {getIO, connectedUser} = require("../socket")
 const prisma = require("../lib/prisma")
 
-const io = getIO()
-
 async function sendNotification(userId, title, description=""){
     const notification = await prisma.notification.create({data:{
         titile:title,
@@ -13,7 +11,11 @@ async function sendNotification(userId, title, description=""){
     const socketId = connectedUser.get(String(userId))
     
     if(socketId){
-        io.to(socketId).emit(`newNotification-${userId}`, notification)
+        try {
+            getIO().to(socketId).emit(`newNotification-${userId}`, notification)
+        } catch (error) {
+            console.warn("Realtime notification skipped:", error.message)
+        }
     }
 
     return notification

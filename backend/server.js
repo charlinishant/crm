@@ -6,6 +6,7 @@ const cors = require("cors")
 
 const prisma = require("./lib/prisma")
 const {initSocket} = require("./socket")
+const { initializeCallbackReminders } = require("./services/callbackReminder.service")
 
 const app = express()
 const BODY_LIMIT = process.env.BODY_LIMIT || "100mb"
@@ -83,4 +84,7 @@ app.use((error, req, res, next) => {
 const PORT = process.env.PORT || 5000
 server.listen(PORT, () => {
   console.log(`Server running on ${PORT}`)
+  initializeCallbackReminders().catch((error) => {
+    console.error("Unable to initialize callback reminders:", error)
+  })
 })

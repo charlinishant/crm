@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 
-const typeOptions = ["Call", "WhatsApp", "Email", "Visit", "Other"];
+const typeOptions = ["Call", "Callback", "WhatsApp", "Email", "Visit", "Other"];
 const priorityOptions = ["Low", "Medium", "High"];
 
 const getLeadId = (lead) => lead?.id || lead?._id || lead?.lead_id || "";

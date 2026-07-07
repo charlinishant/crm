@@ -1,5 +1,6 @@
 const prisma = require("../lib/prisma")
 const { startProviderCall } = require("../services/callProvider.service")
+const { handleCallbackFollowUpSaved } = require("../services/callbackReminder.service")
 const {
   buildBridgeTwiml,
   getRecordingStream,
@@ -33,6 +34,17 @@ const toDateOrNull = (value) => {
 }
 
 const cleanPhone = (value) => String(value || "").replace(/\D/g, "")
+
+const getLeadPhone = (lead) => {
+  const phones = lead?.phones
+  if (!phones) return ""
+  if (Array.isArray(phones)) {
+    const first = phones.find(Boolean)
+    return cleanPhone(typeof first === "object" ? first.value || first.phone || first.number : first)
+  }
+  if (typeof phones === "object") return cleanPhone(phones.value || phones.phone || phones.number)
+  return cleanPhone(phones)
+}
 
 const isSamePhone = (first, second) => {
   const firstDigits = cleanPhone(first)
@@ -241,7 +253,8 @@ const buildFollowUpTime = (date) =>
 
 exports.disposeCall = async (req, res) => {
   try {
-    const callLogId = toNumberOrNull(req.body.callLogId || req.body.id)
+    let callLogId = toNumberOrNull(req.body.callLogId || req.body.id)
+    const leadId = toNumberOrNull(req.body.leadId)
     const disposition = String(req.body.disposition || "").trim()
     const notes = String(req.body.notes || "").trim() || null
     const nextFollowUpAt = toDateOrNull(req.body.nextFollowUpAt || req.body.nextFollowUpDateTime)
@@ -250,7 +263,6 @@ exports.disposeCall = async (req, res) => {
     const budget = String(req.body.budget || "").trim() || null
     const callStatus = normalizeCallStatus(req.body.callStatus || req.body.status || "completed")
 
-    if (!callLogId) return res.status(400).json({ message:"callLogId is required" })
     if (!allowedDispositions.has(disposition)) {
       return res.status(400).json({ message:"Invalid disposition" })
     }
@@ -261,15 +273,51 @@ exports.disposeCall = async (req, res) => {
       return res.status(400).json({ message:"Visit date and time are required" })
     }
 
-    const existingCall = await prisma.callLog.findUnique({
-      where:{ id:callLogId },
-      include:{ lead:true, agent:true },
-    })
+    let existingCall = null
+    if (callLogId) {
+      existingCall = await prisma.callLog.findUnique({
+        where:{ id:callLogId },
+        include:{ lead:true, agent:true },
+      })
+    } else {
+      if (!leadId) return res.status(400).json({ message:"leadId or callLogId is required" })
+      const authUserId = toNumberOrNull(req.authUser?.id)
+      const requestedAgentId = toNumberOrNull(req.body.agentId)
+      const agentId = isAdminUser(req) ? requestedAgentId || authUserId : authUserId
+      if (!agentId) return res.status(400).json({ message:"agentId is required" })
+
+      const [lead, agent] = await Promise.all([
+        prisma.lead.findUnique({ where:{ id:leadId } }),
+        prisma.user.findUnique({ where:{ id:agentId } }),
+      ])
+      if (!lead) return res.status(404).json({ message:"Lead not found" })
+      if (!agent) return res.status(404).json({ message:"Agent not found" })
+      if (!isAdminUser(req) && lead.teamId && lead.teamId !== agentId) {
+        return res.status(403).json({ message:"You can dispose only your assigned leads" })
+      }
+
+      existingCall = await prisma.callLog.create({
+        data:{
+          leadId,
+          agentId,
+          phone:cleanPhone(req.body.leadPhone || req.body.phone) || getLeadPhone(lead) || "-",
+          leadPhone:cleanPhone(req.body.leadPhone || req.body.phone) || getLeadPhone(lead) || null,
+          agentPhone:cleanPhone(req.body.agentPhone || agent.phone || agent.secondaryPhone) || null,
+          provider:"manual",
+          status:callStatus,
+          startedAt:new Date(),
+          endedAt:terminalCallStatuses.has(callStatus) ? new Date() : null,
+        },
+        include:{ lead:true, agent:true },
+      })
+      callLogId = existingCall.id
+    }
     if (!existingCall) return res.status(404).json({ message:"Call log not found" })
     if (!isAdminUser(req) && existingCall.agentId !== toNumberOrNull(req.authUser?.id)) {
       return res.status(403).json({ message:"You can dispose only your own calls" })
     }
 
+    let callbackFollowUp = null
     const result = await prisma.$transaction(async (tx) => {
       const nextLeadStatus = getDispositionLeadStatus(disposition)
       const callLog = await tx.callLog.update({
@@ -309,17 +357,18 @@ exports.disposeCall = async (req, res) => {
       await tx.lead.update({ where:{ id:existingCall.leadId }, data:leadUpdate })
 
       if (["Callback Later", "Follow-up Required"].includes(disposition)) {
-        await tx.followUp.create({
+        callbackFollowUp = await tx.followUp.create({
           data:{
             leadId:existingCall.leadId,
             salesUserId:Number(existingCall.agentId || req.authUser.id),
-            type:"Call",
+            type:disposition === "Callback Later" ? "Callback" : "Call",
             followUpDate:nextFollowUpAt,
             followUpTime:buildFollowUpTime(nextFollowUpAt),
             priority:"Medium",
-            notes,
+            notes:notes || (disposition === "Callback Later" ? "Callback later scheduled from call disposition." : null),
             status:"Pending",
           },
+          include:{ lead:true },
         })
       }
 
@@ -358,6 +407,7 @@ exports.disposeCall = async (req, res) => {
       })
       return callLog
     })
+    if (callbackFollowUp) handleCallbackFollowUpSaved(callbackFollowUp)
 
     res.status(200).json({ message:"Call disposition saved", callLog:result })
   } catch (error) {

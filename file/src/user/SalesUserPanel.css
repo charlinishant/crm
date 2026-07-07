@@ -570,6 +570,11 @@ img.sales-avatar {
   grid-template-columns: minmax(220px, 1.4fr) minmax(160px, 1fr) 120px 70px;
 }
 
+.sales-table-head.with-disposition,
+.sales-row.with-disposition {
+  grid-template-columns: minmax(220px, 1.3fr) minmax(150px, 1fr) 110px minmax(190px, 1fr) 70px;
+}
+
 .sales-table-head {
   border-bottom: 1px solid var(--sales-line);
   color: var(--sales-muted);
@@ -611,6 +616,19 @@ img.sales-avatar {
   color: #185fa5;
   font-size: 11px;
   padding: 3px 8px;
+}
+
+.sales-disposition-cell strong {
+  color: var(--sales-text);
+  font-size: 12px;
+}
+
+.sales-disposition-cell small {
+  color: var(--sales-muted);
+  display: block;
+  font-size: 11px;
+  line-height: 1.35;
+  margin-top: 3px;
 }
 
 .sales-open {
@@ -2094,6 +2112,99 @@ img.sales-avatar {
 
 .sales-call-dispositions .danger {
   color: #b42318;
+}
+
+.sales-disposition-list-card {
+  display: grid;
+  gap: 14px;
+}
+
+.sales-disposition-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sales-disposition-tabs button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid var(--sales-line-strong);
+  border-radius: 999px;
+  color: var(--sales-text);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  gap: 7px;
+  min-height: 34px;
+  padding: 6px 11px;
+}
+
+.sales-disposition-tabs button.active,
+.sales-disposition-tabs button:hover {
+  background: var(--sales-blue-soft);
+  border-color: #8fc4f5;
+  color: #0058a8;
+}
+
+.sales-disposition-tabs span {
+  align-items: center;
+  background: #eef2f7;
+  border-radius: 999px;
+  color: #475569;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 700;
+  height: 20px;
+  justify-content: center;
+  min-width: 20px;
+  padding: 0 6px;
+}
+
+.sales-disposition-tabs button.active span {
+  background: #ffffff;
+  color: #0058a8;
+}
+
+.sales-disposition-list {
+  display: grid;
+}
+
+.sales-disposition-row {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--sales-line);
+  color: var(--sales-text);
+  cursor: pointer;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(220px, 1.1fr) minmax(220px, 1fr) minmax(130px, auto);
+  padding: 12px 0;
+  text-align: left;
+  width: 100%;
+}
+
+.sales-disposition-row:hover {
+  background: #f8fbff;
+}
+
+.sales-disposition-row > span > strong,
+.sales-disposition-row time {
+  display: block;
+  font-size: 13px;
+}
+
+.sales-disposition-row > span > small {
+  color: var(--sales-muted);
+  display: block;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.sales-disposition-row time {
+  color: #475569;
+  text-align: right;
 }
 
 .sales-call-next-row {

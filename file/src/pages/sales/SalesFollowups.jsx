@@ -98,16 +98,22 @@ const SalesFollowups = ({
   }, [loadFollowups]);
 
   const counts = useMemo(() => {
-    const nextCounts = { today: 0, upcoming: 0, missed: 0, completed: 0, all: followups.length };
+    const nextCounts = { callbacks: 0, today: 0, upcoming: 0, missed: 0, completed: 0, all: followups.length };
     followups.forEach((followup) => {
       const bucket = getFilterForFollowup(followup);
       nextCounts[bucket] = (nextCounts[bucket] || 0) + 1;
+      if (followup.type === "Callback" && followup.status === "Pending") {
+        nextCounts.callbacks += 1;
+      }
     });
     return nextCounts;
   }, [followups]);
 
   const visibleFollowups = useMemo(() => {
     if (filter === "all") return followups;
+    if (filter === "callbacks") {
+      return followups.filter((followup) => followup.type === "Callback" && followup.status === "Pending");
+    }
     return followups.filter((followup) => getFilterForFollowup(followup) === filter);
   }, [filter, followups]);
 
@@ -229,8 +235,8 @@ const SalesFollowups = ({
     <section className="sales-card sales-followups-card">
       <div className="sales-card-head">
         <div>
-          <h2>Follow-ups</h2>
-          <p>Today, upcoming, missed and completed customer actions</p>
+          <h2>{filter === "callbacks" ? "Callbacks due" : "Follow-ups"}</h2>
+          <p>{filter === "callbacks" ? "Scheduled callback queue for assigned leads" : "Today, upcoming, missed and completed customer actions"}</p>
         </div>
         <button type="button" className="sales-card-primary-btn" onClick={() => setShowCreate(true)}>
           <CalendarDays size={15} /> Create Follow-up

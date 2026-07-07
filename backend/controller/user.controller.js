@@ -264,7 +264,26 @@ exports.getAccessPanel = async (req, res)=>{
                     configration:true,
                     budget:true,
                     locationPreferences:true,
-                    bookings:true
+                    bookings:true,
+                    callLogs:{
+                        where:{
+                            disposition:{not:null}
+                        },
+                        orderBy:{createdAt:"desc"},
+                        take:1,
+                        select:{
+                            id:true,
+                            status:true,
+                            disposition:true,
+                            notes:true,
+                            nextFollowUpAt:true,
+                            visitDateTime:true,
+                            interestedProject:true,
+                            budget:true,
+                            createdAt:true,
+                            updatedAt:true,
+                        }
+                    }
                 }
             }
 
@@ -385,7 +404,7 @@ exports.getAccessPanel = async (req, res)=>{
             const endToday = new Date(startToday)
             endToday.setDate(endToday.getDate() + 1)
 
-            const [today, missed, upcoming, highPriority] = await Promise.all([
+            const [today, missed, upcoming, highPriority, callbacksDue] = await Promise.all([
                 prisma.followUp.count({
                     where:{
                         salesUserId:authUserId,
@@ -414,6 +433,14 @@ exports.getAccessPanel = async (req, res)=>{
                         priority:"High"
                     }
                 }),
+                prisma.followUp.count({
+                    where:{
+                        salesUserId:authUserId,
+                        type:"Callback",
+                        status:"Pending",
+                        followUpDate:{lte:endToday}
+                    }
+                }),
             ])
 
             followupStats = {
@@ -421,6 +448,7 @@ exports.getAccessPanel = async (req, res)=>{
                 missed,
                 upcoming,
                 highPriority,
+                callbacksDue,
                 due:today + missed,
             }
         } catch (error) {
@@ -449,6 +477,7 @@ exports.getAccessPanel = async (req, res)=>{
                 missedFollowups:followupStats.missed,
                 upcomingFollowups:followupStats.upcoming,
                 highPriorityFollowups:followupStats.highPriority,
+                callbacksDue:followupStats.callbacksDue || 0,
                 siteVisits:leads.filter(lead => lead.conductSiteVisit).length,
                 bookings:bookings.length,
                 tasks:tasks.length

@@ -107,6 +107,18 @@ const leadStageFilters = [
   { key: "Unqualified", label: "Unqualified" },
 ];
 
+const dispositionLeadFilters = [
+  { key: "disposition:Callback Later", label: "Callback Later" },
+  { key: "disposition:Not Interested", label: "Not Interested" },
+  { key: "disposition:Site Visit Scheduled", label: "Site Visit Scheduled" },
+  { key: "disposition:Wrong Number", label: "Wrong Number" },
+  { key: "disposition:No Answer", label: "No Answer" },
+  { key: "disposition:Busy", label: "Busy" },
+  { key: "disposition:Follow-up Required", label: "Follow-up Required" },
+  { key: "disposition:Junk", label: "Junk" },
+  { key: "disposition:Qualified", label: "Qualified" },
+];
+
 const initials = (name) =>
   name
     .split(" ")
@@ -157,6 +169,16 @@ const getLeadPhone = (lead) => {
 const getActionPhone = (lead) => getLeadPhone(lead).replace(/[^\d+]/g, "");
 
 const getLeadId = (lead) => lead?.id || lead?._id || lead?.lead_id || "";
+
+const getLatestDisposition = (lead) =>
+  Array.isArray(lead?.callLogs)
+    ? lead.callLogs.find((call) => call?.disposition) || null
+    : lead?.latestDisposition || null;
+
+const getDispositionFilterValue = (filterKey) =>
+  String(filterKey || "").startsWith("disposition:")
+    ? String(filterKey).slice("disposition:".length)
+    : "";
 
 const getCreatedLabel = (lead) => {
   const rawDate = lead?.createdAt || lead?.conductSiteDate || lead?.birthday;
@@ -317,6 +339,31 @@ const formatTaskDate = (value) => {
   });
 };
 
+const formatTaskDateTime = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
+const getDispositionDetail = (callLog) => {
+  if (!callLog?.disposition) return "-";
+  if (callLog.disposition === "Callback Later") {
+    return callLog.nextFollowUpAt ? `Callback: ${formatTaskDateTime(callLog.nextFollowUpAt)}` : "Callback time pending";
+  }
+  if (callLog.disposition === "Site Visit Scheduled") {
+    return callLog.visitDateTime ? `Visit: ${formatTaskDateTime(callLog.visitDateTime)}` : "Visit time pending";
+  }
+  return callLog.notes || callLog.interestedProject || formatTaskDateTime(callLog.createdAt);
+};
+
 const getDateKey = (value) => {
   if (!value) return "";
   const date = new Date(value);
@@ -389,6 +436,7 @@ const SalesUserPanel = () => {
   const [callLogsByLead, setCallLogsByLead] = useState({});
   const [callingLeadId, setCallingLeadId] = useState(null);
   const [callTarget, setCallTarget] = useState(null);
+  const [activeCallDispositionTab, setActiveCallDispositionTab] = useState("Callback Later");
   const [disposedLeadIds, setDisposedLeadIds] = useState([]);
   const [dispositionTarget, setDispositionTarget] = useState(null);
   const [dispositionInitialValue, setDispositionInitialValue] = useState("");
@@ -683,6 +731,38 @@ const SalesUserPanel = () => {
     return panel.leads.filter((lead) => !disposedLeadIds.includes(String(getLeadId(lead))));
   }, [disposedLeadIds, panel.leads]);
 
+  const getLeadDisposition = useCallback(
+    (lead) => {
+      const leadId = String(getLeadId(lead));
+      return callLogsByLead[leadId]?.disposition
+        ? callLogsByLead[leadId]
+        : getLatestDisposition(lead);
+    },
+    [callLogsByLead]
+  );
+
+  const callDispositionBuckets = useMemo(() => {
+    return dispositionLeadFilters.map((filter) => {
+      const disposition = getDispositionFilterValue(filter.key);
+      const leads = panel.leads
+        .map((lead) => ({
+          lead,
+          callLog:getLeadDisposition(lead),
+        }))
+        .filter((item) => item.callLog?.disposition === disposition);
+
+      return {
+        ...filter,
+        disposition,
+        leads,
+      };
+    });
+  }, [getLeadDisposition, panel.leads]);
+
+  const activeCallDispositionBucket =
+    callDispositionBuckets.find((bucket) => bucket.disposition === activeCallDispositionTab) ||
+    callDispositionBuckets[0];
+
   useEffect(() => {
     const interval = window.setInterval(() => setCallNow(Date.now()), 1000);
     return () => window.clearInterval(interval);
@@ -832,6 +912,7 @@ const SalesUserPanel = () => {
 
   const filteredLeads = useMemo(() => {
     let leads = panel.leads;
+    const activeDisposition = getDispositionFilterValue(activeLeadStage);
 
     if (activeScreen === "followups") {
       leads = leads.filter((lead) => {
@@ -845,7 +926,9 @@ const SalesUserPanel = () => {
     }
 
     if (activeScreen !== "bookings") {
-      if (activeLeadStage === "visited") {
+      if (activeDisposition) {
+        leads = leads.filter((lead) => getLeadDisposition(lead)?.disposition === activeDisposition);
+      } else if (activeLeadStage === "visited") {
         leads = leads.filter((lead) => lead.conductSiteVisit || lead.conductSiteDate);
       } else if (activeLeadStage !== "all") {
         leads = leads.filter((lead) => getLeadStage(lead) === activeLeadStage);
@@ -853,7 +936,7 @@ const SalesUserPanel = () => {
     }
 
     return leads;
-  }, [activeLeadStage, activeScreen, callbackLeadIds, panel.leads]);
+  }, [activeLeadStage, activeScreen, callbackLeadIds, getLeadDisposition, panel.leads]);
 
   const isPaginatedLeadTable = activeScreen === "leads" || activeScreen === "bookings";
 
@@ -1229,7 +1312,6 @@ const SalesUserPanel = () => {
   const openCallPage = (lead = null) => {
     if (lead) {
       setFocusedCallLeadId(getLeadId(lead));
-      setCallTarget(lead);
     }
     setOpenActionLeadId(null);
     setActiveScreen("calls");
@@ -1332,12 +1414,18 @@ const SalesUserPanel = () => {
       followUp: "Follow-up Required",
     };
     const callLog = callLogsByLead[leadId];
-    if (!callLog?.id) {
-      setCallTarget(lead);
-      return;
-    }
     setDispositionInitialValue(dispositionLabels[type] || type);
-    setDispositionTarget({ lead, callLog });
+    setDispositionTarget({
+      lead,
+      callLog:callLog?.id ? callLog : {
+        id:null,
+        leadId:Number(leadId),
+        leadPhone:getActionPhone(lead),
+        phone:getActionPhone(lead),
+        status:"completed",
+        provider:"manual",
+      },
+    });
   };
 
   const updateTaskStatus = async (taskId, status) => {
@@ -1647,7 +1735,10 @@ const SalesUserPanel = () => {
   const visibleLeadStageFilters =
     activeScreen === "bookings"
       ? [{ key: "all", label: "All" }]
+      : activeScreen === "leads"
+        ? [...leadStageFilters, ...dispositionLeadFilters]
       : leadStageFilters;
+  const activeDispositionFilter = getDispositionFilterValue(activeLeadStage);
 
   return (
     <div
@@ -1796,6 +1887,11 @@ const SalesUserPanel = () => {
                 <span>Upcoming follow-ups</span>
                 <strong>{loading ? "..." : panel.stats.upcomingFollowups || 0}</strong>
                 <small>Future schedule</small>
+              </button>
+              <button type="button" className="sales-stat sales-stat-click" onClick={() => openFollowups("callbacks")}>
+                <span>Callbacks due</span>
+                <strong>{loading ? "..." : panel.stats.callbacksDue || 0}</strong>
+                <small>Callback queue</small>
               </button>
               <button type="button" className="sales-stat sales-stat-click" onClick={() => openFollowups("all")}>
                 <span>High priority</span>
@@ -1978,6 +2074,58 @@ const SalesUserPanel = () => {
                 <div><span>Connected</span><strong>{connectedCallLeads.length}</strong></div>
                 <div><span>Qualified</span><strong>{qualifiedCount}</strong></div>
                 <div><span>Talk time</span><strong>{connectedCallLeads.length ? `${connectedCallLeads.length * 7}m` : "0m"}</strong></div>
+              </div>
+
+              <div className="sales-call-list-card sales-disposition-list-card">
+                <div className="sales-card-head">
+                  <div>
+                    <h2>Disposition buckets</h2>
+                    <p>Work each outcome separately</p>
+                  </div>
+                </div>
+                <div className="sales-disposition-tabs" aria-label="Disposition filters">
+                  {callDispositionBuckets.map((bucket) => (
+                    <button
+                      key={bucket.key}
+                      type="button"
+                      className={activeCallDispositionTab === bucket.disposition ? "active" : ""}
+                      onClick={() => setActiveCallDispositionTab(bucket.disposition)}
+                    >
+                      {bucket.label}
+                      <span>{bucket.leads.length}</span>
+                    </button>
+                  ))}
+                </div>
+                {!activeCallDispositionBucket?.leads.length ? (
+                  <div className="sales-empty compact">No leads in this disposition yet.</div>
+                ) : (
+                  <div className="sales-disposition-list">
+                    {activeCallDispositionBucket.leads.map(({ lead, callLog }) => (
+                      <button
+                        type="button"
+                        className="sales-disposition-row"
+                        key={`${activeCallDispositionBucket.disposition}-${getLeadId(lead)}`}
+                        onClick={() => {
+                          setFocusedCallLeadId(getLeadId(lead));
+                          setActiveScreen("calls");
+                        }}
+                      >
+                        <span className="sales-lead-name">
+                          <span className="sales-avatar small">{initials(getLeadName(lead))}</span>
+                          <span>
+                            <strong>{getLeadName(lead)}</strong>
+                            <small>{getLeadPhone(lead)}</small>
+                          </span>
+                        </span>
+                        <span>
+                          <strong>{callLog.disposition}</strong>
+                          <small>{getDispositionDetail(callLog)}</small>
+                        </span>
+                        <time>{formatTaskDateTime(callLog.updatedAt || callLog.createdAt)}</time>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {connectedCallLeads.length > 0 && (
@@ -2303,10 +2451,11 @@ const SalesUserPanel = () => {
               </div>
 
               <div className="sales-table">
-                <div className="sales-table-head">
+                <div className={`sales-table-head ${activeDispositionFilter ? "with-disposition" : ""}`}>
                   <span>Lead</span>
                   <span>Requirement</span>
                   <span>Status</span>
+                  {activeDispositionFilter && <span>Disposition details</span>}
                   <span>Action</span>
                 </div>
                 {tableLeads.length === 0 && (
@@ -2322,10 +2471,11 @@ const SalesUserPanel = () => {
                 )}
                 {tableLeads.map((lead) => {
                   const leadId = getLeadId(lead);
+                  const latestDisposition = getLeadDisposition(lead);
 
                   return (
                   <div
-                    className="sales-row"
+                    className={`sales-row ${activeDispositionFilter ? "with-disposition" : ""}`}
                     key={leadId || lead.email}
                     onClick={() => {
                       if (isBookedLead(lead)) {
@@ -2349,6 +2499,12 @@ const SalesUserPanel = () => {
                     <span>
                       <mark>{statusLabel[lead.status] || lead.status || "New"}</mark>
                     </span>
+                    {activeDispositionFilter && (
+                      <span className="sales-disposition-cell">
+                        <strong>{latestDisposition?.disposition || "-"}</strong>
+                        <small>{getDispositionDetail(latestDisposition)}</small>
+                      </span>
+                    )}
                     <span className="sales-row-actions" onClick={(event) => event.stopPropagation()}>
                       <button
                         type="button"

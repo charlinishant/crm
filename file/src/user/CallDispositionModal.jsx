@@ -75,7 +75,9 @@ const CallDispositionModal = ({ lead, callLog, projects = [], initialDisposition
           ...(token ? { Authorization:`Bearer ${token}` } : {}),
         },
         body:JSON.stringify({
-          callLogId:callLog.id,
+          callLogId:callLog.id || null,
+          leadId:lead.id || callLog.leadId,
+          leadPhone:callLog.leadPhone || callLog.phone || lead.leadPhone || lead.phone || "",
           ...form,
           nextFollowUpAt:needsFollowUp ? form.nextFollowUpAt : null,
           visitDateTime:needsVisit ? form.visitDateTime : null,
@@ -99,7 +101,7 @@ const CallDispositionModal = ({ lead, callLog, projects = [], initialDisposition
         <div className="call-disposition-head">
           <div>
             <h3 id="call-disposition-title">Call disposition</h3>
-            <p>{[lead.firstName, lead.lastName].filter(Boolean).join(" ") || `Lead #${lead.id}`} · Call #{callLog.id}</p>
+            <p>{[lead.firstName, lead.lastName].filter(Boolean).join(" ") || `Lead #${lead.id}`} - {callLog.id ? `Call #${callLog.id}` : "Manual call log"}</p>
           </div>
           <button type="button" onClick={onClose} disabled={saving} aria-label="Close"><X size={18} /></button>
         </div>
@@ -116,7 +118,7 @@ const CallDispositionModal = ({ lead, callLog, projects = [], initialDisposition
               <datalist id="call-project-options">{projects.map((project) => <option key={project.id || project.name} value={project.name} />)}</datalist>
             </label>
             <label><span>Budget</span><input value={form.budget} onChange={(e) => update("budget", e.target.value)} placeholder="Enter budget" /></label>
-            {needsFollowUp && <label className="wide"><span>Next follow-up date and time</span><input type="datetime-local" required value={form.nextFollowUpAt} onChange={(e) => update("nextFollowUpAt", e.target.value)} /></label>}
+            {needsFollowUp && <label className="wide"><span>{form.disposition === "Callback Later" ? "Callback date and time" : "Next follow-up date and time"}</span><input type="datetime-local" required value={form.nextFollowUpAt} onChange={(e) => update("nextFollowUpAt", e.target.value)} /></label>}
             {needsVisit && <label className="wide"><span>Visit date and time</span><input type="datetime-local" required value={form.visitDateTime} onChange={(e) => update("visitDateTime", e.target.value)} /></label>}
             <label className="wide"><span>Notes</span><textarea rows="4" value={form.notes} onChange={(e) => update("notes", e.target.value)} placeholder="Call notes and next action" /></label>
           </div>
