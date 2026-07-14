@@ -54,21 +54,25 @@ model ProjectSalesUser {
 model Tower{
   id Int @id @default(autoincrement())
   name String 
+  wingCode String?
+  floorNumberingConvention String @default("GROUND_IS_FLOOR_1")
+  skippedFloors String?
   projectId Int
-  project Project @relation("Project",  fields: [projectId], references: [id])
+  project Project @relation("Project",  fields: [projectId], references: [id], onDelete: Restrict)
   totalFloor Int? @default(0)
   reraTowerId String?
   floors FloorPlan[] @relation("Tower")
   units Unit[] @relation("Tower")
+  floorPlanSlots FloorPlanSlot[]
 }
 
 model FloorPlan{
   id Int @id @default(autoincrement())
   name String
-  projectId Int?
-  project Project? @relation("Project",  fields: [projectId], references: [id])
-  towerId Int?
-  tower Tower? @relation("Tower",  fields: [towerId], references: [id])
+  projectId Int
+  project Project @relation("Project",  fields: [projectId], references: [id], onDelete: Restrict)
+  towerId Int
+  tower Tower @relation("Tower",  fields: [towerId], references: [id], onDelete: Restrict)
   configurationLabel String?
   status String? @default("Active")
   unitStream String? @default("Sale Unit")
@@ -153,6 +157,21 @@ model FloorPlan{
   agreementTemplate String?
 
   units Unit[] @relation("Floor")
+  slots FloorPlanSlot[]
+}
+
+model FloorPlanSlot {
+  id Int @id @default(autoincrement())
+  floorPlanId Int
+  floorPlan FloorPlan @relation(fields: [floorPlanId], references: [id], onDelete: Cascade)
+  towerId Int
+  tower Tower @relation(fields: [towerId], references: [id], onDelete: Restrict)
+  floor Int
+  unitPosition String
+  createdAt DateTime @default(now())
+
+  @@unique([towerId, floor, unitPosition])
+  @@index([floorPlanId])
 }
 
 model UnitModel{
@@ -163,20 +182,40 @@ model UnitModel{
   baseRate Float? 
   basePrice Float?
   propertyPurpose String? 
+  status UnitStatus @default(Available)
+  heldBy String?
+  heldUntil DateTime?
   unitId Int
   unit Unit @relation(fields: [unitId], references: [id])
+  bookings Booking[]
+
+  @@index([status])
+  @@index([heldBy])
+  @@index([heldUntil])
+}
+
+enum UnitStatus {
+  Available
+  Held
+  Blocked
+  Booked
+  Registered
+  Possession_Given
+  Cancelled
+  Refuge
+  Investor
 }
 
 
 model Unit{
   id Int @id @default(autoincrement())
   unitList UnitModel[]
-  projectId Int?
-  project Project? @relation("Project",  fields: [projectId], references: [id])
-  towerId Int?
-  tower Tower? @relation("Tower",  fields: [towerId], references: [id])
-  floorId Int?
-  floor FloorPlan? @relation("Floor",  fields: [floorId], references: [id])
+  projectId Int
+  project Project @relation("Project",  fields: [projectId], references: [id], onDelete: Restrict)
+  towerId Int
+  tower Tower @relation("Tower",  fields: [towerId], references: [id], onDelete: Restrict)
+  floorId Int
+  floor FloorPlan @relation("Floor",  fields: [floorId], references: [id], onDelete: Restrict)
   type String?
   category String?
   bedrooms Int? 
@@ -515,11 +554,20 @@ model Booking{
   unitCount Int?
   unitId Int?
   unit Unit? @relation(fields: [unitId], references: [id])
+  unitItemId Int?
+  unitItem UnitModel? @relation(fields: [unitItemId], references: [id], onDelete: SetNull)
+  activeUnitItemId Int? @unique
+  idempotencyKey String? @unique
   customerName String?
   stage String? @default("Tentative")
   projectDetails String?
   bookedOn DateTime?
+  carpetArea Float?
+  builtupArea Float?
   saleableArea Float?
+  rateBasis String?
+  priceArea Float?
+  priceFrozenAt DateTime?
   basePrice Float?
   baseRate Float?
   source String?

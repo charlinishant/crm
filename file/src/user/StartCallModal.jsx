@@ -100,6 +100,7 @@ const StartCallModal = ({ lead, leadPhone, initialAgentPhone, onClose, onStart }
             <X size={19} />
           </button>
         </header>
+     
 
         {callLog ? (
           <div className="start-call-success">

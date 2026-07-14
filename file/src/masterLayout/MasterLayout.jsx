@@ -89,6 +89,40 @@ const MasterLayout = ({ children }) => {
   };
 
   useEffect(() => {
+    const token = localStorage.getItem("authToken");
+    if (!token) return undefined;
+
+    const headers = { Authorization: `Bearer ${token}` };
+    const markAvailable = () => {
+      fetch(`${API_URL}/attendance/login`, {
+        method: "POST",
+        headers,
+      }).catch((error) => {
+        console.error("Unable to update attendance login:", error);
+      });
+    };
+    const markLoggedOut = () => {
+      const latestToken = localStorage.getItem("authToken");
+      if (!latestToken) return;
+
+      fetch(`${API_URL}/attendance/logout`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${latestToken}` },
+        keepalive: true,
+      }).catch(() => {});
+    };
+
+    markAvailable();
+    const heartbeatId = window.setInterval(markAvailable, 60000);
+    window.addEventListener("pagehide", markLoggedOut);
+
+    return () => {
+      window.clearInterval(heartbeatId);
+      window.removeEventListener("pagehide", markLoggedOut);
+    };
+  }, []);
+
+  useEffect(() => {
     const refreshNotifications = () => {
       fetchActivityNotifications()
         .then((notifications) => {

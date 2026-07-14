@@ -32,6 +32,8 @@ const emptyBookingForm = {
   projectId: "",
   unit: "",
   unitId: "",
+  unitItemId: "",
+  idempotencyKey: "",
   customerName: "",
   stage: "Booked",
   projectDetails: "",
@@ -39,6 +41,7 @@ const emptyBookingForm = {
   saleableArea: "",
   basePrice: "",
   baseRate: "",
+  projectUnitStatus: "Booked",
   bookingCancellationReason: "",
   bookingCancellationNote: "",
   campaign: "walkin",
@@ -113,6 +116,54 @@ const calculateBasePriceForRateBasis = ({ baseRate, rateBasis, carpet, builtupAr
   if (!rate || !area) return 0;
   return rate * area;
 };
+
+const getDisplayValue = (value, fallback = "-") => {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "object") return value.name || value.title || value.label || value.value || fallback;
+  return value;
+};
+
+const UNIT_STATUSES = [
+  { value: "Available", label: "Available" },
+  { value: "Held", label: "Held" },
+  { value: "Blocked", label: "Blocked" },
+  { value: "Booked", label: "Booked" },
+  { value: "Registered", label: "Registered" },
+  { value: "Possession_Given", label: "Possession Given" },
+  { value: "Cancelled", label: "Cancelled" },
+  { value: "Refuge", label: "Refuge" },
+  { value: "Investor", label: "Investor" },
+];
+
+const unitStatusLabels = UNIT_STATUSES.reduce((labels, status) => {
+  labels[status.value] = status.label;
+  return labels;
+}, {});
+
+const normalizeUnitStatus = (status) => {
+  const value = String(status || "Available").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const aliases = {
+    available: "Available",
+    selected: "Available",
+    held: "Held",
+    hold: "Held",
+    blocked: "Blocked",
+    block: "Blocked",
+    booked: "Booked",
+    sold: "Booked",
+    unavailable: "Booked",
+    registered: "Registered",
+    possession_given: "Possession_Given",
+    cancelled: "Cancelled",
+    canceled: "Cancelled",
+    refuge: "Refuge",
+    investor: "Investor",
+  };
+
+  return aliases[value] || "Available";
+};
+
+const getUnitStatusLabel = (status) => unitStatusLabels[normalizeUnitStatus(status)] || "Available";
 
 const calculateCostNewValue = (row) => {
   const original = toCleanNumber(row.originalValue);
@@ -324,9 +375,12 @@ const UserPreview = () => {
         (group.unitList || []).map((unit) => ({
           ...unit,
           groupId: group.id,
+          unitItemId: unit.id,
           project: group.project,
           tower: group.tower,
           floorPlan: group.floor,
+          floor: getDisplayValue(unit.floor, getDisplayValue(group.floor, "-")),
+          status: normalizeUnitStatus(unit.status || group.status || unit.unitStatus || group.unitStatus),
           category: group.category,
           type: group.type,
           bedrooms: group.bedrooms,
@@ -620,6 +674,7 @@ const UserPreview = () => {
         projectDetails: prev.projectDetails || projectName,
         unit: "",
         unitId: "",
+        unitItemId: "",
       }));
       return;
     }
@@ -636,28 +691,32 @@ const UserPreview = () => {
       projectDetails: project?.name || "",
       unit: "",
       unitId: "",
+      unitItemId: "",
     }));
   };
 
   const handleBookingFilterChange = (filterKey, value) => {
     setBookingFilters((prev) => ({ ...prev, [filterKey]: value }));
-    setBookingForm((prev) => ({ ...prev, unit: "", unitId: "" }));
+    setBookingForm((prev) => ({ ...prev, unit: "", unitId: "", unitItemId: "" }));
   };
 
   const handleClearBookingFilters = () => {
     setBookingFilters(defaultBookingFilters);
     setSelectedBookingTowerId("");
-    setBookingForm((prev) => ({ ...prev, unit: "", unitId: "" }));
+    setBookingForm((prev) => ({ ...prev, unit: "", unitId: "", unitItemId: "" }));
   };
 
   const handleBookingTowerChange = (event) => {
     setSelectedBookingTowerId(event.target.value);
-    setBookingForm((prev) => ({ ...prev, unit: "", unitId: "" }));
+    setBookingForm((prev) => ({ ...prev, unit: "", unitId: "", unitItemId: "" }));
   };
 
   const handleBookingUnitSelect = (unit) => {
+    if (normalizeUnitStatus(unit.status) !== "Available") return;
+
     const unitName = getBookingUnitOptionLabel(unit);
-    const unitId = unit.id || unit.groupId || "";
+    const unitId = unit.groupId || unit.id || "";
+    const unitItemId = unit.unitItemId || unit.id || "";
     const unitBasePrice = calculateBasePriceForRateBasis({
       baseRate: unit.baseRate,
       rateBasis: unit.rateBasis,
@@ -673,6 +732,7 @@ const UserPreview = () => {
       ...prev,
       unit: unitName,
       unitId,
+      unitItemId,
       projectId: unit.project?.id || prev.projectId,
       projectDetails: unit.project?.name || prev.projectDetails,
       basePrice: unitBasePrice || "",
@@ -783,6 +843,7 @@ const UserPreview = () => {
       ...emptyBookingForm,
       customerName: leadName,
       projectDetails: projectName,
+      idempotencyKey: `booking-${leadId}-${Date.now()}`,
     });
     setBookingMessage(message);
     setBookingProjectMessage("");
@@ -824,6 +885,7 @@ const UserPreview = () => {
       ...emptyBookingForm,
       customerName: leadName,
       projectDetails: projectName,
+      idempotencyKey: `booking-${leadId}-${Date.now()}`,
     });
     setBookingMessage(requestedBookingStep === 2 ? "Complete the booking confirmation details." : "");
     setBookingStepIndex(requestedBookingStep);
@@ -858,11 +920,7 @@ const UserPreview = () => {
   };
 
   const formatBookingDetail = (value, fallback = "-") => {
-    if (value === undefined || value === null || value === "") return fallback;
-    if (typeof value === "object") {
-      return value.name || value.title || value.label || value.value || fallback;
-    }
-    return value;
+    return getDisplayValue(value, fallback);
   };
 
   const quotationProjectName =
@@ -968,7 +1026,7 @@ const UserPreview = () => {
     : lead.phone || lead.mobile || "-";
   const bookingUnitDetails = [
     ["Name", quotationUnitName],
-    ["Status", formatBookingDetail(selectedBookingUnit?.status, "Available")],
+    ["Status", getUnitStatusLabel(selectedBookingUnit?.status)],
     ["Floor", quotationFloor],
     ["Project Tower Name", quotationTowerName],
     ["Bedrooms", formatBookingDetail(selectedBookingUnit?.bedrooms, "-")],
@@ -1073,6 +1131,8 @@ const UserPreview = () => {
           stage: "Booked",
           leadId: Number(leadId),
           unitId: bookingForm.unitId ? Number(bookingForm.unitId) : undefined,
+          unitItemId: bookingForm.unitItemId ? Number(bookingForm.unitItemId) : undefined,
+          idempotencyKey: bookingForm.idempotencyKey || `booking-${leadId}-${bookingForm.unitItemId || Date.now()}`,
           source: bookingForm.source || leadSource,
           bookedBy: owner,
           bookedOn: bookingForm.bookedOn || bookingConfirmationDate,
@@ -2506,6 +2566,15 @@ const UserPreview = () => {
   background: #fbf9ff;
 }
 
+.booking-unit-option.is-locked,
+.booking-unit-option:disabled {
+  background: #f1f5f9;
+  border-color: #d7dee8;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.78;
+}
+
 .booking-unit-option strong,
 .booking-unit-option span {
   display: block;
@@ -3806,6 +3875,7 @@ const UserPreview = () => {
               isSavingBooking={isSavingBooking}
               isLoadingBookingProject={isLoadingBookingProject}
               bookingSuccess={isBookingSuccess}
+              bookingHoldOwner={owner}
               onClose={handleCloseBookingForm}
               onSubmit={handleSaveBooking}
               onPrevious={() => setBookingStepIndex((current) => Math.max(0, current - 1))}
@@ -3875,7 +3945,7 @@ const UserPreview = () => {
                                 (item) => getBookingUnitOptionValue(item) === event.target.value
                               );
                               if (unit) handleBookingUnitSelect(unit);
-                              else setBookingForm((prev) => ({ ...prev, unit: "", unitId: "" }));
+                              else setBookingForm((prev) => ({ ...prev, unit: "", unitId: "", unitItemId: "" }));
                             }}
                             disabled={!visibleBookingUnits.length}
                           >
@@ -3979,13 +4049,14 @@ const UserPreview = () => {
                         {visibleBookingUnits.map((unit) => (
                           <button
                             type="button"
-                            className={`booking-unit-option${bookingForm.unit === unit.name ? " is-selected" : ""}`}
+                            className={`booking-unit-option${bookingForm.unit === unit.name ? " is-selected" : ""}${normalizeUnitStatus(unit.status) !== "Available" ? " is-locked" : ""}`}
                             key={`${unit.groupId}-${unit.id}`}
                             onClick={() => handleBookingUnitSelect(unit)}
+                            disabled={normalizeUnitStatus(unit.status) !== "Available"}
                           >
                             <strong>{unit.name || `Unit ${unit.unitIndex || unit.id}`}</strong>
-                            <span>Floor: {unit.floor || unit.floorPlan?.name || "-"} | Carpet Area: {unit.carpet || "-"} Sq. Ft.</span>
-                            <span>Saleable Area: {unit.saleable || "-"} Sq. Ft. | Rs. {Number(unit.basePrice || 0).toLocaleString("en-IN")}</span>
+                            <span>Floor: {formatBookingDetail(unit.floor, unit.floorPlan?.name || "-")} | Carpet Area: {unit.carpet || "-"} Sq. Ft.</span>
+                            <span>{getUnitStatusLabel(unit.status)} | Saleable Area: {unit.saleable || "-"} Sq. Ft. | Rs. {Number(unit.basePrice || 0).toLocaleString("en-IN")}</span>
                           </button>
                         ))}
                       </div>
@@ -4018,14 +4089,18 @@ const UserPreview = () => {
                               (item) => getBookingUnitOptionValue(item) === event.target.value
                             );
                             if (unit) handleBookingUnitSelect(unit);
-                            else setBookingForm((prev) => ({ ...prev, unit: "", unitId: "" }));
+                            else setBookingForm((prev) => ({ ...prev, unit: "", unitId: "", unitItemId: "" }));
                           }}
                           required
                         >
                           <option value="">Select Unit</option>
                           {visibleBookingUnits.map((unit) => (
-                            <option key={`final-${getBookingUnitOptionValue(unit)}`} value={getBookingUnitOptionValue(unit)}>
-                              {getBookingUnitOptionLabel(unit)}
+                            <option
+                              key={`final-${getBookingUnitOptionValue(unit)}`}
+                              value={getBookingUnitOptionValue(unit)}
+                              disabled={normalizeUnitStatus(unit.status) !== "Available"}
+                            >
+                              {getBookingUnitOptionLabel(unit)} - {getUnitStatusLabel(unit.status)}
                             </option>
                           ))}
                         </select>
@@ -4040,7 +4115,7 @@ const UserPreview = () => {
                       <span>{bookingProjectDetails?.projectType || "Residential"} · {visibleBookingUnits.length} of {flattenedBookingUnits.length} units shown</span>
                       {selectedBookingUnit && (
                         <>
-                          <span>{selectedBookingUnit.tower?.name || activeTowerName} | Floor {selectedBookingUnit.floor || quotationFloor}</span>
+                          <span>{formatBookingDetail(selectedBookingUnit.tower, activeTowerName)} | Floor {formatBookingDetail(selectedBookingUnit.floor, quotationFloor)}</span>
                           <span>Carpet {selectedBookingUnit.carpet || "-"} Sq. Ft. | Saleable {selectedBookingUnit.saleable || "-"} Sq. Ft.</span>
                           <span>Base price Rs. {Number(baseAgreementValue || 0).toLocaleString("en-IN")}</span>
                         </>
@@ -4346,15 +4421,13 @@ const UserPreview = () => {
                         <select name="stage" value={bookingForm.stage} onChange={handleBookingChange}>
                           <option value="Tentative">Tentative</option>
                           <option value="Booked">Booked</option>
-                          <option value="Hold">Hold</option>
+                          <option value="Held">Held</option>
                         </select>
                       </label>
                       <label className="booking-confirmation-input">
                         <span>Select Project Unit Status *</span>
-                        <select defaultValue="Booked">
-                          <option>Booked</option>
-                          <option>Hold</option>
-                          <option>Available</option>
+                        <select name="projectUnitStatus" value={bookingForm.projectUnitStatus || "Booked"} onChange={handleBookingChange}>
+                          <option value="Booked">Booked</option>
                         </select>
                       </label>
                     </div>

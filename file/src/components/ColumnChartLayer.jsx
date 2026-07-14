@@ -42,6 +42,19 @@ const toBoolean = (value) => value === true || String(value).toLowerCase() === "
 
 const getProjectName = (project) => project?.name || project?.projectName || `Project #${project?.id}`;
 
+const formatDisplayValue = (value) => {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value)) {
+    if (!value.length) return "-";
+    return value.map(formatDisplayValue).join(", ");
+  }
+  if (typeof value === "object") {
+    return value.name || value.label || value.title || value.id || "-";
+  }
+  return value;
+};
+
 const ColumnChartLayer = () => {
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
@@ -125,7 +138,7 @@ const ColumnChartLayer = () => {
       locality: project.locality || "",
       latitude: project.latitude || "",
       longitude: project.longitude || "",
-      noOfTowers: project.noOfTowers ?? "",
+      noOfTowers: project.towerCount ?? project.noOfTowers ?? 0,
       active: Boolean(project.active),
       inventory: Boolean(project.inventory),
       integratedPortals: project.integratedPortals || "",
@@ -207,7 +220,6 @@ const ColumnChartLayer = () => {
       locality: projectForm.locality,
       latitude: projectForm.latitude,
       longitude: projectForm.longitude,
-      noOfTowers: Number(projectForm.noOfTowers) || 0,
       active: toBoolean(projectForm.active),
       inventory: toBoolean(projectForm.inventory),
       integratedPortals: projectForm.integratedPortals || "",
@@ -351,7 +363,7 @@ const ColumnChartLayer = () => {
 const ProjectRow = ({ project, isOpen, onToggleMenu, onEdit, onView, onDelete }) => (
   <tr>
     <td>{project.name}</td>
-    <td>{project.noOfTowers ?? 0}</td>
+    <td>{project.towerCount ?? project.noOfTowers ?? project._count?.tower ?? 0}</td>
     <td>{project.active ? "Yes" : "No"}</td>
     <td>{project.inventory ? "Yes" : "No"}</td>
     <td>{project.sales || "-"}</td>
@@ -407,7 +419,7 @@ const ProjectEditModal = ({ form, isSaving, onChange, onClose, onSubmit }) => (
 
         <label>
           <span>Number of Towers</span>
-          <input name="noOfTowers" type="number" min="0" value={form.noOfTowers} onChange={onChange} />
+          <input name="noOfTowers" type="number" min="0" value={form.noOfTowers} readOnly />
         </label>
 
         <label>
@@ -562,7 +574,7 @@ const ProjectViewModal = ({ project, viewData, onClose }) => (
 const Detail = ({ label, value, wide = false }) => (
   <div className={wide ? "wide" : ""}>
     <span>{label}</span>
-    <strong>{value || "-"}</strong>
+    <strong>{formatDisplayValue(value)}</strong>
   </div>
 );
 
@@ -587,7 +599,7 @@ const RelatedSection = ({ title, columns, rows }) => (
             rows.map((row, rowIndex) => (
               <tr key={`${title}-${rowIndex}`}>
                 {row.map((cell, cellIndex) => (
-                  <td key={`${title}-${rowIndex}-${cellIndex}`}>{cell || "-"}</td>
+                  <td key={`${title}-${rowIndex}-${cellIndex}`}>{formatDisplayValue(cell)}</td>
                 ))}
               </tr>
             ))

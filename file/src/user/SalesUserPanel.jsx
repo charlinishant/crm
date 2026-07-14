@@ -236,6 +236,8 @@ const emptyBookingForm = {
   projectId: "",
   unit: "",
   unitId: "",
+  unitItemId: "",
+  idempotencyKey: "",
   customerName: "",
   phone: "",
   email: "",
@@ -1500,6 +1502,7 @@ const SalesUserPanel = () => {
       source: leadSource,
       companyName: lead?.companyName || "",
       bookedOn: localDate,
+      idempotencyKey: `booking-${getLeadId(lead) || "lead"}-${Date.now()}`,
     });
     setIsBookingFormOpen(true);
   };
@@ -1594,7 +1597,9 @@ const SalesUserPanel = () => {
           leadId: Number(leadId),
           stage: "Booked",
           unitId: bookingForm.unitId ? Number(bookingForm.unitId) : undefined,
+          unitItemId: bookingForm.unitItemId ? Number(bookingForm.unitItemId) : undefined,
           bookedBy: userName,
+          idempotencyKey: bookingForm.idempotencyKey || `booking-${leadId}-${bookingForm.unitItemId || Date.now()}`,
           bookedOn: bookingForm.bookedOn || new Date().toISOString().slice(0, 10),
           saleableArea: bookingForm.saleableArea || bookingForm.carpetArea,
           source: bookingForm.source || bookingForm.campaign,
@@ -1820,7 +1825,7 @@ const SalesUserPanel = () => {
               <div className="sales-role-name">{userName}</div>
               <div className="sales-role-title">{panel.user?.role || "SALES"}</div>
             </div>
-            <ChevronDown size={14} />
+            {/* <ChevronDown size={14} /> */}
           </div>
           <button className="sales-icon-btn" type="button" title="Logout" onClick={logout}>
             <LogOut size={17} />
@@ -2602,6 +2607,7 @@ const SalesUserPanel = () => {
         isLoadingBookingProject={false}
         bookingSuccess={isBookingSuccess}
         onClose={closeBookingForm}
+        bookingHoldOwner={userName}
         onSubmit={handleSaveBooking}
         onPrevious={() => {
           setBookingMessage("");

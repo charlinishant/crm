@@ -1,5 +1,7 @@
 const prisma = require("../lib/prisma")
 
+const ATTENDANCE_STALE_MINUTES = Math.max(1, Number(process.env.ATTENDANCE_STALE_MINUTES) || 2)
+
 const userSelect = {
   id: true,
   username: true,
@@ -43,6 +45,34 @@ const getEffectiveSessionSeconds = (attendance, now = new Date()) => {
   return secondsBetween(attendance.loginAt, attendance.logoutAt || now)
 }
 
+const closeStaleOpenAttendances = async (userId = null) => {
+  const cutoff = new Date(Date.now() - ATTENDANCE_STALE_MINUTES * 60 * 1000)
+  const staleRows = await prisma.userAttendance.findMany({
+    where: {
+      logoutAt: null,
+      updatedAt: { lt: cutoff },
+      ...(userId ? { userId } : {}),
+    },
+  })
+
+  await Promise.all(staleRows.map((row) => {
+    const logoutAt = row.updatedAt || cutoff
+    const extraBreakSeconds = row.breakStartedAt && !row.breakEndedAt
+      ? secondsBetween(row.breakStartedAt, logoutAt)
+      : 0
+
+    return prisma.userAttendance.update({
+      where: { id: row.id },
+      data: {
+        status: "Logged Out",
+        logoutAt,
+        breakEndedAt: row.breakStartedAt && !row.breakEndedAt ? logoutAt : row.breakEndedAt,
+        totalBreakSeconds: row.totalBreakSeconds + extraBreakSeconds,
+      },
+    })
+  }))
+}
+
 const getTodaySummary = async (userId) => {
   const { start, end } = getTodayBounds()
   const now = new Date()
@@ -81,6 +111,22 @@ const getTodayLatestAttendance = (userId) => {
   })
 }
 
+const getTodayOpenAttendance = (userId) => {
+  const { start, end } = getTodayBounds()
+
+  return prisma.userAttendance.findFirst({
+    where: {
+      userId,
+      logoutAt: null,
+      loginAt: {
+        gte: start,
+        lt: end,
+      },
+    },
+    orderBy: { loginAt: "desc" },
+  })
+}
+
 const withTodaySummary = async (attendance) => {
   if (!attendance?.userId) return attendance
   const summary = await getTodaySummary(attendance.userId)
@@ -104,12 +150,13 @@ const getOpenAttendance = (userId) =>
 
 const startOrResumeAttendance = async (userId) => {
   const now = new Date()
+  await closeStaleOpenAttendances(userId)
   const openAttendance = await getOpenAttendance(userId)
 
   if (openAttendance) {
     return prisma.userAttendance.update({
       where: { id: openAttendance.id },
-      data: { status: openAttendance.status || "Available" },
+      data: { status: openAttendance.status && openAttendance.status !== "Logged Out" ? openAttendance.status : "Available" },
     })
   }
 
@@ -172,7 +219,8 @@ exports.endAttendance = async (req, res) => {
     const attendance = await getOpenAttendance(userId)
 
     if (!attendance) {
-      return res.status(404).json({ message: "No active attendance session found" })
+      const data = { status: "Logged Out", ...(await getTodaySummary(userId)) }
+      return res.status(200).json({ data })
     }
 
     const now = new Date()
@@ -263,6 +311,7 @@ exports.endBreak = async (req, res) => {
 exports.getMyAttendance = async (req, res) => {
   try {
     const userId = Number(req.authUser.id)
+    await closeStaleOpenAttendances(userId)
     const attendance = await getOpenAttendance(userId)
     const data = attendance
       ? await withTodaySummary(attendance)
@@ -276,6 +325,8 @@ exports.getMyAttendance = async (req, res) => {
 
 exports.getAttendanceLogs = async (req, res) => {
   try {
+    await closeStaleOpenAttendances()
+
     const page = Math.max(1, Number(req.query.page) || 1)
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10))
     const skip = (page - 1) * limit
@@ -283,9 +334,8 @@ exports.getAttendanceLogs = async (req, res) => {
 
     const userWhere = {
       OR: [
-        { role: "ADMIN" },
-        { role: "SALES" },
-        { department: "SALES" },
+        { role: { in: ["ADMIN", "MANAGER", "PRE_SALES", "SALES", "POST_SALES"] } },
+        { department: { in: ["PRE_SALES", "SALES", "POST_SALES"] } },
       ],
     }
 
@@ -296,25 +346,32 @@ exports.getAttendanceLogs = async (req, res) => {
     })
 
     const attendanceRows = await Promise.all(users.map(async (user) => {
-      const [latestAttendance, summary] = await Promise.all([
+      const [openAttendance, latestAttendance, summary] = await Promise.all([
+        getTodayOpenAttendance(user.id),
         getTodayLatestAttendance(user.id),
         getTodaySummary(user.id),
       ])
-      const resolvedStatus = latestAttendance?.status || "Logged Out"
+      const activeAttendance = openAttendance || latestAttendance
+      const hasOpenSession = Boolean(openAttendance && !openAttendance.logoutAt)
+      const resolvedStatus = hasOpenSession
+        ? openAttendance.status && openAttendance.status !== "Logged Out"
+          ? openAttendance.status
+          : "Available"
+        : latestAttendance?.status || "Logged Out"
 
       return {
-        id: latestAttendance?.id || `user-${user.id}`,
+        id: activeAttendance?.id || `user-${user.id}`,
         userId: user.id,
         user,
         userName: getUserName(user),
         status: resolvedStatus,
-        loginAt: latestAttendance?.loginAt || null,
-        logoutAt: latestAttendance?.logoutAt || null,
-        breakStartedAt: latestAttendance?.breakStartedAt || null,
-        breakEndedAt: latestAttendance?.breakEndedAt || null,
-        totalBreakSeconds: latestAttendance?.totalBreakSeconds || 0,
-        currentSessionSeconds: latestAttendance ? getEffectiveSessionSeconds(latestAttendance) : 0,
-        currentBreakSeconds: latestAttendance ? getEffectiveBreakSeconds(latestAttendance) : 0,
+        loginAt: activeAttendance?.loginAt || null,
+        logoutAt: hasOpenSession ? null : activeAttendance?.logoutAt || null,
+        breakStartedAt: activeAttendance?.breakStartedAt || null,
+        breakEndedAt: activeAttendance?.breakEndedAt || null,
+        totalBreakSeconds: activeAttendance?.totalBreakSeconds || 0,
+        currentSessionSeconds: activeAttendance ? getEffectiveSessionSeconds(activeAttendance) : 0,
+        currentBreakSeconds: activeAttendance ? getEffectiveBreakSeconds(activeAttendance) : 0,
         ...summary,
       }
     }))

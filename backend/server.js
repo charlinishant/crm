@@ -3,13 +3,15 @@ require("dotenv").config()
 const express = require("express")
 const http = require("http")
 const cors = require("cors")
+const path = require("path")
 
 const prisma = require("./lib/prisma")
 const {initSocket} = require("./socket")
 const { initializeCallbackReminders } = require("./services/callbackReminder.service")
+const { initializeUnitHoldReleaseJob } = require("./services/unitHold.service")
 
 const app = express()
-const BODY_LIMIT = process.env.BODY_LIMIT || "100mb"
+const BODY_LIMIT = process.env.BODY_LIMIT || "250mb"
 
 const server = http.createServer(app)
 
@@ -44,6 +46,7 @@ const emailRouetr = require("./router/email.routes")
 app.use(cors({ origin: "*" }))
 app.use(express.json({ limit: BODY_LIMIT }))
 app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }))
+app.use("/uploads", express.static(path.join(__dirname, "uploads")))
 app.use("/projects", projectRouter)
 app.use("/auth", authRouter)
 app.use("/lead-notes", leadNoteRouter)
@@ -87,4 +90,5 @@ server.listen(PORT, () => {
   initializeCallbackReminders().catch((error) => {
     console.error("Unable to initialize callback reminders:", error)
   })
+  initializeUnitHoldReleaseJob()
 })

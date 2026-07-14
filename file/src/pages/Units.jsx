@@ -10,7 +10,20 @@ const emptyEditForm = {
   baseRate: "",
   basePrice: "",
   propertyPurpose: "",
+  status: "Available",
 };
+
+const UNIT_STATUS_OPTIONS = [
+  "Available",
+  "Held",
+  "Blocked",
+  "Booked",
+  "Registered",
+  "Possession_Given",
+  "Cancelled",
+  "Refuge",
+  "Investor",
+];
 
 const toNumberOrNull = (value) => {
   if (value === "" || value === null || value === undefined) return null;
@@ -31,10 +44,22 @@ const calculateBasePrice = (baseRate, unit) => {
   return Number((rate * area).toFixed(2));
 };
 
+const formatDisplayValue = (value) => {
+  if (value === null || value === undefined || value === "") return "-";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value)) {
+    if (!value.length) return "-";
+    return value.map(formatDisplayValue).join(", ");
+  }
+  if (typeof value === "object") {
+    return value.name || value.label || value.title || value.id || "-";
+  }
+  return value;
+};
+
 const Units = () => {
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const [data, setData] = useState([]);
-  const [totalItems, setTotalItems] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [openActionId, setOpenActionId] = useState(null);
@@ -61,37 +86,38 @@ const Units = () => {
           id: unit.id,
           groupId: group.id,
           name: unit.name || "-",
-          floor: unit.floor ?? "-",
+          unitNumber: unit.name || "-",
+          floor: formatDisplayValue(unit.floorNo ?? unit.floorNumber ?? unit.floor),
           baseRate: unit.baseRate ?? "",
+          basePrice: unit.basePrice ?? "",
+          status: formatDisplayValue(unit.status || "Available"),
           propertyPurpose: unit.propertyPurpose || "",
           unitIndex: unit.unitIndex ?? "-",
-          tower: group.tower?.name || "-",
-          config: group.floor?.name || "-",
-          project: group.project?.name || "-",
-          bedrooms: group.bedrooms ?? "-",
-          bathrooms: group.bathrooms ?? "-",
+          tower: group.floor?.tower?.name || group.tower?.name || "-",
+          config: group.floor?.configurationLabel || group.floor?.name || "-",
+          project: group.floor?.project?.name || group.project?.name || "-",
+          bedrooms: group.floor?.bedrooms ?? "-",
+          bathrooms: group.floor?.bathrooms ?? "-",
           rateBasis: group.floor?.rateBasis || "On Carpet",
           builtupArea: group.floor?.builtupArea ?? "",
-          saleableValue: group.saleable || group.floor?.saleable || "",
-          carpetValue: group.carpet || group.floor?.carpet || "",
-          saleable: group.saleable || group.floor?.saleable
-            ? `${group.saleable || group.floor?.saleable} ${group.measure === "sqm" ? "Sq. M." : "Sq. Ft."}`
+          saleableValue: group.floor?.saleable || group.saleable || "",
+          carpetValue: group.floor?.carpet || group.carpet || "",
+          saleable: group.floor?.saleable || group.saleable
+            ? `${group.floor?.saleable || group.saleable} ${group.floor?.measure === "sqm" || group.measure === "sqm" ? "Sq. M." : "Sq. Ft."}`
             : "-",
-          carpet: group.carpet || group.floor?.carpet
-            ? `${group.carpet || group.floor?.carpet} ${group.measure === "sqm" ? "Sq. M." : "Sq. Ft."}`
+          carpet: group.floor?.carpet || group.carpet
+            ? `${group.floor?.carpet || group.carpet} ${group.floor?.measure === "sqm" || group.measure === "sqm" ? "Sq. M." : "Sq. Ft."}`
             : "-",
-          facing: "-",
           leads: "-",
           updated: "-",
         }))
       );
       mapped.forEach((unit) => {
-        unit.basePrice = calculateBasePrice(unit.baseRate, unit);
+        unit.basePrice = unit.basePrice || calculateBasePrice(unit.baseRate, unit);
         unit.price = unit.basePrice || "-";
       });
 
       setData(mapped);
-      setTotalItems(json?.totalItems ?? mapped.length);
     } catch (err) {
       console.error(err);
       setError(err.message || "Failed to load units");
@@ -119,17 +145,22 @@ const Units = () => {
         unit.bathrooms,
         unit.saleable,
         unit.carpet,
-        unit.facing,
         unit.leads,
         unit.updated,
         unit.name,
+        unit.unitNumber,
         unit.floor,
+        unit.status,
         unit.propertyPurpose,
+        unit.baseRate,
+        unit.basePrice,
       ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query))
     );
   }, [data, searchQuery]);
+
+  const displayedItemCount = filteredData.length;
 
   const closeModal = () => {
     if (saving) return;
@@ -152,8 +183,9 @@ const Units = () => {
       floor: unit.floor === "-" ? "" : unit.floor,
       unitIndex: unit.unitIndex === "-" ? "" : unit.unitIndex,
       baseRate: unit.baseRate ?? "",
-      basePrice: calculateBasePrice(unit.baseRate, unit) || "",
+      basePrice: unit.basePrice || calculateBasePrice(unit.baseRate, unit) || "",
       propertyPurpose: unit.propertyPurpose || "",
+      status: unit.status || "Available",
     });
     setModalMode("edit");
   };
@@ -162,9 +194,6 @@ const Units = () => {
     const { name, value } = event.target;
     setEditForm((current) => {
       const next = { ...current, [name]: value };
-      if (name === "baseRate") {
-        next.basePrice = calculateBasePrice(value, selectedUnit) || "";
-      }
       return next;
     });
   };
@@ -179,12 +208,10 @@ const Units = () => {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: editForm.name.trim(),
           floor: toNumberOrNull(editForm.floor),
           unitIndex: toNumberOrNull(editForm.unitIndex),
-          baseRate: toNumberOrNull(editForm.baseRate),
-          basePrice: calculateBasePrice(editForm.baseRate, selectedUnit),
           propertyPurpose: editForm.propertyPurpose,
+          status: editForm.status,
         }),
       });
 
@@ -225,7 +252,7 @@ const Units = () => {
         <div className="floor-card">
           <div className="floor-header d-flex justify-content-between align-items-center">
             <div className="item-count">
-              <span>{totalItems} items.</span>
+              <span>{displayedItemCount} {displayedItemCount === 1 ? "item" : "items"}.</span>
             </div>
 
             <div className="action-wrapper">
@@ -250,18 +277,21 @@ const Units = () => {
               <thead>
                 <tr>
                   {[
-                    "LIVE PRICE",
-                    "UNIT INDEX",
+                    "SR. NO.",
+                    "UNIT NUMBER",
+                    "FLOOR",
+                    "UNIT POSITION",
                     "PROJECT TOWER",
                     "UNIT CONFIG",
                     "PROJECT NAME",
+                    "PROPERTY PURPOSE",
                     "BEDROOMS",
                     "BATHROOMS",
                     "SALEABLE AREA",
                     "CARPET AREA",
-                    "FACING",
-                    "LEADS",
-                    "UPDATED",
+                    "BASE RATE",
+                    "BASE PRICE",
+                    "STATUS",
                     "ACTIONS",
                   ].map((head) => (
                     <th key={head}>{head}</th>
@@ -272,34 +302,34 @@ const Units = () => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="13" className="floor-empty">Loading units...</td>
+                    <td colSpan="16" className="floor-empty">Loading units...</td>
                   </tr>
                 ) : error ? (
                   <tr>
-                    <td colSpan="13" className="floor-empty text-danger">{error}</td>
+                    <td colSpan="16" className="floor-empty text-danger">{error}</td>
                   </tr>
                 ) : filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan="13" className="floor-empty">{searchQuery ? "No matching units found." : "No units found."}</td>
+                    <td colSpan="16" className="floor-empty">{searchQuery ? "No matching units found." : "No units found."}</td>
                   </tr>
                 ) : (
-                  filteredData.map((item) => (
+                  filteredData.map((item, index) => (
                     <tr key={item.id}>
-                      <td className="fw-bold">{item.price}</td>
+                      <td className="fw-bold">{index + 1}</td>
+                      <td className="fw-bold">{item.unitNumber}</td>
+                      <td>{item.floor}</td>
                       <td>{item.unitIndex}</td>
                       <td className="text-muted">{item.tower}</td>
                       <td>{item.config}</td>
                       <td className="text-muted">{item.project}</td>
+                      <td>{item.propertyPurpose || "-"}</td>
                       <td>{item.bedrooms}</td>
                       <td>{item.bathrooms}</td>
                       <td>{item.saleable}</td>
                       <td>{item.carpet}</td>
-                      <td>{item.facing}</td>
-                      <td>
-                        {item.leads}
-                        <span className="info-icon" title="View Lead Information">i</span>
-                      </td>
-                      <td>{item.updated}</td>
+                      <td>{item.baseRate || "-"}</td>
+                      <td className="fw-bold">{item.price}</td>
+                      <td><span className={`unit-status-badge ${String(item.status).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>{item.status}</span></td>
                       <td className="unit-actions-cell">
                         <button
                           className="unit-actions-menu-btn"
@@ -347,7 +377,7 @@ const Units = () => {
 const Detail = ({ label, value }) => (
   <div>
     <span>{label}</span>
-    <strong>{value || "-"}</strong>
+    <strong>{formatDisplayValue(value)}</strong>
   </div>
 );
 
@@ -363,13 +393,16 @@ const UnitViewModal = ({ unit, onClose }) => (
       </div>
 
       <div className="unit-detail-grid">
-        <Detail label="Unit Index" value={unit.unitIndex} />
+        <Detail label="Unit Number" value={unit.unitNumber} />
+        <Detail label="Unit Position" value={unit.unitIndex} />
         <Detail label="Floor" value={unit.floor} />
         <Detail label="Project" value={unit.project} />
         <Detail label="Tower" value={unit.tower} />
         <Detail label="Unit Config" value={unit.config} />
         <Detail label="Live Price" value={unit.price} />
         <Detail label="Base Rate" value={unit.baseRate} />
+        <Detail label="Base Price" value={unit.basePrice} />
+        <Detail label="Status" value={unit.status} />
         <Detail label="Rate Basis" value={unit.rateBasis} />
         <Detail label="Bedrooms" value={unit.bedrooms} />
         <Detail label="Bathrooms" value={unit.bathrooms} />
@@ -394,20 +427,20 @@ const UnitEditModal = ({ form, saving, onChange, onClose, onSubmit }) => (
 
       <form className="unit-edit-form" onSubmit={onSubmit}>
         <label>
-          <span>Name *</span>
-          <input name="name" value={form.name} onChange={onChange} required />
+          <span>Generated Unit Number</span>
+          <input name="name" value={form.name} readOnly />
         </label>
         <label>
           <span>Floor</span>
           <input name="floor" type="number" value={form.floor} onChange={onChange} />
         </label>
         <label>
-          <span>Unit Index</span>
+          <span>Unit Position</span>
           <input name="unitIndex" type="number" value={form.unitIndex} onChange={onChange} />
         </label>
         <label>
           <span>Base Rate</span>
-          <input name="baseRate" type="number" value={form.baseRate} onChange={onChange} />
+          <input name="baseRate" type="number" value={form.baseRate} readOnly />
         </label>
         <label>
           <span>Base Price</span>
@@ -416,6 +449,14 @@ const UnitEditModal = ({ form, saving, onChange, onClose, onSubmit }) => (
         <label>
           <span>Purpose</span>
           <input name="propertyPurpose" value={form.propertyPurpose} onChange={onChange} />
+        </label>
+        <label>
+          <span>Status</span>
+          <select name="status" value={form.status || "Available"} onChange={onChange}>
+            {UNIT_STATUS_OPTIONS.map((status) => (
+              <option key={status} value={status}>{status.replace("_", " ")}</option>
+            ))}
+          </select>
         </label>
 
         <div className="unit-modal-actions">
@@ -485,6 +526,35 @@ const unitStyles = `
 
   .unit-actions-dropdown .danger {
     color: #dc2626;
+  }
+
+  .unit-status-badge {
+    background: #e8f1ff;
+    border-radius: 999px;
+    color: #1d4ed8;
+    display: inline-flex;
+    font-size: 12px;
+    font-weight: 800;
+    justify-content: center;
+    min-width: 82px;
+    padding: 6px 10px;
+    white-space: nowrap;
+  }
+
+  .unit-status-badge.available {
+    background: #dcfce7;
+    color: #166534;
+  }
+
+  .unit-status-badge.booked,
+  .unit-status-badge.blocked {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+
+  .unit-status-badge.held {
+    background: #fef3c7;
+    color: #92400e;
   }
 
   .unit-modal-backdrop {
@@ -574,7 +644,8 @@ const unitStyles = `
     overflow-wrap: anywhere;
   }
 
-  .unit-edit-form input {
+  .unit-edit-form input,
+  .unit-edit-form select {
     border: 1px solid #d6dee9;
     border-radius: 8px;
     color: #1e293b;

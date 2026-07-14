@@ -1,5 +1,47 @@
 const prisma = require("../lib/prisma")
 
+const withGeneratedUnitCounts = async (projects) => {
+    const rows = Array.isArray(projects) ? projects : [projects]
+    const projectIds = rows.map((project) => project?.id).filter((id) => Number.isInteger(Number(id)))
+    if(!projectIds.length) return projects
+
+    const counts = await prisma.unitModel.groupBy({
+        by:["unitId"],
+        where:{
+            unit:{
+                is:{
+                    projectId:{ in:projectIds.map(Number) }
+                }
+            }
+        },
+        _count:{ id:true },
+    })
+
+    const unitGroups = await prisma.unit.findMany({
+        where:{ projectId:{ in:projectIds.map(Number) } },
+        select:{ id:true, projectId:true },
+    })
+    const generatedCountByProject = new Map(projectIds.map((id) => [Number(id), 0]))
+    const unitGroupProjectById = new Map(unitGroups.map((unit) => [unit.id, unit.projectId]))
+
+    counts.forEach((count) => {
+        const projectId = unitGroupProjectById.get(count.unitId)
+        if(projectId){
+            generatedCountByProject.set(
+                projectId,
+                (generatedCountByProject.get(projectId) || 0) + count._count.id
+            )
+        }
+    })
+
+    const attachCount = (project) => ({
+        ...project,
+        generatedUnitCount: generatedCountByProject.get(Number(project.id)) || 0,
+    })
+
+    return Array.isArray(projects) ? rows.map(attachCount) : attachCount(projects)
+}
+
 const projectSalesInclude = {
     salesUsers: {
         include: {
@@ -14,6 +56,13 @@ const projectSalesInclude = {
                 }
             }
         }
+    },
+    _count: {
+        select: {
+            tower: true,
+            floor: true,
+            unit: true,
+        }
     }
 }
 
@@ -27,12 +76,33 @@ const normalizeSalesIds = (salesIds, fallbackSalesId) => {
     return [...new Set(values.map(Number).filter(Number.isInteger))]
 }
 
+const assertProjectModelRules = (data, salesIds) => {
+    if(salesIds.length > 3){
+        const error = new Error("Select at most 3 sales users for a project.")
+        error.statusCode = 400
+        throw error
+    }
+
+    if(data.active === true && data.inventory !== true){
+        const error = new Error("Project cannot be Active until Inventory is Yes.")
+        error.statusCode = 400
+        throw error
+    }
+}
+
 const formatProject = (project) => {
     if(!project) return project
 
     const assignments = Array.isArray(project.salesUsers) ? project.salesUsers : []
+    const unitCount = project.generatedUnitCount ?? project._count?.unit ?? 0
     return {
         ...project,
+        noOfTowers: project._count?.tower ?? 0,
+        towerCount: project._count?.tower ?? 0,
+        floorPlanCount: project._count?.floor ?? 0,
+        unitCount,
+        inventory: unitCount > 0,
+        active: unitCount > 0 ? project.active : false,
         salesIds:assignments.map((assignment) => assignment.userId),
         salesUsers:assignments.map((assignment) => assignment.user)
     }
@@ -41,8 +111,12 @@ const formatProject = (project) => {
 exports.createProject = async (req, res)=>{
     try{
         const {salesIds, ...data} = req.body
+        delete data.noOfTowers
         const normalizedSalesIds = normalizeSalesIds(salesIds, data.salesId)
         data.salesId = normalizedSalesIds[0] || null
+        data.inventory = false
+        data.active = false
+        assertProjectModelRules(data, normalizedSalesIds)
 
         const project = await prisma.project.create({
             data:{
@@ -55,11 +129,14 @@ exports.createProject = async (req, res)=>{
             },
             include:projectSalesInclude
         })
-        res.status(201).json(formatProject(project))
+        res.status(201).json(formatProject(await withGeneratedUnitCounts(project)))
     }
     catch(err)
     {
         console.error("Create project error:", err)
+        if(err.statusCode){
+            return res.status(err.statusCode).json({ message: err.message })
+        }
         res.status(500).json("something went wrong")
     }
 }
@@ -67,11 +144,15 @@ exports.createProject = async (req, res)=>{
 exports.getProject = async (req, res)=>{
     try{
         const projects = await prisma.project.findMany({include:projectSalesInclude});
-        res.status(200).json(projects.map(formatProject))
+        const projectsWithUnitCounts = await withGeneratedUnitCounts(projects)
+        res.status(200).json(projectsWithUnitCounts.map(formatProject))
     }
     catch(err)
     {
         console.log(err);
+        if(err.statusCode){
+            return res.status(err.statusCode).json({ message: err.message })
+        }
         res.status(500).json("something went wrong")
     }
 }
@@ -85,7 +166,7 @@ exports.getProjectById = async (req, res)=>{
         });
         if(!project)
             return res.status(404).json("Project not found")
-        res.status(200).json(formatProject(project))
+        res.status(200).json(formatProject(await withGeneratedUnitCounts(project)))
     }
     catch(err)
     {
@@ -98,12 +179,23 @@ exports.updateProject = async (req, res)=>{
     try{
         const id = req.params.id
         const {salesIds, ...data} = req.body
-        const project = await prisma.project.findUnique({where:{id:Number(id)}});
+        delete data.noOfTowers
+        const project = await prisma.project.findUnique({
+            where:{id:Number(id)},
+            include:{ _count:{ select:{ unit:true } } }
+        });
         if(!project)
             return res.status(404).json("Project not found")
+
+        const derivedInventory = (project._count?.unit ?? 0) > 0
+        delete data.inventory
+        if(data.active === true && !derivedInventory){
+            return res.status(400).json({ message:"Project cannot be Active until Inventory is Yes." })
+        }
         
         if(salesIds !== undefined){
             const normalizedSalesIds = normalizeSalesIds(salesIds, data.salesId)
+            assertProjectModelRules({ ...data, inventory: derivedInventory }, normalizedSalesIds)
             data.salesId = normalizedSalesIds[0] || null
             data.salesUsers = {
                 deleteMany:{},
@@ -118,7 +210,7 @@ exports.updateProject = async (req, res)=>{
             data:data,
             include:projectSalesInclude
         })
-        res.status(200).json(formatProject(result))
+        res.status(200).json(formatProject(await withGeneratedUnitCounts(result)))
     }
     catch(err)
     {
@@ -130,9 +222,18 @@ exports.updateProject = async (req, res)=>{
 exports.deleteProject = async (req, res)=>{
     try{
         const id = req.params.id
-        const project = await prisma.project.findUnique({where:{id:Number(id)}});
+        const project = await prisma.project.findUnique({
+            where:{id:Number(id)},
+            include:{ _count:{ select:{ tower:true, floor:true, unit:true } } }
+        });
         if(!project)
             return res.status(404).json("Project not found")
+
+        if(project._count.tower || project._count.floor || project._count.unit){
+            return res.status(409).json({
+                message:"Cannot delete project because towers, floor plans, or units exist under it. Delete or remap children first."
+            })
+        }
         
         const result = await prisma.project.delete({
             where:{id:project.id}

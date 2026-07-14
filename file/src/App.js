@@ -171,6 +171,7 @@ const clearSession = () => {
 const isTokenExpired = (token) => {
   if (!token) return true;
 
+
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));
     if (!payload?.exp) return false;
@@ -447,6 +448,7 @@ const ProtectedAppRoutes = () => {
          <Route exact path='/user-details' element={<RedirectWithSearch to="/user/sales/details" />} />
          <Route exact path='/BlukClickToCalls' element={< BlukClickPage />} />
         <Route exact path='*' element={<ErrorPage />} />
+        <Route exact path='/access-denied' element={<Navigate to="/sign-in" replace state={{ accessDenied: true }} />} />
       </Routes>
       <ToastContainer />
     </>

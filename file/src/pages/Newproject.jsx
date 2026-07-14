@@ -133,10 +133,16 @@ const NEWPROJECT = () => {
     const id = String(userId);
     setFormData((current) => {
       const isSelected = current.salesIds.includes(id);
+      if (!isSelected && current.salesIds.length >= 3) {
+        setSaveError("Select at most 3 sales users.");
+        return current;
+      }
+
       const salesIds = isSelected
         ? current.salesIds.filter((selectedId) => selectedId !== id)
         : [...current.salesIds, id];
 
+      setSaveError("");
       return {
         ...current,
         salesIds,
@@ -178,6 +184,13 @@ const NEWPROJECT = () => {
     e.preventDefault();
     setIsSaving(true);
     setSaveError("");
+
+    if (formData.salesIds.length > 3) {
+      setIsSaving(false);
+      setSaveError("Select at most 3 sales users.");
+      return;
+    }
+
     const description = editorRef.current?.innerHTML || "";
 
     const newProject = {
@@ -197,9 +210,6 @@ const NEWPROJECT = () => {
       locality: formData.locality,
       latitude: formData.latitude,
       longitude: formData.longitude,
-      noOfTowers: Number(formData.noOfTowers) || 0,
-      active: parseBoolean(formData.active),
-      inventory: parseBoolean(formData.inventory),
       integratedPortals: formData.integratedPortals || "",
     };
 
@@ -378,7 +388,8 @@ const NEWPROJECT = () => {
           .np-sales-option {
             display: flex !important;
             align-items: center;
-            gap: 9px;
+            justify-content: space-between;
+            gap: 12px;
             margin: 0 !important;
             padding: 9px 8px;
             border-radius: 5px;
@@ -390,15 +401,39 @@ const NEWPROJECT = () => {
             background: #f5f3ff;
           }
 
+          .np-sales-option.selected {
+            background: #f8f5ff;
+            color: #1e293b !important;
+            font-weight: 600;
+          }
+
           .np-sales-option.disabled {
             opacity: 0.48;
             cursor: not-allowed;
           }
 
           .np-sales-option input {
-            width: 16px;
-            height: 16px;
-            accent-color: #7c3aed;
+            height: 1px;
+            opacity: 0;
+            pointer-events: none;
+            position: absolute;
+            width: 1px;
+          }
+
+          .np-sales-option-name {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .np-sales-option-tick {
+            color: #2563eb;
+            font-size: 18px;
+            font-weight: 800;
+            line-height: 1;
+            min-width: 18px;
+            text-align: right;
           }
 
           .np-sales-empty {
@@ -540,7 +575,7 @@ const NEWPROJECT = () => {
                             const isSelected = formData.salesIds.includes(id);
                             return (
                               <label
-                                className="np-sales-option"
+                                className={`np-sales-option ${isSelected ? "selected" : ""}`}
                                 key={user.id || user.email}
                               >
                                 <input
@@ -548,7 +583,10 @@ const NEWPROJECT = () => {
                                   checked={isSelected}
                                   onChange={() => toggleSalesUser(id)}
                                 />
-                                <span>{getUserName(user)}</span>
+                                <span className="np-sales-option-name">{getUserName(user)}</span>
+                                <span className="np-sales-option-tick" aria-hidden="true">
+                                  {isSelected ? "✓" : ""}
+                                </span>
                               </label>
                             );
                           }) : (
@@ -558,7 +596,7 @@ const NEWPROJECT = () => {
                       </div>
                     )}
                   </div>
-                  <span className="np-help-text">Select multiple sales users.</span>
+                  <span className="np-help-text">Select up to 3 sales users.</span>
                 </div>
               </div>
 

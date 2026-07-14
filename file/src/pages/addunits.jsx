@@ -3,12 +3,22 @@ import { useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
 
 const emptyUnit = {
-  name: "",
   floor: "",
   unitIndex: "",
-  baseRate: "",
-  basePrice: "",
+  status: "Available",
 };
+
+const UNIT_STATUS_OPTIONS = [
+  "Available",
+  "Held",
+  "Blocked",
+  "Booked",
+  "Registered",
+  "Possession_Given",
+  "Cancelled",
+  "Refuge",
+  "Investor",
+];
 
 const AddUnits = () => {
   const navigate = useNavigate();
@@ -36,6 +46,16 @@ const AddUnits = () => {
   };
 
   const selectedFloorPlan = floorPlans.find((plan) => String(plan.id) === String(formData.floorId));
+  const selectedTower = towers.find((tower) => String(tower.id) === String(formData.towerId));
+
+  const getGeneratedUnitNumber = (unit) => {
+    const wingCode = String(selectedTower?.wingCode || "").trim().toUpperCase();
+    const floor = toNumberOrNull(unit.floor);
+    const position = toNumberOrNull(unit.unitIndex);
+
+    if (!wingCode || floor === null || position === null) return "";
+    return `${wingCode}-${floor}${String(position).padStart(2, "0")}`;
+  };
 
   const getRateBasisArea = (floorPlan) => {
     if (!floorPlan) return 0;
@@ -44,11 +64,18 @@ const AddUnits = () => {
     return toNumberOrNull(floorPlan.carpet) || 0;
   };
 
-  const calculateUnitBasePrice = (baseRate) => {
-    const rate = toNumberOrNull(baseRate) || 0;
+  const getUnitPricing = (floor) => {
+    const baseRate = toNumberOrNull(selectedFloorPlan?.baseRate) || 0;
+    const floorRise = toNumberOrNull(selectedFloorPlan?.floorRisePerSqft) || 0;
+    const baseFloor = toNumberOrNull(selectedFloorPlan?.baseFloorForFloorRise) ?? toNumberOrNull(selectedFloorPlan?.applicableFloorFrom) ?? 0;
+    const floorNumber = toNumberOrNull(floor) ?? baseFloor;
     const area = getRateBasisArea(selectedFloorPlan);
-    if (!rate || !area) return "";
-    return Number((rate * area).toFixed(2));
+    const effectiveRate = Number((baseRate + ((floorNumber - baseFloor) * floorRise)).toFixed(2));
+
+    return {
+      baseRate: effectiveRate || "",
+      basePrice: effectiveRate && area ? Number((effectiveRate * area).toFixed(2)) : "",
+    };
   };
 
   useEffect(() => {
@@ -142,11 +169,12 @@ const AddUnits = () => {
 
     const payload = {
       unitList: unitList.map((unit) => ({
-        name: unit.name.trim(),
+        name: getGeneratedUnitNumber(unit),
         floor: toNumberOrNull(unit.floor),
         unitIndex: toNumberOrNull(unit.unitIndex),
-        baseRate: toNumberOrNull(unit.baseRate),
-        basePrice: calculateUnitBasePrice(unit.baseRate) || 0,
+        baseRate: getUnitPricing(unit.floor).baseRate || 0,
+        basePrice: getUnitPricing(unit.floor).basePrice || 0,
+        status: unit.status || "Available",
       })),
       projectId: toNumberOrNull(formData.projectId),
       towerId: toNumberOrNull(formData.towerId),
@@ -154,6 +182,18 @@ const AddUnits = () => {
       propertyPurpose: formData.propertyPurpose,
       description: formData.description,
     };
+
+    if (!selectedTower?.wingCode) {
+      setSaving(false);
+      setError("Selected tower needs a Wing Code before unit numbers can be generated.");
+      return;
+    }
+
+    if (payload.unitList.some((unit) => !unit.name)) {
+      setSaving(false);
+      setError("Enter Floor and Unit Position for every unit so the unit number can be generated.");
+      return;
+    }
 
     try {
       const response = await fetch(`${API_URL}/unit`, {
@@ -285,11 +325,16 @@ const AddUnits = () => {
                     )}
                   </div>
                   <div className="lead-grid">
-                    <FormField label="NAME *" name="name" value={unit.name} onChange={(event) => handleUnitChange(index, event)} placeholder="Unit Name" required />
+                    <FormField label="GENERATED UNIT NUMBER" name="name" value={getGeneratedUnitNumber(unit)} placeholder="Auto-generated" disabled />
                     <FormField label="FLOOR *" name="floor" type="number" value={unit.floor} onChange={(event) => handleUnitChange(index, event)} placeholder="0" required />
-                    <FormField label="UNIT INDEX *" name="unitIndex" type="number" value={unit.unitIndex} onChange={(event) => handleUnitChange(index, event)} placeholder="0" required />
-                    <FormField label="BASE RATE *" name="baseRate" type="number" value={unit.baseRate} onChange={(event) => handleUnitChange(index, event)} required />
-                    <FormField label="BASE PRICE *" name="basePrice" type="number" value={calculateUnitBasePrice(unit.baseRate)} disabled required />
+                    <FormField label="UNIT POSITION *" name="unitIndex" type="number" value={unit.unitIndex} onChange={(event) => handleUnitChange(index, event)} placeholder="01" required />
+                    <FormField label="BASE RATE" name="baseRate" type="number" value={getUnitPricing(unit.floor).baseRate} disabled />
+                    <FormField label="BASE PRICE" name="basePrice" type="number" value={getUnitPricing(unit.floor).basePrice} disabled />
+                    <SelectField label="STATUS" name="status" value={unit.status || "Available"} onChange={(event) => handleUnitChange(index, event)}>
+                      {UNIT_STATUS_OPTIONS.map((status) => (
+                        <option key={status} value={status}>{status.replace("_", " ")}</option>
+                      ))}
+                    </SelectField>
                   </div>
                 </div>
               ))}
@@ -363,4 +408,3 @@ const SelectField = ({ label, name, value, onChange, children, required = false,
     </select>
   </div>
 );
-

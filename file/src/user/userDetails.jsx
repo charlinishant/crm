@@ -208,6 +208,7 @@ const formatNumber = (value, fallback = "-") => {
   return amount.toLocaleString("en-IN");
 };
 
+
 const formatArea = (value) => {
   const formatted = formatNumber(value);
   return formatted === "-" ? "-" : `${formatted} sq_ft`;
@@ -256,6 +257,7 @@ const getStatusScore = (status) => {
   return statusScores[status] ?? 0;
 };
 
+
 const getOwnerName = (lead) => {
   const team = lead?.team;
   return (
@@ -266,6 +268,8 @@ const getOwnerName = (lead) => {
     "Unassigned"
   );
 };
+
+
 
 const getActivityDay = (value) => {
   const date = toDate(value);

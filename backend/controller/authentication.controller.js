@@ -3,6 +3,41 @@ const bcrypt = require("bcryptjs")
 
 const prisma = require("../lib/prisma");
 
+const ATTENDANCE_STALE_MINUTES = Math.max(1, Number(process.env.ATTENDANCE_STALE_MINUTES) || 2)
+
+const secondsBetween = (start, end) => {
+    if (!start || !end) return 0
+    return Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 1000))
+}
+
+const closeStaleOpenAttendances = async (userId) => {
+    const cutoff = new Date(Date.now() - ATTENDANCE_STALE_MINUTES * 60 * 1000)
+    const staleRows = await prisma.userAttendance.findMany({
+        where:{
+            userId,
+            logoutAt:null,
+            updatedAt:{lt:cutoff},
+        },
+    })
+
+    await Promise.all(staleRows.map((row) => {
+        const logoutAt = row.updatedAt || cutoff
+        const extraBreakSeconds = row.breakStartedAt && !row.breakEndedAt
+            ? secondsBetween(row.breakStartedAt, logoutAt)
+            : 0
+
+        return prisma.userAttendance.update({
+            where:{id:row.id},
+            data:{
+                status:"Logged Out",
+                logoutAt,
+                breakEndedAt: row.breakStartedAt && !row.breakEndedAt ? logoutAt : row.breakEndedAt,
+                totalBreakSeconds: row.totalBreakSeconds + extraBreakSeconds,
+            },
+        })
+    }))
+}
+
 const normalizeRole = (role) => {
     const value = String(role || "").trim().toUpperCase()
     if(value === "SALESPERSON") return "SALES"
@@ -30,6 +65,7 @@ const normalizeDepartment = (department, role) => {
 
 const startOrResumeAttendance = async (userId) => {
     const now = new Date()
+    await closeStaleOpenAttendances(userId)
     const attendance = await prisma.userAttendance.findFirst({
         where:{userId, logoutAt: null},
         orderBy:{loginAt:"desc"}
@@ -39,7 +75,7 @@ const startOrResumeAttendance = async (userId) => {
         return prisma.userAttendance.update({
             where:{id:attendance.id},
             data:{
-                status: attendance.status || "Available"
+                status: attendance.status && attendance.status !== "Logged Out" ? attendance.status : "Available"
             }
         })
     }
@@ -129,6 +165,7 @@ exports.login = async (req, res)=>{
                 data:{password:await bcrypt.hash(password, 10)}
             })
         }
+
         const token = jwt.sign({id:user.id, email:user.email, role:user.role}, 
                                 process.env.JWT_SECRET,
                             {expiresIn:"1h"})

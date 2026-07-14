@@ -1,6 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Plus, Filter, MoreVertical, Layers, Building, Trash2, Pencil, X } from 'lucide-react';
 
+const floorConventionOptions = [
+  { value: "GROUND_IS_FLOOR_1", label: "Ground is Floor 1" },
+  { value: "STILT_NOT_COUNTED", label: "Stilt not counted" },
+  { value: "STILT_COUNTED_AS_FLOOR", label: "Stilt counted as floor" },
+];
+
+const getFloorConventionLabel = (value) =>
+  floorConventionOptions.find((option) => option.value === value)?.label || "Ground is Floor 1";
+
 export default function Projecttower() {
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const normalizeList = (data) => {
@@ -13,8 +22,10 @@ export default function Projecttower() {
   const [towers, setTowers] = useState([]);
   const [projects, setProjects] = useState([]);
   const [name, setName] = useState('');
+  const [wingCode, setWingCode] = useState('');
   const [projectId, setProjectId] = useState('');
-  const [floorPlans, setFloorPlans] = useState('');
+  const [floorNumberingConvention, setFloorNumberingConvention] = useState("GROUND_IS_FLOOR_1");
+  const [skippedFloors, setSkippedFloors] = useState('');
   const [totalFloors, setTotalFloors] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -31,6 +42,9 @@ export default function Projecttower() {
     return towers.filter((tower) =>
       [
         tower.name,
+        tower.wingCode,
+        getFloorConventionLabel(tower.floorNumberingConvention),
+        tower.skippedFloors,
         tower.project,
         tower.floorPlans,
         tower.totalFloors,
@@ -62,10 +76,13 @@ export default function Projecttower() {
         const mapped = towerList.map((tower) => ({
           id: tower.id,
           name: tower.name,
+          wingCode: tower.wingCode || "",
+          floorNumberingConvention: tower.floorNumberingConvention || "GROUND_IS_FLOOR_1",
+          skippedFloors: tower.skippedFloors || "",
           project: tower.project?.name || tower.project || "-",
           projectId: tower.project?.id,
-          floorPlans: tower._count?.floors || tower.floorPlans || 0,
-          totalFloors: tower.totalFloor || tower.totalFloors || 0,
+          floorPlans: tower._count?.floors ?? tower.floorPlans ?? 0,
+          totalFloors: tower.totalFloor ?? tower.totalFloors ?? 0,
           source: "backend",
         }));
 
@@ -90,10 +107,13 @@ export default function Projecttower() {
     const mapped = list.map((tower) => ({
       id: tower.id,
       name: tower.name,
+      wingCode: tower.wingCode || "",
+      floorNumberingConvention: tower.floorNumberingConvention || "GROUND_IS_FLOOR_1",
+      skippedFloors: tower.skippedFloors || "",
       project: tower.project?.name || tower.project || "-",
       projectId: tower.project?.id,
-      floorPlans: tower._count?.floors || tower.floorPlans || 0,
-      totalFloors: tower.totalFloor || tower.totalFloors || 0,
+      floorPlans: tower._count?.floors ?? tower.floorPlans ?? 0,
+      totalFloors: tower.totalFloor ?? tower.totalFloors ?? 0,
       source: "backend",
     }));
 
@@ -102,8 +122,10 @@ export default function Projecttower() {
 
   const resetForm = () => {
     setName('');
+    setWingCode('');
     setProjectId('');
-    setFloorPlans('');
+    setFloorNumberingConvention("GROUND_IS_FLOOR_1");
+    setSkippedFloors('');
     setTotalFloors('');
     setEditingTowerId(null);
     setActiveMenuId(null);
@@ -118,8 +140,10 @@ export default function Projecttower() {
     });
 
     setName(tower.name || '');
+    setWingCode(tower.wingCode || '');
     setProjectId(tower.projectId || matchedProject?.id || '');
-    setFloorPlans(tower.floorPlans || '');
+    setFloorNumberingConvention(tower.floorNumberingConvention || "GROUND_IS_FLOOR_1");
+    setSkippedFloors(tower.skippedFloors || '');
     setTotalFloors(tower.totalFloors || '');
     setEditingTowerId(tower.id);
     setActiveMenuId(null);
@@ -127,7 +151,11 @@ export default function Projecttower() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!name || !projectId) return;
+    const totalFloorCount = Number(totalFloors);
+    if (!name || !wingCode || !projectId || !Number.isInteger(totalFloorCount) || totalFloorCount < 1) {
+      setError("Tower Name, Wing Code, Project, and Total Floors of at least 1 are required.");
+      return;
+    }
 
     setSaving(true);
     setError('');
@@ -137,8 +165,11 @@ export default function Projecttower() {
     try {
       const payload = {
         name: name.trim(),
+        wingCode: wingCode.trim().toUpperCase(),
+        floorNumberingConvention,
+        skippedFloors: skippedFloors.trim(),
         projectId: Number(projectId),
-        totalFloor: Number(totalFloors) || 0,
+        totalFloor: totalFloorCount,
       };
 
       const response = await fetch(
@@ -166,10 +197,13 @@ export default function Projecttower() {
       const savedTower = {
         id: isEditing ? editingTowerId : result.id || Date.now(),
         name: name.trim(),
+        wingCode: wingCode.trim().toUpperCase(),
+        floorNumberingConvention,
+        skippedFloors: skippedFloors.trim(),
         project: selectedProject?.name || "-",
         projectId: Number(projectId),
-        floorPlans: parseInt(floorPlans) || 0,
-        totalFloors: parseInt(totalFloors) || 0,
+        floorPlans: 0,
+        totalFloors: totalFloorCount,
         source: "backend",
       };
 
@@ -248,7 +282,12 @@ export default function Projecttower() {
                     <Building className="building-icon" size={20} />
                     <div>
                       <h4 className="tower-name">{tower.name}</h4>
-                      <p className="tower-project">{tower.project}</p>
+                      <p className="tower-project">
+                        {tower.project}
+                        {tower.wingCode ? <span className="tower-code">Wing {tower.wingCode}</span> : null}
+                      </p>
+                      <p className="tower-project">{getFloorConventionLabel(tower.floorNumberingConvention)}</p>
+                      {tower.skippedFloors ? <p className="tower-project">Skipped Floors: {tower.skippedFloors}</p> : null}
                     </div>
                   </div>
                   
@@ -339,26 +378,51 @@ export default function Projecttower() {
               />
             </div>
 
-            <div className="form-row">
-              <div className="form-group half">
-                <label>Floor Plans</label>
-                <input
-                  type="number"
-                  value={floorPlans}
-                  onChange={(e) => setFloorPlans(e.target.value)}
-                  placeholder="1"
-                />
-              </div>
-              
-              <div className="form-group half">
-                <label>Total Floors</label>
-                <input
-                  type="number"
-                  value={totalFloors}
-                  onChange={(e) => setTotalFloors(e.target.value)}
-                  placeholder="1"
-                />
-              </div>
+            <div className="form-group">
+              <label>Wing Code *</label>
+              <input
+                type="text"
+                value={wingCode}
+                onChange={(e) => setWingCode(e.target.value.toUpperCase())}
+                placeholder="e.g. A, B, TG"
+                maxLength={12}
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Stilt / Ground Convention *</label>
+              <select
+                value={floorNumberingConvention}
+                onChange={(e) => setFloorNumberingConvention(e.target.value)}
+                required
+              >
+                {floorConventionOptions.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-group">
+              <label>Total Floors *</label>
+              <input
+                type="number"
+                value={totalFloors}
+                onChange={(e) => setTotalFloors(e.target.value)}
+                placeholder="1"
+                min="1"
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label>Skipped Floors</label>
+              <input
+                type="text"
+                value={skippedFloors}
+                onChange={(e) => setSkippedFloors(e.target.value)}
+                placeholder="13, 14"
+              />
             </div>
 
             <div className="form-footer">

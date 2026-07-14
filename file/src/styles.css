@@ -20231,9 +20231,24 @@ table.dataTable td.dt-type-date {
 }
 
 .tower-project {
+  align-items: center;
   font-size: 12px;
   color: #64748b;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
   margin-top: 2px;
+}
+
+.tower-code {
+  background: #eaf2ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  color: #1d4ed8;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 4px 8px;
 }
 
 .card-actions {
