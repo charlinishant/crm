@@ -73,6 +73,7 @@ app.use("/api/demands", demandRouter)
 // app.use('/all-users', userRouter)
 app.use("/notification", notifiactionRouter)
 app.use("/post-sales", postSalesRouter)
+app.use("/api/post-sales", postSalesRouter)
 
 app.use((error, req, res, next) => {
   if (error?.type === "entity.too.large") {

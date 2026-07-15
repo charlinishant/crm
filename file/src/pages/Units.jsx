@@ -25,6 +25,8 @@ const UNIT_STATUS_OPTIONS = [
   "Investor",
 ];
 
+const ROWS_PER_PAGE = 10;
+
 const toNumberOrNull = (value) => {
   if (value === "" || value === null || value === undefined) return null;
   const number = Number(value);
@@ -68,6 +70,7 @@ const Units = () => {
   const [editForm, setEditForm] = useState(emptyEditForm);
   const [saving, setSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const fetchUnits = useCallback(async () => {
     try {
@@ -159,8 +162,24 @@ const Units = () => {
         .some((value) => String(value).toLowerCase().includes(query))
     );
   }, [data, searchQuery]);
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / ROWS_PER_PAGE));
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * ROWS_PER_PAGE;
+    return filteredData.slice(startIndex, startIndex + ROWS_PER_PAGE);
+  }, [currentPage, filteredData]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const displayedItemCount = filteredData.length;
+  const pageStartIndex = (currentPage - 1) * ROWS_PER_PAGE;
 
   const closeModal = () => {
     if (saving) return;
@@ -313,9 +332,9 @@ const Units = () => {
                     <td colSpan="16" className="floor-empty">{searchQuery ? "No matching units found." : "No units found."}</td>
                   </tr>
                 ) : (
-                  filteredData.map((item, index) => (
+                  paginatedData.map((item, index) => (
                     <tr key={item.id}>
-                      <td className="fw-bold">{index + 1}</td>
+                      <td className="fw-bold">{pageStartIndex + index + 1}</td>
                       <td className="fw-bold">{item.unitNumber}</td>
                       <td>{item.floor}</td>
                       <td>{item.unitIndex}</td>
@@ -353,6 +372,14 @@ const Units = () => {
                 )}
               </tbody>
             </table>
+            {filteredData.length > ROWS_PER_PAGE && (
+              <TablePagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPrevious={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                onNext={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              />
+            )}
           </div>
         </div>
 
@@ -378,6 +405,22 @@ const Detail = ({ label, value }) => (
   <div>
     <span>{label}</span>
     <strong>{formatDisplayValue(value)}</strong>
+  </div>
+);
+
+const TablePagination = ({ currentPage, totalPages, onPrevious, onNext }) => (
+  <div className="table-pagination">
+    <span>
+      Showing page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
+    </span>
+    <div className="table-pagination-actions">
+      <button type="button" onClick={onPrevious} disabled={currentPage === 1}>
+        Previous
+      </button>
+      <button type="button" onClick={onNext} disabled={currentPage === totalPages}>
+        Next
+      </button>
+    </div>
   </div>
 );
 
@@ -528,6 +571,47 @@ const unitStyles = `
     color: #dc2626;
   }
 
+  .table-pagination {
+    align-items: center;
+    color: #64748b;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: space-between;
+    padding: 16px 2px 0;
+  }
+
+  .table-pagination strong {
+    color: #0f172a;
+  }
+
+  .table-pagination-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .table-pagination-actions button {
+    background: #ffffff;
+    border: 1px solid #d6dee9;
+    border-radius: 8px;
+    color: #334155;
+    cursor: pointer;
+    font-weight: 700;
+    min-height: 38px;
+    padding: 0 14px;
+  }
+
+  .table-pagination-actions button:hover:not(:disabled) {
+    background: #f8fafc;
+    border-color: #487fff;
+    color: #2557d6;
+  }
+
+  .table-pagination-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
   .unit-status-badge {
     background: #e8f1ff;
     border-radius: 999px;
@@ -604,14 +688,18 @@ const unitStyles = `
   }
 
   .unit-modal-close {
+    align-items: center;
     background: #f8fafc;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     color: #334155;
     cursor: pointer;
+    display: inline-flex;
     font-size: 22px;
     height: 36px;
+    justify-content: center;
     line-height: 1;
+    padding: 0;
     width: 36px;
   }
 

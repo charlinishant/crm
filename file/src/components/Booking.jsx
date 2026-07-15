@@ -31,6 +31,21 @@ const Booking = () => {
         });
     };
 
+    const getBookingProject = (booking) =>
+        booking.projectDetails ||
+        booking.unitItem?.unit?.project?.name ||
+        booking.unit?.project?.name ||
+        "-";
+
+    const getBookingUnit = (booking) => {
+        if (booking.unitItem?.name) return booking.unitItem.name;
+        if (booking.unit?.name) return booking.unit.name;
+        if (booking.unit?.unitNo) return booking.unit.unitNo;
+        if (booking.unit?.id) return `Unit #${booking.unit.id}`;
+        if (typeof booking.unit === "string") return booking.unit;
+        return "-";
+    };
+
     useEffect(() => {
         const fetchBookings = async () => {
             try {
@@ -60,7 +75,8 @@ const Booking = () => {
         bookingSales: booking.bookedBy || "-",
         applicantName: booking.customerName || "Customer",
         applicantSales: booking.bookedBy || "-",
-        projectUnit: booking.unit || "-",
+        project: getBookingProject(booking),
+        bookingUnit: getBookingUnit(booking),
         projectSales: booking.projectDetails || "",
         stage: booking.stage || "Tentative",
         source: booking.source || "-",
@@ -157,8 +173,8 @@ const Booking = () => {
     };
 
     return (
-        <div className="floor-dashboard">
-            <div className="floor-card">
+        <div className="floor-dashboard booking-dashboard">
+            <div className="floor-card booking-card">
                 <div className="floor-header d-flex justify-content-between align-items-center">
                     <div className="d-flex align-items-center gap-3">
                         <select
@@ -205,7 +221,8 @@ const Booking = () => {
                                 <th style={{ borderStartStartRadius: '8px', borderEndStartRadius: '8px' }}>Lead Id</th>
                                 <th>Booking Name</th>
                                 <th>Applicant Name</th>
-                                <th>Project Unit</th>
+                                <th>Project</th>
+                                <th>Booking Unit</th>
                                 <th>Stage</th>
                                 <th>Source</th>
                                 <th>Booked By</th>
@@ -223,7 +240,7 @@ const Booking = () => {
                         <tbody>
                             {filteredBookings.length === 0 ? (
                                 <tr>
-                                    <td colSpan="17" className="text-center py-4">
+                                    <td colSpan="16" className="text-center py-4">
                                         {loading ? "Loading bookings..." : "No bookings found."}
                                     </td>
                                 </tr>
@@ -238,7 +255,10 @@ const Booking = () => {
                                             <strong>{item.applicantName}</strong>
                                         </td>
                                         <td>
-                                            {item.projectUnit}
+                                            {item.project}
+                                        </td>
+                                        <td>
+                                            {item.bookingUnit}
                                         </td>
                                         <td>
                                             <select

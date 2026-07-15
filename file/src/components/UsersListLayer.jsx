@@ -702,13 +702,13 @@ const UsersListLayer = () => {
   return (
     <div className="admin-users-access">
       <style>{adminUserStyles}</style>
-
-      <div className="admin-users-head">
+      
+      {/* <div className="admin-users-head">
         <div>
           <h2>Admin Access Users</h2>
           <p>View all users, roles, departments, and access status in one clean admin view.</p>
         </div>
-      </div>
+      </div> */}
 
       <div className="admin-users-stats">
         <div className="admin-user-stat">
@@ -736,7 +736,7 @@ const UsersListLayer = () => {
       <section className="admin-users-card">
         <div className="admin-users-card-head">
           <div>
-            <h6>All User Details</h6>
+            
             <p>{filteredUsers.length} users showing from {adminUsers.length} registered users</p>
           </div>
           <button
@@ -905,7 +905,7 @@ const UsersListLayer = () => {
               <section className="admin-user-section">
                 <h4>User Details</h4>
                 <div className="admin-user-detail-grid">
-                  {getUserDetailRows(selectedUser).map(([label, value]) => (
+                  {getUserDetailRows(selectedUser).map(([label,value]) => (
                     <div className="admin-user-detail-item" key={label}>
                       <span>{label}</span>
                       <strong>{value || "-"}</strong>

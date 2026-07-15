@@ -1,7 +1,10 @@
 import React, { useMemo, useState } from "react";
 
+const RECORDS_PER_PAGE = 10;
+
 const SalesPerformanceTable = ({ data = [] }) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const filteredData = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -23,6 +26,17 @@ const SalesPerformanceTable = ({ data = [] }) => {
     );
   }, [data, searchQuery]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredData.length / RECORDS_PER_PAGE));
+  const activePage = Math.min(currentPage, totalPages);
+  const pageStartIndex = (activePage - 1) * RECORDS_PER_PAGE;
+  const paginatedData = filteredData.slice(pageStartIndex, pageStartIndex + RECORDS_PER_PAGE);
+  const pageEndIndex = Math.min(pageStartIndex + paginatedData.length, filteredData.length);
+
+  const handleSearchChange = (event) => {
+    setSearchQuery(event.target.value);
+    setCurrentPage(1);
+  };
+
   return (
     <div className="admin-report-table-card sales-performance-table-card">
       <h6>Sales User Performance</h6>
@@ -31,7 +45,7 @@ const SalesPerformanceTable = ({ data = [] }) => {
         <input
           type="search"
           value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
+          onChange={handleSearchChange}
           placeholder="Search sales performance..."
           aria-label="Search sales performance"
         />
@@ -51,7 +65,7 @@ const SalesPerformanceTable = ({ data = [] }) => {
             </tr>
           </thead>
           <tbody>
-            {filteredData.length ? filteredData.map((row) => (
+            {filteredData.length ? paginatedData.map((row) => (
               <tr key={row.userId || row.userName}>
                 <td>
                   <div className="sales-performance-user">{row.userName}</div>
@@ -74,6 +88,35 @@ const SalesPerformanceTable = ({ data = [] }) => {
           </tbody>
         </table>
       </div>
+      {filteredData.length > 0 && (
+        <div className="lead-pagination sales-performance-pagination">
+          <div className="lead-pagination-info">
+            Showing <strong>{pageStartIndex + 1}</strong> to <strong>{pageEndIndex}</strong> of{" "}
+            <strong>{filteredData.length}</strong> records
+          </div>
+          <div className="lead-pagination-actions">
+            <button
+              type="button"
+              className="lead-pagination-btn"
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              disabled={activePage === 1}
+            >
+              Previous
+            </button>
+            <span className="lead-pagination-page">
+              {activePage} / {totalPages}
+            </span>
+            <button
+              type="button"
+              className="lead-pagination-btn"
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              disabled={activePage === totalPages}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

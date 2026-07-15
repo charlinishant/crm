@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
@@ -9,9 +9,19 @@ const getUserName = (user) =>
     user?.email ||
     (user?.id ? `User #${user.id}` : "");
 
+const toDateInputValue = (value) => {
+    if (!value || value === "-") return ""
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10)
+}
+
 const BorderedTables = () => {
     const navigate = useNavigate()
+    const location = useLocation()
+    const [searchParams] = useSearchParams()
     const fileInputRef = useRef(null)
+    const editTaskId = searchParams.get("editTaskId")
+    const isEditing = Boolean(editTaskId)
     const [attachments, setAttachments] = useState([])
     const [users, setUsers] = useState([])
     const [isLoadingUsers, setIsLoadingUsers] = useState(true)
@@ -22,12 +32,29 @@ const BorderedTables = () => {
         "description":"",
         "remark":"",
         "type":"",
-        "status":"",
-        "priority":"",
-        "dueDate":null,
+        "status":"Open",
+        "priority":"Medium",
+        "dueDate":"",
         "dueTime":"",
         "assigneeId":"",
     })
+
+    const hydrateTaskForm = (task) => {
+        if (!task) return
+
+        setFormData({
+            title: task.title || task.name || "",
+            description: task.description || "",
+            remark: task.remark || "",
+            type: task.type || "",
+            status: task.status || "Open",
+            priority: task.priority || "Medium",
+            dueDate: toDateInputValue(task.dueDate || task.dueOn || task.due_date),
+            dueTime: task.dueTime || "",
+            assigneeId: String(task.assigneeId || task.assignId || task.assign?.id || ""),
+        })
+        setAttachments([])
+    }
 
     useEffect(() => {
         const fetchUsers = async () => {
@@ -49,6 +76,45 @@ const BorderedTables = () => {
 
         fetchUsers()
     }, [])
+
+    useEffect(() => {
+        if (!editTaskId) return
+
+        const stateTask = location.state?.task
+        if (stateTask) {
+            hydrateTaskForm(stateTask)
+            return
+        }
+
+        let isMounted = true
+
+        const fetchTaskForEdit = async () => {
+            try {
+                const response = await fetch(`${API_URL}/tasks`)
+                if (!response.ok) throw new Error("Unable to load task")
+
+                const result = await response.json()
+                const taskList = Array.isArray(result) ? result : result?.data || result?.tasks || []
+                const task = taskList.find((item) => String(item.id || item._id) === String(editTaskId))
+
+                if (isMounted && task) {
+                    hydrateTaskForm(task)
+                } else if (isMounted) {
+                    setMessage("Unable to load selected task.")
+                }
+            } catch (error) {
+                if (isMounted) {
+                    setMessage(error.message || "Unable to load selected task.")
+                }
+            }
+        }
+
+        fetchTaskForEdit()
+
+        return () => {
+            isMounted = false
+        }
+    }, [editTaskId, location.state])
 
     const handleChange = (event) => {
         const { name, value } = event.target
@@ -83,29 +149,32 @@ const BorderedTables = () => {
         const authUser = JSON.parse(window.localStorage.getItem("authUser") || "null")
         const selectedUser = users.find((user) => String(user.id) === String(formData.assigneeId))
 
-        const newTask = {
+        const taskPayload = {
             title: formData.title.trim(),
             description: formData.description.trim(),
             remark: formData.remark.trim(),
-            status: "Open",
+            status: isEditing ? formData.status || "Open" : "Open",
             priority: formData.priority,
             dueDate: formData.dueDate || null,
             dueTime: formData.dueTime,
-            attachments: attachments.map((file) => file.name),
             assigneeId: Number(formData.assigneeId),
-            assignedById: authUser?.id || null,
+        }
+
+        if (!isEditing) {
+            taskPayload.attachments = attachments.map((file) => file.name)
+            taskPayload.assignedById = authUser?.id || null
         }
 
         setIsSaving(true)
         setMessage("")
 
         try {
-            const response = await fetch(`${API_URL}/tasks`, {
-                method: "POST",
+            const response = await fetch(isEditing ? `${API_URL}/tasks/${editTaskId}` : `${API_URL}/tasks`, {
+                method: isEditing ? "PATCH" : "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify(newTask),
+                body: JSON.stringify(taskPayload),
             })
 
             let result = {}
@@ -119,7 +188,7 @@ const BorderedTables = () => {
                 throw new Error(result?.message || "Unable to save task")
             }
 
-            setMessage(`Task assigned to ${getUserName(selectedUser)}.`)
+            setMessage(isEditing ? "Task updated successfully." : `Task assigned to ${getUserName(selectedUser)}.`)
             setAttachments([])
             setFormData({
                 title: "",
@@ -128,6 +197,7 @@ const BorderedTables = () => {
                 dueTime: "",
                 assigneeId: "",
                 remark: "",
+                status: "Open",
                 priority: "Medium",
             })
 
@@ -147,7 +217,7 @@ const BorderedTables = () => {
         <div className="col-12">
             <div className="lead-page task-lead-page">
                 <div className="lead-container">
-                    <p className="lead-title">New Task</p>
+                    <p className="lead-title">{isEditing ? "Edit Task" : "New Task"}</p>
 
                     <div className="lead-tabs">
                         <button type="button" className="active">Task Details</button>
@@ -310,7 +380,7 @@ const BorderedTables = () => {
 
                         <div className="lead-buttons">
                             <button type="submit" className="lead-save" disabled={isSaving}>
-                                {isSaving ? "Saving..." : "Save"}
+                                {isSaving ? "Saving..." : isEditing ? "Update" : "Save"}
                             </button>
                             <button type="button" className="lead-cancel" onClick={() => navigate("/all-tasks")}>
                                 Cancel

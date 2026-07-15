@@ -121,7 +121,7 @@ const Attendance = () => {
   return (
     <div className="table-section attendance-section fa-2x">
       <div className="attendance-title-row">
-        <p>User Attendance Data</p>
+        {/* <p>User Attendance Data</p> */}
         <div className="attendance-filter-row">
           <div className="dropdown-wrapper">
             <select

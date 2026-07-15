@@ -141,15 +141,9 @@ const CompletedTask = () => {
     <MasterLayout>
       <div className="completed-task-page">
         <div className="completed-task-toolbar">
-          <div>
-            <select className="completed-task-filter" defaultValue="Completed">
-              <option value="Completed">Completed</option>
-              <option value="All">All</option>
-              <option value="Open">Open</option>
-              <option value="Closed">Closed</option>
-            </select>
+          <div className="completed-task-toolbar-summary">
             <p className="completed-task-total">
-              {isLoading ? "LOADING TASKS..." : `TOTAL TASKS : ${tasks.length}`}
+              {isLoading ? "LOADING TASKS..." : `${filteredTasks.length} items`}
             </p>
             {fetchError && <p className="completed-task-error">{fetchError}</p>}
           </div>
@@ -158,13 +152,6 @@ const CompletedTask = () => {
             <Link to="/new-task" className="completed-task-add">
               Add Task
             </Link>
-            <button
-              type="button"
-              className="completed-task-filter-btn"
-              aria-label="Filter tasks"
-            >
-              <Icon icon="mdi:filter" />
-            </button>
           </div>
         </div>
 

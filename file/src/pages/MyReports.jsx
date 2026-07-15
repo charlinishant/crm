@@ -121,7 +121,7 @@ const MyReports = () => {
     <div className="admin-report-page">
       <div className="admin-report-header">
         <div>
-          <h4>Reports</h4>
+          
           <p>{lastUpdatedAt ? `Last updated ${lastUpdatedAt}` : "Live admin reporting"}</p>
         </div>
       </div>

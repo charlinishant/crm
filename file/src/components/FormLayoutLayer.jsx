@@ -82,7 +82,8 @@ const FormLayoutLayer = () => {
         .admin-email-tools { align-items: center; display: flex; gap: 10px; }
         .admin-email-filter {
           background: #fff; border: 1px solid #d1d5db; border-radius: 6px;
-          color: #374151; min-width: 145px; padding: 8px 11px;
+          color: #374151; height: 38px; line-height: 38px; min-width: 145px;
+          padding: 0 34px 0 11px;
         }
         .admin-email-refresh {
           align-items: center; background: #fff; border: 1px solid #487fff;
@@ -164,8 +165,8 @@ const FormLayoutLayer = () => {
 
       <div className="admin-email-toolbar">
         <div className="admin-email-title">
-          <h6>Sent Email Activity</h6>
-          <p>Emails sent by sales users from lead conversations.</p>
+          {/* <h6>Sent Email Activity</h6>
+          <p>Emails sent by sales users from lead conversations.</p> */}
         </div>
         <div className="admin-email-tools">
           <select

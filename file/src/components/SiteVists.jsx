@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Icon } from "@iconify/react";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
@@ -198,9 +197,9 @@ const SiteVists = () => {
   return (
     <div className="table-section site-visits-section fa-2x">
       <div className="site-visits-title-row">
-        <p>Site Visit Data</p>
+        {/* <p>Site Visit Data</p> */}
         <div className="site-visits-filter-row">
-          <div className="dropdown-wrapper">
+          <div className="dropdown-wrapper status-filter-wrapper">
             <select
               className="form-select"
               value={statusFilter}
@@ -214,10 +213,10 @@ const SiteVists = () => {
             </select>
           </div>
 
-          <div className="filter-badge">
+          {/* <div className="filter-badge">
             <Icon icon="mdi:filter" width={16} height={16} />
             {visitRows.length > 0 && <span className="badge-count">{visitRows.length}</span>}
-          </div>
+          </div> */}
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
 
 const INDIAN_STATES = [
@@ -41,35 +41,50 @@ const INDIAN_STATES = [
   "Puducherry",
 ];
 
+const initialProjectForm = {
+  name: "",
+  description: "",
+  reraProjectId: "",
+  salesId: null,
+  salesIds: [],
+  projectType: "",
+  possession: false,
+  postSales: false,
+  searchAddress: "",
+  address: "",
+  street: "",
+  country: "",
+  state: "",
+  city: "",
+  zip: "",
+  locality: "",
+  latitude: "",
+  longitude: "",
+  noOfTowers: "",
+  active: false,
+  inventory: false,
+  integratedPortals: "",
+};
+
+const normalizeProjectType = (value) => {
+  const normalized = String(value || "").trim().toLowerCase().replace(/\s*\+\s*/g, "_").replace(/\s+/g, "_");
+  if (normalized === "residential") return "residential";
+  if (normalized === "commercial") return "commercial";
+  if (normalized === "residential_commercial") return "residential_commercial";
+  return value || "";
+};
+
 const NEWPROJECT = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+  const editProjectId = searchParams.get("editProjectId");
+  const isEditMode = Boolean(editProjectId);
 
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    reraProjectId: "",
-    salesId: null,
-    salesIds: [],
-    projectType: "",
-    possession: false,
-    searchAddress: "",
-    address: "",
-    street: "",
-    country: "",
-    state: "",
-    city: "",
-    zip: "",
-    locality: "",
-    latitude: "",
-    longitude: "",
-    noOfTowers: "",
-    active: false,
-    inventory: false,
-    integratedPortals: "",
-  });
+  const [formData, setFormData] = useState(initialProjectForm);
   const [users, setUsers] = useState([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
+  const [isLoadingProject, setIsLoadingProject] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [isSalesOpen, setIsSalesOpen] = useState(false);
@@ -98,6 +113,70 @@ const NEWPROJECT = () => {
 
     fetchUsers();
   }, [API_URL]);
+
+  useEffect(() => {
+    if (!editProjectId) {
+      setFormData(initialProjectForm);
+      if (editorRef.current) editorRef.current.innerHTML = "";
+      return;
+    }
+
+    const fetchProject = async () => {
+      try {
+        setIsLoadingProject(true);
+        setSaveError("");
+
+        const response = await fetch(`${API_URL}/projects/${editProjectId}`);
+        const project = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(project?.message || "Unable to load project details.");
+        }
+
+        const salesIds = Array.isArray(project.salesIds)
+          ? project.salesIds.map(String)
+          : project.salesId
+          ? [String(project.salesId)]
+          : [];
+
+        setFormData({
+          ...initialProjectForm,
+          name: project.name || "",
+          description: project.description || "",
+          reraProjectId: project.reraProjectId || "",
+          salesId: salesIds[0] || null,
+          salesIds,
+          projectType: normalizeProjectType(project.projectType),
+          possession: parseBoolean(project.possession),
+          postSales: parseBoolean(project.postSales),
+          searchAddress: project.searchAddress || "",
+          address: project.address || "",
+          street: project.street || "",
+          country: project.country || "",
+          state: project.state || "",
+          city: project.city || "",
+          zip: project.zip || "",
+          locality: project.locality || "",
+          latitude: project.latitude || "",
+          longitude: project.longitude || "",
+          noOfTowers: project.noOfTowers || "",
+          active: parseBoolean(project.active),
+          inventory: parseBoolean(project.inventory),
+          integratedPortals: project.integratedPortals || "",
+        });
+
+        if (editorRef.current) {
+          editorRef.current.innerHTML = project.description || "";
+        }
+      } catch (error) {
+        console.error("Unable to load project:", error);
+        setSaveError(error.message || "Unable to load project details.");
+      } finally {
+        setIsLoadingProject(false);
+      }
+    };
+
+    fetchProject();
+  }, [API_URL, editProjectId]);
 
   useEffect(() => {
     const closeSalesDropdown = (event) => {
@@ -193,7 +272,7 @@ const NEWPROJECT = () => {
 
     const description = editorRef.current?.innerHTML || "";
 
-    const newProject = {
+    const projectPayload = {
       name: formData.name,
       description,
       reraProjectId: formData.reraProjectId ? Number(formData.reraProjectId) : null,
@@ -201,6 +280,7 @@ const NEWPROJECT = () => {
       salesIds: formData.salesIds.map(Number),
       projectType: formData.projectType,
       possession: parseBoolean(formData.possession),
+      postSales: parseBoolean(formData.postSales),
       address: formData.address,
       street: formData.street,
       country: formData.country,
@@ -214,37 +294,40 @@ const NEWPROJECT = () => {
     };
 
     try {
-      const response = await fetch(`${API_URL}/projects`, {
-        method: "POST",
+      const response = await fetch(`${API_URL}/projects${isEditMode ? `/${editProjectId}` : ""}`, {
+        method: isEditMode ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(newProject),
+        body: JSON.stringify(projectPayload),
       });
 
+      const savedProject = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(`API save failed: ${response.status}`);
+        throw new Error(savedProject?.message || `API save failed: ${response.status}`);
       }
 
-      const savedProject = await response.json();
-      const savedProjects = JSON.parse(
-        window.localStorage.getItem("savedProjects") || "[]"
-      );
-      const projectToStore = {
-        id: savedProject.id || Date.now(),
-        ...savedProject,
-        createdAt: savedProject.createdAt || new Date().toISOString(),
-      };
+      if (!isEditMode) {
+        const savedProjects = JSON.parse(
+          window.localStorage.getItem("savedProjects") || "[]"
+        );
+        const projectToStore = {
+          id: savedProject.id || Date.now(),
+          ...savedProject,
+          createdAt: savedProject.createdAt || new Date().toISOString(),
+        };
 
-      window.localStorage.setItem(
-        "savedProjects",
-        JSON.stringify([...savedProjects, projectToStore])
-      );
-      window.alert("Project created successfully!");
+        window.localStorage.setItem(
+          "savedProjects",
+          JSON.stringify([...savedProjects, projectToStore])
+        );
+      }
+
+      window.alert(isEditMode ? "Project updated successfully!" : "Project created successfully!");
       navigate("/projects");
     } catch (error) {
       console.error("Unable to save project to database:", error);
-      setSaveError("Project could not be saved to the database. Please make sure the backend and MySQL are running.");
+      setSaveError(error.message || "Project could not be saved to the database. Please make sure the backend and MySQL are running.");
     } finally {
       setIsSaving(false);
     }
@@ -495,14 +578,14 @@ const NEWPROJECT = () => {
 
         <div className="np-page">
           <div className="np-container">
-            <p className="np-title">New Project</p>
+            <p className="np-title">{isEditMode ? "Edit Project" : "New Project"}</p>
 
             <form onSubmit={handleSubmit}>
 
               {/* PROJECT NAME */}
               <div className="np-field">
                 <label>PROJECT NAME *</label>
-                <input name="name" value={formData.name} onChange={handleChange} required />
+                <input name="name" value={formData.name} onChange={handleChange} required disabled={isLoadingProject} />
               </div>
 
               {/* DESCRIPTION */}
@@ -525,7 +608,7 @@ const NEWPROJECT = () => {
               <div className="np-row">
                 <div className="np-field">
                   <label>RERA PROJECT ID</label>
-                  <input name="reraProjectId" value={formData.reraProjectId} onChange={handleChange} />
+                  <input name="reraProjectId" value={formData.reraProjectId} onChange={handleChange} disabled={isLoadingProject} />
                 </div>
 
                 <div className="np-field">
@@ -534,8 +617,8 @@ const NEWPROJECT = () => {
                     <button
                       type="button"
                       className={`np-multi-control ${isSalesOpen ? "open" : ""}`}
-                      onClick={() => !isLoadingUsers && setIsSalesOpen((open) => !open)}
-                      disabled={isLoadingUsers}
+                      onClick={() => !isLoadingUsers && !isLoadingProject && setIsSalesOpen((open) => !open)}
+                      disabled={isLoadingUsers || isLoadingProject}
                     >
                       {selectedSalesUsers.length ? selectedSalesUsers.map((user) => (
                         <span className="np-sales-chip" key={user.id}>
@@ -612,11 +695,19 @@ const NEWPROJECT = () => {
 
                 <div className="np-field">
                   <label>PROJECT TYPE</label>
-                  <select name="projectType" value={formData.projectType} onChange={handleChange}>
+                  <select name="projectType" value={formData.projectType} onChange={handleChange} disabled={isLoadingProject}>
                     <option value="" disabled>Select</option>
                     <option value="residential">Residential</option>
                     <option value="commercial">Commercial</option>
                     <option value="residential_commercial">Residential + Commercial</option>
+                  </select>
+                </div>
+
+                <div className="np-field">
+                  <label>POST SALES</label>
+                  <select name="postSales" value={String(formData.postSales)} onChange={handleChange} disabled={isLoadingProject}>
+                    <option value="false">No</option>
+                    <option value="true">Yes</option>
                   </select>
                 </div>
               </div>
@@ -624,7 +715,7 @@ const NEWPROJECT = () => {
               {/* SEARCH */}
               <div className="np-field">
                 <label>SEARCH ADDRESS</label>
-                <input name="searchAddress" value={formData.searchAddress || ""} onChange={handleChange} />
+                <input name="searchAddress" value={formData.searchAddress || ""} onChange={handleChange} disabled={isLoadingProject} />
               </div>
 
               {/* ADDRESS + MAP */}
@@ -635,18 +726,18 @@ const NEWPROJECT = () => {
 
                   <div className="np-field">
                     <label>ADDRESS</label>
-                    <input name="address" value={formData.address} onChange={handleChange} />
+                    <input name="address" value={formData.address} onChange={handleChange} disabled={isLoadingProject} />
                   </div>
 
                   <div className="np-row">
                     <div className="np-field">
                       <label>STREET</label>
-                      <input name="street" value={formData.street} onChange={handleChange} />
+                      <input name="street" value={formData.street} onChange={handleChange} disabled={isLoadingProject} />
                     </div>
 
                     <div className="np-field">
                       <label>COUNTRY</label>
-                      <select name="country" value={formData.country} onChange={handleChange}>
+                      <select name="country" value={formData.country} onChange={handleChange} disabled={isLoadingProject}>
                         <option value="">Select Country</option>
                         <option value="India">India</option>
                       </select>
@@ -656,7 +747,7 @@ const NEWPROJECT = () => {
                   <div className="np-row">
                     <div className="np-field">
                       <label>STATE</label>
-                      <select name="state" value={formData.state} onChange={handleChange}>
+                      <select name="state" value={formData.state} onChange={handleChange} disabled={isLoadingProject}>
                         <option value="">Select State</option>
                         {INDIAN_STATES.map((state) => (
                           <option key={state} value={state}>
@@ -668,12 +759,12 @@ const NEWPROJECT = () => {
 
                     <div className="np-field">
                       <label>CITY</label>
-                      <input name="city" value={formData.city} onChange={handleChange} />
+                      <input name="city" value={formData.city} onChange={handleChange} disabled={isLoadingProject} />
                     </div>
 
                     <div className="np-field">
                       <label>ZIP</label>
-                      <input name="zip" value={formData.zip} onChange={handleChange} />
+                      <input name="zip" value={formData.zip} onChange={handleChange} disabled={isLoadingProject} />
                     </div>
                   </div>
 
@@ -681,17 +772,17 @@ const NEWPROJECT = () => {
                   <div className="np-row">
                     <div className="np-field" style={{ flex: 2 }}>
                       <label>LOCALITY</label>
-                      <input name="locality" value={formData.locality} onChange={handleChange} />
+                      <input name="locality" value={formData.locality} onChange={handleChange} disabled={isLoadingProject} />
                     </div>
 
                     <div className="np-field">
                       <label>LATITUDE</label>
-                      <input name="latitude" value={formData.latitude} onChange={handleChange} />
+                      <input name="latitude" value={formData.latitude} onChange={handleChange} disabled={isLoadingProject} />
                     </div>
 
                     <div className="np-field">
                       <label>LONGITUDE</label>
-                      <input name="longitude" value={formData.longitude} onChange={handleChange} />
+                      <input name="longitude" value={formData.longitude} onChange={handleChange} disabled={isLoadingProject} />
                     </div>
                   </div>
 
@@ -714,8 +805,8 @@ const NEWPROJECT = () => {
                 <p style={{ color: "#dc2626", marginBottom: 12 }}>{saveError}</p>
               )}
               <div className="np-buttons">
-                <button type="submit" className="np-btn-save" disabled={isSaving}>
-                  {isSaving ? "Saving..." : "Save"}
+                <button type="submit" className="np-btn-save" disabled={isSaving || isLoadingProject}>
+                  {isSaving ? "Saving..." : isEditMode ? "Update" : "Save"}
                 </button>
                 <button type="button" className="np-btn-cancel" onClick={() => navigate("/projects")}>Cancel</button>
               </div>

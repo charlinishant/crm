@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Download, Headphones, RefreshCw } from "lucide-react";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
@@ -91,6 +91,8 @@ const CallLogsTable = ({ scope = "admin" }) => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const recordsPerPage = 10;
 
   const loadLogs = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -120,10 +122,23 @@ const CallLogsTable = ({ scope = "admin" }) => {
     return () => window.clearInterval(interval);
   }, [loadLogs]);
 
+  const totalPages = Math.max(1, Math.ceil(logs.length / recordsPerPage));
+  const activePage = Math.min(currentPage, totalPages);
+  const pageStart = (activePage - 1) * recordsPerPage;
+  const pageEnd = Math.min(pageStart + recordsPerPage, logs.length);
+  const paginatedLogs = useMemo(
+    () => logs.slice(pageStart, pageStart + recordsPerPage),
+    [logs, pageStart]
+  );
+
+  useEffect(() => {
+    setCurrentPage((page) => Math.min(page, totalPages));
+  }, [totalPages]);
+
   return (
     <section className="call-log-panel">
       <style>{`
-        .call-log-panel { background:#fff; border:1px solid #dbe3ef; border-radius:10px; box-shadow:0 10px 30px rgba(15,23,42,.04); overflow:hidden; }
+        .call-log-panel { background:#fff; border:1px solid #dbe3ef; border-radius:10px; box-shadow:0 4px 10px rgba(0,0,0,.05); overflow:hidden; }
         .call-log-head { align-items:center; background:linear-gradient(180deg,#ffffff 0%,#f8fbff 100%); border-bottom:1px solid #dbe3ef; display:flex; gap:16px; justify-content:space-between; padding:20px 24px; }
         .call-log-head h2 { color:#0f172a; font-size:20px; margin:0 0 4px; }
         .call-log-head p { color:#64748b; font-size:13px; margin:0; }
@@ -134,30 +149,40 @@ const CallLogsTable = ({ scope = "admin" }) => {
         .call-log-summary-card { background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px 14px; }
         .call-log-summary-card span { color:#64748b; display:block; font-size:11px; font-weight:700; text-transform:uppercase; }
         .call-log-summary-card strong { color:#0f172a; display:block; font-size:22px; line-height:1; margin-top:8px; }
-        .call-log-table-wrap { border-top:1px solid #e2e8f0; overflow-x:auto; }
-        .call-log-table { border-collapse:separate; border-spacing:0; min-width:1320px; width:100%; }
-        .call-log-table th { background:#f1f5f9; border-bottom:1px solid #dbe3ef; color:#475569; font-size:11px; letter-spacing:.25px; padding:12px 14px; text-align:left; text-transform:uppercase; }
-        .call-log-table td { border-bottom:1px solid #e5e7eb; color:#334155; font-size:13px; padding:14px; vertical-align:middle; }
-        .call-log-table tbody tr:hover { background:#f8fbff; }
-        .call-log-name { color:#0f172a; display:block; font-weight:650; }
-        .call-log-sub { color:#64748b; display:block; font-size:11px; margin-top:2px; }
-        .call-log-status { background:#eef4ff; border-radius:999px; color:#2563eb; display:inline-flex; font-size:11px; font-weight:700; padding:4px 8px; text-transform:capitalize; }
+        .call-log-table-wrap { border-top:1px solid #e2e8f0; overflow-x:auto; padding:24px; }
+        .call-log-table { border-collapse:collapse; color:#334155; font-size:14px; min-width:1320px; width:100%; }
+        .call-log-table th { background:#487fff; border:0; color:#ffffff; font-size:14px; font-weight:700; letter-spacing:0; padding:18px 20px; text-align:left; text-transform:none; white-space:nowrap; }
+        .call-log-table th:first-child { border-radius:8px 0 0 8px; }
+        .call-log-table th:last-child { border-radius:0 8px 8px 0; }
+        .call-log-table td { border-bottom:1px solid #e2e8f0; color:#334155; font-size:14px; padding:18px 20px; vertical-align:middle; }
+        .call-log-table tbody tr:nth-child(even) { background:#f8fafc; }
+        .call-log-table tbody tr:hover, .call-log-table tbody tr:nth-child(even):hover { background:#f1f5f9; }
+        .call-log-name { color:#0f172a; display:block; font-size:15px; font-weight:700; }
+        .call-log-sub { color:#64748b; display:block; font-size:12px; margin-top:4px; }
+        .call-log-status { background:#eef4ff; border-radius:999px; color:#0f172a; display:inline-flex; font-size:12px; font-weight:700; padding:8px 12px; text-transform:capitalize; }
         .call-log-recording-player { align-items:flex-start; display:grid; gap:7px; min-width:240px; }
         .call-log-recording { height:34px; max-width:250px; width:230px; }
         .call-log-load-recording, .call-log-download-recording { font-size:11px; min-height:30px; padding:0 9px; width:max-content; }
         .call-log-recording-box { align-items:flex-start; display:grid; gap:5px; min-width:180px; }
         .call-log-recording-box small { color:#64748b; font-size:10px; }
-        .call-log-recording-box.muted span { color:#94a3b8; font-size:12px; font-weight:700; }
+        .call-log-recording-box.muted span { color:#94a3b8; font-size:14px; font-weight:700; }
         .call-log-recording-saved { align-items:center; color:#166534; display:inline-flex; font-size:11px; font-weight:800; gap:5px; text-transform:uppercase; }
         .call-log-recording-error { color:#dc2626; display:block; font-size:10px; margin-top:4px; max-width:180px; }
         .call-log-empty { color:#64748b; padding:42px 20px; text-align:center; }
         .call-log-error { color:#dc2626; padding:18px 20px; }
         .call-log-notes { max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .call-log-pagination { align-items:center; border-top:1px solid #e2e8f0; display:flex; gap:16px; justify-content:space-between; padding:16px 24px 22px; }
+        .call-log-pagination span { color:#64748b; font-size:14px; }
+        .call-log-pagination strong { color:#0f172a; }
+        .call-log-page-actions { display:flex; gap:10px; }
+        .call-log-page-actions button { background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; color:#0f172a; cursor:pointer; font-size:14px; font-weight:700; min-height:38px; padding:0 16px; }
+        .call-log-page-actions button:hover:not(:disabled) { background:#eff6ff; border-color:#93c5fd; color:#2563eb; }
+        .call-log-page-actions button:disabled { color:#94a3b8; cursor:not-allowed; opacity:.7; }
         @media (max-width:900px) { .call-log-head { align-items:flex-start; flex-direction:column; } .call-log-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-        @media (max-width:560px) { .call-log-summary { grid-template-columns:1fr; } }
+        @media (max-width:560px) { .call-log-summary { grid-template-columns:1fr; } .call-log-pagination { align-items:flex-start; flex-direction:column; } }
       `}</style>
       <div className="call-log-head">
-        <div><h2>{scope === "admin" ? "All call logs" : "My call logs"}</h2><p>Live Twilio statuses, dispositions and recordings</p></div>
+        <div></div>
         <button type="button" onClick={loadLogs} disabled={loading}><RefreshCw size={15} /> Refresh</button>
       </div>
       {!loading && !error && logs.length > 0 && (
@@ -169,9 +194,10 @@ const CallLogsTable = ({ scope = "admin" }) => {
         </div>
       )}
       {error ? <div className="call-log-error">{error}</div> : loading ? <div className="call-log-empty">Loading call logs...</div> : logs.length === 0 ? <div className="call-log-empty">No call logs found.</div> : (
+        <>
         <div className="call-log-table-wrap"><table className="call-log-table"><thead><tr>
           <th>Lead</th><th>Lead Number</th><th>Lead Status</th><th>Agent</th><th>Call Status</th><th>Duration</th><th>Disposition</th><th>After Call Recording</th><th>Notes</th><th>Created</th>
-        </tr></thead><tbody>{logs.map((log) => <tr key={log.id}>
+        </tr></thead><tbody>{paginatedLogs.map((log) => <tr key={log.id}>
           <td><span className="call-log-name">{getName(log.lead, `Lead #${log.leadId}`)}</span><span className="call-log-sub">#{log.leadId}</span></td>
           <td>{log.leadPhone || log.phone || "-"}</td>
           <td>{String(log.lead?.status || "-").replace(/_/g, " ")}</td>
@@ -183,6 +209,28 @@ const CallLogsTable = ({ scope = "admin" }) => {
           <td><div className="call-log-notes" title={log.notes || ""}>{log.notes || "-"}</div></td>
           <td>{formatDate(log.createdAt)}</td>
         </tr>)}</tbody></table></div>
+        <div className="call-log-pagination">
+          <span>
+            Showing <strong>{pageStart + 1}-{pageEnd}</strong> of <strong>{logs.length}</strong> call logs
+          </span>
+          <div className="call-log-page-actions">
+            <button
+              type="button"
+              disabled={activePage === 1}
+              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              disabled={activePage >= totalPages}
+              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+        </>
       )}
     </section>
   );

@@ -99,3 +99,39 @@ exports.upsertScheduleVisit = async (req, res) => {
     res.status(500).json({ message: error.message || "Unable to save schedule visit" })
   }
 }
+
+exports.deleteScheduleVisit = async (req, res) => {
+  try {
+    const id = Number(req.params.id)
+    if (!id) return res.status(400).json({ message: "Schedule visit id is required" })
+
+    const visit = await prisma.scheduleVisit.findUnique({ where: { id } })
+    if (!visit) return res.status(404).json({ message: "Schedule visit not found" })
+
+    await prisma.scheduleVisit.delete({ where: { id } })
+
+    await prisma.lead.update({
+      where: { id: visit.leadId },
+      data: {
+        conductSiteVisit: null,
+        conductSiteDate: null,
+        siteVisitProject: null,
+        siteVisitStatus: null,
+        visitStatus: null,
+        conductSiteStatus: null,
+        siteVisitLocation: null,
+        meetingPoint: null,
+        siteVisitExecutive: null,
+        siteVisitNote: null,
+        siteVisitInitiatedBy: null,
+        siteVisitDate: null,
+        siteVisitConductedOn: null,
+      },
+    })
+
+    res.status(200).json({ message: "Schedule visit deleted successfully" })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ message: error.message || "Unable to delete schedule visit" })
+  }
+}

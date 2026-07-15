@@ -2,7 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import MasterLayout from '../../masterLayout/MasterLayout';
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const API_URL =
+  process.env.REACT_APP_API_URL ||
+  (typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname)
+    ? window.location.origin
+    : "http://localhost:5000");
 const authHeaders = () => ({ "Authorization": `Bearer ${localStorage.getItem("authToken")}`, "Content-Type": "application/json" });
 
 const fmt = (v) => v !== undefined && v !== null && v !== "" ? `₹${Number(v).toLocaleString("en-IN")}` : "—";

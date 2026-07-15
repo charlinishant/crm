@@ -10,6 +10,8 @@ const floorConventionOptions = [
 const getFloorConventionLabel = (value) =>
   floorConventionOptions.find((option) => option.value === value)?.label || "Ground is Floor 1";
 
+const TOWERS_PER_PAGE = 8;
+
 export default function Projecttower() {
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const normalizeList = (data) => {
@@ -33,6 +35,7 @@ export default function Projecttower() {
   const [editingTowerId, setEditingTowerId] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
 
   const isEditing = editingTowerId !== null;
   const filteredTowers = useMemo(() => {
@@ -53,6 +56,21 @@ export default function Projecttower() {
         .some((value) => String(value).toLowerCase().includes(query))
     );
   }, [searchQuery, towers]);
+  const totalPages = Math.max(1, Math.ceil(filteredTowers.length / TOWERS_PER_PAGE));
+  const paginatedTowers = useMemo(() => {
+    const startIndex = (currentPage - 1) * TOWERS_PER_PAGE;
+    return filteredTowers.slice(startIndex, startIndex + TOWERS_PER_PAGE);
+  }, [currentPage, filteredTowers]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   useEffect(() => {
     const fetchOptions = async () => {
@@ -248,15 +266,15 @@ export default function Projecttower() {
         <div className="list-column">
           <div className="list-header">
             <div>
-              <h2>Towers</h2>
+              {/* <h2>Towers</h2> */}
               <span className="item-count">
                 {loading ? "Loading towers..." : `${filteredTowers.length} active projects and towers available.`}
               </span>
             </div>
             <div className="action-wrapper">
-              <button className="btn-filter" title="Filter Towers">
+              {/* <button className="btn-filter" title="Filter Towers">
                 <Filter size={18} />
-              </button>
+              </button> */}
             </div>
           </div>
 
@@ -275,7 +293,7 @@ export default function Projecttower() {
             {filteredTowers.length === 0 && !error && (
               <div className="tower-alert">{searchQuery ? "No matching towers found." : "No towers found."}</div>
             )}
-            {filteredTowers.map((tower) => (
+            {paginatedTowers.map((tower) => (
               <div key={tower.id} className="tower-item-card">
                 <div className="tower-item-header">
                   <div className="tower-title-section">
@@ -339,6 +357,39 @@ export default function Projecttower() {
                 </div>
               </div>
             ))}
+            {filteredTowers.length > TOWERS_PER_PAGE && (
+              <div
+                className="tower-pagination"
+                style={{
+                  alignItems: "center",
+                  display: "flex",
+                  gap: 12,
+                  gridColumn: "1 / -1",
+                  justifyContent: "flex-end",
+                  marginTop: 4,
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                  disabled={currentPage === 1}
+                >
+                  Previous
+                </button>
+                <span>
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         </div>
 

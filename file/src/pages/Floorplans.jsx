@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
 import Breadcrumb from "../components/Breadcrumb";
 
+const ROWS_PER_PAGE = 10;
+
 const Floorplans = () => {
     const navigate = useNavigate();
     const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
@@ -17,6 +19,7 @@ const Floorplans = () => {
     const [selectedPlan, setSelectedPlan] = useState(null);
     const [viewLoading, setViewLoading] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
+    const [currentPage, setCurrentPage] = useState(1);
 
     const fetchFloorplans = useCallback(async () => {
         try {
@@ -69,6 +72,22 @@ const Floorplans = () => {
                 .some((value) => String(value).toLowerCase().includes(query))
         );
     }, [floorplans, searchQuery]);
+    const totalPages = Math.max(1, Math.ceil(filteredFloorplans.length / ROWS_PER_PAGE));
+    const paginatedFloorplans = useMemo(() => {
+        const startIndex = (currentPage - 1) * ROWS_PER_PAGE;
+        return filteredFloorplans.slice(startIndex, startIndex + ROWS_PER_PAGE);
+    }, [currentPage, filteredFloorplans]);
+    const pageStartIndex = (currentPage - 1) * ROWS_PER_PAGE;
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery]);
+
+    useEffect(() => {
+        if (currentPage > totalPages) {
+            setCurrentPage(totalPages);
+        }
+    }, [currentPage, totalPages]);
 
     const closeModal = () => {
         setModalMode("");
@@ -135,9 +154,9 @@ const Floorplans = () => {
                                 <Icon icon="ic:baseline-add" width="16" />
                                 New Floor Plan
                             </button>
-                            <button className="btn-filter">
+                            {/* <button className="btn-filter">
                                 <Icon icon="mdi:filter" width="18" />
-                            </button>
+                            </button> */}
                         </div>
                     </div>
 
@@ -155,6 +174,7 @@ const Floorplans = () => {
                         <table className="floor-table">
                             <thead>
                                 <tr>
+                                    <th>SR. NO.</th>
                                     <th>NAME</th>
                                     <th>SALEABLE AREA</th>
                                     <th>CARPET AREA</th>
@@ -168,19 +188,20 @@ const Floorplans = () => {
                             <tbody>
                                 {loading ? (
                                     <tr>
-                                        <td colSpan="7" className="floor-empty">Loading...</td>
+                                        <td colSpan="8" className="floor-empty">Loading...</td>
                                     </tr>
                                 ) : error ? (
                                     <tr>
-                                        <td colSpan="7" className="floor-empty text-danger">{error}</td>
+                                        <td colSpan="8" className="floor-empty text-danger">{error}</td>
                                     </tr>
                                 ) : filteredFloorplans.length === 0 ? (
                                     <tr>
-                                        <td colSpan="7" className="floor-empty">{searchQuery ? "No matching floor plans found" : "No Data Found"}</td>
+                                        <td colSpan="8" className="floor-empty">{searchQuery ? "No matching floor plans found" : "No Data Found"}</td>
                                     </tr>
                                 ) : (
-                                    filteredFloorplans.map((plan) => (
+                                    paginatedFloorplans.map((plan, index) => (
                                         <tr key={plan.id}>
+                                            <td className="fw-bold">{pageStartIndex + index + 1}</td>
                                             <td className="fw-bold">{plan.name}</td>
                                             <td>{plan.saleableArea}</td>
                                             <td>{plan.carpetArea}</td>
@@ -210,6 +231,14 @@ const Floorplans = () => {
                                 )}
                             </tbody>
                         </table>
+                        {filteredFloorplans.length > ROWS_PER_PAGE && (
+                            <TablePagination
+                                currentPage={currentPage}
+                                totalPages={totalPages}
+                                onPrevious={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                                onNext={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                            />
+                        )}
                     </div>
                 </div>
 
@@ -225,6 +254,22 @@ const Detail = ({ label, value }) => (
     <div>
         <span>{label}</span>
         <strong>{formatDetailValue(value)}</strong>
+    </div>
+);
+
+const TablePagination = ({ currentPage, totalPages, onPrevious, onNext }) => (
+    <div className="table-pagination">
+        <span>
+            Showing page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
+        </span>
+        <div className="table-pagination-actions">
+            <button type="button" onClick={onPrevious} disabled={currentPage === 1}>
+                Previous
+            </button>
+            <button type="button" onClick={onNext} disabled={currentPage === totalPages}>
+                Next
+            </button>
+        </div>
     </div>
 );
 
@@ -445,6 +490,47 @@ const floorPlanStyles = `
         color: #dc2626;
     }
 
+    .table-pagination {
+        align-items: center;
+        color: #64748b;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        justify-content: space-between;
+        padding: 16px 2px 0;
+    }
+
+    .table-pagination strong {
+        color: #0f172a;
+    }
+
+    .table-pagination-actions {
+        display: flex;
+        gap: 8px;
+    }
+
+    .table-pagination-actions button {
+        background: #ffffff;
+        border: 1px solid #d6dee9;
+        border-radius: 8px;
+        color: #334155;
+        cursor: pointer;
+        font-weight: 700;
+        min-height: 38px;
+        padding: 0 14px;
+    }
+
+    .table-pagination-actions button:hover:not(:disabled) {
+        background: #f8fafc;
+        border-color: #487fff;
+        color: #2557d6;
+    }
+
+    .table-pagination-actions button:disabled {
+        cursor: not-allowed;
+        opacity: 0.55;
+    }
+
     .floor-modal-backdrop {
         align-items: center;
         background: rgba(15, 23, 42, 0.42);
@@ -494,14 +580,18 @@ const floorPlanStyles = `
     }
 
     .floor-modal-close {
+        align-items: center;
         background: #f8fafc;
         border: 1px solid #e2e8f0;
         border-radius: 8px;
         color: #334155;
         cursor: pointer;
+        display: inline-flex;
         font-size: 22px;
         height: 36px;
+        justify-content: center;
         line-height: 1;
+        padding: 0;
         width: 36px;
     }
 

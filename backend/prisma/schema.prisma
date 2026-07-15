@@ -19,6 +19,7 @@ model Project{
   salesId Int?
   projectType String
   possession Boolean @default(false)
+  postSales Boolean @default(false)
   address String? @db.Text
   street String? 
   locality String?
@@ -37,6 +38,7 @@ model Project{
   floor FloorPlan[] @relation("Project")
   unit Unit[] @relation("Project")
   salesUsers ProjectSalesUser[]
+  interestedCallLogs CallLog[] @relation("CallLogInterestedProject")
 }
 
 model ProjectSalesUser {
@@ -506,6 +508,8 @@ model CallLog {
   notes        String?  @db.Text
   connectedAt  DateTime?
   nextFollowUpAt DateTime?
+  interestedProjectId Int?
+  interestedProjectRef Project? @relation("CallLogInterestedProject", fields: [interestedProjectId], references: [id], onDelete: SetNull)
   interestedProject String?
   budget       String?
   visitDateTime DateTime?
@@ -518,6 +522,7 @@ model CallLog {
   @@index([agentId])
   @@index([status])
   @@index([disposition])
+  @@index([interestedProjectId])
   @@index([createdAt])
 }
 

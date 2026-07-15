@@ -141,15 +141,9 @@ const OpenTask = () => {
     <MasterLayout>
       <div className="open-task-page">
         <div className="open-task-toolbar">
-          <div>
-            <select className="open-task-filter" defaultValue="Open">
-              <option value="Open">Open</option>
-              <option value="All">All</option>
-              <option value="Closed">Closed</option>
-              <option value="Completed">Completed</option>
-            </select>
+          <div className="open-task-toolbar-summary">
             <p className="open-task-total">
-              {isLoading ? "LOADING TASKS..." : `TOTAL TASKS : ${tasks.length}`}
+              {isLoading ? "LOADING TASKS..." : `${filteredTasks.length} items`}
             </p>
             {fetchError && <p className="open-task-error">{fetchError}</p>}
           </div>
@@ -158,9 +152,6 @@ const OpenTask = () => {
             <Link to="/new-task" className="open-task-add">
               Add Task
             </Link>
-            <button type="button" className="open-task-filter-btn" aria-label="Filter tasks">
-              <Icon icon="mdi:filter" />
-            </button>
           </div>
         </div>
 

@@ -126,6 +126,13 @@ const compactCurrency = (value) => {
   }
   return confirmCurrency(amount);
 };
+const escapeHtml = (value) =>
+  String(value ?? "-")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 
 const getProjectName = (project) =>
   project?.name || project?.projectName || project?.project_name || project?.title || "";
@@ -242,12 +249,14 @@ const UserBookingForm = ({
     unitType: "Residential",
     propertyType: "Apartment",
   });
+  const [unitPage, setUnitPage] = useState(1);
   const [completionActionMessage, setCompletionActionMessage] = useState("");
   const [bookingProjects, setBookingProjects] = useState([]);
   const [projectTowers, setProjectTowers] = useState([]);
   const [databaseUnitGroups, setDatabaseUnitGroups] = useState([]);
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
   const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
+  const [projectSearch, setProjectSearch] = useState("");
   const [editableCostRows, setEditableCostRows] = useState([]);
   const [selectedTowerId, setSelectedTowerId] = useState("");
   const projectSelectRef = useRef(null);
@@ -429,6 +438,7 @@ const UserBookingForm = ({
 
   const selectProjectOption = (value) => {
     setIsProjectMenuOpen(false);
+    setProjectSearch("");
 
     if (value === "__lead_project__") {
       updateField("projectId", "");
@@ -489,7 +499,21 @@ const UserBookingForm = ({
     (bookingStepIndex === 1 && !bookingForm.unit) ||
     (bookingStepIndex === 2 && !bookingForm.customerName && !leadName);
 
-  const floorGroups = Array.from(new Set(filteredCatalogUnits.map((unit) => unit.floor))).sort((a, b) => Number(b) - Number(a));
+  const unitsPerPage = 8;
+  const totalUnitPages = Math.max(1, Math.ceil(filteredCatalogUnits.length / unitsPerPage));
+  const activeUnitPage = Math.min(unitPage, totalUnitPages);
+  const unitPageStart = (activeUnitPage - 1) * unitsPerPage;
+  const visibleCatalogUnits = filteredCatalogUnits.slice(unitPageStart, unitPageStart + unitsPerPage);
+  const visibleUnitEnd = Math.min(unitPageStart + visibleCatalogUnits.length, filteredCatalogUnits.length);
+  const floorGroups = Array.from(new Set(visibleCatalogUnits.map((unit) => unit.floor))).sort((a, b) => Number(b) - Number(a));
+
+  useEffect(() => {
+    setUnitPage(1);
+  }, [bookingForm.projectId, bookingForm.projectDetails, filters.propertyPurpose, filters.propertyType, filters.unitType, selectedTowerId]);
+
+  useEffect(() => {
+    setUnitPage((page) => Math.min(page, totalUnitPages));
+  }, [totalUnitPages]);
   const quotationName = [
     bookingForm.projectDetails || selectedUnit.projectName,
     selectedTowerName || selectedUnit.towerName,
@@ -621,6 +645,12 @@ const UserBookingForm = ({
     : selectedProjectId
       ? getProjectName(selectedProject) || bookingForm.projectDetails || "Select Project"
       : bookingForm.projectDetails || (bookingProjects.length ? "Select Project" : "No projects found");
+  const projectSearchQuery = projectSearch.trim().toLowerCase();
+  const filteredBookingProjects = projectSearchQuery
+    ? bookingProjects.filter((project) => getProjectName(project).toLowerCase().includes(projectSearchQuery))
+    : bookingProjects;
+  const shouldShowLeadProjectOption =
+    hasLeadProjectOption && (!projectSearchQuery || bookingForm.projectDetails.toLowerCase().includes(projectSearchQuery));
 
   const syncCostSheetFields = (rows) => {
     const lineRows = rows
@@ -715,7 +745,18 @@ const UserBookingForm = ({
           </button>
           {isProjectMenuOpen && (
             <div className="ubf-project-select-menu" role="listbox">
-            {bookingProjects.map((project) => (
+              <div className="ubf-project-search-wrap">
+                <input
+                  autoFocus
+                  className="ubf-project-search"
+                  type="search"
+                  value={projectSearch}
+                  onChange={(event) => setProjectSearch(event.target.value)}
+                  placeholder="Search project..."
+                  aria-label="Search project"
+                />
+              </div>
+            {filteredBookingProjects.map((project) => (
               <button
                 type="button"
                 className={String(project.id) === selectedProjectId ? "active" : ""}
@@ -727,7 +768,7 @@ const UserBookingForm = ({
                 {getProjectName(project)}
               </button>
             ))}
-            {hasLeadProjectOption && (
+            {shouldShowLeadProjectOption && (
               <button
                 type="button"
                 className={!selectedProjectId ? "active" : ""}
@@ -737,6 +778,9 @@ const UserBookingForm = ({
               >
                 {bookingForm.projectDetails}
               </button>
+            )}
+            {!filteredBookingProjects.length && !shouldShowLeadProjectOption && (
+              <div className="ubf-project-empty">No matching projects found.</div>
             )}
             </div>
           )}
@@ -846,7 +890,7 @@ const UserBookingForm = ({
             <React.Fragment key={floor}>
               <div className="ubf-floor-label">Floor {floor}</div>
               <div className="ubf-units-line">
-                {filteredCatalogUnits.filter((unit) => unit.floor === floor).map((unit) => {
+                {visibleCatalogUnits.filter((unit) => unit.floor === floor).map((unit) => {
                   const status = normalizeUnitStatus(unit.status);
                   const tone = bookingForm.unit === unit.name ? "selected" : interestedUnits.has(unit.name) ? "interested" : status;
                   const isLocked = ["booked", "blocked", "refuge", "investor"].includes(status);
@@ -878,6 +922,29 @@ const UserBookingForm = ({
             </React.Fragment>
           ))}
         </div>
+        {filteredCatalogUnits.length > unitsPerPage && (
+          <div className="ubf-unit-pagination">
+            <span>
+              Showing <b>{unitPageStart + 1}-{visibleUnitEnd}</b> of <b>{filteredCatalogUnits.length}</b> units
+            </span>
+            <div>
+              <button
+                type="button"
+                disabled={activeUnitPage === 1}
+                onClick={() => setUnitPage((page) => Math.max(1, page - 1))}
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                disabled={activeUnitPage >= totalUnitPages}
+                onClick={() => setUnitPage((page) => Math.min(totalUnitPages, page + 1))}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       {renderUnitGallery()}
@@ -1175,19 +1242,33 @@ const UserBookingForm = ({
     );
   };
 
-  const getBookingDocumentHtml = () => {
+  const getBookingDocumentData = () => {
+    const bookingReference = bookingForm.bookingName || quotationName || `BKG-${bookingForm.id || Date.now()}`;
+    const customerName = bookingForm.customerName || leadName || "-";
+    const projectName = bookingForm.projectDetails || selectedUnit.projectName || "-";
+    const towerName = selectedTowerName || selectedUnit.towerName || "-";
+    const unitName = bookingForm.unit || selectedUnit.name || "-";
+    const bookingDate = bookingForm.bookedOn || bookingForm.bookingDate || new Date().toLocaleDateString("en-IN");
+    const finalPrice = bookingForm.totalPrice || bookingForm.basePrice || allInclusiveValue || "";
     const rows = [
-      ["Booking Reference", bookingForm.bookingName || quotationName || "Booking"],
-      ["Customer", bookingForm.customerName || leadName || "-"],
-      ["Project", bookingForm.projectDetails || selectedUnit.projectName || "-"],
-      ["Tower", selectedTowerName || selectedUnit.towerName || "-"],
-      ["Unit", bookingForm.unit || selectedUnit.name || "-"],
+      ["Booking Reference", bookingReference],
+      ["Customer", customerName],
+      ["Project", projectName],
+      ["Tower", towerName],
+      ["Unit", unitName],
       ["Floor", selectedUnit.floor || "-"],
-      ["Booking Date", bookingForm.bookedOn || bookingForm.bookingDate || new Date().toLocaleDateString("en-IN")],
+      ["Booking Date", bookingDate],
       ["Saleable Area", bookingForm.saleableArea || selectedUnit.saleable || "-"],
+      ["Carpet Area", bookingForm.carpetArea || selectedUnit.carpet || "-"],
       ["Base Rate", bookingForm.baseRate || selectedUnit.baseRate || "-"],
-      ["Final Price", bookingForm.totalPrice || bookingForm.basePrice || allInclusiveValue || "-"],
+      ["Final Price", finalPrice ? confirmCurrency(finalPrice) : "-"],
     ];
+
+    return { bookingReference, customerName, projectName, towerName, unitName, bookingDate, finalPrice, rows };
+  };
+
+  const getBookingDocumentHtml = () => {
+    const { bookingReference, customerName, projectName, unitName, bookingDate, rows } = getBookingDocumentData();
 
     return `<!doctype html>
 <html>
@@ -1195,18 +1276,47 @@ const UserBookingForm = ({
   <meta charset="utf-8" />
   <title>Booking Confirmation</title>
   <style>
-    body { color: #172033; font-family: Arial, sans-serif; margin: 32px; }
-    h1 { font-size: 24px; margin: 0 0 4px; }
-    p { color: #64748b; margin: 0 0 24px; }
-    table { border-collapse: collapse; width: 100%; }
-    td { border: 1px solid #d7dde7; padding: 10px 12px; }
+    body { color: #172033; font-family: Arial, sans-serif; margin: 0; background: #f6f8fc; }
+    .page { background: #fff; margin: 24px auto; max-width: 860px; padding: 52px 56px; }
+    .top { align-items: flex-start; display: flex; justify-content: space-between; gap: 24px; }
+    .brand { color: #1d2a57; font-size: 34px; font-weight: 900; letter-spacing: .02em; }
+    .sub { color: #64748b; font-size: 12px; letter-spacing: .12em; margin-top: 8px; text-transform: uppercase; }
+    .ref { color: #0f172a; font-size: 14px; line-height: 1.7; text-align: right; }
+    .ref strong { display: block; font-size: 18px; }
+    .rule { background: #2458e6; height: 3px; margin: 28px 0 34px; }
+    h1 { border-left: 4px solid #2458e6; color: #0f172a; font-size: 26px; margin: 0 0 24px; padding-left: 16px; text-transform: uppercase; }
+    .hero { background: #dbeafe; border: 1px solid #a9c7ff; border-radius: 8px; color: #2563eb; margin-bottom: 28px; padding: 24px; text-align: center; }
+    .hero strong { display: block; font-size: 28px; margin-bottom: 10px; }
+    p { color: #1f2a44; font-size: 15px; line-height: 1.7; margin: 0 0 20px; }
+    table { border-collapse: collapse; margin: 24px 0; width: 100%; }
+    td { border: 1px solid #d7dde7; padding: 12px 14px; }
     td:first-child { background: #f4f7fb; color: #526070; font-weight: 700; width: 34%; }
+    .signature { margin-top: 42px; }
+    .signature strong { display: block; margin-top: 42px; }
   </style>
 </head>
 <body>
-  <h1>Booking Confirmation</h1>
-  <p>Booking Confirmed Successfully</p>
-  <table>${rows.map(([label, value]) => `<tr><td>${label}</td><td>${value}</td></tr>`).join("")}</table>
+  <main class="page">
+    <section class="top">
+      <div>
+        <div class="brand">SWAMI</div>
+        <div class="sub">Premium Real Estate CRM · Sales Division</div>
+      </div>
+      <div class="ref"><strong>${escapeHtml(bookingReference)}</strong>Date: ${escapeHtml(bookingDate)}</div>
+    </section>
+    <div class="rule"></div>
+    <h1>Booking Confirmation Letter</h1>
+    <div class="hero"><strong>Your Booking is Confirmed!</strong>Unit selected · Pricing confirmed · Booking recorded</div>
+    <p>Dear <strong>${escapeHtml(customerName)}</strong>,</p>
+    <p>We are pleased to confirm your booking for unit <strong>${escapeHtml(unitName)}</strong> at <strong>${escapeHtml(projectName)}</strong>. This document records the booking details captured in SWAMI CRM.</p>
+    <table>${rows.map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`).join("")}</table>
+    <p>Please keep this booking confirmation for your records. The project team will coordinate the next documentation and payment steps as per the agreed booking terms.</p>
+    <div class="signature">
+      <span>For SWAMI Real Estate CRM</span>
+      <strong>Authorized Signatory</strong>
+      <span>Sales Team</span>
+    </div>
+  </main>
 </body>
 </html>`;
   };
@@ -1214,32 +1324,44 @@ const UserBookingForm = ({
   const escapePdfText = (value) => String(value ?? "-").replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
 
   const getBookingPdfBlob = () => {
-    const rows = [
-      "Booking Confirmation",
-      "Booking Confirmed Successfully",
-      "",
-      `Booking Reference: ${bookingForm.bookingName || quotationName || "Booking"}`,
-      `Customer: ${bookingForm.customerName || leadName || "-"}`,
-      `Project: ${bookingForm.projectDetails || selectedUnit.projectName || "-"}`,
-      `Tower: ${selectedTowerName || selectedUnit.towerName || "-"}`,
-      `Unit: ${bookingForm.unit || selectedUnit.name || "-"}`,
-      `Floor: ${selectedUnit.floor || "-"}`,
-      `Booking Date: ${bookingForm.bookedOn || bookingForm.bookingDate || new Date().toLocaleDateString("en-IN")}`,
-      `Saleable Area: ${bookingForm.saleableArea || selectedUnit.saleable || "-"}`,
-      `Base Rate: ${bookingForm.baseRate || selectedUnit.baseRate || "-"}`,
-      `Final Price: ${bookingForm.totalPrice || bookingForm.basePrice || allInclusiveValue || "-"}`,
+    const { bookingReference, customerName, projectName, unitName, bookingDate, rows } = getBookingDocumentData();
+    const detailLines = rows.map(([label, value]) => `${label}: ${value}`);
+    const bodyLines = [
+      `Dear ${customerName},`,
+      `Your booking for unit ${unitName} at ${projectName} is confirmed.`,
+      "Please keep this document for your records.",
     ];
+    const stream = [];
+    const text = (content, x, y, size = 11) => {
+      stream.push("BT", `/F1 ${size} Tf`, `${x} ${y} Td`, `(${escapePdfText(content)}) Tj`, "ET");
+    };
+    const rect = (x, y, width, height, color = "0.96 0.98 1") => {
+      stream.push(`${color} rg`, `${x} ${y} ${width} ${height} re f`, "0 0 0 rg");
+    };
+    rect(0, 0, 595, 842, "1 1 1");
+    text("SWAMI", 58, 748, 28);
+    text("PREMIUM REAL ESTATE CRM - SALES DIVISION", 58, 728, 9);
+    text(bookingReference, 420, 748, 13);
+    text(`Date: ${bookingDate}`, 420, 728, 10);
+    rect(58, 704, 480, 3, "0.14 0.35 0.9");
+    text("BOOKING CONFIRMATION LETTER", 74, 662, 20);
+    rect(58, 592, 480, 58, "0.86 0.93 1");
+    text("Your Booking is Confirmed!", 170, 626, 20);
+    text("Unit selected - Pricing confirmed - Booking recorded", 150, 606, 10);
+    bodyLines.forEach((line, index) => text(line, 58, 560 - index * 18, 11));
+    let y = 482;
+    detailLines.forEach((line, index) => {
+      if (index % 2 === 0) rect(58, y - 7, 480, 22, "0.96 0.98 1");
+      text(line, 72, y, 10);
+      y -= 26;
+    });
+    text("For SWAMI Real Estate CRM", 58, 128, 11);
+    text("Authorized Signatory", 58, 86, 12);
+    text("Sales Team", 58, 70, 9);
     const content = [
-      "BT",
-      "/F1 18 Tf",
-      "50 790 Td",
-      `(${escapePdfText(rows[0])}) Tj`,
-      "/F1 11 Tf",
-      ...rows.slice(1).flatMap((line, index) => [
-        `0 -${index === 0 ? 26 : 18} Td`,
-        `(${escapePdfText(line)}) Tj`,
-      ]),
-      "ET",
+      "q",
+      ...stream,
+      "Q",
     ].join("\n");
     const objects = [
       "<< /Type /Catalog /Pages 2 0 R >>",

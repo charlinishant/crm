@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Icon } from "@iconify/react";
-import { useNavigate } from "react-router-dom";
 
 const getLeadId = (lead) => lead?.id || lead?._id || lead?.lead_id || "";
 
@@ -129,11 +128,12 @@ const scheduleVisitToVisit = (visit) => {
 const SVPDashboard = () => {
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const recordsPerPage = 10;
-  const navigate = useNavigate();
   const [scheduledVisits, setScheduledVisits] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [openActionId, setOpenActionId] = useState(null);
+  const [viewVisit, setViewVisit] = useState(null);
 
   const fetchScheduledVisits = useCallback(async (showLoading = false) => {
     try {
@@ -196,10 +196,34 @@ const SVPDashboard = () => {
     setCurrentPage((page) => Math.min(page, totalPages));
   }, [totalPages]);
 
-  const handleEdit = (lead) => {
-    window.sessionStorage.setItem("selectedLeadEdit", JSON.stringify(lead));
-    const leadId = getLeadId(lead);
-    navigate(leadId ? `/add-lead?editLeadId=${leadId}` : "/add-lead", { state: { lead } });
+  const handleView = (visit) => {
+    setOpenActionId(null);
+    setViewVisit(visit);
+  };
+
+  const handleDelete = async (visit) => {
+    setOpenActionId(null);
+    if (!visit?.id) return;
+    if (!window.confirm("Delete this scheduled visit?")) return;
+
+    const previousVisits = scheduledVisits;
+    setScheduledVisits((current) => current.filter((item) => item.id !== visit.id));
+    setError("");
+
+    try {
+      const token = localStorage.getItem("authToken");
+      const response = await fetch(`${API_URL}/schedule-visits/${visit.id}`, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      const result = await response.json().catch(() => ({}));
+
+      if (!response.ok) throw new Error(result?.message || "Unable to delete scheduled visit");
+      window.dispatchEvent(new CustomEvent("siteVisitStatusUpdated"));
+    } catch (err) {
+      setScheduledVisits(previousVisits);
+      setError(err.message || "Unable to delete scheduled visit");
+    }
   };
 
   const handleExport = () => {
@@ -306,15 +330,27 @@ const SVPDashboard = () => {
                   <td>{formatVisitTime(visit.scheduledOn)}</td>
                   <td>{getUserName(visit.salesExecutive)}</td>
                   <td>{visit.location}</td>
-                  <td>
-                    <button
-                      type="button"
-                      className="lead-action-btn"
-                      onClick={() => handleEdit(lead)}
-                      aria-label="Edit scheduled visit lead"
-                    >
-                      <Icon icon="mdi:pencil" width={16} height={16} />
-                    </button>
+                  <td className="svp-action-cell">
+                    <div className="svp-action-wrap">
+                      <button
+                        type="button"
+                        className="lead-action-btn"
+                        onClick={() => setOpenActionId((current) => (current === visit.id ? null : visit.id))}
+                        aria-label="Open scheduled visit actions"
+                      >
+                        <Icon icon="ph:dots-three-vertical-bold" width={18} height={18} />
+                      </button>
+                      {openActionId === visit.id && (
+                        <div className="svp-action-menu">
+                          <button type="button" onClick={() => handleView(visit)}>
+                            View
+                          </button>
+                          <button type="button" className="danger" onClick={() => handleDelete(visit)}>
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -358,6 +394,46 @@ const SVPDashboard = () => {
           </div>
         )}
       </div>
+      {viewVisit && <VisitViewModal visit={viewVisit} onClose={() => setViewVisit(null)} />}
+    </div>
+  );
+};
+
+const VisitViewModal = ({ visit, onClose }) => {
+  const lead = visit.lead || {};
+  const details = [
+    ["Lead ID", getLeadId(lead) ? `#${getLeadId(lead)}` : "-"],
+    ["Lead Name", getLeadName(lead)],
+    ["Project", visit.project],
+    ["Status", visit.status],
+    ["Scheduled Date", formatVisitDate(visit.scheduledOn)],
+    ["Day", formatVisitDay(visit.scheduledOn)],
+    ["Time", formatVisitTime(visit.scheduledOn)],
+    ["Sales Executive", getUserName(visit.salesExecutive)],
+    ["Location", visit.location],
+  ];
+
+  return (
+    <div className="svp-modal-backdrop">
+      <section className="svp-modal" role="dialog" aria-modal="true" aria-labelledby="svp-visit-title">
+        <div className="svp-modal-head">
+          <div>
+            <h2 id="svp-visit-title">{getLeadName(lead)}</h2>
+            <p>Scheduled visit details</p>
+          </div>
+          <button type="button" className="svp-modal-close" onClick={onClose}>
+            x
+          </button>
+        </div>
+        <div className="svp-modal-grid">
+          {details.map(([label, value]) => (
+            <div className="svp-modal-field" key={label}>
+              <span>{label}</span>
+              <strong>{value || "-"}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 };

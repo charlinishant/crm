@@ -44,6 +44,25 @@ const buildBookingPriceSnapshot = (unitItem, data = {}) => {
   }
 }
 
+const bookingInclude = {
+  costSheet: true,
+  paymentSchedule: true,
+  unit: {
+    include: {
+      project: true,
+    },
+  },
+  unitItem: {
+    include: {
+      unit: {
+        include: {
+          project: true,
+        },
+      },
+    },
+  },
+}
+
 const ACTIVE_BOOKING_STAGES = new Set(["confirmed", "held", "booked", "registered"])
 const FROZEN_PRICE_FIELDS = new Set([
   "carpetArea",
@@ -333,7 +352,7 @@ exports.getBookings = async (req, res) => {
     const { id } = req.params
 
     if (id) {
-      const booking = await prisma.booking.findUnique({ where: { id: Number(id) } })
+      const booking = await prisma.booking.findUnique({ where: { id: Number(id) }, include: bookingInclude })
       if (!booking) return res.status(404).json({ message: "Booking not found" })
       return res.status(200).json(booking)
     }
@@ -350,7 +369,7 @@ exports.getBookings = async (req, res) => {
       where,
       skip,
       take: limit,
-      include:{costSheet:true, paymentSchedule:true, unitItem:true },
+      include: bookingInclude,
       orderBy: { createdAt: "desc" },
     })
 

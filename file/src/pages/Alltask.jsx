@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Icon } from "@iconify/react/dist/iconify.js";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
@@ -43,6 +43,7 @@ const getTaskUserLabel = (...values) => {
 
 const normalizeTask = (task, index) => ({
   id: task.id || task._id || index,
+  raw: task,
   title: task.title || task.name || "Untitled Task",
   subtitle: task.subtitle || task.description || task.type || "",
   assignedTo: getTaskUserLabel(task.assignedTo, task.assignee, task.assigneeName, task.assigned_to, task.assign),
@@ -54,14 +55,14 @@ const normalizeTask = (task, index) => ({
 });
 
 const Alltask = () => {
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [statusFilter, setStatusFilter] = useState("All");
-  const [assigneeFilter, setAssigneeFilter] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [fetchError, setFetchError] = useState("");
+  const [openActionId, setOpenActionId] = useState(null);
+  const [viewTask, setViewTask] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -102,40 +103,10 @@ const Alltask = () => {
     };
   }, []);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchUsers = async () => {
-      try {
-        const response = await fetch(`${API_URL}/users?limit=100`);
-        if (!response.ok) throw new Error("Unable to fetch users");
-
-        const result = await response.json();
-        const userList = Array.isArray(result) ? result : result?.data || result?.users || [];
-
-        if (isMounted) {
-          setUsers(userList);
-        }
-      } catch (error) {
-        if (isMounted) {
-          setUsers([]);
-        }
-      }
-    };
-
-    fetchUsers();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
   const filteredTasks = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
     return tasks.filter((task) => {
-      const matchesStatus = statusFilter === "All" || task.status === statusFilter;
-      const matchesAssignee = assigneeFilter === "All" || task.assignedTo === assigneeFilter;
       const matchesSearch =
         !query ||
         [
@@ -151,9 +122,9 @@ const Alltask = () => {
           .filter(Boolean)
           .some((value) => String(value).toLowerCase().includes(query));
 
-      return matchesStatus && matchesAssignee && matchesSearch;
+      return matchesSearch;
     });
-  }, [assigneeFilter, searchQuery, statusFilter, tasks]);
+  }, [searchQuery, tasks]);
 
   const totalPages = Math.max(1, Math.ceil(filteredTasks.length / TASKS_PER_PAGE));
   const paginatedTasks = useMemo(() => {
@@ -162,11 +133,10 @@ const Alltask = () => {
   }, [currentPage, filteredTasks]);
   const firstTaskNumber = filteredTasks.length === 0 ? 0 : (currentPage - 1) * TASKS_PER_PAGE + 1;
   const lastTaskNumber = Math.min(currentPage * TASKS_PER_PAGE, filteredTasks.length);
-  const totalTasks = tasks.length || 0;
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [assigneeFilter, searchQuery, statusFilter]);
+  }, [searchQuery]);
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
@@ -201,55 +171,51 @@ const Alltask = () => {
     }
   };
 
+  const handleEditTask = (task) => {
+    setOpenActionId(null);
+    navigate(`/new-task?editTaskId=${task.id}`, { state: { task: task.raw || task } });
+  };
+
+  const handleViewTask = (task) => {
+    setOpenActionId(null);
+    setViewTask(task);
+  };
+
+  const handleDeleteTask = async (taskId) => {
+    setOpenActionId(null);
+    if (!window.confirm("Delete this task?")) return;
+
+    const previousTasks = tasks;
+    setTasks((current) => current.filter((task) => task.id !== taskId));
+    setFetchError("");
+
+    try {
+      const response = await fetch(`${API_URL}/tasks/${taskId}`, {
+        method: "DELETE",
+      });
+
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || "Unable to delete task");
+    } catch (error) {
+      setTasks(previousTasks);
+      setFetchError(error.message || "Unable to delete task.");
+    }
+  };
+
   return (
     <MasterLayout>
       <div className="all-task-page">
         <div className="all-task-toolbar">
-          <div>
-            <div className="all-task-filter-row">
-              <select
-                className="all-task-filter"
-                value={statusFilter}
-                onChange={(event) => setStatusFilter(event.target.value)}
-              >
-                <option value="All">All</option>
-                <option value="Open">Open</option>
-                <option value="Completed">Completed</option>
-                <option value="Archived">Archived</option>
-              </select>
-              <select
-                className="all-task-filter all-task-user-filter"
-                value={assigneeFilter}
-                onChange={(event) => setAssigneeFilter(event.target.value)}
-              >
-                <option value="All">All Users</option>
-                {users.map((user) => {
-                  const userName = getUserName(user);
-
-                  if (!userName) return null;
-
-                  return (
-                    <option key={user.id || user.email} value={userName}>
-                      {userName}
-                      {user.role ? ` (${user.role})` : ""}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
+          <div className="all-task-toolbar-summary">
             <p className="all-task-total">
-              {isLoading ? "LOADING TASKS..." : `TOTAL TASKS : ${filteredTasks.length} / ${totalTasks}`}
+              {isLoading ? "LOADING TASKS..." : `${filteredTasks.length} items`}
             </p>
             {fetchError && <p className="all-task-error">{fetchError}</p>}
           </div>
-
           <div className="all-task-actions">
             <Link to="/new-task" className="all-task-add">
               Add Task
             </Link>
-            {/* <button type="button" className="all-task-filter-btn" aria-label="Filter tasks">
-              <Icon icon="mdi:filter" />
-            </button> */}
           </div>
         </div>
 
@@ -309,9 +275,29 @@ const Alltask = () => {
                   <td>{task.createdOn}</td>
                   <td>{task.dueOn}</td>
                   <td className="all-task-action-cell">
-                    <button type="button" className="all-task-menu" aria-label="Task actions">
-                      <Icon icon="ph:dots-three-vertical-bold" />
-                    </button>
+                    <div className="all-task-action-wrap">
+                      <button
+                        type="button"
+                        className="all-task-menu"
+                        aria-label="Task actions"
+                        onClick={() => setOpenActionId((current) => (current === task.id ? null : task.id))}
+                      >
+                        <Icon icon="ph:dots-three-vertical-bold" />
+                      </button>
+                      {openActionId === task.id && (
+                        <div className="all-task-action-dropdown">
+                          <button type="button" onClick={() => handleViewTask(task)}>
+                            View
+                          </button>
+                          <button type="button" onClick={() => handleEditTask(task)}>
+                            Edit
+                          </button>
+                          <button type="button" className="danger" onClick={() => handleDeleteTask(task.id)}>
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -348,8 +334,49 @@ const Alltask = () => {
             </div>
           </div>
         )}
+        {viewTask && <TaskViewModal task={viewTask} onClose={() => setViewTask(null)} />}
       </div>
     </MasterLayout>
+  );
+};
+
+const TaskViewModal = ({ task, onClose }) => {
+  const raw = task.raw || {};
+  const details = [
+    ["Title", task.title],
+    ["Assigned To", task.assignedTo],
+    ["Assigned By", task.assignedBy],
+    ["Status", task.status],
+    ["Priority", task.priority],
+    ["Created On", task.createdOn],
+    ["Due On", task.dueOn],
+    ["Due Time", raw.dueTime || "-"],
+    ["Description", raw.description || task.subtitle || "-"],
+    ["Remark", raw.remark || "-"],
+  ];
+
+  return (
+    <div className="all-task-modal-backdrop">
+      <section className="all-task-modal" role="dialog" aria-modal="true" aria-labelledby="task-view-title">
+        <div className="all-task-modal-head">
+          <div>
+            <h2 id="task-view-title">{task.title}</h2>
+            <p>Task details</p>
+          </div>
+          <button type="button" className="all-task-modal-close" onClick={onClose}>
+            x
+          </button>
+        </div>
+        <div className="all-task-modal-grid">
+          {details.map(([label, value]) => (
+            <div className="all-task-modal-field" key={label}>
+              <span>{label}</span>
+              <strong>{value || "-"}</strong>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
   );
 };
 

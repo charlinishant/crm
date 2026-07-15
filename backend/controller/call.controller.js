@@ -10,6 +10,7 @@ const {
 const allowedDispositions = new Set([
   "Qualified",
   "Callback Later",
+  "Interested Project",
   "Site Visit Scheduled",
   "Not Interested",
   "Wrong Number",
@@ -244,7 +245,7 @@ exports.startCall = async (req, res) => {
 const getDispositionLeadStatus = (disposition) => {
   if (disposition === "Qualified") return "Qualified"
   if (["Not Interested", "Wrong Number", "Junk"].includes(disposition)) return "Unqualified"
-  if (["Callback Later", "Follow-up Required", "Site Visit Scheduled"].includes(disposition)) return "Qualified"
+  if (["Callback Later", "Follow-up Required", "Site Visit Scheduled", "Interested Project"].includes(disposition)) return "Qualified"
   return "New"
 }
 
@@ -259,7 +260,8 @@ exports.disposeCall = async (req, res) => {
     const notes = String(req.body.notes || "").trim() || null
     const nextFollowUpAt = toDateOrNull(req.body.nextFollowUpAt || req.body.nextFollowUpDateTime)
     const visitDateTime = toDateOrNull(req.body.visitDateTime)
-    const interestedProject = String(req.body.interestedProject || "").trim() || null
+    const interestedProjectId = toNumberOrNull(req.body.interestedProjectId || req.body.projectId)
+    let interestedProject = String(req.body.interestedProject || "").trim() || null
     const budget = String(req.body.budget || "").trim() || null
     const callStatus = normalizeCallStatus(req.body.callStatus || req.body.status || "completed")
 
@@ -271,6 +273,15 @@ exports.disposeCall = async (req, res) => {
     }
     if (disposition === "Site Visit Scheduled" && !visitDateTime) {
       return res.status(400).json({ message:"Visit date and time are required" })
+    }
+
+    if (interestedProjectId) {
+      const project = await prisma.project.findUnique({
+        where:{ id:interestedProjectId },
+        select:{ id:true, name:true },
+      })
+      if (!project) return res.status(400).json({ message:"Selected interested project is invalid" })
+      interestedProject = project.name
     }
 
     let existingCall = null
@@ -327,6 +338,7 @@ exports.disposeCall = async (req, res) => {
           disposition,
           notes,
           nextFollowUpAt,
+          interestedProjectId,
           interestedProject,
           budget,
           visitDateTime,

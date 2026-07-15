@@ -146,10 +146,32 @@ const getContactValue = (value, keys = ["value", "email", "phone", "number"]) =>
   return "";
 };
 
+const displayValue = (value, fallback = "-") => {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (Array.isArray(value)) return value.map((item) => displayValue(item, "")).find(Boolean) || fallback;
+  if (typeof value === "object") {
+    return (
+      value.name ||
+      value.unitName ||
+      value.unitNo ||
+      value.number ||
+      value.label ||
+      value.title ||
+      value.project?.name ||
+      value.description ||
+      value.type ||
+      value.category ||
+      (value.id ? `#${value.id}` : fallback)
+    );
+  }
+  return fallback;
+};
+
 const valueOf = (lead, keys, fallback = "-") => {
   for (const key of keys) {
     const value = lead?.[key];
-    if (value !== undefined && value !== null && value !== "") return value;
+    if (value !== undefined && value !== null && value !== "") return displayValue(value, fallback);
   }
   return fallback;
 };
@@ -844,7 +866,7 @@ const UserDetails = ({
       type: "Site Visits",
       icon: <FaMapMarkerAlt />,
       title: `Site Visit ${visit.status || "Scheduled"}`,
-      description: visit.project || projectInterest,
+      description: displayValue(visit.project || projectInterest),
       meta: visit.meetingPoint || visit.salesExecutive || "Site visit",
       createdAt: visit.scheduledOn || visit.updatedAt || visit.createdAt,
       source: visit,
@@ -866,7 +888,7 @@ const UserDetails = ({
       type: "History",
       icon: <FaCheckCircle />,
       title: "Booking Created",
-      description: booking.projectDetails || booking.customerName || "Booking",
+      description: displayValue(booking.projectDetails || booking.customerName, "Booking"),
       meta: `${formatMoney(booking.basePrice)} ${booking.stage || ""}`.trim(),
       createdAt: booking.bookedOn || booking.createdAt,
       source: booking,
@@ -2116,7 +2138,7 @@ const UserDetails = ({
                 ) : (
                   visits.map((visit) => (
                     <div className="crm-list-row" key={visit.id}>
-                      <div className="crm-value">{visit.project || projectInterest}</div>
+                      <div className="crm-value">{displayValue(visit.project || projectInterest)}</div>
                       <div className="crm-muted">{formatDateTime(visit.scheduledOn)} | {visit.status}</div>
                     </div>
                   ))
@@ -2135,7 +2157,7 @@ const UserDetails = ({
                 ) : (
                   bookings.map((booking) => (
                     <div className="crm-list-row" key={booking.id}>
-                      <div className="crm-value">{booking.projectDetails || booking.customerName || "Booking"}</div>
+                      <div className="crm-value">{displayValue(booking.projectDetails || booking.customerName, "Booking")}</div>
                       <div className="crm-muted">
                         {formatDateOnly(booking.bookedOn || booking.createdAt)} | {formatMoney(booking.basePrice)} | {booking.stage || "-"}
                       </div>

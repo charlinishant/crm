@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Icon } from "@iconify/react";
 import { useNavigate } from "react-router-dom";
 import {
   cancelFollowup,
@@ -370,9 +369,9 @@ const SalesFollowupsTable = () => {
   return (
     <div className="table-section site-visits-section fa-2x">
       <div className="site-visits-title-row">
-        <p>Sales User Follow-ups</p>
-        <div className="site-visits-filter-row">
-          <div className="dropdown-wrapper">
+        {/* <p>Sales User Follow-ups</p> */}
+        {/* <div className="site-visits-filter-row"> */}
+          <div className="dropdown-wrapper followups-filter-wrapper">
             <select
               className="form-select"
               value={statusFilter}
@@ -386,11 +385,11 @@ const SalesFollowupsTable = () => {
             </select>
           </div>
 
-          <div className="filter-badge">
+          {/* <div className="filter-badge">
             <Icon icon="mdi:filter" width={16} height={16} />
             {followupRows.length > 0 && <span className="badge-count">{followupRows.length}</span>}
-          </div>
-        </div>
+          </div> */}
+        {/* </div> */}
       </div>
 
       {loading && <div className="site-visit-message">Loading sales follow-ups...</div>}

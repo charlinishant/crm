@@ -6,6 +6,7 @@ const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 const dispositions = [
   "Qualified",
   "Callback Later",
+  "Interested Project",
   "Site Visit Scheduled",
   "Not Interested",
   "Wrong Number",
@@ -16,6 +17,11 @@ const dispositions = [
 ];
 
 const callStatuses = ["completed", "connected", "failed", "no-answer", "busy"];
+
+const getProjectName = (project) =>
+  project?.name || project?.projectName || project?.title || project?.label || "";
+
+const getProjectId = (project) => project?.id || project?._id || project?.projectId || "";
 
 const getDefaultDateTime = () => {
   const date = new Date(Date.now() + 60 * 60 * 1000);
@@ -29,6 +35,7 @@ const CallDispositionModal = ({ lead, callLog, projects = [], initialDisposition
     disposition:"Qualified",
     notes:"",
     nextFollowUpAt:getDefaultDateTime(),
+    interestedProjectId:"",
     interestedProject:"",
     budget:"",
     visitDateTime:getDefaultDateTime(),
@@ -40,6 +47,11 @@ const CallDispositionModal = ({ lead, callLog, projects = [], initialDisposition
     if (!callLog) return;
     const budget = lead?.budget || [lead?.budgetMin, lead?.budgetMax].filter(Boolean).join(" - ") || "";
     const savedStatus = String(callLog.status || "completed").toLowerCase();
+    const savedProjectId = callLog.interestedProjectId || "";
+    const savedProjectName = lead?.interestedProjects || callLog.interestedProject || "";
+    const savedProject = projects.find((project) =>
+      String(getProjectId(project)) === String(savedProjectId) || getProjectName(project) === savedProjectName
+    );
     setForm({
       callStatus:initialDisposition === "No Answer"
         ? "no-answer"
@@ -49,18 +61,27 @@ const CallDispositionModal = ({ lead, callLog, projects = [], initialDisposition
       disposition:initialDisposition || callLog.disposition || "Qualified",
       notes:callLog.notes || "",
       nextFollowUpAt:getDefaultDateTime(),
-      interestedProject:lead?.interestedProjects || callLog.interestedProject || "",
+      interestedProjectId:savedProject ? String(getProjectId(savedProject)) : "",
+      interestedProject:savedProject ? getProjectName(savedProject) : savedProjectName,
       budget:callLog.budget || budget,
       visitDateTime:getDefaultDateTime(),
     });
     setError("");
-  }, [callLog, initialDisposition, lead]);
+  }, [callLog, initialDisposition, lead, projects]);
 
   if (!lead || !callLog) return null;
 
   const needsFollowUp = ["Callback Later", "Follow-up Required"].includes(form.disposition);
   const needsVisit = form.disposition === "Site Visit Scheduled";
   const update = (name, value) => setForm((current) => ({ ...current, [name]:value }));
+  const updateInterestedProject = (projectId) => {
+    const project = projects.find((item) => String(getProjectId(item)) === String(projectId));
+    setForm((current) => ({
+      ...current,
+      interestedProjectId:projectId,
+      interestedProject:project ? getProjectName(project) : "",
+    }));
+  };
 
   const submit = async (event) => {
     event.preventDefault();
@@ -79,6 +100,7 @@ const CallDispositionModal = ({ lead, callLog, projects = [], initialDisposition
           leadId:lead.id || callLog.leadId,
           leadPhone:callLog.leadPhone || callLog.phone || lead.leadPhone || lead.phone || "",
           ...form,
+          interestedProjectId:form.interestedProjectId || null,
           nextFollowUpAt:needsFollowUp ? form.nextFollowUpAt : null,
           visitDateTime:needsVisit ? form.visitDateTime : null,
         }),
@@ -114,8 +136,18 @@ const CallDispositionModal = ({ lead, callLog, projects = [], initialDisposition
             <label><span>Disposition</span><select value={form.disposition} onChange={(e) => update("disposition", e.target.value)}>
               {dispositions.map((item) => <option key={item} value={item}>{item}</option>)}
             </select></label>
-            <label><span>Interested project</span><input list="call-project-options" value={form.interestedProject} onChange={(e) => update("interestedProject", e.target.value)} />
-              <datalist id="call-project-options">{projects.map((project) => <option key={project.id || project.name} value={project.name} />)}</datalist>
+            <label><span>Interested project</span>
+              <select value={form.interestedProjectId} onChange={(e) => updateInterestedProject(e.target.value)}>
+                <option value="">{projects.length ? "Select project" : "No projects found"}</option>
+                {projects.map((project) => {
+                  const id = getProjectId(project);
+                  return (
+                    <option key={id || getProjectName(project)} value={id}>
+                      {getProjectName(project)}
+                    </option>
+                  );
+                })}
+              </select>
             </label>
             <label><span>Budget</span><input value={form.budget} onChange={(e) => update("budget", e.target.value)} placeholder="Enter budget" /></label>
             {needsFollowUp && <label className="wide"><span>{form.disposition === "Callback Later" ? "Callback date and time" : "Next follow-up date and time"}</span><input type="datetime-local" required value={form.nextFollowUpAt} onChange={(e) => update("nextFollowUpAt", e.target.value)} /></label>}

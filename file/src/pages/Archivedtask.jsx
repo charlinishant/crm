@@ -141,15 +141,9 @@ const Archivedtask = () => {
     <MasterLayout>
       <div className="archived-task-page">
         <div className="archived-task-toolbar">
-          <div>
-            <select className="archived-task-filter" defaultValue="Archived">
-              <option value="Archived">Archived</option>
-              <option value="All">All</option>
-              <option value="Open">Open</option>
-              <option value="Completed">Completed</option>
-            </select>
+          <div className="archived-task-toolbar-summary">
             <p className="archived-task-total">
-              {isLoading ? "LOADING TASKS..." : `TOTAL TASKS : ${tasks.length}`}
+              {isLoading ? "LOADING TASKS..." : `${filteredTasks.length} items`}
             </p>
             {fetchError && <p className="archived-task-error">{fetchError}</p>}
           </div>
@@ -158,13 +152,6 @@ const Archivedtask = () => {
             <Link to="/new-task" className="archived-task-add">
               Add Task
             </Link>
-            <button
-              type="button"
-              className="archived-task-filter-btn"
-              aria-label="Filter tasks"
-            >
-              <Icon icon="mdi:filter" />
-            </button>
           </div>
         </div>
 

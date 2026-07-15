@@ -2,7 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MasterLayout from '../../masterLayout/MasterLayout';
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const API_URL =
+  process.env.REACT_APP_API_URL ||
+  (typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname)
+    ? window.location.origin
+    : "http://localhost:5000");
 const authHeaders = () => ({ "Authorization": `Bearer ${localStorage.getItem("authToken")}` });
 
 const fmt = (v) => v !== undefined && v !== null && v !== "" ? `₹${Number(v).toLocaleString("en-IN")}` : "—";
@@ -97,6 +101,88 @@ const PostSalesBookingList = () => {
 
   return (
     <MasterLayout>
+      <style>{`
+        .ps-booking-list-table-card {
+          background: #ffffff !important;
+          border: 1px solid #e2e8f0;
+          border-radius: 10px !important;
+          box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05) !important;
+          overflow: hidden;
+        }
+
+        .ps-booking-list-table-wrap {
+          overflow-x: auto;
+          padding: 24px;
+        }
+
+        .ps-booking-list-table {
+          border-collapse: collapse !important;
+          color: #334155;
+          font-size: 14px !important;
+          min-width: 1280px;
+          width: 100%;
+        }
+
+        .ps-booking-list-table thead tr {
+          background: transparent !important;
+          border-bottom: 0 !important;
+        }
+
+        .ps-booking-list-table thead th {
+          background: #487fff !important;
+          border: 0 !important;
+          color: #ffffff !important;
+          font-size: 14px !important;
+          font-weight: 700 !important;
+          letter-spacing: 0 !important;
+          padding: 18px 20px !important;
+          text-align: left !important;
+          text-transform: none !important;
+          white-space: nowrap;
+        }
+
+        .ps-booking-list-table thead th:first-child {
+          border-radius: 8px 0 0 8px;
+        }
+
+        .ps-booking-list-table thead th:last-child {
+          border-radius: 0 8px 8px 0;
+        }
+
+        .ps-booking-list-table tbody tr {
+          border-bottom: 1px solid #e2e8f0 !important;
+          transition: background 0.2s;
+        }
+
+        .ps-booking-list-table tbody tr:nth-child(even) {
+          background: #f8fafc !important;
+        }
+
+        .ps-booking-list-table tbody tr:hover,
+        .ps-booking-list-table tbody tr:nth-child(even):hover {
+          background: #f1f5f9 !important;
+        }
+
+        .ps-booking-list-table tbody td {
+          border-bottom: 1px solid #e2e8f0 !important;
+          color: #334155 !important;
+          font-size: 14px !important;
+          padding: 18px 20px !important;
+          vertical-align: middle;
+        }
+
+        .ps-booking-list-table tbody td strong,
+        .ps-booking-list-customer {
+          color: #0f172a !important;
+          font-size: 15px;
+          font-weight: 700;
+        }
+
+        .ps-booking-list-pagination {
+          border-top: 1px solid #e2e8f0 !important;
+          padding: 16px 24px !important;
+        }
+      `}</style>
       <div className="floor-dashboard p-4">
 
         {/* ── Header ── */}
@@ -137,10 +223,10 @@ const PostSalesBookingList = () => {
         </div>
 
         {/* ── Table ── */}
-        <div style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 6px rgba(0,0,0,.07)", overflow: "hidden" }}>
+        <div className="ps-booking-list-table-card" style={{ background: "#fff", borderRadius: 12, boxShadow: "0 1px 6px rgba(0,0,0,.07)", overflow: "hidden" }}>
           {error && <div className="alert alert-danger m-3">{error}</div>}
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+          <div className="ps-booking-list-table-wrap" style={{ overflowX: "auto" }}>
+            <table className="ps-booking-list-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>
                   {["Booking No","Customer","Project","Tower","Unit","Date","Agreement Value","Docs","Status","Actions"].map(h => (
@@ -168,15 +254,12 @@ const PostSalesBookingList = () => {
                   const docCount = docGeneratedCount(item);
                   const isGenerating = generating === item.id;
                   return (
-                    <tr key={item.id} style={{ borderBottom: "1px solid #f1f5f9", transition: "background 0.1s" }}
-                      onMouseEnter={e => e.currentTarget.style.background = "#fafbff"}
-                      onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-                    >
+                    <tr key={item.id} style={{ borderBottom: "1px solid #f1f5f9", transition: "background 0.1s" }}>
                       <td style={{ padding: "12px 16px" }}>
                         <span style={{ fontWeight: 700, color: "#1d4ed8", fontFamily: "monospace", fontSize: 12 }}>BKG-{item.id}</span>
                       </td>
                       <td style={{ padding: "12px 16px" }}>
-                        <div style={{ fontWeight: 700, color: "#1e293b" }}>{customerName}</div>
+                        <div className="ps-booking-list-customer" style={{ fontWeight: 700, color: "#1e293b" }}>{customerName}</div>
                         <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{phone}</div>
                       </td>
                       <td style={{ padding: "12px 16px", color: "#475569" }}>{projectName}</td>
@@ -228,7 +311,7 @@ const PostSalesBookingList = () => {
 
           {/* Pagination */}
           {filtered.length > PER_PAGE && (
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderTop: "1px solid #f1f5f9", fontSize: 12 }}>
+            <div className="ps-booking-list-pagination" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 20px", borderTop: "1px solid #f1f5f9", fontSize: 12 }}>
               <span style={{ color: "#64748b" }}>
                 Showing {Math.min((page-1)*PER_PAGE+1, filtered.length)}–{Math.min(page*PER_PAGE, filtered.length)} of {filtered.length}
               </span>

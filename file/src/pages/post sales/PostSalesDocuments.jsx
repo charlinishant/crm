@@ -2,7 +2,11 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MasterLayout from '../../masterLayout/MasterLayout';
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const API_URL =
+  process.env.REACT_APP_API_URL ||
+  (typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname)
+    ? window.location.origin
+    : "http://localhost:5000");
 const authHeaders = () => ({ "Authorization": `Bearer ${localStorage.getItem("authToken")}`, "Content-Type": "application/json" });
 
 const fmtDate = (v) => { if (!v) return "—"; return new Date(v).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }); };

@@ -48,9 +48,16 @@ const formatNotificationTime = (value) => {
   });
 };
 
+const normalizeProfilePhoto = (value) => {
+  if (!value) return "/assets/images/user.png";
+  if (/^(https?:|data:|blob:)/i.test(value)) return value;
+  return value.startsWith("/") ? value : `/${value}`;
+};
+
 const MasterLayout = ({ children }) => {
   let [sidebarActive, seSidebarActive] = useState(false);
   let [mobileMenu, setMobileMenu] = useState(false);
+  const [navbarSearch, setNavbarSearch] = useState("");
   const [activityNotifications, setActivityNotifications] = useState(getActivityNotifications);
   const [adminNotificationToast, setAdminNotificationToast] = useState(null);
   const notificationLoadRef = useRef({ initialized: false, ids: new Set(getActivityNotifications().map((item) => item.id)) });
@@ -66,7 +73,7 @@ const MasterLayout = ({ children }) => {
     ? savedUser.role.charAt(0).toUpperCase() +
       savedUser.role.slice(1).toLowerCase()
     : "User";
-  const profilePhoto = savedUser?.profilePhoto || "assets/images/user.png";
+  const profilePhoto = normalizeProfilePhoto(savedUser?.profilePhoto);
   const recentActivityNotifications = activityNotifications.slice(0, 5);
 
   const handleLogout = async () => {
@@ -86,6 +93,34 @@ const MasterLayout = ({ children }) => {
     localStorage.removeItem("authToken");
     localStorage.removeItem("authUser");
     navigate("/sign-in");
+  };
+
+  const handleNavbarSearch = (event) => {
+    event.preventDefault();
+
+    const query = navbarSearch.trim().toLowerCase();
+    if (!query) return;
+
+    const sidebarLinks = Array.from(
+      document.querySelectorAll(".sidebar-menu a[href]")
+    )
+      .map((link) => ({
+        href: link.getAttribute("href"),
+        text: link.textContent.replace(/\s+/g, " ").trim(),
+      }))
+      .filter((link) => link.href && link.href !== "#" && link.text);
+
+    const normalize = (value) => value.toLowerCase();
+    const matchedLink =
+      sidebarLinks.find((link) => normalize(link.text) === query) ||
+      sidebarLinks.find((link) => normalize(link.text).startsWith(query)) ||
+      sidebarLinks.find((link) => normalize(link.text).includes(query));
+
+    if (!matchedLink) return;
+
+    const targetUrl = new URL(matchedLink.href, window.location.origin);
+    navigate(`${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`);
+    setNavbarSearch("");
   };
 
   useEffect(() => {
@@ -883,7 +918,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-primary-600 w-auto' />
-                    Booking Details
+                    Dashboard
                   </NavLink>
                 </li>
                 <li>
@@ -1333,7 +1368,7 @@ const MasterLayout = ({ children }) => {
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-primary-600 w-auto' />{" "}
-                    Users List
+                    User Details
                   </NavLink>
                 </li>
                 <li>
@@ -1772,8 +1807,14 @@ const MasterLayout = ({ children }) => {
                 >
                   <Icon icon='heroicons:bars-3-solid' className='icon' />
                 </button>
-                <form className='navbar-search'>
-                  <input type='text' name='search' placeholder='Search' />
+                <form className='navbar-search' onSubmit={handleNavbarSearch}>
+                  <input
+                    type='text'
+                    name='search'
+                    placeholder='Search'
+                    value={navbarSearch}
+                    onChange={(event) => setNavbarSearch(event.target.value)}
+                  />
                   <Icon icon='ion:search-outline' className='icon' />
                 </form>
               </div>

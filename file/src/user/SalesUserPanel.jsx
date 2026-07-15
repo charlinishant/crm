@@ -9,6 +9,7 @@ import {
   Home,
   History,
   LayoutDashboard,
+  ListFilter,
   LogOut,
   MessageSquare,
   Phone,
@@ -69,17 +70,19 @@ const getScreenFromPath = (pathname) =>
         ? "whatsapp"
         : pathname.endsWith("/calls")
           ? "calls"
-          : pathname.endsWith("/my-call-logs") || pathname === "/my-call-logs"
-            ? "callLogs"
-          : pathname.endsWith("/followups")
-            ? "followups"
-          : pathname.endsWith("/site-visit")
-            ? "scheduleVisit"
-            : pathname.endsWith("/conversation")
-              ? "conversation"
-              : pathname.endsWith("/add-lead")
-                ? "addLead"
-                : "";
+          : pathname.endsWith("/disposition")
+            ? "disposition"
+            : pathname.endsWith("/my-call-logs") || pathname === "/my-call-logs"
+              ? "callLogs"
+              : pathname.endsWith("/followups")
+                ? "followups"
+                : pathname.endsWith("/site-visit")
+                  ? "scheduleVisit"
+                  : pathname.endsWith("/conversation")
+                    ? "conversation"
+                    : pathname.endsWith("/add-lead")
+                      ? "addLead"
+                      : "";
 
 const statusLabel = {
   Fresh_Lead: "Fresh Lead",
@@ -109,6 +112,7 @@ const leadStageFilters = [
 
 const dispositionLeadFilters = [
   { key: "disposition:Callback Later", label: "Callback Later" },
+  { key: "disposition:Interested Project", label: "Interested Project" },
   { key: "disposition:Not Interested", label: "Not Interested" },
   { key: "disposition:Site Visit Scheduled", label: "Site Visit Scheduled" },
   { key: "disposition:Wrong Number", label: "Wrong Number" },
@@ -135,6 +139,33 @@ const getName = (user) =>
   "Sales User";
 
 const getUserId = (user) => user?.id ?? user?._id ?? user?.userId ?? "";
+
+const getDisplayText = (value, fallback = "-") => {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value === "string" || typeof value === "number") return String(value);
+
+  if (Array.isArray(value)) {
+    return value.map((item) => getDisplayText(item, "")).find(Boolean) || fallback;
+  }
+
+  if (typeof value === "object") {
+    return (
+      value.name ||
+      value.unitName ||
+      value.unitNo ||
+      value.number ||
+      value.label ||
+      value.title ||
+      value.description ||
+      value.project?.name ||
+      value.type ||
+      value.category ||
+      (value.id ? `#${value.id}` : fallback)
+    );
+  }
+
+  return fallback;
+};
 
 const getSalesExecutiveName = (value) => {
   if (!value) return "";
@@ -223,6 +254,37 @@ const isBookedLead = (lead) =>
   (lead?.bookings || []).some((booking) => normalizeStageText(booking?.stage) === "booked");
 
 const taskStatusOptions = ["Open", "Completed", "Archived"];
+
+const getTaskAttachments = (task) => {
+  const rawAttachments = task?.attachments || task?.attachment || task?.files || [];
+  const attachments = Array.isArray(rawAttachments) ? rawAttachments : [rawAttachments];
+
+  return attachments
+    .filter(Boolean)
+    .map((attachment, index) => {
+      if (typeof attachment === "string") {
+        return { id: `${attachment}-${index}`, name: attachment, url: "" };
+      }
+
+      const name =
+        attachment.name ||
+        attachment.fileName ||
+        attachment.filename ||
+        attachment.originalName ||
+        attachment.path ||
+        attachment.url ||
+        `Attachment ${index + 1}`;
+      const url = attachment.url || attachment.path || attachment.fileUrl || attachment.location || "";
+
+      return { id: `${name}-${index}`, name, url };
+    });
+};
+
+const getAttachmentHref = (attachment) => {
+  if (!attachment?.url) return "";
+  if (/^(https?:|blob:|data:)/i.test(attachment.url)) return attachment.url;
+  return attachment.url.startsWith("/") ? attachment.url : `/${attachment.url}`;
+};
 const siteVisitStatusOptions = [
   "Scheduled",
   "Confirmed",
@@ -436,6 +498,7 @@ const SalesUserPanel = () => {
   );
   const [callDispositions, setCallDispositions] = useState({});
   const [callLogsByLead, setCallLogsByLead] = useState({});
+  const [callLogCount, setCallLogCount] = useState(0);
   const [callingLeadId, setCallingLeadId] = useState(null);
   const [callTarget, setCallTarget] = useState(null);
   const [activeCallDispositionTab, setActiveCallDispositionTab] = useState("Callback Later");
@@ -465,13 +528,13 @@ const SalesUserPanel = () => {
   const [bookingStepIndex, setBookingStepIndex] = useState(0);
   const [isBookingSuccess, setIsBookingSuccess] = useState(false);
   const [bookingPreview, setBookingPreview] = useState(null);
+  const [viewTask, setViewTask] = useState(null);
   const [leadTableSearch, setLeadTableSearch] = useState("");
   const [leadTablePage, setLeadTablePage] = useState(1);
   const [projects, setProjects] = useState([]);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [users, setUsers] = useState([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
-  const [isExecutiveDropdownOpen, setIsExecutiveDropdownOpen] = useState(false);
   const [attendance, setAttendance] = useState(null);
   const [attendanceBusy, setAttendanceBusy] = useState(false);
   const [attendanceNow, setAttendanceNow] = useState(Date.now());
@@ -534,6 +597,39 @@ const SalesUserPanel = () => {
     loadPanel();
   }, [loadPanel]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadCallLogCount = async () => {
+      const token = localStorage.getItem("authToken");
+      if (!token) {
+        if (isMounted) setCallLogCount(0);
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_URL}/api/calls/my?limit=1`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result?.message || "Unable to load call log count");
+        if (isMounted) {
+          setCallLogCount(Number(result?.totalItems) || (Array.isArray(result?.data) ? result.data.length : 0));
+        }
+      } catch (loadError) {
+        console.error("Unable to load call log count", loadError);
+      }
+    };
+
+    loadCallLogCount();
+    const interval = window.setInterval(loadCallLogCount, 15000);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(interval);
+    };
+  }, []);
+
   const updateAttendance = useCallback(async (action) => {
     const token = localStorage.getItem("authToken");
     if (!token) return null;
@@ -579,7 +675,7 @@ const SalesUserPanel = () => {
         });
         const currentResult = await currentResponse.json().catch(() => ({}));
 
-        if (currentResult?.data) {
+        if (currentResult?.data && currentResult.data.status !== "Logged Out") {
           if (isMounted) setAttendance(withAttendanceLoadedAt(currentResult.data));
           return;
         }
@@ -940,10 +1036,11 @@ const SalesUserPanel = () => {
     return leads;
   }, [activeLeadStage, activeScreen, callbackLeadIds, getLeadDisposition, panel.leads]);
 
-  const isPaginatedLeadTable = activeScreen === "leads" || activeScreen === "bookings";
+  const isPaginatedLeadTable = activeScreen === "home" || activeScreen === "leads" || activeScreen === "bookings";
+  const isSearchableLeadTable = activeScreen === "leads" || activeScreen === "bookings";
 
   const searchedLeads = useMemo(() => {
-    if (!isPaginatedLeadTable) return filteredLeads;
+    if (!isSearchableLeadTable) return filteredLeads;
 
     const query = leadTableSearch.trim().toLowerCase();
     if (!query) return filteredLeads;
@@ -963,7 +1060,7 @@ const SalesUserPanel = () => {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query))
     );
-  }, [filteredLeads, isPaginatedLeadTable, leadTableSearch]);
+  }, [filteredLeads, isSearchableLeadTable, leadTableSearch]);
 
   const leadTableTotalPages = Math.max(1, Math.ceil(searchedLeads.length / salesTablePageSize));
   const tableLeads =
@@ -1150,12 +1247,11 @@ const SalesUserPanel = () => {
     const savedExecutiveId = getExecutiveIdFromValue(savedExecutive);
 
     setOpenActionLeadId(null);
-    setIsExecutiveDropdownOpen(false);
     setSiteVisitLead(nextLead);
     setSiteVisitMessage("");
     setSiteVisitForm({
       leadId: nextLeadId ? String(nextLeadId) : "",
-      project: visitData.siteVisitProject || visitData.conductSiteVisit || nextLead?.interestedProjects || nextLead?.propertyType || "",
+      project: getDisplayText(visitData.siteVisitProject || visitData.conductSiteVisit || nextLead?.interestedProjects || nextLead?.propertyType, ""),
       visitDateTime: visitData.conductSiteDate
         ? toDateTimeLocalValue(visitData.conductSiteDate)
         : getDefaultVisitDateTime(),
@@ -1188,13 +1284,12 @@ const SalesUserPanel = () => {
     const nextLead = panel.leads.find((lead) => String(getLeadId(lead)) === String(value)) || null;
     const savedExecutive = nextLead?.siteVisitExecutive || nextLead?.team || "";
     const savedExecutiveId = getExecutiveIdFromValue(savedExecutive);
-    setIsExecutiveDropdownOpen(false);
     setSiteVisitLead(nextLead);
     setSiteVisitForm((current) => {
       return {
         ...current,
         leadId: value,
-        project: nextLead?.siteVisitProject || nextLead?.conductSiteVisit || nextLead?.interestedProjects || nextLead?.propertyType || current.project,
+        project: getDisplayText(nextLead?.siteVisitProject || nextLead?.conductSiteVisit || nextLead?.interestedProjects || nextLead?.propertyType || current.project, ""),
         visitDateTime: nextLead?.conductSiteDate ? toDateTimeLocalValue(nextLead.conductSiteDate) : current.visitDateTime,
         location: nextLead?.siteVisitLocation || nextLead?.meetingPoint || nextLead?.locationPreferences || current.location,
         executiveId: savedExecutiveId || current.executiveId,
@@ -1407,6 +1502,7 @@ const SalesUserPanel = () => {
     const dispositionLabels = {
       qualified: "Qualified",
       callback: "Callback Later",
+      interestedProject: "Interested Project",
       siteVisit: "Site Visit Scheduled",
       notInterested: "Not Interested",
       wrongNumber: "Wrong Number",
@@ -1722,13 +1818,15 @@ const SalesUserPanel = () => {
   const upNextLeads = callQueue.filter((lead) => getLeadId(lead) !== getLeadId(currentCallLead)).slice(0, 3);
   const todayDialCount = Object.keys(callDispositions).length;
   const qualifiedCount = Object.values(callDispositions).filter((item) => item?.type === "qualified").length;
+  const dispositionLeadCount = callDispositionBuckets.reduce((total, bucket) => total + bucket.leads.length, 0);
 
   const navItems = [
     { key: "home", label: "Home", icon: Home },
     { key: "leads", label: "My Leads", icon: Users, count: panel.stats.assignedLeads },
     // { key: "calls", label: "Calls", icon: Phone, count: callQueue.length },
     { key: "conversation", label: "Conversation", icon: MessageSquare, count: panel.leads.length },
-    { key: "callLogs", label: "My Call Logs", icon: History },
+    { key: "disposition", label: "Disposition", icon: ListFilter, count: dispositionLeadCount },
+    { key: "callLogs", label: "My Call Logs", icon: History, count: callLogCount },
     { key: "followups", label: "Follow-ups", icon: CalendarDays, count: panel.stats.followupsDue },
     { key: "scheduleVisit", label: "Schedule Visit", icon: CalendarDays, count: panel.stats.siteVisits },
     { key: "bookings", label: "Bookings", icon: LayoutDashboard, count: panel.stats.bookings },
@@ -1744,6 +1842,84 @@ const SalesUserPanel = () => {
         ? [...leadStageFilters, ...dispositionLeadFilters]
       : leadStageFilters;
   const activeDispositionFilter = getDispositionFilterValue(activeLeadStage);
+  const siteVisitLeadOptions = panel.leads.map((lead) => ({
+    value: String(getLeadId(lead)),
+    label: getLeadName(lead),
+    sub: getLeadPhone(lead) !== "-" ? getLeadPhone(lead) : "",
+  }));
+  const siteVisitProjectOptions = [
+    ...(siteVisitForm.project && !projectOptions.includes(siteVisitForm.project)
+      ? [{ value: siteVisitForm.project, label: siteVisitForm.project }]
+      : []),
+    ...projectOptions.map((project) => ({ value: project, label: project })),
+  ];
+  const siteVisitExecutiveOptions = [
+    ...(siteVisitForm.executive &&
+    !siteVisitForm.executiveId &&
+    !salesExecutiveOptions.some((executive) => executive.name.toLowerCase() === siteVisitForm.executive.toLowerCase())
+      ? [{ value: "", label: siteVisitForm.executive }]
+      : []),
+    ...salesExecutiveOptions.map((executive) => ({
+      value: executive.id,
+      label: executive.name,
+      sub: executive.role,
+    })),
+  ];
+  const siteVisitStatusSelectOptions = siteVisitStatusOptions.map((status) => ({ value: status, label: status }));
+  const renderDispositionBuckets = () => (
+    <div className="sales-call-list-card sales-disposition-list-card">
+      <div className="sales-card-head">
+        <div>
+          <h2>Disposition buckets</h2>
+          <p>Work each outcome separately</p>
+        </div>
+      </div>
+      <div className="sales-disposition-tabs" aria-label="Disposition filters">
+        {callDispositionBuckets.map((bucket) => (
+          <button
+            key={bucket.key}
+            type="button"
+            className={activeCallDispositionTab === bucket.disposition ? "active" : ""}
+            onClick={() => setActiveCallDispositionTab(bucket.disposition)}
+          >
+            {bucket.label}
+            <span>{bucket.leads.length}</span>
+          </button>
+        ))}
+      </div>
+      {!activeCallDispositionBucket?.leads.length ? (
+        <div className="sales-empty compact">No leads in this disposition yet.</div>
+      ) : (
+        <div className="sales-disposition-list">
+          {activeCallDispositionBucket.leads.map(({ lead, callLog }) => (
+            <button
+              type="button"
+              className="sales-disposition-row"
+              key={`${activeCallDispositionBucket.disposition}-${getLeadId(lead)}`}
+              onClick={() => {
+                setFocusedCallLeadId(getLeadId(lead));
+                setActiveScreen("calls");
+                navigate(`/user/sales/calls${getLeadId(lead) ? `?leadId=${getLeadId(lead)}` : ""}`);
+              }}
+            >
+              <span className="sales-lead-name">
+                <span className="sales-avatar small">{initials(getLeadName(lead))}</span>
+                <span>
+                  <strong>{getLeadName(lead)}</strong>
+                  <small>{getLeadPhone(lead)}</small>
+                </span>
+              </span>
+              <span>
+                <strong>{callLog.disposition}</strong>
+                <small>{getDispositionDetail(callLog)}</small>
+              </span>
+              <time>{formatTaskDateTime(callLog.updatedAt || callLog.createdAt)}</time>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div
@@ -1773,6 +1949,7 @@ const SalesUserPanel = () => {
                   setActiveScreen(item.key);
                   if (item.key === "bookings") setActiveLeadStage("all");
                   if (item.key === "calls") navigate("/user/sales/calls");
+                  if (item.key === "disposition") navigate("/user/sales/disposition");
                   if (item.key === "callLogs") navigate("/my-call-logs");
                   if (item.key === "followups") openFollowups(activeFollowupFilter);
                   if (item.key === "conversation") navigate("/user/sales/conversation");
@@ -1965,6 +2142,10 @@ const SalesUserPanel = () => {
             />
           ) : activeScreen === "callLogs" ? (
             <CallLogsTable scope="sales" />
+          ) : activeScreen === "disposition" ? (
+            <section className="sales-call-workspace">
+              {renderDispositionBuckets()}
+            </section>
           ) : activeScreen === "calls" ? (
             <section className="sales-call-workspace">
               <div className="sales-call-head">
@@ -1991,14 +2172,13 @@ const SalesUserPanel = () => {
                     </div>
                     <div className="sales-call-badges">
                       <span>Score {currentCallLead.score || 78}</span>
-                      <strong>Hot - 9 min left</strong>
                     </div>
                   </div>
 
                   <div className="sales-call-meta">
                     <div><span>Source</span><strong>{currentCallLead.channelPartner || currentCallLead.tags || "Website"}</strong></div>
-                    <div><span>Interested in</span><strong>{currentCallLead.interestedProjects || currentCallLead.propertyType || "-"}</strong></div>
-                    <div><span>Budget</span><strong>{currentCallLead.budget || [currentCallLead.budgetMin, currentCallLead.budgetMax].filter(Boolean).join(" - ") || "-"}</strong></div>
+                    <div><span>Interested in</span><strong>{getDisplayText(currentCallLead.interestedProjects || currentCallLead.propertyType)}</strong></div>
+                    <div><span>Budget</span><strong>{getDisplayText(currentCallLead.budget || [currentCallLead.budgetMin, currentCallLead.budgetMax].filter(Boolean).join(" - "))}</strong></div>
                     <div><span>Attempt</span><strong>{callDispositions[getLeadId(currentCallLead)] ? "2 of 3" : "1 of 3"}</strong></div>
                   </div>
 
@@ -2039,6 +2219,7 @@ const SalesUserPanel = () => {
                   <div className="sales-call-dispositions">
                     <button type="button" className="qualified" onClick={() => openCallDisposition(currentCallLead, "qualified")}>Qualified →</button>
                     <button type="button" onClick={() => openCallDisposition(currentCallLead, "callback")}>Callback later</button>
+                    <button type="button" onClick={() => openCallDisposition(currentCallLead, "interestedProject")}>Interested Project</button>
                     <button type="button" onClick={() => openCallDisposition(currentCallLead, "siteVisit")}>Site visit scheduled</button>
                     <button type="button" onClick={() => openCallDisposition(currentCallLead, "notInterested")}>Not interested</button>
                     <button type="button" onClick={() => openCallDisposition(currentCallLead, "wrongNumber")}>Wrong number</button>
@@ -2081,58 +2262,6 @@ const SalesUserPanel = () => {
                 <div><span>Talk time</span><strong>{connectedCallLeads.length ? `${connectedCallLeads.length * 7}m` : "0m"}</strong></div>
               </div>
 
-              <div className="sales-call-list-card sales-disposition-list-card">
-                <div className="sales-card-head">
-                  <div>
-                    <h2>Disposition buckets</h2>
-                    <p>Work each outcome separately</p>
-                  </div>
-                </div>
-                <div className="sales-disposition-tabs" aria-label="Disposition filters">
-                  {callDispositionBuckets.map((bucket) => (
-                    <button
-                      key={bucket.key}
-                      type="button"
-                      className={activeCallDispositionTab === bucket.disposition ? "active" : ""}
-                      onClick={() => setActiveCallDispositionTab(bucket.disposition)}
-                    >
-                      {bucket.label}
-                      <span>{bucket.leads.length}</span>
-                    </button>
-                  ))}
-                </div>
-                {!activeCallDispositionBucket?.leads.length ? (
-                  <div className="sales-empty compact">No leads in this disposition yet.</div>
-                ) : (
-                  <div className="sales-disposition-list">
-                    {activeCallDispositionBucket.leads.map(({ lead, callLog }) => (
-                      <button
-                        type="button"
-                        className="sales-disposition-row"
-                        key={`${activeCallDispositionBucket.disposition}-${getLeadId(lead)}`}
-                        onClick={() => {
-                          setFocusedCallLeadId(getLeadId(lead));
-                          setActiveScreen("calls");
-                        }}
-                      >
-                        <span className="sales-lead-name">
-                          <span className="sales-avatar small">{initials(getLeadName(lead))}</span>
-                          <span>
-                            <strong>{getLeadName(lead)}</strong>
-                            <small>{getLeadPhone(lead)}</small>
-                          </span>
-                        </span>
-                        <span>
-                          <strong>{callLog.disposition}</strong>
-                          <small>{getDispositionDetail(callLog)}</small>
-                        </span>
-                        <time>{formatTaskDateTime(callLog.updatedAt || callLog.createdAt)}</time>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
               {connectedCallLeads.length > 0 && (
                 <div className="sales-call-list-card">
                   <div className="sales-card-head">
@@ -2163,41 +2292,25 @@ const SalesUserPanel = () => {
               <form className="sales-visit-form" onSubmit={saveSiteVisit}>
                 <label>
                   <span>Lead</span>
-                  <select
-                    name="leadId"
+                  <SalesSearchableSelect
                     value={siteVisitForm.leadId}
-                    onChange={handleSiteVisitChange}
-                    required
-                  >
-                    <option value="">Select lead</option>
-                    {panel.leads.map((lead) => (
-                      <option key={getLeadId(lead) || getLeadName(lead)} value={getLeadId(lead)}>
-                        {getLeadName(lead)} {getLeadPhone(lead) !== "-" ? `- ${getLeadPhone(lead)}` : ""}
-                      </option>
-                    ))}
-                  </select>
+                    options={siteVisitLeadOptions}
+                    placeholder="Select lead"
+                    searchPlaceholder="Search lead..."
+                    onChange={(value) => handleSiteVisitChange({ target: { name: "leadId", value } })}
+                  />
                 </label>
 
                 <label>
                   <span>Project</span>
-                  <select
-                    name="project"
+                  <SalesSearchableSelect
                     value={siteVisitForm.project}
-                    onChange={handleSiteVisitChange}
-                    required
-                  >
-                    <option value="">
-                      {isLoadingProjects ? "Loading projects..." : "Select project"}
-                    </option>
-                    {siteVisitForm.project && !projectOptions.includes(siteVisitForm.project) && (
-                      <option value={siteVisitForm.project}>{siteVisitForm.project}</option>
-                    )}
-                    {projectOptions.map((project) => (
-                      <option key={project} value={project}>
-                        {project}
-                      </option>
-                    ))}
-                  </select>
+                    options={siteVisitProjectOptions}
+                    placeholder={isLoadingProjects ? "Loading projects..." : "Select project"}
+                    searchPlaceholder="Search project..."
+                    disabled={isLoadingProjects}
+                    onChange={(value) => handleSiteVisitChange({ target: { name: "project", value } })}
+                  />
                 </label>
 
                 <label>
@@ -2223,94 +2336,32 @@ const SalesUserPanel = () => {
 
                 <label>
                   <span>Assign sales executive</span>
-                  <div
-                    className="sales-executive-dropdown"
-                    onBlur={(event) => {
-                      if (!event.currentTarget.contains(event.relatedTarget)) {
-                        setIsExecutiveDropdownOpen(false);
-                      }
+                  <SalesSearchableSelect
+                    value={siteVisitForm.executiveId}
+                    options={siteVisitExecutiveOptions}
+                    placeholder={isLoadingUsers ? "Loading executives..." : "Select sales executive"}
+                    searchPlaceholder="Search executive..."
+                    disabled={isLoadingUsers}
+                    onChange={(value) => {
+                      const selectedExecutive = salesExecutiveOptions.find((executive) => String(executive.id) === String(value));
+                      setSiteVisitForm((current) => ({
+                        ...current,
+                        executiveId: value,
+                        executive: selectedExecutive?.name || siteVisitForm.executive,
+                      }));
                     }}
-                  >
-                    <button
-                      className="sales-executive-trigger"
-                      type="button"
-                      aria-haspopup="listbox"
-                      aria-expanded={isExecutiveDropdownOpen}
-                      onClick={() => setIsExecutiveDropdownOpen((isOpen) => !isOpen)}
-                    >
-                      <span>
-                        {getExecutiveNameFromId(siteVisitForm.executiveId) ||
-                          getSalesExecutiveName(siteVisitForm.executive) ||
-                          (isLoadingUsers ? "Loading executives..." : "Select sales executive")}
-                      </span>
-                      <ChevronDown size={16} />
-                    </button>
-
-                    {isExecutiveDropdownOpen && (
-                      <div className="sales-executive-menu" role="listbox">
-                        {siteVisitForm.executive &&
-                          !siteVisitForm.executiveId &&
-                          !salesExecutiveOptions.some(
-                            (executive) =>
-                              executive.name.toLowerCase() === siteVisitForm.executive.toLowerCase()
-                          ) && (
-                            <button
-                              type="button"
-                              role="option"
-                              aria-selected
-                              onClick={() => {
-                                setSiteVisitForm((current) => ({
-                                  ...current,
-                                  executiveId: "",
-                                  executive: siteVisitForm.executive,
-                                }));
-                                setIsExecutiveDropdownOpen(false);
-                              }}
-                            >
-                              <strong>{siteVisitForm.executive}</strong>
-                            </button>
-                          )}
-                        {salesExecutiveOptions.map((executive) => (
-                          <button
-                            key={executive.id}
-                            type="button"
-                            role="option"
-                            aria-selected={String(siteVisitForm.executiveId) === String(executive.id)}
-                            className={String(siteVisitForm.executiveId) === String(executive.id) ? "selected" : ""}
-                            onClick={() => {
-                              setSiteVisitForm((current) => ({
-                                ...current,
-                                executiveId: executive.id,
-                                executive: executive.name,
-                              }));
-                              setIsExecutiveDropdownOpen(false);
-                            }}
-                          >
-                            <strong>{executive.name}</strong>
-                            {executive.role && <small>{executive.role}</small>}
-                          </button>
-                        ))}
-                        {!isLoadingUsers && salesExecutiveOptions.length === 0 && (
-                          <div className="sales-executive-empty">No sales executives found</div>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  />
                 </label>
 
                 <label>
                   <span>Visit Status</span>
-                  <select
-                    name="status"
+                  <SalesSearchableSelect
                     value={siteVisitForm.status}
-                    onChange={handleSiteVisitChange}
-                  >
-                    {siteVisitStatusOptions.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
+                    options={siteVisitStatusSelectOptions}
+                    placeholder="Select status"
+                    searchPlaceholder="Search status..."
+                    onChange={(value) => handleSiteVisitChange({ target: { name: "status", value } })}
+                  />
                 </label>
 
                 <label className="sales-visit-note">
@@ -2413,6 +2464,12 @@ const SalesUserPanel = () => {
                         ))}
                       </select>
                     </label>
+                    <div className="sales-task-actions">
+                      <span>Action</span>
+                      <button type="button" onClick={() => setViewTask(task)}>
+                        View
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -2427,7 +2484,7 @@ const SalesUserPanel = () => {
                 </div>
               </div>
 
-              {isPaginatedLeadTable && (
+              {isSearchableLeadTable && (
                 <div className="sales-table-toolbar">
                   <label className="sales-table-search">
                     <Search size={15} />
@@ -2498,8 +2555,8 @@ const SalesUserPanel = () => {
                       </span>
                     </span>
                     <span>
-                      <strong>{lead.interestedProjects || lead.propertyType || "-"}</strong>
-                      <small>{lead.configration || lead.budget || "-"}</small>
+                      <strong>{getDisplayText(lead.interestedProjects || lead.propertyType)}</strong>
+                      <small>{getDisplayText(lead.configration || lead.budget)}</small>
                     </span>
                     <span>
                       <mark>{statusLabel[lead.status] || lead.status || "New"}</mark>
@@ -2585,7 +2642,7 @@ const SalesUserPanel = () => {
                 {panel.bookings.map((booking) => (
                   <div className="sales-booking" key={booking.id}>
                     <strong>{booking.customerName || "Customer"}</strong>
-                    <small>{booking.projectDetails || booking.unit || "Unit details pending"}</small>
+                    <small>{getDisplayText(booking.projectDetails || booking.unit, "Unit details pending")}</small>
                   </div>
                 ))}
               </div>
@@ -2594,6 +2651,10 @@ const SalesUserPanel = () => {
           )}
         </section>
       </main>
+
+      {viewTask && (
+        <SalesTaskViewModal task={viewTask} onClose={() => setViewTask(null)} />
+      )}
 
       <UserBookingForm
         isOpen={isBookingFormOpen}
@@ -2664,6 +2725,153 @@ const SalesUserPanel = () => {
         onStart={(agentPhone) => startLeadCall(callTarget, agentPhone)}
       />
 
+    </div>
+  );
+};
+
+const SalesSearchableSelect = ({
+  value,
+  options,
+  placeholder,
+  searchPlaceholder = "Search...",
+  disabled = false,
+  onChange,
+}) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const selectedOption = options.find((option) => String(option.value) === String(value));
+  const filteredOptions = options.filter((option) =>
+    [option.label, option.sub]
+      .filter(Boolean)
+      .some((text) => String(text).toLowerCase().includes(search.trim().toLowerCase()))
+  );
+
+  const close = () => {
+    setIsOpen(false);
+    setSearch("");
+  };
+
+  return (
+    <div
+      className="sales-search-select"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) close();
+      }}
+    >
+      <button
+        type="button"
+        className="sales-search-select-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        disabled={disabled}
+        onClick={() => setIsOpen((current) => !current)}
+      >
+        <span>{selectedOption?.label || placeholder}</span>
+        <ChevronDown size={16} />
+      </button>
+
+      {isOpen && (
+        <div className="sales-search-select-menu" role="listbox">
+          <div className="sales-search-select-search">
+            <input
+              autoFocus
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={searchPlaceholder}
+            />
+          </div>
+          <div className="sales-search-select-options">
+            {filteredOptions.map((option) => (
+              <button
+                type="button"
+                role="option"
+                aria-selected={String(option.value) === String(value)}
+                className={String(option.value) === String(value) ? "selected" : ""}
+                key={`${option.value}-${option.label}`}
+                onClick={() => {
+                  onChange(option.value);
+                  close();
+                }}
+              >
+                <strong>{option.label}</strong>
+                {option.sub && <small>{option.sub}</small>}
+              </button>
+            ))}
+            {!filteredOptions.length && (
+              <div className="sales-search-select-empty">No options found</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SalesTaskViewModal = ({ task, onClose }) => {
+  const attachments = getTaskAttachments(task);
+  const taskDetails = [
+    ["Status", task.status || "Open"],
+    ["Priority", task.priority || "Medium"],
+    ["Due Date", formatTaskDate(task.dueDate || task.dueOn)],
+    ["Due Time", task.dueTime || "-"],
+    ["Assigned By", task.assignedBy ? getName(task.assignedBy) : task.assignedByName || "-"],
+  ];
+
+  return (
+    <div className="sales-task-modal-backdrop">
+      <section className="sales-task-modal" role="dialog" aria-modal="true" aria-labelledby="sales-task-view-title">
+        <div className="sales-task-modal-head">
+          <div>
+            <h2 id="sales-task-view-title">{task.title || "Untitled Task"}</h2>
+            <p>{task.description || task.subtitle || task.type || "Task details"}</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close task details">
+            X
+          </button>
+        </div>
+
+        <div className="sales-task-modal-grid">
+          {taskDetails.map(([label, value]) => (
+            <div className="sales-task-modal-field" key={label}>
+              <span>{label}</span>
+              <strong>{value}</strong>
+            </div>
+          ))}
+        </div>
+
+        <div className="sales-task-modal-section">
+          <h3>Attachments</h3>
+          {attachments.length === 0 ? (
+            <p className="sales-task-modal-empty">No attachments uploaded for this task.</p>
+          ) : (
+            <div className="sales-task-attachment-list">
+              {attachments.map((attachment) => {
+                const href = getAttachmentHref(attachment);
+                return (
+                  <div className="sales-task-attachment" key={attachment.id}>
+                    <span>{attachment.name}</span>
+                    {href ? (
+                      <a
+                        className="sales-task-attachment-view"
+                        href={href}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        View
+                      </a>
+                    ) : (
+                      <button type="button" className="sales-task-attachment-view" disabled>
+                        View
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 };

@@ -3,26 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { FaEllipsisV, FaPlus } from "react-icons/fa";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
-
-const emptyProjectForm = {
-  name: "",
-  description: "",
-  reraProjectId: "",
-  projectType: "",
-  address: "",
-  street: "",
-  country: "",
-  state: "",
-  city: "",
-  zip: "",
-  locality: "",
-  latitude: "",
-  longitude: "",
-  noOfTowers: "",
-  active: false,
-  inventory: false,
-  integratedPortals: "",
-};
+const ROWS_PER_PAGE = 10;
 
 const normalizeList = (data) =>
   Array.isArray(data)
@@ -37,8 +18,6 @@ const formatDate = (value) => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString("en-GB");
 };
-
-const toBoolean = (value) => value === true || String(value).toLowerCase() === "true";
 
 const getProjectName = (project) => project?.name || project?.projectName || `Project #${project?.id}`;
 
@@ -63,9 +42,8 @@ const ColumnChartLayer = () => {
   const [openMenuId, setOpenMenuId] = useState(null);
   const [modalMode, setModalMode] = useState("");
   const [selectedProject, setSelectedProject] = useState(null);
-  const [projectForm, setProjectForm] = useState(emptyProjectForm);
-  const [isSaving, setIsSaving] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [viewData, setViewData] = useState({
     towers: [],
     floorPlans: [],
@@ -113,38 +91,33 @@ const ColumnChartLayer = () => {
         project.state,
         project.country,
         project.noOfTowers,
-        project.sales,
+        project.postSales ? "Yes" : "No",
         project.integratedPortals,
       ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query))
     );
   }, [projects, searchQuery]);
+  const totalPages = Math.max(1, Math.ceil(filteredProjects.length / ROWS_PER_PAGE));
+  const paginatedProjects = useMemo(() => {
+    const startIndex = (currentPage - 1) * ROWS_PER_PAGE;
+    return filteredProjects.slice(startIndex, startIndex + ROWS_PER_PAGE);
+  }, [currentPage, filteredProjects]);
+  const pageStartIndex = (currentPage - 1) * ROWS_PER_PAGE;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [currentPage, totalPages]);
 
   const openEditProject = (project) => {
     setOpenMenuId(null);
-    setSelectedProject(project);
-    setProjectForm({
-      name: project.name || "",
-      description: project.description || "",
-      reraProjectId: project.reraProjectId || "",
-      projectType: project.projectType || "",
-      address: project.address || "",
-      street: project.street || "",
-      country: project.country || "",
-      state: project.state || "",
-      city: project.city || "",
-      zip: project.zip || "",
-      locality: project.locality || "",
-      latitude: project.latitude || "",
-      longitude: project.longitude || "",
-      noOfTowers: project.towerCount ?? project.noOfTowers ?? 0,
-      active: Boolean(project.active),
-      inventory: Boolean(project.inventory),
-      integratedPortals: project.integratedPortals || "",
-    });
-    setModalMode("edit");
-    setMessage("");
+    navigate(`/new-project?editProjectId=${project.id}`);
   };
 
   const openViewProject = async (project) => {
@@ -187,67 +160,7 @@ const ColumnChartLayer = () => {
   const closeModal = () => {
     setModalMode("");
     setSelectedProject(null);
-    setProjectForm(emptyProjectForm);
     setViewData({ towers: [], floorPlans: [], units: [], loading: false, error: "" });
-  };
-
-  const handleFormChange = (event) => {
-    const { name, value, type, checked } = event.target;
-    setProjectForm((current) => ({
-      ...current,
-      [name]: type === "checkbox" ? checked : value,
-    }));
-  };
-
-  const saveProject = async (event) => {
-    event.preventDefault();
-    if (!selectedProject?.id) return;
-
-    setIsSaving(true);
-    setMessage("");
-
-    const payload = {
-      name: projectForm.name,
-      description: projectForm.description,
-      reraProjectId: projectForm.reraProjectId ? Number(projectForm.reraProjectId) : null,
-      projectType: projectForm.projectType,
-      address: projectForm.address,
-      street: projectForm.street,
-      country: projectForm.country,
-      state: projectForm.state,
-      city: projectForm.city,
-      zip: projectForm.zip,
-      locality: projectForm.locality,
-      latitude: projectForm.latitude,
-      longitude: projectForm.longitude,
-      active: toBoolean(projectForm.active),
-      inventory: toBoolean(projectForm.inventory),
-      integratedPortals: projectForm.integratedPortals || "",
-    };
-
-    try {
-      const response = await fetch(`${API_URL}/projects/${selectedProject.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result?.message || "Unable to update project");
-
-      setProjects((current) =>
-        current.map((project) =>
-          String(project.id) === String(selectedProject.id) ? { ...project, ...result } : project
-        )
-      );
-      closeModal();
-      window.alert("Project updated successfully!");
-    } catch (error) {
-      console.error(error);
-      setMessage(error.message || "Unable to update project.");
-    } finally {
-      setIsSaving(false);
-    }
   };
 
   const deleteProject = async (project) => {
@@ -301,6 +214,7 @@ const ColumnChartLayer = () => {
           <table className="project-table">
             <thead>
               <tr>
+                <th>SR. NO.</th>
                 <th>Project</th>
                 <th>Number of Towers</th>
                 <th>Active</th>
@@ -315,17 +229,18 @@ const ColumnChartLayer = () => {
             <tbody>
               {loadError ? (
                 <tr>
-                  <td colSpan="8" className="project-empty text-danger">{loadError}</td>
+                  <td colSpan="9" className="project-empty text-danger">{loadError}</td>
                 </tr>
               ) : filteredProjects.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="project-empty">{searchQuery ? "No matching projects found" : "No Data Available"}</td>
+                  <td colSpan="9" className="project-empty">{searchQuery ? "No matching projects found" : "No Data Available"}</td>
                 </tr>
               ) : (
-                filteredProjects.map((project) => (
+                paginatedProjects.map((project, index) => (
                   <ProjectRow
                     key={project.id}
                     project={project}
+                    serialNumber={pageStartIndex + index + 1}
                     isOpen={openMenuId === project.id}
                     onToggleMenu={() => setOpenMenuId((current) => (current === project.id ? null : project.id))}
                     onEdit={() => openEditProject(project)}
@@ -336,18 +251,16 @@ const ColumnChartLayer = () => {
               )}
             </tbody>
           </table>
+          {filteredProjects.length > ROWS_PER_PAGE && (
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPrevious={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              onNext={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+            />
+          )}
         </div>
       </div>
-
-      {modalMode === "edit" && (
-        <ProjectEditModal
-          form={projectForm}
-          isSaving={isSaving}
-          onChange={handleFormChange}
-          onClose={closeModal}
-          onSubmit={saveProject}
-        />
-      )}
 
       {modalMode === "view" && selectedProject && (
         <ProjectViewModal
@@ -360,13 +273,14 @@ const ColumnChartLayer = () => {
   );
 };
 
-const ProjectRow = ({ project, isOpen, onToggleMenu, onEdit, onView, onDelete }) => (
+const ProjectRow = ({ project, serialNumber, isOpen, onToggleMenu, onEdit, onView, onDelete }) => (
   <tr>
+    <td className="fw-bold">{serialNumber}</td>
     <td>{project.name}</td>
     <td>{project.towerCount ?? project.noOfTowers ?? project._count?.tower ?? 0}</td>
     <td>{project.active ? "Yes" : "No"}</td>
     <td>{project.inventory ? "Yes" : "No"}</td>
-    <td>{project.sales || "-"}</td>
+    <td>{project.postSales ? "Yes" : "No"}</td>
     <td>{formatDate(project.createdAt)}</td>
     <td>{project.integratedPortals || "-"}</td>
     <td className="actions-cell">
@@ -385,122 +299,19 @@ const ProjectRow = ({ project, isOpen, onToggleMenu, onEdit, onView, onDelete })
   </tr>
 );
 
-const ProjectEditModal = ({ form, isSaving, onChange, onClose, onSubmit }) => (
-  <div className="project-modal-backdrop">
-    <section className="project-modal" role="dialog" aria-modal="true" aria-labelledby="project-edit-title">
-      <div className="project-modal-head">
-        <div>
-          <h2 id="project-edit-title">Edit Project</h2>
-          <p>Update project form details and save them to this record.</p>
-        </div>
-        <button type="button" className="project-modal-close" onClick={onClose}>x</button>
-      </div>
-
-      <form className="project-edit-form" onSubmit={onSubmit}>
-        <label>
-          <span>Project Name *</span>
-          <input name="name" value={form.name} onChange={onChange} required />
-        </label>
-
-        <label>
-          <span>Project Type</span>
-          <select name="projectType" value={form.projectType} onChange={onChange} required>
-            <option value="">Select</option>
-            <option value="residential">Residential</option>
-            <option value="commercial">Commercial</option>
-            <option value="residential_commercial">Residential + Commercial</option>
-          </select>
-        </label>
-
-        <label>
-          <span>RERA Project ID</span>
-          <input name="reraProjectId" type="number" value={form.reraProjectId} onChange={onChange} />
-        </label>
-
-        <label>
-          <span>Number of Towers</span>
-          <input name="noOfTowers" type="number" min="0" value={form.noOfTowers} readOnly />
-        </label>
-
-        <label>
-          <span>Active</span>
-          <select name="active" value={String(form.active)} onChange={onChange}>
-            <option value="true">Yes</option>
-            <option value="false">No</option>
-          </select>
-        </label>
-
-        <label>
-          <span>Inventory</span>
-          <select name="inventory" value={String(form.inventory)} onChange={onChange}>
-            <option value="true">Yes</option>
-            <option value="false">No</option>
-          </select>
-        </label>
-
-        <label>
-          <span>Integrated Portals</span>
-          <input name="integratedPortals" value={form.integratedPortals} onChange={onChange} />
-        </label>
-
-        <label>
-          <span>Country</span>
-          <input name="country" value={form.country} onChange={onChange} />
-        </label>
-
-        <label>
-          <span>State</span>
-          <input name="state" value={form.state} onChange={onChange} />
-        </label>
-
-        <label>
-          <span>City</span>
-          <input name="city" value={form.city} onChange={onChange} />
-        </label>
-
-        <label>
-          <span>Zip</span>
-          <input name="zip" value={form.zip} onChange={onChange} />
-        </label>
-
-        <label>
-          <span>Locality</span>
-          <input name="locality" value={form.locality} onChange={onChange} />
-        </label>
-
-        <label>
-          <span>Latitude</span>
-          <input name="latitude" value={form.latitude} onChange={onChange} />
-        </label>
-
-        <label>
-          <span>Longitude</span>
-          <input name="longitude" value={form.longitude} onChange={onChange} />
-        </label>
-
-        <label className="project-form-wide">
-          <span>Street</span>
-          <input name="street" value={form.street} onChange={onChange} />
-        </label>
-
-        <label className="project-form-wide">
-          <span>Address</span>
-          <textarea name="address" value={form.address} onChange={onChange} />
-        </label>
-
-        <label className="project-form-wide">
-          <span>Description</span>
-          <textarea name="description" value={form.description} onChange={onChange} />
-        </label>
-
-        <div className="project-modal-actions">
-          <button type="button" onClick={onClose}>Cancel</button>
-          <button type="submit" className="primary" disabled={isSaving}>
-            {isSaving ? "Saving..." : "Save Changes"}
-          </button>
-        </div>
-      </form>
-    </section>
+const TablePagination = ({ currentPage, totalPages, onPrevious, onNext }) => (
+  <div className="table-pagination">
+    <span>
+      Showing page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
+    </span>
+    <div className="table-pagination-actions">
+      <button type="button" onClick={onPrevious} disabled={currentPage === 1}>
+        Previous
+      </button>
+      <button type="button" onClick={onNext} disabled={currentPage === totalPages}>
+        Next
+      </button>
+    </div>
   </div>
 );
 
@@ -521,6 +332,7 @@ const ProjectViewModal = ({ project, viewData, onClose }) => (
         <Detail label="Created On" value={formatDate(project.createdAt)} />
         <Detail label="Active" value={project.active ? "Yes" : "No"} />
         <Detail label="Inventory" value={project.inventory ? "Yes" : "No"} />
+        <Detail label="Post Sales" value={project.postSales ? "Yes" : "No"} />
         <Detail label="Integrated Portals" value={project.integratedPortals} />
         <Detail label="Address" value={[project.address, project.locality, project.city, project.state, project.country, project.zip].filter(Boolean).join(", ")} wide />
         <Detail label="Description" value={project.description?.replace(/<[^>]*>/g, "")} wide />
@@ -798,6 +610,47 @@ const projectStyles = `
     text-align: center;
   }
 
+  .table-pagination {
+    align-items: center;
+    color: #64748b;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: space-between;
+    padding: 16px 2px 0;
+  }
+
+  .table-pagination strong {
+    color: #0f172a;
+  }
+
+  .table-pagination-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .table-pagination-actions button {
+    background: #ffffff;
+    border: 1px solid #d6dee9;
+    border-radius: 8px;
+    color: #334155;
+    cursor: pointer;
+    font-weight: 700;
+    min-height: 38px;
+    padding: 0 14px;
+  }
+
+  .table-pagination-actions button:hover:not(:disabled) {
+    background: #f8fafc;
+    border-color: #487fff;
+    color: #2557d6;
+  }
+
+  .table-pagination-actions button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
   .project-modal-backdrop {
     align-items: center;
     background: rgba(15, 23, 42, 0.42);
@@ -849,14 +702,18 @@ const projectStyles = `
   }
 
   .project-modal-close {
+    align-items: center;
     background: #f8fafc;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     color: #334155;
     cursor: pointer;
+    display: inline-flex;
     font-size: 22px;
     height: 36px;
+    justify-content: center;
     line-height: 1;
+    padding: 0;
     width: 36px;
   }
 

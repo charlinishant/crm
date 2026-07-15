@@ -12,7 +12,7 @@ const PieChartPage = () => {
       <MasterLayout>
 
         {/* Breadcrumb */}
-        <Breadcrumb title="Chart - Project Tower" />
+        <Breadcrumb title="Project Tower" />
 
         {/* PieChartLayer */}
        

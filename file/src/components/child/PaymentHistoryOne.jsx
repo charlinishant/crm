@@ -8,6 +8,8 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
   const [isLoadingUsers, setIsLoadingUsers] = useState(true);
   const [openMenu, setOpenMenu] = useState(null);
   const [menuPosition, setMenuPosition] = useState(null);
+  const [teamMenu, setTeamMenu] = useState(null);
+  const [teamSearch, setTeamSearch] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const navigate = useNavigate();
@@ -71,6 +73,8 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
     const leadId = lead.id || lead._id || lead.lead_id;
     return leadId ? ` ${leadId}` : "-";
   }, []);
+
+  const getLeadKey = useCallback((lead) => lead.id || lead._id || lead.lead_id, []);
 
   const getLeadOwner = useCallback((lead) => {
     return lead.owner || lead.sales || getUserName(lead.team) || "Unassigned";
@@ -144,7 +148,19 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
     setCurrentPage(1);
     setOpenMenu(null);
     setMenuPosition(null);
+    setTeamMenu(null);
+    setTeamSearch("");
   }, [searchQuery, trashMode]);
+
+  useEffect(() => {
+    const closeTeamMenu = () => {
+      setTeamMenu(null);
+      setTeamSearch("");
+    };
+
+    document.addEventListener("mousedown", closeTeamMenu);
+    return () => document.removeEventListener("mousedown", closeTeamMenu);
+  }, []);
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
@@ -554,7 +570,7 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
   };
 
   const handleTeamChange = async (lead, userId) => {
-    const leadId = lead.id || lead._id || lead.lead_id;
+    const leadId = getLeadKey(lead);
     const previousData = leadData;
     const nextTeam = users.find((user) => String(user.id) === String(userId)) || null;
     const nextTeamId = userId ? Number(userId) : null;
@@ -584,6 +600,29 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
       setLeadData(previousData);
       alert(error.message || "Unable to assign lead");
     }
+  };
+
+  const handleTeamMenuToggle = (event, lead) => {
+    event.stopPropagation();
+    if (isLoadingUsers) return;
+
+    const leadId = getLeadKey(lead);
+    if (teamMenu?.leadId === leadId) {
+      setTeamMenu(null);
+      setTeamSearch("");
+      return;
+    }
+
+    setTeamMenu({
+      leadId,
+    });
+    setTeamSearch("");
+  };
+
+  const handleTeamSelect = async (lead, userId) => {
+    setTeamMenu(null);
+    setTeamSearch("");
+    await handleTeamChange(lead, userId);
   };
 
   const handleTagsChange = (lead, nextTags) => {
@@ -619,6 +658,71 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
       await fetchLeadData();
       alert(error.message || "Unable to update tags");
     }
+  };
+
+  const getSelectedTeamName = (lead) => {
+    const selectedUser =
+      users.find((user) => String(user.id) === String(lead.teamId || "")) ||
+      lead.team;
+
+    return getUserName(selectedUser) || "Unassigned";
+  };
+
+  const getFilteredTeamUsers = () => {
+    const query = teamSearch.trim().toLowerCase();
+    if (!query) return users;
+
+    return users.filter((user) => getUserName(user).toLowerCase().includes(query));
+  };
+
+  const renderTeamDropdown = (lead) => {
+    const leadId = getLeadKey(lead);
+    if (teamMenu?.leadId !== leadId) return null;
+
+    const filteredUsers = getFilteredTeamUsers();
+    const selectedTeamId = String(lead.teamId || "");
+
+    return (
+      <div
+        className="lead-team-menu"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <input
+          type="search"
+          className="lead-team-search"
+          value={teamSearch}
+          onChange={(event) => setTeamSearch(event.target.value)}
+          placeholder="Search team..."
+          autoFocus
+        />
+        <div className="lead-team-options">
+          <button
+            type="button"
+            className={!selectedTeamId ? "active" : ""}
+            onClick={() => handleTeamSelect(lead, "")}
+          >
+            Unassigned
+          </button>
+          {filteredUsers.length ? (
+            filteredUsers.map((user) => {
+              const userId = String(user.id);
+              return (
+                <button
+                  type="button"
+                  className={selectedTeamId === userId ? "active" : ""}
+                  key={user.id || user.email}
+                  onClick={() => handleTeamSelect(lead, userId)}
+                >
+                  {getUserName(user)}
+                </button>
+              );
+            })
+          ) : (
+            <div className="lead-team-empty">No users found</div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -710,14 +814,97 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
           outline: none;
         }
 
+        .lead-team-dropdown {
+          position: relative;
+          width: 100%;
+        }
+
         .lead-team-select {
+          align-items: center;
           min-width: 180px;
           height: 36px;
           border: 1px solid #cbd5e1;
           border-radius: 6px;
           background: #ffffff;
           color: #334155;
+          cursor: pointer;
+          display: inline-flex;
+          justify-content: space-between;
           padding: 0 10px;
+          text-align: left;
+          width: 100%;
+        }
+
+        .lead-team-select::after {
+          border-left: 4px solid transparent;
+          border-right: 4px solid transparent;
+          border-top: 5px solid #64748b;
+          content: "";
+          margin-left: 10px;
+        }
+
+        .lead-team-select:disabled {
+          cursor: not-allowed;
+          opacity: 0.7;
+        }
+
+        .lead-team-select span {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .lead-team-menu {
+          background: #ffffff;
+          border: 1px solid #1f2937;
+          box-shadow: 0 14px 32px rgba(15, 23, 42, 0.2);
+          left: 0;
+          padding: 0;
+          position: absolute;
+          top: calc(100% + 4px);
+          width: 100%;
+          z-index: 2500;
+        }
+
+        .lead-team-search {
+          border: 0;
+          border-bottom: 1px solid #e2e8f0;
+          color: #0f172a;
+          height: 38px;
+          outline: none;
+          padding: 0 12px;
+          width: 100%;
+        }
+
+        .lead-team-options {
+          max-height: 324px;
+          overflow-y: auto;
+        }
+
+        .lead-team-options button,
+        .lead-team-empty {
+          align-items: center;
+          background: #ffffff;
+          border: 0;
+          color: #0f172a;
+          cursor: pointer;
+          display: flex;
+          font: inherit;
+          min-height: 36px;
+          padding: 0 12px;
+          text-align: left;
+          width: 100%;
+        }
+
+        .lead-team-options button:hover,
+        .lead-team-options button.active {
+          background: #2563d6;
+          color: #ffffff;
+        }
+
+        .lead-team-empty {
+          color: #64748b;
+          cursor: default;
         }
 
         .lead-action-cell {
@@ -879,8 +1066,8 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
       `}</style>
 
       <div  className="table-section fa-2x">
-        <p>{trashMode ? "Trash" : "Lead Data"}</p>
-        <label className="crm-table-search">
+        {/* <p>{trashMode ? "Trash" : "Lead Data"}</p> */}
+        {/* <label className="crm-table-search">
           <span aria-hidden="true">🔍</span>
           <input
             type="search"
@@ -889,7 +1076,7 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
             placeholder="Search customer, project, unit..."
             aria-label="Search leads"
           />
-        </label>
+         </label> */}
 
         <table border="1" cellPadding="0" cellSpacing="0">
           <thead>
@@ -901,7 +1088,6 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
               <th>Received On</th>
               <th>Requirement</th>
               <th>Team</th>
-              <th>Tags</th>
               <th style={{ borderStartEndRadius: '8px', borderEndEndRadius: '8px' }}>Actions</th>
             </tr>
           </thead>
@@ -909,7 +1095,7 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
           <tbody>
             {filteredLeadData.length === 0 ? (
               <tr>
-                <td colSpan="9" className="empty-state">
+                <td colSpan="8" className="empty-state">
                   {searchQuery ? "No matching leads found" : trashMode ? "Trash is empty" : "No Data Available"}
                 </td>
               </tr>
@@ -929,36 +1115,18 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
                     {trashMode ? (
                       getLeadOwner(lead)
                     ) : (
-                      <select
-                        className="lead-team-select"
-                        value={lead.teamId || ""}
-                        onChange={(event) => handleTeamChange(lead, event.target.value)}
-                        disabled={isLoadingUsers}
-                      >
-                        <option value="">
-                          {isLoadingUsers ? "Loading users..." : "Unassigned"}
-                        </option>
-                        {users.map((user) => (
-                          <option key={user.id || user.email} value={user.id}>
-                            {getUserName(user)}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="lead-team-dropdown">
+                        <button
+                          type="button"
+                          className="lead-team-select"
+                          onClick={(event) => handleTeamMenuToggle(event, lead)}
+                          disabled={isLoadingUsers}
+                        >
+                          <span>{isLoadingUsers ? "Loading users..." : getSelectedTeamName(lead)}</span>
+                        </button>
+                        {renderTeamDropdown(lead)}
+                      </div>
                     )}
-                  </td>
-                  <td className="lead-tags-cell" title={lead.tags || ""}>
-                    <input
-                      type="text"
-                      className="lead-tags-input"
-                      value={lead.tags || ""}
-                      onChange={(event) => handleTagsChange(lead, event.target.value)}
-                      onBlur={(event) => handleTagsSave(lead, event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") event.currentTarget.blur();
-                      }}
-                      placeholder="Tags"
-                      disabled={trashMode}
-                    />
                   </td>
                   <td className="lead-action-cell">
                     <button
