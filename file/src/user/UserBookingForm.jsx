@@ -499,7 +499,7 @@ const UserBookingForm = ({
     (bookingStepIndex === 1 && !bookingForm.unit) ||
     (bookingStepIndex === 2 && !bookingForm.customerName && !leadName);
 
-  const unitsPerPage = 8;
+  const unitsPerPage = 6;
   const totalUnitPages = Math.max(1, Math.ceil(filteredCatalogUnits.length / unitsPerPage));
   const activeUnitPage = Math.min(unitPage, totalUnitPages);
   const unitPageStart = (activeUnitPage - 1) * unitsPerPage;
