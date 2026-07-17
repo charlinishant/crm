@@ -536,9 +536,9 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                         );
                       })}
                     </select>
-                    <button type="button" className="lead-add">
+                    {/* <button type="button" className="lead-add">
                       + Add Channel Partner
-                    </button>
+                    </button> */}
                   </div>
                 </div>
 
