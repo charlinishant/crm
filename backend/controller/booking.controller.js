@@ -221,6 +221,7 @@ exports.createBooking = async (req, res) => {
           basePrice: priceSnapshot.basePrice,
           baseRate: priceSnapshot.baseRate,
           source: data.source || null,
+          channelPartnerId: toNumberOrNull(data.channelPartnerId),
           bookedBy: data.bookedBy || null,
           idempotencyKey,
         }
@@ -408,6 +409,7 @@ exports.updateBooking = async (req, res) => {
     if (data.basePrice !== undefined) updateData.basePrice = toNumberOrNull(data.basePrice)
     if (data.baseRate !== undefined) updateData.baseRate = toNumberOrNull(data.baseRate)
     if (data.source !== undefined) updateData.source = data.source
+    if (data.channelPartnerId !== undefined) updateData.channelPartnerId = toNumberOrNull(data.channelPartnerId)
     if (data.bookedBy !== undefined) updateData.bookedBy = data.bookedBy
     if (data.unitId !== undefined) updateData.unitId = toNumberOrNull(data.unitId)
     if (data.stage !== undefined) {

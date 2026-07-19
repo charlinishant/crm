@@ -2,6 +2,7 @@ import "./styles.css";
 import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ADDLEAD from"./pages/Addlead"
+import LeadMergePage from "./pages/LeadMergePage";
 // import HomePageOne from "./pages/HomePageOne";
 import HomePageTwo from "./pages/HomePageTwo";
 import HomePageThree from "./pages/HomePageThree";
@@ -182,6 +183,16 @@ const isTokenExpired = (token) => {
   }
 };
 
+const getTokenPayload = (token) => {
+  if (!token) return null;
+
+  try {
+    return JSON.parse(atob(token.split(".")[1]));
+  } catch (error) {
+    return null;
+  }
+};
+
 const getStoredAuthUser = () => {
   try {
     return JSON.parse(localStorage.getItem("authUser") || "null");
@@ -220,7 +231,7 @@ const ProtectedAppRoutes = () => {
   const [sessionExpired, setSessionExpired] = useState(false);
   const token = localStorage.getItem("authToken");
   const authUser = getStoredAuthUser();
-  const role = getRoleName(authUser);
+  const role = getRoleName(authUser) || getRoleName(getTokenPayload(token));
   const isSalesUser = salesRoles.has(role);
   const isAdminUser = adminRoles.has(role);
   const isAccessDeniedPath = location.pathname === accessDeniedPath;
@@ -300,6 +311,7 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/user-preview' element={<RedirectUserPreviewToSales />} />
         <Route exact path='/details' element={<Details />} />
         <Route exact path='/dashboard' element={<HomePageEleven />} />
+        <Route exact path='/lead-merge' element={<LeadMergePage />} />
         <Route exact path='/user/sales' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/leads' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/calls' element={<SalesUserPanel />} />

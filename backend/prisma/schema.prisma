@@ -58,7 +58,7 @@ model Tower{
   name String 
   wingCode String?
   floorNumberingConvention String @default("GROUND_IS_FLOOR_1")
-  skippedFloors String?
+  skippedFloors String? @default("[]")
   projectId Int
   project Project @relation("Project",  fields: [projectId], references: [id], onDelete: Restrict)
   totalFloor Int? @default(0)
@@ -94,7 +94,7 @@ model FloorPlan{
   applicableFloorFrom Int?
   applicableFloorTo Int?
   unitPosition String?
-  skippedFloors String?
+  skippedFloors String? @default("[]")
   unitNumbers String? @db.Text
   totalUnitsOfPlan Int?
   facing String?
@@ -576,6 +576,7 @@ model Booking{
   basePrice Float?
   baseRate Float?
   source String?
+  channelPartnerId Int?
   bookedBy String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

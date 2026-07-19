@@ -44,6 +44,53 @@ const toArray = (value) => {
         .filter(Boolean)
 }
 
+const parseJsonArray = (value) => {
+    if (Array.isArray(value)) return value
+    if (value === null || value === undefined || value === "") return []
+
+    if (typeof value === "string") {
+        const trimmed = value.trim()
+        if (!trimmed) return []
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+            try {
+                const parsed = JSON.parse(trimmed)
+                return Array.isArray(parsed) ? parsed : []
+            } catch {
+                return []
+            }
+        }
+
+        return trimmed.split(",").map((item) => item.trim())
+    }
+
+    return [value]
+}
+
+const normalizeSkippedFloors = (value, from, to) => {
+    const values = parseJsonArray(value)
+    if (!values.length) return { floors: [], error: null }
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from > to) {
+        return { floors: [], error: "Select a valid applicable floor range before entering skipped floors." }
+    }
+
+    const normalized = []
+    for (const item of values) {
+        const text = String(item).trim()
+        if (!/^\d+$/.test(text)) {
+            return { floors: [], error: `Skipped floors must contain unique whole floor numbers between ${from} and ${to}.` }
+        }
+
+        const floor = Number(text)
+        if (!Number.isInteger(floor) || floor < from || floor > to) {
+            return { floors: [], error: `Skipped floors must contain unique whole floor numbers between ${from} and ${to}.` }
+        }
+
+        normalized.push(floor)
+    }
+
+    return { floors: Array.from(new Set(normalized)).sort((a, b) => a - b), error: null }
+}
+
 const isPublishedStatus = (status) => String(status || "").toLowerCase() === "published"
 
 const getAreaForBasis = (data, basis) => {
@@ -80,6 +127,14 @@ const validateFloorPlan = (data) => {
 
     if (!parseUnitPositions(data.unitPosition).length) {
         return "Enter at least one valid Unit Position, for example 01 or 01, 02, 03"
+    }
+
+    if (data.applicableFloorFrom === null || data.applicableFloorTo === null) {
+        return "Applicable Floor From and Applicable Floor To are required"
+    }
+
+    if (data.validationError) {
+        return data.validationError
     }
 
     if (
@@ -160,30 +215,28 @@ const validateFloorPlanTowerBounds = async (data) => {
     return null
 }
 
-const applyTowerInheritedFields = async (data) => {
+const applyDerivedFloorPlanFields = async (data) => {
     const tower = await prisma.tower.findUnique({
         where: { id: data.towerId },
-        select: { skippedFloors: true },
+        select: { wingCode: true },
     })
-    const inheritedSkippedFloors = tower?.skippedFloors || null
     const inheritedData = {
         ...data,
-        skippedFloors: inheritedSkippedFloors,
+        skippedFloors: data.skippedFloors || "[]",
     }
 
     return {
         ...inheritedData,
         totalUnitsOfPlan: getClaimedSlots(inheritedData).length,
+        unitNumbers: getClaimedSlots(inheritedData)
+            .map((slot) => buildGeneratedUnitNumber(tower?.wingCode, slot.floor, slot.unitPosition))
+            .filter(Boolean)
+            .join(", ") || null,
     }
 }
 
 const parseSkippedFloorSet = (value) =>
-    new Set(
-        String(value || "")
-            .split(",")
-            .map((item) => Number(item.trim()))
-            .filter((item) => Number.isInteger(item))
-    )
+    new Set(parseJsonArray(value).map((item) => Number(item)).filter((item) => Number.isInteger(item)))
 
 const getClaimedFloors = (data) => {
     const from = Number(data.applicableFloorFrom)
@@ -307,9 +360,9 @@ const normalizeFloorPlanPayload = (body) => {
         applicableFloorFrom: toIntOrNull(body.applicableFloorFrom),
         applicableFloorTo: toIntOrNull(body.applicableFloorTo),
         unitPosition: parseUnitPositions(body.unitPosition).join(", ") || null,
-        skippedFloors: body.skippedFloors || null,
+        skippedFloors: null,
         unitNumbers: body.unitNumbers || null,
-        totalUnitsOfPlan: toIntOrNull(body.totalUnitsOfPlan),
+        totalUnitsOfPlan: null,
         facing: body.facing || null,
         cornerUnit: toBoolean(body.cornerUnit),
         view: toArray(body.view),
@@ -377,12 +430,22 @@ const normalizeFloorPlanPayload = (body) => {
     }
 
     data.coverArea = data.builtupArea
+    const skippedFloors = normalizeSkippedFloors(
+        body.skippedFloors,
+        data.applicableFloorFrom,
+        data.applicableFloorTo
+    )
+    if (skippedFloors.error) {
+        data.validationError = skippedFloors.error
+    }
+    data.skippedFloors = JSON.stringify(skippedFloors.floors)
+    data.totalUnitsOfPlan = getClaimedSlots(data).length
 
     return data
 }
 
 const buildFloorPlanMutationData = (data, { allowDisconnect = false } = {}) => {
-    const { projectId, towerId, ...payload } = data
+    const { projectId, towerId, validationError, ...payload } = data
 
     payload.project = { connect: { id: projectId } }
 
@@ -413,6 +476,21 @@ const buildGeneratedUnitNumber = (wingCode, floor, unitPosition) => {
     if (!code || !Number.isInteger(Number(floor)) || !unitPosition) return ""
 
     return `${code}-${Number(floor)}${String(unitPosition).padStart(2, "0")}`
+}
+
+const formatFloorPlanResponse = (floorPlan) => {
+    if (!floorPlan || typeof floorPlan !== "object") return floorPlan
+    const skippedFloors = parseJsonArray(floorPlan.skippedFloors)
+        .map((item) => Number(item))
+        .filter((item) => Number.isInteger(item))
+        .sort((a, b) => a - b)
+
+    return {
+        ...floorPlan,
+        skippedFloors,
+        eligibleFloorCount: getClaimedFloors({ ...floorPlan, skippedFloors }).length,
+        totalUnitsOfPlan: getClaimedSlots({ ...floorPlan, skippedFloors }).length,
+    }
 }
 
 const createUnitsFromFloorPlanTemplate = async (tx, floorPlan) => {
@@ -506,6 +584,89 @@ const createUnitsFromFloorPlanTemplate = async (tx, floorPlan) => {
     })
 }
 
+const getGeneratedUnitNamesForFloorPlan = async (tx, floorPlan) => {
+    const tower = floorPlan.tower?.wingCode
+        ? floorPlan.tower
+        : await tx.tower.findUnique({
+            where: { id: floorPlan.towerId },
+            select: { wingCode: true },
+        })
+    const wingCode = tower?.wingCode
+
+    return new Set(
+        getClaimedSlots(floorPlan)
+            .map((slot) => buildGeneratedUnitNumber(wingCode, slot.floor, slot.unitPosition))
+            .filter(Boolean)
+    )
+}
+
+const removeUnitsNoLongerClaimed = async (tx, floorPlan) => {
+    const expectedNames = await getGeneratedUnitNamesForFloorPlan(tx, floorPlan)
+    const unitGroups = await tx.unit.findMany({
+        where: { floorId: floorPlan.id },
+        select: {
+            id: true,
+            _count: { select: { bookings: true } },
+            unitList: {
+                select: {
+                    id: true,
+                    name: true,
+                    floor: true,
+                    status: true,
+                    _count: { select: { bookings: true } },
+                },
+            },
+        },
+    })
+
+    const removableUnitIds = []
+
+    for (const group of unitGroups) {
+        for (const unit of group.unitList || []) {
+            if (expectedNames.has(unit.name)) continue
+
+            const isProtected =
+                group._count.bookings > 0 ||
+                unit._count.bookings > 0 ||
+                normalizeUnitStatus(unit.status) !== UNIT_STATUS.Available
+
+            if (isProtected) {
+                const error = new Error(
+                    `Floor ${unit.floor || unit.name || unit.id} cannot be skipped because ${unit.name || "this unit"} is linked to an active booking or protected inventory status. Resolve it before updating this floor plan.`
+                )
+                error.statusCode = 409
+                throw error
+            }
+
+            removableUnitIds.push(unit.id)
+        }
+    }
+
+    if (removableUnitIds.length) {
+        await tx.unitModel.deleteMany({
+            where: { id: { in: removableUnitIds } },
+        })
+    }
+
+    const refreshedGroups = await tx.unit.findMany({
+        where: { floorId: floorPlan.id },
+        select: {
+            id: true,
+            _count: { select: { unitList: true, bookings: true } },
+        },
+    })
+
+    const emptyGroupIds = refreshedGroups
+        .filter((group) => group._count.unitList === 0 && group._count.bookings === 0)
+        .map((group) => group.id)
+
+    if (emptyGroupIds.length) {
+        await tx.unit.deleteMany({
+            where: { id: { in: emptyGroupIds } },
+        })
+    }
+}
+
 const refreshGeneratedUnitPricing = async (tx, floorPlan) => {
     const unitGroups = await tx.unit.findMany({
         where: { floorId: floorPlan.id },
@@ -544,7 +705,7 @@ exports.createFloor = async (req, res)=>{
             return res.status(400).json({ message: towerValidationError })
         }
 
-        const inheritedData = await applyTowerInheritedFields(data)
+        const inheritedData = await applyDerivedFloorPlanFields(data)
         const slotValidationError = await validateFloorPlanSlotClaims(inheritedData)
         if (slotValidationError) {
             return res.status(400).json({ message: slotValidationError })
@@ -588,7 +749,7 @@ exports.getFloor  = async (req, res)=>{
             if(!result)
                 res.status(200).json("Floor plan not found")
             else{
-                res.status(200).json(result)
+                res.status(200).json(formatFloorPlanResponse(result))
             }
         }
         else{
@@ -639,6 +800,11 @@ exports.getFloor  = async (req, res)=>{
                     floorRisePerSqft:true,
                     baseFloorForFloorRise:true,
                     applicableFloorFrom:true,
+                    applicableFloorTo:true,
+                    unitPosition:true,
+                    skippedFloors:true,
+                    unitNumbers:true,
+                    totalUnitsOfPlan:true,
                 }
             })
 
@@ -646,7 +812,7 @@ exports.getFloor  = async (req, res)=>{
                 page:page,
                 limit:limit,
                 totalItems:totalItems,
-                data:result
+                data:result.map(formatFloorPlanResponse)
             }
             res.status(200).json(context)
         }
@@ -683,13 +849,7 @@ exports.updateFloor = async (req, res)=>{
             return res.status(400).json("Floor plan not found")
         }
 
-        if (record._count.units > 0) {
-            return res.status(409).json({
-                message: "This published floor plan already generated units. Clone it or use an explicit regeneration flow before changing inventory fields.",
-            })
-        }
-
-        const inheritedData = await applyTowerInheritedFields(data)
+        const inheritedData = await applyDerivedFloorPlanFields(data)
         const slotValidationError = await validateFloorPlanSlotClaims(inheritedData, record.id)
         if (slotValidationError) {
             return res.status(400).json({ message: slotValidationError })
@@ -705,14 +865,16 @@ exports.updateFloor = async (req, res)=>{
                 data: buildFloorPlanMutationData(inheritedData)
             })
             await replaceFloorPlanSlotClaims(tx, updated)
+            await removeUnitsNoLongerClaimed(tx, updated)
             if (isPublishedStatus(updated.status)) {
                 await createUnitsFromFloorPlanTemplate(tx, updated)
+                await refreshGeneratedUnitPricing(tx, updated)
             }
 
             return updated
         })
 
-        res.status(200).json(result)
+        res.status(200).json(formatFloorPlanResponse(result))
     } catch (error) {
         console.log(error);
         if (error.statusCode) {

@@ -112,11 +112,48 @@ const getTowerWingPrefix = (tower) => {
   return String(tower?.wingCode || "").trim().toUpperCase();
 };
 
-const parseSkippedFloors = (value) =>
-  String(value || "")
-    .split(",")
-    .map((item) => Number(item.trim()))
-    .filter((item) => Number.isInteger(item));
+const parseStoredSkippedFloors = (value) => {
+  if (Array.isArray(value)) return value.join(", ");
+  if (!value) return "";
+  const text = String(value).trim();
+  if (text.startsWith("[") && text.endsWith("]")) {
+    try {
+      const parsed = JSON.parse(text);
+      return Array.isArray(parsed) ? parsed.join(", ") : "";
+    } catch {
+      return text;
+    }
+  }
+  return text;
+};
+
+const normalizeSkippedFloorsInput = (value, from, to) => {
+  const text = String(value || "").trim();
+  if (!text) return { floors: [], text: "", error: "" };
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from > to) {
+    return { floors: [], text, error: "Select a valid applicable floor range before entering skipped floors." };
+  }
+
+  const parts = text.split(",");
+  const floors = [];
+
+  for (const part of parts) {
+    const item = part.trim();
+    if (!/^\d+$/.test(item)) {
+      return { floors: [], text, error: `Skipped floors must contain unique whole floor numbers between ${from} and ${to}.` };
+    }
+
+    const floor = Number(item);
+    if (floor < from || floor > to) {
+      return { floors: [], text, error: `Skipped floors must contain unique whole floor numbers between ${from} and ${to}.` };
+    }
+
+    floors.push(floor);
+  }
+
+  const uniqueFloors = Array.from(new Set(floors)).sort((a, b) => a - b);
+  return { floors: uniqueFloors, text: uniqueFloors.join(", "), error: "" };
+};
 
 const parseUnitPositions = (value) =>
   Array.from(new Set(String(value || "")
@@ -139,7 +176,7 @@ const getGeneratedUnitNumbers = ({ from, to, unitPosition, skippedFloors, tower 
   const wingPrefix = getTowerWingPrefix(tower);
   if (!wingPrefix) return [];
 
-  const skippedFloorSet = new Set(parseSkippedFloors(skippedFloors));
+  const skippedFloorSet = new Set(skippedFloors);
   const units = [];
 
   for (let floor = from; floor <= to; floor += 1) {
@@ -213,7 +250,7 @@ const AddFloorplan = () => {
     applicableFloorFrom: plan.applicableFloorFrom ?? "",
     applicableFloorTo: plan.applicableFloorTo ?? "",
     unitPosition: plan.unitPosition || "01",
-    skippedFloors: plan.skippedFloors || "",
+    skippedFloors: parseStoredSkippedFloors(plan.skippedFloors),
     unitNumbers: plan.unitNumbers || "",
     totalUnitsOfPlan: plan.totalUnitsOfPlan ?? "",
     facing: plan.facing || "",
@@ -269,7 +306,11 @@ const AddFloorplan = () => {
     () => towers.find((tower) => String(tower.id) === String(formData.projectTower)),
     [formData.projectTower, towers]
   );
-  const inheritedSkippedFloors = selectedTower?.skippedFloors || "";
+  const skippedFloorValidation = useMemo(() => {
+    const from = toNumberOrNull(formData.applicableFloorFrom);
+    const to = toNumberOrNull(formData.applicableFloorTo);
+    return normalizeSkippedFloorsInput(formData.skippedFloors, from, to);
+  }, [formData.applicableFloorFrom, formData.applicableFloorTo, formData.skippedFloors]);
 
   useEffect(() => {
     const fetchOptions = async () => {
@@ -409,14 +450,14 @@ const AddFloorplan = () => {
     return getGeneratedUnitNumbers({
       from,
       to,
-      skippedFloors: inheritedSkippedFloors,
+      skippedFloors: skippedFloorValidation.error ? [] : skippedFloorValidation.floors,
       unitPosition: formData.unitPosition,
       tower: selectedTower,
     });
   }, [
     formData.applicableFloorFrom,
     formData.applicableFloorTo,
-    inheritedSkippedFloors,
+    skippedFloorValidation,
     formData.unitPosition,
     selectedTower,
   ]);
@@ -481,6 +522,9 @@ const AddFloorplan = () => {
       ...prev,
       [name]: type === "checkbox" ? checked : value,
       ...(name === "project" ? { projectTower: "" } : {}),
+      ...(name === "projectTower" && !prev.skippedFloors
+        ? { skippedFloors: parseStoredSkippedFloors(towers.find((tower) => String(tower.id) === String(value))?.skippedFloors) }
+        : {}),
     }));
   };
 
@@ -510,6 +554,7 @@ const AddFloorplan = () => {
     if (towerTotalFloors !== null && to !== null && to > towerTotalFloors) {
       return `Applicable Floor To cannot exceed this tower's Total Floors (${towerTotalFloors}).`;
     }
+    if (skippedFloorValidation.error) return skippedFloorValidation.error;
     if (formData.projectTower && !getTowerWingPrefix(selectedTower)) return "Selected tower needs a Wing Code before unit numbers can be generated.";
     if (formData.projectTower && !generatedUnitNumbers.length) return "Unit numbers could not be generated. Check floor range and unit position.";
     if (loading !== null && (loading < 0 || loading > 100)) return "Loading % must be between 0 and 100";
@@ -551,7 +596,7 @@ const AddFloorplan = () => {
       applicableFloorFrom: toNumberOrNull(formData.applicableFloorFrom),
       applicableFloorTo: toNumberOrNull(formData.applicableFloorTo),
       unitPosition: formData.unitPosition,
-      skippedFloors: inheritedSkippedFloors,
+      skippedFloors: skippedFloorValidation.floors,
       unitNumbers: generatedUnitNumbers.join(", "),
       totalUnitsOfPlan: generatedUnitNumbers.length,
       facing: formData.facing,
@@ -724,10 +769,11 @@ const AddFloorplan = () => {
                   <InputField
                     label="SKIPPED FLOORS"
                     name="skippedFloors"
-                    value={inheritedSkippedFloors}
-                    onChange={() => {}}
-                    placeholder="Inherited from tower"
-                    disabled
+                    value={formData.skippedFloors}
+                    onChange={handleChange}
+                    placeholder="Example: 13, 14"
+                    helperText="Units will not be generated for these floors."
+                    error={skippedFloorValidation.error}
                   />
                   <GeneratedUnitsField units={generatedUnitNumbers} />
                   <InputField
@@ -873,15 +919,17 @@ const Section = ({ title, children }) => (
   </div>
 );
 
-const FieldShell = ({ label, children }) => (
+const FieldShell = ({ label, children, helperText, error }) => (
   <div className="lead-group">
     <label>{label}</label>
     {children}
+    {helperText && <small className="floorplan-helper-text">{helperText}</small>}
+    {error && <small className="floorplan-field-error">{error}</small>}
   </div>
 );
 
-const InputField = ({ label, name, value, onChange, type = "text", step, min, max, placeholder, required, disabled }) => (
-  <FieldShell label={label}>
+const InputField = ({ label, name, value, onChange, type = "text", step, min, max, placeholder, required, disabled, helperText, error }) => (
+  <FieldShell label={label} helperText={helperText} error={error}>
     <input
       type={type}
       step={step}

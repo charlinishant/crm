@@ -21,6 +21,31 @@ const calculateBasePrice = (baseRate, floor) => {
   return Number((rate * area).toFixed(2))
 }
 
+const parseJsonArray = (value) => {
+  if (Array.isArray(value)) return value
+  if (value === null || value === undefined || value === "") return []
+
+  if (typeof value === "string") {
+    const trimmed = value.trim()
+    if (!trimmed) return []
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        return Array.isArray(parsed) ? parsed : []
+      } catch {
+        return []
+      }
+    }
+
+    return trimmed.split(",").map((item) => item.trim())
+  }
+
+  return [value]
+}
+
+const getSkippedFloorSet = (value) =>
+  new Set(parseJsonArray(value).map((item) => Number(item)).filter((item) => Number.isInteger(item)))
+
 const calculateUnitPricing = (floorPlan, floor) => {
   const baseRate = toNumberOrNull(floorPlan?.baseRate) || 0
   const floorRise = toNumberOrNull(floorPlan?.floorRisePerSqft) || 0
@@ -43,136 +68,103 @@ const generateUnitNumber = (wingCode, floor, position) => {
   return `${normalizedWing}-${Math.trunc(floorNumber)}${String(Math.trunc(positionNumber)).padStart(2, "0")}`
 }
 
-exports.createUnit = async (req, res) => {
-  try {
-    const {
-      unitList,
-      projectId,
-      towerId,
-      floorId,
-      propertyPurpose,
-      description,
-    } = req.body
+const formatUnitPosition = (value) => {
+  const position = toNumberOrNull(value)
+  if (position === null || !Number.isInteger(position) || position < 0 || position > 99) return ""
+  return String(position).padStart(2, "0")
+}
 
-    if (!Array.isArray(unitList) || unitList.length === 0) {
-      return res.status(400).json({ message: "Unit list is required" })
-    }
+const assertFloorPlanSlotClaim = async (floorPlanId, towerId, floor, unitIndex) => {
+  const floorNumber = toNumberOrNull(floor)
+  const unitPosition = formatUnitPosition(unitIndex)
 
-    if (!projectId || !towerId || !floorId) {
-      return res.status(400).json({
-        message: "Project, tower, and floor plan are required before creating units.",
-      })
-    }
-
-    const floorPlan = await prisma.floorPlan.findFirst({
-      where: {
-        id: Number(floorId),
-        projectId: Number(projectId),
-        towerId: Number(towerId),
-      },
-      select: {
-        type: true,
-        category: true,
-        bedrooms: true,
-        bathrooms: true,
-        measure: true,
-        carpet: true,
-        builtupArea: true,
-        saleable: true,
-        loading: true,
-        rateBasis: true,
-        baseRate: true,
-        floorRisePerSqft: true,
-        baseFloorForFloorRise: true,
-        applicableFloorFrom: true,
-        tower: {
-          select: {
-            wingCode: true,
-          },
-        },
-      },
-    })
-
-    if (!floorPlan) {
-      return res.status(400).json({
-        message: "Selected floor plan must belong to the selected project and tower.",
-      })
-    }
-
-    if (!floorPlan.tower?.wingCode) {
-      return res.status(400).json({
-        message: "Selected tower needs a Wing Code before unit numbers can be generated.",
-      })
-    }
-
-    const generatedUnits = unitList.map((unit) => ({
-      ...unit,
-      name: generateUnitNumber(floorPlan.tower.wingCode, unit.floor, unit.unitIndex),
-      floor: toNumberOrNull(unit.floor),
-      unitIndex: toNumberOrNull(unit.unitIndex),
-    }))
-
-    if (generatedUnits.some((unit) => !unit.name)) {
-      return res.status(400).json({
-        message: "Floor and Unit Position are required for every unit.",
-      })
-    }
-
-    const duplicateInPayload = generatedUnits.find((unit, index) =>
-      generatedUnits.findIndex((candidate) => candidate.name === unit.name) !== index
-    )
-
-    if (duplicateInPayload) {
-      return res.status(400).json({
-        message: `${duplicateInPayload.name} is duplicated in this unit list.`,
-      })
-    }
-
-    const existingUnit = await prisma.unitModel.findFirst({
-      where: {
-        name: { in: generatedUnits.map((unit) => unit.name) },
-        unit: {
-          is: {
-            projectId: Number(projectId),
-            towerId: Number(towerId),
-          },
-        },
-      },
-      select: { name: true },
-    })
-
-    if (existingUnit) {
-      return res.status(409).json({
-        message: `${existingUnit.name} already exists in this project tower.`,
-      })
-    }
-
-    const record = await prisma.unit.create({ data: {
-      unitList:{
-        create:generatedUnits.map(unit=>({
-            ...calculateUnitPricing(floorPlan, unit.floor),
-            name:unit.name,
-            floor:unit.floor,
-            unitIndex:unit.unitIndex,
-            propertyPurpose:propertyPurpose,
-            status: normalizeUnitStatus(unit.status)
-        }))
-      },
-      projectId: Number(projectId),
-      towerId: Number(towerId),
-      floorId: Number(floorId),
-      description,
-    } })
-
-    res.status(201).json({
-      id: record.id,
-      message: "Unit created successfully",
-    })
-  } catch (error) {
-    console.log(error)
-
-    res.status(500).json("Something went wrong")
+  if (floorNumber === null || !unitPosition) {
+    const error = new Error("Floor and Unit Position are required for every unit.")
+    error.statusCode = 400
+    throw error
   }
+
+  const slot = await prisma.floorPlanSlot.findFirst({
+    where: {
+      floorPlanId: Number(floorPlanId),
+      towerId: Number(towerId),
+      floor: Math.trunc(floorNumber),
+      unitPosition,
+    },
+    select: { id: true },
+  })
+
+  if (!slot) {
+    const error = new Error(`Floor ${Math.trunc(floorNumber)}, unit position ${unitPosition} is not part of this floor plan's generated inventory set.`)
+    error.statusCode = 400
+    throw error
+  }
+}
+
+const assertUniqueTowerFloorPosition = async ({ towerId, floor, unitIndex, excludeUnitModelId = null }) => {
+  const floorNumber = toNumberOrNull(floor)
+  const positionNumber = toNumberOrNull(unitIndex)
+  if (floorNumber === null || positionNumber === null) return
+
+  const duplicate = await prisma.unitModel.findFirst({
+    where: {
+      ...(excludeUnitModelId ? { id: { not: Number(excludeUnitModelId) } } : {}),
+      floor: Math.trunc(floorNumber),
+      unitIndex: Math.trunc(positionNumber),
+      unit: {
+        is: {
+          towerId: Number(towerId),
+        },
+      },
+    },
+    select: {
+      name: true,
+    },
+  })
+
+  if (duplicate) {
+    const error = new Error(`Floor ${Math.trunc(floorNumber)}, unit position ${formatUnitPosition(positionNumber)} already exists in this tower as ${duplicate.name}.`)
+    error.statusCode = 409
+    throw error
+  }
+}
+
+const getClaimedSlotKeys = async (unitItems) => {
+  const floorPlanIds = Array.from(new Set(unitItems.map((item) => item.unit?.floorId).filter(Boolean)))
+  if (!floorPlanIds.length) return new Set()
+
+  const slots = await prisma.floorPlanSlot.findMany({
+    where: {
+      floorPlanId: { in: floorPlanIds.map(Number) },
+    },
+    select: {
+      floorPlanId: true,
+      towerId: true,
+      floor: true,
+      unitPosition: true,
+    },
+  })
+
+  return new Set(slots.map((slot) => `${slot.floorPlanId}:${slot.towerId}:${slot.floor}:${slot.unitPosition}`))
+}
+
+const getUnitItemClaimKey = (item) =>
+  `${item.unit?.floorId}:${item.unit?.towerId}:${Math.trunc(Number(item.floor))}:${formatUnitPosition(item.unitIndex)}`
+
+const getExpectedGeneratedUnitName = (item) =>
+  generateUnitNumber(item.unit?.tower?.wingCode, item.floor, item.unitIndex)
+
+const isFloorPlanGeneratedUnitItem = (item, claimedSlotKeys) => {
+  const expectedName = getExpectedGeneratedUnitName(item)
+  return Boolean(expectedName) &&
+    claimedSlotKeys.has(getUnitItemClaimKey(item)) &&
+    String(item.name || "").trim().toUpperCase() === expectedName
+}
+
+exports.createUnit = async (req, res) => {
+  return res.status(410).json({
+    message: "Manual unit creation has been retired. Publish or update a floor plan to generate structured inventory units.",
+  })
 }
 
 exports.getUnit = async (req, res) => {
@@ -200,6 +192,7 @@ exports.getUnit = async (req, res) => {
             select: {
               id: true,
               name: true,
+              projectType: true,
               configurationLabel: true,
               type: true,
               category: true,
@@ -215,6 +208,7 @@ exports.getUnit = async (req, res) => {
                 select: {
                   id: true,
                   name: true,
+                  projectType: true,
                 },
               },
               tower: {
@@ -260,13 +254,15 @@ exports.getUnit = async (req, res) => {
 
       const skip = (page - 1) * limit
 
-      const totalItems = await prisma.unitModel.count({ where: unitItemConditions })
-
       const unitItems = await prisma.unitModel.findMany({
         where: unitItemConditions,
         skip: skip,
         take: limit,
-        orderBy: { id: "desc" },
+        orderBy: [
+          { floor: "desc" },
+          { unitIndex: "asc" },
+          { id: "asc" },
+        ],
         select: {
           id:true,
           name:true,
@@ -281,17 +277,21 @@ exports.getUnit = async (req, res) => {
           unit:{
             select:{
               id:true,
+              floorId:true,
+              towerId:true,
               description:true,
               project:{
                 select:{
                   id:true,
-                  name:true
+                  name:true,
+                  projectType:true
                 }
               },
               tower:{
                 select:{
                   id:true,
-                  name:true
+                  name:true,
+                  wingCode:true
                 }
               },
               floor:{
@@ -312,13 +312,15 @@ exports.getUnit = async (req, res) => {
                   project:{
                     select:{
                       id:true,
-                      name:true
+                      name:true,
+                      projectType:true
                     }
                   },
                   tower:{
                     select:{
                       id:true,
-                      name:true
+                      name:true,
+                      wingCode:true
                     }
                   }
                 }
@@ -328,7 +330,10 @@ exports.getUnit = async (req, res) => {
 
         },
       })
-      const result = unitItems.map(({ unit, ...item }) => ({
+      const claimedSlotKeys = await getClaimedSlotKeys(unitItems)
+      const validUnitItems = unitItems.filter((item) => isFloorPlanGeneratedUnitItem(item, claimedSlotKeys))
+      const orphanUnitItems = unitItems.filter((item) => !isFloorPlanGeneratedUnitItem(item, claimedSlotKeys))
+      const result = validUnitItems.map(({ unit, ...item }) => ({
         id: unit?.id,
         unitList: [item],
         project: unit?.project,
@@ -340,7 +345,17 @@ exports.getUnit = async (req, res) => {
       let context = {
         page: page,
         limit: limit,
-        totalItems: totalItems,
+        totalItems: validUnitItems.length,
+        orphanUnitCount: orphanUnitItems.length,
+        orphanUnits: orphanUnitItems.map((item) => ({
+          id: item.id,
+          name: item.name,
+          floor: item.floor,
+          unitIndex: item.unitIndex,
+          floorPlanId: item.unit?.floorId,
+          towerId: item.unit?.towerId,
+          expectedName: getExpectedGeneratedUnitName(item),
+        })),
         data: result,
       }
       res.status(200).json(context)
@@ -444,6 +459,14 @@ exports.updateUnitItem = async (req, res) => {
         })
     const nextFloor = payload.floor === undefined ? existingUnit.floor : payload.floor
     const nextPosition = payload.unitIndex === undefined ? existingUnit.unitIndex : payload.unitIndex
+    await assertFloorPlanSlotClaim(existingUnit.unit?.floorId, existingUnit.unit?.towerId, nextFloor, nextPosition)
+    await assertUniqueTowerFloorPosition({
+      towerId: existingUnit.unit?.towerId,
+      floor: nextFloor,
+      unitIndex: nextPosition,
+      excludeUnitModelId: id,
+    })
+
     const generatedName = generateUnitNumber(existingUnit.unit?.tower?.wingCode, nextFloor, nextPosition)
     if (generatedName) {
       const duplicateUnit = await prisma.unitModel.findFirst({
@@ -690,10 +713,19 @@ exports.listUnit = async (req, res) => {
     const record = await prisma.unit.findMany({
       select: {
         id: true,
+        floorId: true,
+        towerId: true,
+        tower: {
+          select: {
+            wingCode: true,
+          },
+        },
         unitList: {
           select: {
             id: true,
             name: true,
+            floor: true,
+            unitIndex: true,
             status: true,
             heldBy: true,
             heldUntil: true,
@@ -701,5 +733,30 @@ exports.listUnit = async (req, res) => {
         },
       },
     })
-    res.status(200).json(record)
+    const flatItems = record.flatMap((unit) =>
+      (unit.unitList || []).map((item) => ({
+        ...item,
+        unit: {
+          floorId: unit.floorId,
+          towerId: unit.towerId,
+          tower: unit.tower,
+        },
+      }))
+    )
+    const claimedSlotKeys = await getClaimedSlotKeys(flatItems)
+    const filtered = record.map((unit) => ({
+      ...unit,
+      unitList: (unit.unitList || []).filter((item) =>
+        isFloorPlanGeneratedUnitItem({
+          ...item,
+          unit: {
+            floorId: unit.floorId,
+            towerId: unit.towerId,
+            tower: unit.tower,
+          },
+        }, claimedSlotKeys)
+      ),
+    })).filter((unit) => unit.unitList.length > 0)
+
+    res.status(200).json(filtered)
 }

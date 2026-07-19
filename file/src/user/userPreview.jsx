@@ -47,6 +47,7 @@ const emptyBookingForm = {
   campaign: "walkin",
   source: "",
   channelPartner: "",
+  channelPartnerId: "",
   companyName: "",
   numberOfSeats: "",
   physicalSeats: "",
@@ -93,10 +94,14 @@ const bookingSteps = [
 ];
 
 const defaultBookingFilters = {
-  propertyPurpose: "",
   unitType: "",
-  propertyType: "",
 };
+
+const getUserName = (user) =>
+  [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+  user?.username ||
+  user?.email ||
+  `User #${user?.id}`;
 
 const toCleanNumber = (value) => {
   if (value === undefined || value === null || value === "") return 0;
@@ -121,6 +126,25 @@ const getDisplayValue = (value, fallback = "-") => {
   if (value === undefined || value === null || value === "") return fallback;
   if (typeof value === "object") return value.name || value.title || value.label || value.value || fallback;
   return value;
+};
+
+const normalizeProjectTypeValue = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/[_-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const matchesProjectTypeFilter = (unit, selectedType, project) => {
+  if (!selectedType) return true;
+  const selected = normalizeProjectTypeValue(selectedType);
+  const projectType = normalizeProjectTypeValue(project?.projectType || unit?.project?.projectType);
+  const unitType = normalizeProjectTypeValue(unit?.type || unit?.floorPlan?.type);
+
+  if (projectType.includes("residential") && projectType.includes("commercial")) return true;
+  if (projectType) return projectType === selected;
+  if (unitType) return unitType === selected;
+  return true;
 };
 
 const UNIT_STATUSES = [
@@ -230,6 +254,7 @@ const UserPreview = () => {
   const [bookingProjects, setBookingProjects] = useState([]);
   const [bookingProjectDetails, setBookingProjectDetails] = useState(null);
   const [bookingProjectUnits, setBookingProjectUnits] = useState([]);
+  const [registeredChannelPartners, setRegisteredChannelPartners] = useState([]);
   const [isLoadingBookingProject, setIsLoadingBookingProject] = useState(false);
   const [bookingProjectMessage, setBookingProjectMessage] = useState("");
   const [bookingFilters, setBookingFilters] = useState(defaultBookingFilters);
@@ -262,6 +287,34 @@ const UserPreview = () => {
   }, [location.search, location.state]);
 
   useEffect(() => {
+    let isMounted = true;
+
+    const fetchRegisteredChannelPartners = async () => {
+      try {
+        const response = await fetch(`${API_URL}/users?limit=1000`);
+        if (!response.ok) throw new Error("Unable to load users");
+
+        const result = await response.json();
+        const users = Array.isArray(result) ? result : result?.data || [];
+        if (!isMounted) return;
+
+        setRegisteredChannelPartners(users.filter(
+          (user) => String(user?.role || "").toUpperCase() === "CHANNEL_PARTNER"
+        ));
+      } catch (error) {
+        console.error("Unable to load registered channel partners:", error);
+        if (isMounted) setRegisteredChannelPartners([]);
+      }
+    };
+
+    fetchRegisteredChannelPartners();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [API_URL]);
+
+  useEffect(() => {
     if (!isBookingFormOpen) return undefined;
 
     const previousBodyOverflow = document.body.style.overflow;
@@ -274,6 +327,28 @@ const UserPreview = () => {
       document.documentElement.style.overflow = previousHtmlOverflow;
     };
   }, [isBookingFormOpen]);
+
+  useEffect(() => {
+    if (!isBookingFormOpen || isBookingSuccess) return undefined;
+
+    window.history.pushState({ bookingWizard: true, bookingStepIndex }, "");
+
+    const handleBookingPopState = () => {
+      if (bookingStepIndex > 0) {
+        setBookingStepIndex((current) => Math.max(0, current - 1));
+        window.history.pushState({ bookingWizard: true, bookingStepIndex: bookingStepIndex - 1 }, "");
+        return;
+      }
+
+      setIsBookingFormOpen(false);
+      setBookingStepIndex(0);
+      setIsBookingSuccess(false);
+      window.history.pushState({ bookingWizardClosed: true }, "");
+    };
+
+    window.addEventListener("popstate", handleBookingPopState);
+    return () => window.removeEventListener("popstate", handleBookingPopState);
+  }, [bookingStepIndex, isBookingFormOpen, isBookingSuccess]);
 
   useEffect(() => {
     if (location.state?.lead) {
@@ -372,24 +447,28 @@ const UserPreview = () => {
   const flattenedBookingUnits = useMemo(
     () =>
       bookingProjectUnits.flatMap((group) =>
-        (group.unitList || []).map((unit) => ({
-          ...unit,
-          groupId: group.id,
-          unitItemId: unit.id,
-          project: group.project,
-          tower: group.tower,
-          floorPlan: group.floor,
-          floor: getDisplayValue(unit.floor, getDisplayValue(group.floor, "-")),
-          status: normalizeUnitStatus(unit.status || group.status || unit.unitStatus || group.unitStatus),
-          category: group.category,
-          type: group.type,
-          bedrooms: group.bedrooms,
-          bathrooms: group.bathrooms,
-          carpet: group.carpet || group.floor?.carpet,
-          builtupArea: group.builtupArea || group.floor?.builtupArea,
-          saleable: group.saleable || group.floor?.saleable,
-          rateBasis: group.rateBasis || group.floor?.rateBasis || "On Carpet",
-        }))
+        (group.unitList || []).map((unit) => {
+          const floorPlan = group.floor || {};
+
+          return {
+            ...unit,
+            groupId: group.id,
+            unitItemId: unit.id,
+            project: group.project,
+            tower: group.tower,
+            floorPlan,
+            floor: getDisplayValue(unit.floor, getDisplayValue(floorPlan, "-")),
+            status: normalizeUnitStatus(unit.status || group.status || unit.unitStatus || group.unitStatus),
+            category: floorPlan.category || group.category,
+            type: floorPlan.type || group.type,
+            bedrooms: floorPlan.bedrooms ?? "-",
+            bathrooms: floorPlan.bathrooms ?? "-",
+            carpet: floorPlan.carpet ?? "-",
+            builtupArea: floorPlan.builtupArea ?? "",
+            saleable: floorPlan.saleable ?? "-",
+            rateBasis: floorPlan.rateBasis || "On Carpet",
+          };
+        })
       ),
     [bookingProjectUnits]
   );
@@ -423,22 +502,12 @@ const UserPreview = () => {
       const towerMatches =
         !selectedBookingTowerId ||
         String(unit.tower?.id || unit.tower?.name || "") === String(selectedBookingTowerId);
-      const purposeMatches =
-        !bookingFilters.propertyPurpose ||
-        !unit.propertyPurpose ||
-        unit.propertyPurpose.toLowerCase() === bookingFilters.propertyPurpose.toLowerCase();
       const unitTypeMatches =
-        !bookingFilters.unitType ||
-        !unit.type ||
-        unit.type.toLowerCase() === bookingFilters.unitType.toLowerCase();
-      const propertyTypeMatches =
-        !bookingFilters.propertyType ||
-        !unit.category ||
-        unit.category.toLowerCase() === bookingFilters.propertyType.toLowerCase();
+        matchesProjectTypeFilter(unit, bookingFilters.unitType, bookingProjectDetails || selectedBookingProject);
 
-      return towerMatches && purposeMatches && unitTypeMatches && propertyTypeMatches;
+      return towerMatches && unitTypeMatches;
     });
-  }, [bookingFilters, flattenedBookingUnits, selectedBookingTowerId]);
+  }, [bookingFilters, bookingProjectDetails, flattenedBookingUnits, selectedBookingProject, selectedBookingTowerId]);
   const bookingProjectSelectValue =
     bookingForm.projectId || (bookingForm.projectDetails ? "__lead_project__" : "");
   const activeTowerName =
@@ -657,7 +726,13 @@ const UserPreview = () => {
 
   const handleBookingChange = (event) => {
     const { name, value } = event.target;
-    setBookingForm((prev) => ({ ...prev, [name]: value }));
+    setBookingForm((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === "source" && !["channel_partner", "Channel Partner"].includes(value)
+        ? { channelPartner: "", channelPartnerId: "" }
+        : {}),
+    }));
   };
 
   const handleBookingProjectChange = (event) => {
@@ -766,7 +841,7 @@ const UserPreview = () => {
         }
       }
 
-      const unitsResponse = await fetch(`${API_URL}/unit?limit=100`);
+      const unitsResponse = await fetch(`${API_URL}/unit?limit=1000`);
       if (!unitsResponse.ok) throw new Error("Unable to load units");
       const unitsResult = await unitsResponse.json();
       const unitGroups = Array.isArray(unitsResult) ? unitsResult : unitsResult?.data || [];
@@ -808,7 +883,7 @@ const UserPreview = () => {
 
     const fetchAdminCreatedUnits = async () => {
       try {
-        const unitsResponse = await fetch(`${API_URL}/unit?limit=100`);
+        const unitsResponse = await fetch(`${API_URL}/unit?limit=1000`);
         if (!unitsResponse.ok) throw new Error("Unable to load units");
 
         const unitsResult = await unitsResponse.json();
@@ -933,7 +1008,7 @@ const UserPreview = () => {
     formatBookingDetail(selectedBookingUnit?.floorPlan, "") ||
     formatBookingDetail(selectedBookingUnit?.floor, "23");
   const quotationSaleable =
-    formatBookingDetail(selectedBookingUnit?.saleable, "") || bookingForm.saleableArea || "1,500 sq_ft";
+    formatBookingDetail(selectedBookingUnit?.saleable, "") || bookingForm.saleableArea || "-";
   const quotationBaseRate =
     bookingForm.baseRate || selectedBookingUnit?.baseRate || "7.8K (7,750)";
   const quotationName = `${quotationProjectName} - ${quotationTowerName} - ${quotationUnitName}`;
@@ -3984,9 +4059,7 @@ const UserPreview = () => {
                     </div>
 
                     {[
-                      ["propertyPurpose", "Property purpose", ["Sale", "Resale", "Rental"]],
-                      ["unitType", "Unit type", ["Residential", "Commercial", "Plot"]],
-                      // ["propertyType", "Property type", ["Villa", "Bungalow", "Apartment"]],
+                      ["unitType", "Project Type", ["Residential", "Commercial"]],
                     ].map(([filterKey, label, options]) => (
                       <div className="booking-filter-block" key={label}>
                         <div className="booking-filter-label">{label}</div>
@@ -4137,7 +4210,7 @@ const UserPreview = () => {
                         <span>Name</span>
                         <strong>{quotationUnitName}</strong>
                         <span>Bedrooms</span>
-                        <strong>{formatBookingDetail(selectedBookingUnit?.bedrooms, "3")}</strong>
+                        <strong>{formatBookingDetail(selectedBookingUnit?.bedrooms, "-")}</strong>
                         <span>Base Rate</span>
                         <strong>Rs. {quotationBaseRate}</strong>
                         <span>Agreement Value</span>
@@ -4146,14 +4219,14 @@ const UserPreview = () => {
                         <span>Status</span>
                         <strong>{formatBookingDetail(selectedBookingUnit?.status, "Available")}</strong>
                         <span>Bathrooms</span>
-                        <strong>{formatBookingDetail(selectedBookingUnit?.bathrooms, "2")}</strong>
+                        <strong>{formatBookingDetail(selectedBookingUnit?.bathrooms, "-")}</strong>
                         <span>Floor Rise</span>
                       </div>
                       <div>
                         <span>Floor</span>
                         <strong>{quotationFloor}</strong>
                         <span>Carpet</span>
-                        <strong>{formatBookingDetail(selectedBookingUnit?.carpet, "967")}</strong>
+                        <strong>{formatBookingDetail(selectedBookingUnit?.carpet, "-")}</strong>
                         <span>Effective Rate</span>
                       </div>
                       <div>
@@ -4398,7 +4471,6 @@ const UserPreview = () => {
                       <div><span>Aadhaar Number</span><strong>-</strong></div>
                       <div><span>Email</span><strong>{applicantEmail}</strong></div>
                     </div>
-                    <button type="button" className="booking-add-coapplicant">+ Add New Co-Applicant</button>
                   </section>
 
                   <section className="booking-confirmation-card">
@@ -4448,50 +4520,34 @@ const UserPreview = () => {
                         <span>Source</span>
                         <select name="source" value={bookingForm.source} onChange={handleBookingChange}>
                           <option value="">Select Source</option>
+                          <option value="Direct">Direct</option>
                           <option value="walkin">walkin</option>
                           <option value="channel_partner">channel_partner</option>
+                          <option value="Channel Partner">Channel Partner</option>
                           <option value="digital">digital</option>
                         </select>
                       </label>
                       <label className="booking-confirmation-input booking-confirmation-wide">
                         <span>Channel Partner</span>
-                        <select name="channelPartner" value={bookingForm.channelPartner} onChange={handleBookingChange}>
+                        <select
+                          name="channelPartnerId"
+                          value={bookingForm.channelPartnerId || ""}
+                          onChange={(event) => {
+                            const selected = registeredChannelPartners.find((user) => String(user.id) === event.target.value);
+                            setBookingForm((current) => ({
+                              ...current,
+                              channelPartnerId: event.target.value,
+                              channelPartner: selected ? getUserName(selected) : "",
+                            }));
+                          }}
+                          disabled={!["channel_partner", "Channel Partner"].includes(bookingForm.source)}
+                        >
                           <option value="">Select Channel Partner</option>
-                          <option value={cpName}>{cpName}</option>
+                          {registeredChannelPartners.map((user) => (
+                            <option key={user.id} value={user.id}>{getUserName(user)}</option>
+                          ))}
                         </select>
                       </label>
-                    </div>
-                  </section>
-
-                  <section className="booking-confirmation-card">
-                    <div className="booking-confirmation-card-head">Custom Fields</div>
-                    <div className="booking-custom-grid">
-                      {[
-                        ["companyName", "Company Name", "select"],
-                        ["numberOfSeats", "Number Of Seats"],
-                        ["physicalSeats", "Physical Seats"],
-                        ["carpetArea", "Carpet Area"],
-                        ["tenureMonths", "Tenure In Months"],
-                        ["perSeatPrice", "Per Seat Price"],
-                        ["monthlyRevenue", "Monthly Revenue"],
-                        ["noticePeriodMonths", "Notice Period In Months"],
-                        ["lockInPeriod", "Lock In Period"],
-                        ["securityDeposit", "Security Deposit"],
-                        ["leaseStartDate", "Lease Start Date", "date"],
-                        ["leaseEndDate", "Lease End Date", "date"],
-                      ].map(([name, label, type]) => (
-                        <label className="booking-confirmation-input" key={name}>
-                          <span>{label}</span>
-                          {type === "select" ? (
-                            <select name={name} value={bookingForm[name]} onChange={handleBookingChange}>
-                              <option value="">select</option>
-                              <option value={lead.companyName || "Company"}>{lead.companyName || "Company"}</option>
-                            </select>
-                          ) : (
-                            <input name={name} type={type || "text"} value={bookingForm[name]} onChange={handleBookingChange} />
-                          )}
-                        </label>
-                      ))}
                     </div>
                   </section>
                 </div>

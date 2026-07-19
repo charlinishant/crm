@@ -25,7 +25,7 @@ const UNIT_STATUS_OPTIONS = [
   "Investor",
 ];
 
-const ROWS_PER_PAGE = 10;
+const FLOORS_PER_PAGE = 10;
 
 const toNumberOrNull = (value) => {
   if (value === "" || value === null || value === undefined) return null;
@@ -59,6 +59,24 @@ const formatDisplayValue = (value) => {
   return value;
 };
 
+const getFloorSortValue = (value) => {
+  const number = Number(value);
+  return Number.isNaN(number) ? Number.NEGATIVE_INFINITY : number;
+};
+
+const getPositionSortValue = (value) => {
+  const number = Number(value);
+  return Number.isNaN(number) ? Number.MAX_SAFE_INTEGER : number;
+};
+
+const getFloorGroupKey = (unit) =>
+  [
+    unit.project,
+    unit.tower,
+    unit.config,
+    unit.floor,
+  ].map((value) => String(value || "-")).join("|");
+
 const Units = () => {
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   const [data, setData] = useState([]);
@@ -77,7 +95,7 @@ const Units = () => {
       setLoading(true);
       setError("");
 
-      const response = await fetch(`${API_URL}/unit?limit=100`);
+      const response = await fetch(`${API_URL}/unit?limit=1000`);
       if (!response.ok) {
         throw new Error("Unable to fetch units");
       }
@@ -162,11 +180,51 @@ const Units = () => {
         .some((value) => String(value).toLowerCase().includes(query))
     );
   }, [data, searchQuery]);
-  const totalPages = Math.max(1, Math.ceil(filteredData.length / ROWS_PER_PAGE));
-  const paginatedData = useMemo(() => {
-    const startIndex = (currentPage - 1) * ROWS_PER_PAGE;
-    return filteredData.slice(startIndex, startIndex + ROWS_PER_PAGE);
-  }, [currentPage, filteredData]);
+  const floorGroups = useMemo(() => {
+    const groups = new Map();
+
+    filteredData.forEach((unit) => {
+      const key = getFloorGroupKey(unit);
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          floor: unit.floor,
+          project: unit.project,
+          tower: unit.tower,
+          config: unit.config,
+          units: [],
+        });
+      }
+      groups.get(key).units.push(unit);
+    });
+
+    return Array.from(groups.values()).sort((a, b) => {
+      const floorDiff = getFloorSortValue(b.floor) - getFloorSortValue(a.floor);
+      if (floorDiff) return floorDiff;
+      return String(a.key).localeCompare(String(b.key));
+    }).map((group) => ({
+      ...group,
+      units: group.units.slice().sort((a, b) => {
+        const positionDiff = getPositionSortValue(a.unitIndex) - getPositionSortValue(b.unitIndex);
+        if (positionDiff) return positionDiff;
+        return String(a.unitNumber).localeCompare(String(b.unitNumber));
+      }),
+    }));
+  }, [filteredData]);
+
+  const totalPages = Math.max(1, Math.ceil(floorGroups.length / FLOORS_PER_PAGE));
+  const paginatedFloorGroups = useMemo(() => {
+    const startIndex = (currentPage - 1) * FLOORS_PER_PAGE;
+    return floorGroups.slice(startIndex, startIndex + FLOORS_PER_PAGE);
+  }, [currentPage, floorGroups]);
+  const paginatedData = useMemo(
+    () => paginatedFloorGroups.flatMap((group) => group.units),
+    [paginatedFloorGroups]
+  );
+  const orderedData = useMemo(
+    () => floorGroups.flatMap((group) => group.units),
+    [floorGroups]
+  );
 
   useEffect(() => {
     setCurrentPage(1);
@@ -179,7 +237,9 @@ const Units = () => {
   }, [currentPage, totalPages]);
 
   const displayedItemCount = filteredData.length;
-  const pageStartIndex = (currentPage - 1) * ROWS_PER_PAGE;
+  const displayedFloorCount = floorGroups.length;
+  const pageStartFloor = displayedFloorCount === 0 ? 0 : (currentPage - 1) * FLOORS_PER_PAGE + 1;
+  const pageEndFloor = Math.min(currentPage * FLOORS_PER_PAGE, displayedFloorCount);
 
   const closeModal = () => {
     if (saving) return;
@@ -275,8 +335,8 @@ const Units = () => {
             </div>
 
             <div className="action-wrapper">
-              <Link to="/add-units" style={{ textDecoration: "none" }}>
-                <button className="btn-new-plan">+ New Unit</button>
+              <Link to="/floorplans" style={{ textDecoration: "none" }}>
+                <button className="btn-new-plan">Manage Floor Plans</button>
               </Link>
             </div>
           </div>
@@ -332,9 +392,9 @@ const Units = () => {
                     <td colSpan="16" className="floor-empty">{searchQuery ? "No matching units found." : "No units found."}</td>
                   </tr>
                 ) : (
-                  paginatedData.map((item, index) => (
+                  paginatedData.map((item) => (
                     <tr key={item.id}>
-                      <td className="fw-bold">{pageStartIndex + index + 1}</td>
+                      <td className="fw-bold">{orderedData.findIndex((unit) => unit.id === item.id) + 1}</td>
                       <td className="fw-bold">{item.unitNumber}</td>
                       <td>{item.floor}</td>
                       <td>{item.unitIndex}</td>
@@ -372,10 +432,14 @@ const Units = () => {
                 )}
               </tbody>
             </table>
-            {filteredData.length > ROWS_PER_PAGE && (
+            {floorGroups.length > FLOORS_PER_PAGE && (
               <TablePagination
                 currentPage={currentPage}
                 totalPages={totalPages}
+                pageStartFloor={pageStartFloor}
+                pageEndFloor={pageEndFloor}
+                floorCount={displayedFloorCount}
+                unitCount={displayedItemCount}
                 onPrevious={() => setCurrentPage((page) => Math.max(1, page - 1))}
                 onNext={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
               />
@@ -408,10 +472,11 @@ const Detail = ({ label, value }) => (
   </div>
 );
 
-const TablePagination = ({ currentPage, totalPages, onPrevious, onNext }) => (
+const TablePagination = ({ currentPage, totalPages, pageStartFloor, pageEndFloor, floorCount, unitCount, onPrevious, onNext }) => (
   <div className="table-pagination">
     <span>
-      Showing page <strong>{currentPage}</strong> of <strong>{totalPages}</strong>
+      Showing floors <strong>{pageStartFloor}-{pageEndFloor}</strong> of <strong>{floorCount}</strong>
+      {" "}(<strong>{unitCount}</strong> units)
     </span>
     <div className="table-pagination-actions">
       <button type="button" onClick={onPrevious} disabled={currentPage === 1}>

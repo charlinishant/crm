@@ -209,6 +209,76 @@ const filterDuplicateLeads = (leads) => {
   })
 }
 
+const getLeadNameValue = (lead) =>
+  [lead.firstName, lead.lastName].filter(Boolean).join(" ") ||
+  lead.name ||
+  "-"
+
+const normalizeNameValue = (value) =>
+  String(value || "").trim().toLowerCase().replace(/\s+/g, " ")
+
+const getLeadDuplicateMatchKeys = (lead) => {
+  const { emails, phones } = getLeadDuplicateKeys(lead)
+  const name = normalizeNameValue(getLeadNameValue(lead))
+
+  return [
+    ...phones.map(value => ({
+      key: `phone:${value}`,
+      matchedOn: "Phone number",
+      matchValue: value,
+      priority: 1,
+    })),
+    ...emails.map(value => ({
+      key: name && name !== "-" ? `email-name:${value}:${name}` : `email:${value}`,
+      matchedOn: name && name !== "-" ? "Email + name" : "Email",
+      matchValue: value,
+      priority: 2,
+    })),
+  ]
+}
+
+const getLeadSortValue = (lead) => {
+  const value = lead.createdAt || lead.created_at || lead.received_on || lead.updatedAt
+  const date = value ? new Date(value) : null
+  if (date && !Number.isNaN(date.getTime())) return date.getTime()
+  return Number.isNaN(Number(lead.id)) ? Number.MAX_SAFE_INTEGER : Number(lead.id)
+}
+
+const buildDuplicateLeadGroups = (leads) => {
+  const groupsByKey = new Map()
+
+  leads.forEach(lead => {
+    getLeadDuplicateMatchKeys(lead).forEach(match => {
+      if (!groupsByKey.has(match.key)) {
+        groupsByKey.set(match.key, {
+          id: match.key,
+          matchedOn: match.matchedOn,
+          matchValue: match.matchValue,
+          priority: match.priority,
+          records: [],
+        })
+      }
+      groupsByKey.get(match.key).records.push(lead)
+    })
+  })
+
+  return Array.from(groupsByKey.values())
+    .filter(group => group.records.length > 1)
+    .sort((a, b) => a.priority - b.priority || a.matchValue.localeCompare(b.matchValue))
+    .map(group => {
+      const records = group.records
+        .slice()
+        .sort((a, b) => getLeadSortValue(a) - getLeadSortValue(b))
+        .map((lead, index) => ({
+          ...withLeadStageScore(lead),
+          duplicateRank: index + 1,
+          isOriginalLead: index === 0,
+        }))
+
+      return { ...group, records, original: records[0] }
+    })
+}
+
 const normalizeAddressList = (value) => {
   if (!Array.isArray(value)) return []
 
@@ -500,6 +570,54 @@ exports.getLeads = async (req, res) => {
   } catch (err) {
   console.log(err)
   res.status(500).json("something went wrong")
+  }
+}
+
+exports.getDuplicateLeads = async (req, res) => {
+  try {
+    const leads = await prisma.lead.findMany({
+      where: {
+        is_delete: false
+      },
+      include:{
+        team:{
+          select:{
+          id:true,
+          isActive:true,
+          username:true,
+          email:true,
+          firstName:true,
+          lastName:true,
+          phone:true,
+          secondaryPhone:true,
+          timeZone:true,
+          linkedUrl:true,
+          description:true,
+          role:true,
+          department:true,
+          defaultRouting:true,
+          defaultRoutingRule:true,
+          autoRoster:true,
+          teamId:true,
+          pushNotification:true,
+          gpsTracking:true
+          }
+        }
+      },
+      orderBy: {
+        id: "asc"
+      }
+    })
+
+    const groups = buildDuplicateLeadGroups(leads)
+    res.status(200).json({
+      count: groups.length,
+      duplicateCopyCount: groups.reduce((sum, group) => sum + Math.max(0, group.records.length - 1), 0),
+      groups,
+    })
+  } catch (err) {
+    console.log(err)
+    res.status(500).json({message: err.message || "Unable to load duplicate leads"})
   }
 }
 

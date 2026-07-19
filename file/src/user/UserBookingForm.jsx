@@ -20,9 +20,7 @@ const defaultSteps = [
 ];
 
 const chipGroups = {
-  propertyPurpose: ["Sale", "Resale", "Rental"],
-  unitType: ["Residential", "Commercial", "Plot"],
-  propertyType: ["Villa", "Bungalow", "Apartment", "Penthouse", "Duplex", "Shops", "Office space", "Na plot"],
+  unitType: ["Residential", "Commercial"],
 };
 
 const unitSeed = [
@@ -69,6 +67,17 @@ const unitSeed = [
   { name: "2405", floor: 24, carpet: 1372, saleable: 2150, bedrooms: 3, bathrooms: 2, status: "available" },
   { name: "2406", floor: 24, carpet: 1372, saleable: 2150, bedrooms: 3, bathrooms: 2, status: "available" },
 ];
+
+const emptySelectedUnit = {
+  ...unitSeed[0],
+  name: "-",
+  floor: "-",
+  carpet: "-",
+  saleable: "-",
+  bedrooms: "-",
+  bathrooms: "-",
+  status: "available",
+};
 
 const paymentRows = [
   { name: "Agreement", milestone: "Agreement", percentage: 80, amount: 14326000, taxes: 0, tds: 0, grandTotal: 14326000 },
@@ -137,6 +146,31 @@ const escapeHtml = (value) =>
 const getProjectName = (project) =>
   project?.name || project?.projectName || project?.project_name || project?.title || "";
 
+const getUserName = (user) =>
+  [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+  user?.username ||
+  user?.email ||
+  `User #${user?.id}`;
+
+const normalizeProjectTypeValue = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/[_-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const matchesProjectTypeFilter = (unit, selectedType, project) => {
+  if (!selectedType) return true;
+  const selected = normalizeProjectTypeValue(selectedType);
+  const projectType = normalizeProjectTypeValue(project?.projectType || unit?.projectType);
+  const unitType = normalizeProjectTypeValue(unit?.unitType || unit?.type);
+
+  if (projectType.includes("residential") && projectType.includes("commercial")) return true;
+  if (projectType) return projectType === selected;
+  if (unitType) return unitType === selected;
+  return true;
+};
+
 const getImageSource = (value) => {
   if (!value) return "";
 
@@ -164,19 +198,20 @@ const getImageSource = (value) => {
 
 const flattenDatabaseUnits = (unitGroups = []) =>
   unitGroups.flatMap((group) => {
+    const floorPlan = group?.floor || {};
     const models = Array.isArray(group?.unitList) && group.unitList.length ? group.unitList : [group];
     return models.map((unit, index) => ({
       id: unit?.id || group?.id || unit?.name,
       groupId: group?.id,
       name: unit?.name || group?.name || `Unit ${index + 1}`,
-      floor: unit?.floor || group?.floor?.name || group?.floor || "-",
+      floor: unit?.floor || floorPlan?.name || group?.floor || "-",
       unitIndex: unit?.unitIndex,
-      carpet: group?.carpet || unit?.carpet || group?.floor?.carpet || "-",
-      builtupArea: group?.builtupArea || unit?.builtupArea || group?.floor?.builtupArea || "",
-      saleable: group?.saleable || unit?.saleable || group?.floor?.saleable || "-",
-      rateBasis: group?.rateBasis || unit?.rateBasis || group?.floor?.rateBasis || "On Carpet",
-      bedrooms: group?.bedrooms || unit?.bedrooms || "-",
-      bathrooms: group?.bathrooms || unit?.bathrooms || "-",
+      carpet: floorPlan?.carpet ?? "-",
+      builtupArea: floorPlan?.builtupArea ?? "",
+      saleable: floorPlan?.saleable ?? "-",
+      rateBasis: floorPlan?.rateBasis || "On Carpet",
+      bedrooms: floorPlan?.bedrooms ?? "-",
+      bathrooms: floorPlan?.bathrooms ?? "-",
       baseRate: unit?.baseRate || group?.baseRate || "",
       basePrice: unit?.basePrice || group?.basePrice || "",
       floorRise: unit?.floorRise || group?.floorRise || "",
@@ -200,6 +235,8 @@ const flattenDatabaseUnits = (unitGroups = []) =>
       projectName: getProjectName(group?.project),
       towerId: group?.tower?.id || group?.towerId || "",
       towerName: group?.tower?.name || group?.towerName || "Tower",
+      type: floorPlan?.type || group?.type || "",
+      projectType: group?.project?.projectType || group?.projectType || "",
       image: getImageSource(
         unit?.image ||
           unit?.unitImage ||
@@ -245,15 +282,14 @@ const UserBookingForm = ({
 }) => {
   const [interestedUnits, setInterestedUnits] = useState(new Set());
   const [filters, setFilters] = useState({
-    propertyPurpose: "Sale",
-    unitType: "Residential",
-    propertyType: "Apartment",
+    unitType: "",
   });
   const [unitPage, setUnitPage] = useState(1);
   const [completionActionMessage, setCompletionActionMessage] = useState("");
   const [bookingProjects, setBookingProjects] = useState([]);
   const [projectTowers, setProjectTowers] = useState([]);
   const [databaseUnitGroups, setDatabaseUnitGroups] = useState([]);
+  const [channelPartners, setChannelPartners] = useState([]);
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
   const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
   const [projectSearch, setProjectSearch] = useState("");
@@ -297,23 +333,29 @@ const UserBookingForm = ({
       setIsLoadingCatalog(true);
 
       try {
-        const [projectsResponse, unitsResponse] = await Promise.all([
+        const [projectsResponse, unitsResponse, usersResponse] = await Promise.all([
           fetch(`${API_URL}/projects`),
           fetch(`${API_URL}/unit?limit=1000`),
+          fetch(`${API_URL}/users?limit=1000`),
         ]);
 
         const projectsResult = projectsResponse.ok ? await projectsResponse.json() : [];
         const unitsResult = unitsResponse.ok ? await unitsResponse.json() : {};
+        const usersResult = usersResponse.ok ? await usersResponse.json() : {};
 
         if (!isMounted) return;
 
         setBookingProjects(Array.isArray(projectsResult) ? projectsResult : projectsResult?.data || []);
         setDatabaseUnitGroups(Array.isArray(unitsResult) ? unitsResult : unitsResult?.data || []);
+        setChannelPartners((Array.isArray(usersResult) ? usersResult : usersResult?.data || []).filter(
+          (user) => String(user?.role || "").toUpperCase() === "CHANNEL_PARTNER"
+        ));
       } catch (error) {
         console.error("Unable to load booking project catalog:", error);
         if (isMounted) {
           setBookingProjects([]);
           setDatabaseUnitGroups([]);
+          setChannelPartners([]);
         }
       } finally {
         if (isMounted) setIsLoadingCatalog(false);
@@ -375,8 +417,7 @@ const UserBookingForm = ({
       return true;
     });
 
-    if (selectedProjectId || selectedProjectName) return realUnits;
-    return realUnits.length ? realUnits : unitSeed;
+    return realUnits;
   }, [databaseUnits, selectedProjectId, selectedProjectName]);
   const towerOptions = useMemo(
     () => {
@@ -402,13 +443,18 @@ const UserBookingForm = ({
     },
     [catalogUnits, projectTowers]
   );
-  const filteredCatalogUnits = useMemo(
-    () =>
-      selectedTowerId
-        ? catalogUnits.filter((unit) => String(unit.towerId || unit.towerName || "Tower") === selectedTowerId)
-        : catalogUnits,
-    [catalogUnits, selectedTowerId]
-  );
+  const filteredCatalogUnits = useMemo(() => {
+    const selectedProject = bookingProjects.find((project) => String(project.id) === selectedProjectId);
+
+    return catalogUnits.filter((unit) => {
+      const towerMatches =
+        !selectedTowerId ||
+        String(unit.towerId || unit.towerName || "Tower") === selectedTowerId;
+      const typeMatches = matchesProjectTypeFilter(unit, filters.unitType, selectedProject);
+
+      return towerMatches && typeMatches;
+    });
+  }, [bookingProjects, catalogUnits, filters.unitType, selectedProjectId, selectedTowerId]);
   const selectedTowerName =
     towerOptions.find((tower) => String(tower.id) === String(selectedTowerId))?.name || "";
 
@@ -417,7 +463,7 @@ const UserBookingForm = ({
       filteredCatalogUnits.find((unit) => unit.name === bookingForm.unit) ||
       filteredCatalogUnits.find((unit) => unit.status === "selected") ||
       filteredCatalogUnits[0] ||
-      unitSeed[0]
+      emptySelectedUnit
     );
   }, [bookingForm.unit, filteredCatalogUnits]);
 
@@ -509,7 +555,7 @@ const UserBookingForm = ({
 
   useEffect(() => {
     setUnitPage(1);
-  }, [bookingForm.projectId, bookingForm.projectDetails, filters.propertyPurpose, filters.propertyType, filters.unitType, selectedTowerId]);
+  }, [bookingForm.projectId, bookingForm.projectDetails, filters.unitType, selectedTowerId]);
 
   useEffect(() => {
     setUnitPage((page) => Math.min(page, totalUnitPages));
@@ -821,9 +867,9 @@ const UserBookingForm = ({
         <h6>Filters By</h6>
         {Object.entries(chipGroups).map(([key, values]) => (
           <div className="ubf-chip-block compact" key={key}>
-            <span>{key.replace(/([A-Z])/g, " $1")}</span>
+            <span>{key === "unitType" ? "Project Type" : key.replace(/([A-Z])/g, " $1")}</span>
             <div className="ubf-chip-row">
-              {values.slice(0, key === "propertyType" ? 8 : 3).map((value) => (
+              {values.map((value) => (
                 <button
                   type="button"
                   key={value}
@@ -1101,12 +1147,6 @@ const UserBookingForm = ({
     const applicantName = bookingForm.customerName || leadName || "-";
     const applicantEmail = bookingForm.email || "-";
     const applicantPhone = bookingForm.phone || "-";
-    const companyOptions = ["select", bookingForm.companyName || applicantName].filter(Boolean);
-    const numberOfSeatsValue = toNumber(bookingForm.numberOfSeats);
-    const perSeatPriceValue = toNumber(bookingForm.perSeatPrice);
-    const calculatedMonthlyRevenue =
-      numberOfSeatsValue && perSeatPriceValue ? String(numberOfSeatsValue * perSeatPriceValue) : "";
-
     return (
       <div className="ubf-step ubf-confirm-step">
         <h4 className="ubf-confirm-title">Booking Confirmation</h4>
@@ -1161,7 +1201,6 @@ const UserBookingForm = ({
                 <FaEllipsisV />
               </button>
             </div>
-            <div className="ubf-add-row">+ Add New Co-Applicant</div>
           </>
         )}
 
@@ -1195,48 +1234,42 @@ const UserBookingForm = ({
               value: bookingForm.campaign || "walkin",  
               options: ["walkin", "Site Visit", "Digital"],
             })}
-            {renderConfirmField({
-              label: "Source",
-              name: "source",
-              type: "select",
-              value: bookingForm.source || "Bulk Marketing",
-              options: ["Bulk Marketing", "Referral", "Channel Partner", bookingForm.source].filter(Boolean),
-            })}
-            {renderConfirmField({
-              label: "Sub Source",
-              name: "subSource",
-              type: "select",
-              value: bookingForm.subSource || "Enter Sub Source",
-              options: ["Enter Sub Source", "WhatsApp", "Call", bookingForm.subSource].filter(Boolean),
-            })}
-            {renderConfirmField({
-              label: "Channel Partner",
-              name: "channelPartner",
-              type: "select",
-              value: bookingForm.channelPartner || "Select Channel Partner",
-              options: ["Select Channel Partner", "Direct", bookingForm.channelPartner].filter(Boolean),
-            })}
+            <label className="ubf-confirm-field">
+              <span>Source</span>
+              <select
+                value={bookingForm.source || "Direct"}
+                onChange={(event) => {
+                  updateField("source", event.target.value);
+                  if (event.target.value !== "Channel Partner") {
+                    updateField("channelPartnerId", "");
+                    updateField("channelPartner", "");
+                  }
+                }}
+              >
+                {["Direct", "Bulk Marketing", "Referral", "Channel Partner", bookingForm.source].filter(Boolean).map((option, index) => (
+                  <option key={`${option}-${index}`} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <label className="ubf-confirm-field">
+              <span>Channel Partner</span>
+              <select
+                value={bookingForm.channelPartnerId || ""}
+                onChange={(event) => {
+                  const selected = channelPartners.find((user) => String(user.id) === event.target.value);
+                  updateField("channelPartnerId", event.target.value);
+                  updateField("channelPartner", selected ? getUserName(selected) : "");
+                }}
+                disabled={bookingForm.source !== "Channel Partner"}
+              >
+                <option value="">Select Channel Partner</option>
+                {channelPartners.map((user) => (
+                  <option key={user.id} value={user.id}>{getUserName(user)}</option>
+                ))}
+              </select>
+            </label>
           </div>,
           "campaign"
-        )}
-
-        {renderConfirmSection(
-          "Custom Fields",
-          <div className="ubf-confirm-form-grid">
-            {renderConfirmField({ label: "Company Name", name: "companyName", type: "select", value: bookingForm.companyName || "select", options: companyOptions })}
-            {renderConfirmField({ label: "Number Of Seats", name: "numberOfSeats" })}
-            {renderConfirmField({ label: "Physical Seats", name: "physicalSeats" })}
-            {renderConfirmField({ label: "Carpet Area", name: "carpetArea", value: carpetValue.toLocaleString("en-IN") })}
-            {renderConfirmField({ label: "Tenure In Months", name: "tenureMonths" })}
-            {renderConfirmField({ label: "Per Seat Price", name: "perSeatPrice" })}
-            {renderConfirmField({ label: "Monthly Revenue", name: "monthlyRevenue", value: calculatedMonthlyRevenue })}
-            {renderConfirmField({ label: "Notice Period In Months", name: "noticePeriodMonths" })}
-            {renderConfirmField({ label: "Lock In Period", name: "lockInPeriod" })}
-            {renderConfirmField({ label: "Security Deposit", name: "securityDeposit" })}
-            {renderConfirmField({ label: "Lease Start Date", name: "leaseStartDate", disabled: true, clearable: true })}
-            {renderConfirmField({ label: "Lease End Date", name: "leaseEndDate", disabled: true, clearable: true })}
-          </div>,
-          "custom-fields"
         )}
       </div>
     );

@@ -2096,9 +2096,6 @@ const UserDetails = ({
                     </div>
                   ))}
                 </div>
-                <button className="crm-add-coapplicant" type="button">
-                  + Add New Co-Applicant
-                </button>
               </div>
             </section>
           )}

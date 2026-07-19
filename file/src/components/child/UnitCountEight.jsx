@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { buildDuplicateLeadGroups } from "../../utils/leadDuplicates";
 
 const UnitCountEight = () => {
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
@@ -7,6 +9,7 @@ const UnitCountEight = () => {
     bookings: [],
     tasks: [],
     projects: [],
+    duplicateGroups: [],
   });
   const [loading, setLoading] = useState(true);
 
@@ -18,6 +21,7 @@ const UnitCountEight = () => {
     if (Array.isArray(result?.bookings)) return result.bookings;
     if (Array.isArray(result?.leads)) return result.leads;
     if (Array.isArray(result?.projects)) return result.projects;
+    if (Array.isArray(result?.groups)) return result.groups;
     return [];
   };
 
@@ -37,14 +41,16 @@ const UnitCountEight = () => {
 
     const loadCounts = async () => {
       setLoading(true);
-      const [leads, bookings, tasks, projects] = await Promise.all([
+      const [leads, bookings, tasks, projects, duplicateGroupsResult] = await Promise.all([
         fetchList("/leads"),
         fetchList("/bookings?limit=1000"),
         fetchList("/tasks"),
         fetchList("/projects/list"),
+        fetchList("/leads/duplicates"),
       ]);
+      const duplicateGroups = duplicateGroupsResult.length ? duplicateGroupsResult : buildDuplicateLeadGroups(leads);
 
-      setDashboardData({ leads, bookings, tasks, projects });
+      setDashboardData({ leads, bookings, tasks, projects, duplicateGroups });
       setLoading(false);
     };
 
@@ -52,7 +58,7 @@ const UnitCountEight = () => {
   }, [API_URL]);
 
   const counts = useMemo(() => {
-    const { leads, bookings, tasks, projects } = dashboardData;
+    const { leads, bookings, tasks, projects, duplicateGroups } = dashboardData;
     const nextSevenDays = new Date();
     nextSevenDays.setDate(nextSevenDays.getDate() + 7);
 
@@ -77,27 +83,11 @@ const UnitCountEight = () => {
       return visitDate >= new Date() && visitDate <= nextSevenDays;
     };
 
-    const duplicateKeys = new Set();
-    const seenKeys = new Set();
-    leads.forEach((lead) => {
-      const emails = Array.isArray(lead?.emails) ? lead.emails : [];
-      const phones = Array.isArray(lead?.phones) ? lead.phones : [];
-      const keys = [
-        ...emails.map((email) => email?.value || email).filter(Boolean).map((value) => `email:${String(value).toLowerCase()}`),
-        ...phones.map((phone) => phone?.value || phone).filter(Boolean).map((value) => `phone:${String(value).replace(/\D/g, "")}`),
-      ];
-
-      keys.forEach((key) => {
-        if (seenKeys.has(key)) duplicateKeys.add(key);
-        seenKeys.add(key);
-      });
-    });
-
     return {
       activeTasks: tasks.filter((task) => !["completed", "archived"].includes(String(task?.status || "").toLowerCase())).length,
       mfa: projects.length,
       visitExpiry: leads.filter(hasVisitExpiringSoon).length,
-      leadMerge: duplicateKeys.size,
+      leadMerge: duplicateGroups.length,
       hotLeads: leads.filter(isHotLead).length,
       newLeads: leads.filter((lead) => String(lead?.status || "").toLowerCase() === "fresh_lead").length,
       bookedLeads: Math.max(bookings.length, leads.filter(isBookedLead).length),
@@ -109,7 +99,7 @@ const UnitCountEight = () => {
     { title: "Active Tasks", subtitle: "Open Tasks", count: counts.activeTasks },
     { title: "MFA", subtitle: "Projects", count: counts.mfa },
     { title: "Visit Expiry", subtitle: "Soon", count: counts.visitExpiry },
-    { title: "Lead Merge", subtitle: "Duplicates", count: counts.leadMerge },
+    { title: "Lead Merge", subtitle: "Duplicates", count: counts.leadMerge, path: "/lead-merge" },
     { title: "Hot Leads", subtitle: "Priority", count: counts.hotLeads },
     { title: "New Leads", subtitle: "Fresh", count: counts.newLeads },
     { title: "Booked Leads", subtitle: "Confirmed", count: counts.bookedLeads },
@@ -232,27 +222,34 @@ const UnitCountEight = () => {
     //   </div>
     // </div>
     <div className="row g-4 align-items-stretch">
-  {cards.map((item, index) => (
-    <div className="col-xl-3 col-md-4 col-sm-6" key={index}>
-     <div className="card dashboard-card shadow-sm border-0">
-        <div className="card-body d-flex justify-content-between align-items-center">
-          
-          {/* LEFT TEXT */}
-          <div className="text-content">
-            <p className="custom-title">{item.title}</p>
-            <small className="text-secondary">{item.subtitle}</small>
-          </div>
+      {cards.map((item, index) => {
+        const CardTag = item.path ? Link : "div";
+        const cardProps = item.path
+          ? { to: item.path, "aria-label": `Open ${item.title}` }
+          : {};
 
-          {/* RIGHT COUNT */}
-          <div className="count-box">
-            {loading ? "..." : item.count}
-          </div>
+        return (
+          <div className="col-xl-3 col-md-4 col-sm-6" key={index}>
+            <CardTag className={`card dashboard-card shadow-sm border-0${item.path ? " dashboard-card-clickable" : ""}`} {...cardProps}>
+              <div className="card-body d-flex justify-content-between align-items-center">
+                
+                {/* LEFT TEXT */}
+                <div className="text-content">
+                  <p className="custom-title">{item.title}</p>
+                  <small className="text-secondary">{item.subtitle}</small>
+                </div>
 
-        </div>
-      </div>
+                {/* RIGHT COUNT */}
+                <div className="count-box">
+                  {loading ? "..." : item.count}
+                </div>
+
+              </div>
+            </CardTag>
+          </div>
+        );
+      })}
     </div>
-  ))}
-</div>
   );
 };
 

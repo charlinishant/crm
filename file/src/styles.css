@@ -627,6 +627,11 @@ a {
   padding: 0; /* remove extra padding */
 }
 
+.dashboard-card-clickable:hover {
+  box-shadow: 0 10px 24px rgba(72, 127, 255, 0.16) !important;
+  transform: translateY(-1px);
+}
+
 /* Card body controls alignment */
 .card-body {
   height: 100%;
@@ -18939,6 +18944,134 @@ table.dataTable td.dt-type-date {
   color: #64748b;
 }
 
+.lead-merge-section {
+  margin-top: 4px;
+}
+
+.lead-merge-title-row > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lead-merge-title-row span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.lead-merge-summary {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 18px;
+}
+
+.lead-merge-summary div {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.lead-merge-summary span {
+  color: #64748b;
+  display: block;
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+
+.lead-merge-summary strong {
+  color: #1e293b;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.lead-merge-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.lead-merge-group {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.lead-merge-group-head {
+  align-items: center;
+  background: #f8fafc;
+  color: #334155;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 12px 14px;
+  width: 100%;
+}
+
+.lead-merge-group-head span {
+  font-size: 14px;
+}
+
+.lead-merge-group-head strong {
+  color: #1e293b;
+  font-weight: 700;
+}
+
+.lead-merge-group-head small {
+  color: #64748b;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.lead-merge-section table {
+  min-width: 1320px;
+}
+
+.lead-origin-pill {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 9px;
+}
+
+.lead-origin-pill.original {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #15803d;
+}
+
+.lead-merge-view-btn {
+  background: #487fff;
+  border-radius: 7px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 7px 12px;
+}
+
+.lead-merge-audit-note {
+  border-top: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: 12px;
+  padding: 10px 14px;
+}
+
+.lead-merge-empty {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 8px;
+  color: #64748b;
+  display: flex;
+  justify-content: center;
+  min-height: 120px;
+}
+
 .lead-name-main {
   color: #000000;
   font-size: 16px;
@@ -21774,6 +21907,23 @@ th{
 .floorplan-form .lead-group textarea,
 .floorplan-form .unit-input-group {
   min-height: 58px;
+}
+
+.floorplan-helper-text {
+  color: #64748b;
+  display: block;
+  font-size: 12px;
+  line-height: 1.4;
+  margin-top: 6px;
+}
+
+.floorplan-field-error {
+  color: #dc2626;
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  margin-top: 6px;
 }
 
 .floorplan-generated-units {
