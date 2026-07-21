@@ -983,10 +983,11 @@ const GeneratedUnitsField = ({ units }) => (
 
 const CheckboxField = ({ label, name, checked, onChange, inline = false }) => (
   <div className={inline ? "floorplan-checkbox-inline" : "lead-group floorplan-checkbox"}>
-    <label>
-      <input type="checkbox" name={name} checked={checked} onChange={onChange} />
-      {label}
-    </label>
+    <span className="floorplan-checkbox-box">
+      <input type="checkbox" name={name} checked={checked} onChange={onChange} aria-label={label} />
+      <span className="floorplan-checkbox-tick" aria-hidden="true" />
+    </span>
+    <span className="floorplan-checkbox-text">{label}</span>
   </div>
 );
 

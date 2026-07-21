@@ -1,31 +1,7 @@
-import React, { useEffect, useState } from "react";
-import { CheckCircle2, Phone, ShieldCheck, Smartphone, X } from "lucide-react";
-import countryCallingCodes from "./countryCallingCodes";
+import React, { useEffect, useRef, useState } from "react";
+import { CheckCircle2, Phone, ShieldCheck, X } from "lucide-react";
 
 const cleanPhone = (value) => String(value || "").replace(/\D/g, "");
-const DEFAULT_COUNTRY_CODE = "91";
-
-const isSamePhone = (first, second) => {
-  const firstDigits = cleanPhone(first);
-  const secondDigits = cleanPhone(second);
-  if (!firstDigits || !secondDigits) return false;
-  if (firstDigits === secondDigits) return true;
-  return firstDigits.length >= 10 && secondDigits.length >= 10 &&
-    firstDigits.slice(-10) === secondDigits.slice(-10);
-};
-
-const splitPhoneNumber = (value) => {
-  const digits = cleanPhone(value);
-  if (digits.length <= 10) return { countryCode: DEFAULT_COUNTRY_CODE, nationalNumber: digits };
-
-  const match = [...countryCallingCodes]
-    .sort((a, b) => b.dialCode.length - a.dialCode.length)
-    .find((item) => digits.startsWith(item.dialCode));
-
-  return match
-    ? { countryCode: match.dialCode, nationalNumber: digits.slice(match.dialCode.length) }
-    : { countryCode: DEFAULT_COUNTRY_CODE, nationalNumber: digits };
-};
 
 const getLeadName = (lead) =>
   [lead?.firstName, lead?.lastName].filter(Boolean).join(" ") ||
@@ -39,17 +15,14 @@ const getStatusLabel = (value) => {
   return status.replace(/-/g, " ");
 };
 
-const StartCallModal = ({ lead, leadPhone, initialAgentPhone, onClose, onStart }) => {
-  const [countryCode, setCountryCode] = useState(DEFAULT_COUNTRY_CODE);
-  const [nationalNumber, setNationalNumber] = useState("");
+const StartCallModal = ({ lead, leadPhone, initialAgentPhone, onClose, onStart, onDispose }) => {
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(false);
   const [callLog, setCallLog] = useState(null);
+  const submitLockRef = useRef(false);
 
   useEffect(() => {
-    const parsedPhone = splitPhoneNumber(initialAgentPhone);
-    setCountryCode(parsedPhone.countryCode);
-    setNationalNumber(parsedPhone.nationalNumber);
+    submitLockRef.current = false;
     setError("");
     setStarting(false);
     setCallLog(null);
@@ -59,28 +32,22 @@ const StartCallModal = ({ lead, leadPhone, initialAgentPhone, onClose, onStart }
 
   const submit = async (event) => {
     event.preventDefault();
-    const normalizedAgentPhone = `${countryCode}${cleanPhone(nationalNumber)}`;
+    if (submitLockRef.current || starting || callLog) return;
 
     if (cleanPhone(leadPhone).length < 10) {
       setError("This lead does not have a valid phone number.");
       return;
     }
-    if (cleanPhone(nationalNumber).length < 6 || normalizedAgentPhone.length > 15) {
-      setError("Enter a valid phone number for the selected country code.");
-      return;
-    }
-    if (isSamePhone(normalizedAgentPhone, leadPhone)) {
-      setError("Agent and lead phone numbers must be different. Enter your own phone number here.");
-      return;
-    }
 
+    submitLockRef.current = true;
     setStarting(true);
     setError("");
     try {
-      const result = await onStart?.(normalizedAgentPhone);
+      const result = await onStart?.(cleanPhone(initialAgentPhone));
       if (!result) throw new Error("Unable to initiate the call.");
       setCallLog(result);
     } catch (startError) {
+      submitLockRef.current = false;
       setError(startError.message || "Unable to initiate the call.");
     } finally {
       setStarting(false);
@@ -94,7 +61,7 @@ const StartCallModal = ({ lead, leadPhone, initialAgentPhone, onClose, onStart }
           <div className="start-call-brand"><Phone size={20} /></div>
           <div>
             <h3 id="start-call-title">{callLog ? "Call initiated" : "Start cloud call"}</h3>
-            <p>Secure Twilio bridge call</p>
+            <p>Secure MCube bridge call</p>
           </div>
           <button type="button" className="start-call-close" onClick={onClose} disabled={starting} aria-label="Close">
             <X size={19} />
@@ -105,13 +72,25 @@ const StartCallModal = ({ lead, leadPhone, initialAgentPhone, onClose, onStart }
         {callLog ? (
           <div className="start-call-success">
             <CheckCircle2 size={54} />
-            <h4>Check your phone</h4>
-            <p>Twilio will call your agent number first. Answer it to connect with {getLeadName(lead)}.</p>
+            <h4>Call initiated</h4>
+            <p>MCube has started the call to {getLeadName(lead)}. After hang up, save the disposition; recording will be attached when MCube sends it.</p>
             <div className="start-call-reference">
               <span>Status <strong>{getStatusLabel(callLog.status)}</strong></span>
               <span>Call reference <strong>#{callLog.id}</strong></span>
             </div>
-            <button type="button" className="start-call-primary full" onClick={onClose}>OK, continue</button>
+            <div className="start-call-success-actions">
+              <button type="button" className="start-call-secondary" onClick={onClose}>Close</button>
+              <button
+                type="button"
+                className="start-call-primary"
+                onClick={() => {
+                  onDispose?.(callLog);
+                  onClose?.();
+                }}
+              >
+                Dispose call
+              </button>
+            </div>
           </div>
         ) : (
           <form onSubmit={submit}>
@@ -122,30 +101,13 @@ const StartCallModal = ({ lead, leadPhone, initialAgentPhone, onClose, onStart }
               </div>
 
               <div className="start-call-flow" aria-label="Call connection flow">
-                <div><Smartphone size={18} /><span>Your phone</span></div>
-                <i />
-                <div><ShieldCheck size={18} /><span>Twilio</span></div>
+                <div><ShieldCheck size={18} /><span>MCube</span></div>
                 <i />
                 <div><Phone size={18} /><span>Lead</span></div>
               </div>
 
-              <label className="start-call-field">
-                <span>Agent phone number</span>
-                <div>
-                  <select value={countryCode} onChange={(event) => setCountryCode(event.target.value)} aria-label="Country calling code">
-                    {countryCallingCodes.map((item) => (
-                      <option key={`${item.iso}-${item.dialCode}`} value={item.dialCode}>
-                        {item.iso} +{item.dialCode} - {item.country}
-                      </option>
-                    ))}
-                  </select>
-                  <input autoFocus inputMode="tel" value={nationalNumber} maxLength="15" onChange={(event) => setNationalNumber(cleanPhone(event.target.value))} placeholder="9876543210" aria-label="Agent phone number" />
-                </div>
-                <small>Select a country code, then enter the phone number. This number rings first.</small>
-              </label>
-
               <div className="start-call-info">
-              The lead sees your configured Twilio number. Calls may be recorded for CRM history and quality purposes.
+              MCube will call this lead using your configured sales number. Recording and status will be saved after hang up.
               </div>
               {error && <div className="start-call-error" role="alert">{error}</div>}
             </div>

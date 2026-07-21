@@ -335,8 +335,8 @@ const Units = () => {
             </div>
 
             <div className="action-wrapper">
-              <Link to="/floorplans" style={{ textDecoration: "none" }}>
-                <button className="btn-new-plan">Manage Floor Plans</button>
+              <Link to="/add-units" style={{ textDecoration: "none" }}>
+                <button className="btn-new-plan">Add Units</button>
               </Link>
             </div>
           </div>

@@ -12,6 +12,9 @@ const {
   webhook,
   recordingWebhook,
   getAnalytics,
+  mcubeInbound,
+  mcubeRecordingWebhook,
+  mcubeWebhook,
   twilioVoice,
   getRecording,
 } = require("../controller/call.controller")
@@ -31,5 +34,11 @@ router.get("/recording/:id", authenticate, getRecording)
 router.post("/twilio/voice", twilioVoice)
 router.post("/twilio/status", webhook)
 router.post("/twilio/recording", recordingWebhook)
+router.post("/mcube/inbound", mcubeInbound)
+router.post("/mcube/status", mcubeWebhook)
+router.post("/mcube/recording", mcubeRecordingWebhook)
+router.get("/mcube/inbound", mcubeInbound)
+router.get("/mcube/status", mcubeWebhook)
+router.get("/mcube/recording", mcubeRecordingWebhook)
 
 module.exports = router

@@ -162,9 +162,179 @@ const isFloorPlanGeneratedUnitItem = (item, claimedSlotKeys) => {
 }
 
 exports.createUnit = async (req, res) => {
-  return res.status(410).json({
-    message: "Manual unit creation has been retired. Publish or update a floor plan to generate structured inventory units.",
-  })
+  try {
+    const payload = req.body || {}
+    const projectId = toNumberOrNull(payload.projectId)
+    const towerId = toNumberOrNull(payload.towerId)
+    const floorId = toNumberOrNull(payload.floorId)
+    const floor = toNumberOrNull(payload.floor)
+    const unitIndex = toNumberOrNull(payload.unitIndex)
+
+    if (!projectId || !towerId || !floorId || floor === null || unitIndex === null) {
+      return res.status(400).json({ message: "Project, tower, floor plan, floor, and unit position are required." })
+    }
+
+    const unitPosition = formatUnitPosition(unitIndex)
+    if (!unitPosition) {
+      return res.status(400).json({ message: "Unit Position must be a whole number between 0 and 99." })
+    }
+
+    const floorPlan = await prisma.floorPlan.findFirst({
+      where: {
+        id: floorId,
+        projectId,
+        towerId,
+      },
+      include: {
+        project: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        tower: {
+          select: {
+            id: true,
+            name: true,
+            wingCode: true,
+          },
+        },
+      },
+    })
+
+    if (!floorPlan) {
+      return res.status(400).json({ message: "Selected floor plan must belong to the selected project and tower." })
+    }
+
+    const generatedName = generateUnitNumber(floorPlan.tower?.wingCode, floor, unitIndex)
+    if (!generatedName) {
+      return res.status(400).json({ message: "Selected tower needs a Wing Code before unit numbers can be generated." })
+    }
+
+    const floorNumber = Math.trunc(floor)
+    const positionNumber = Math.trunc(unitIndex)
+    const pricing = calculateUnitPricing(floorPlan, floorNumber)
+
+    const result = await prisma.$transaction(async (tx) => {
+      const existingSlot = await tx.floorPlanSlot.findFirst({
+        where: {
+          towerId,
+          floor: floorNumber,
+          unitPosition,
+        },
+        select: {
+          id: true,
+          floorPlanId: true,
+        },
+      })
+
+      if (existingSlot && Number(existingSlot.floorPlanId) !== floorId) {
+        const error = new Error(`Floor ${floorNumber}, unit position ${unitPosition} is already used by another floor plan.`)
+        error.statusCode = 409
+        throw error
+      }
+
+      if (!existingSlot) {
+        await tx.floorPlanSlot.create({
+          data: {
+            floorPlanId: floorId,
+            towerId,
+            floor: floorNumber,
+            unitPosition,
+          },
+        })
+      }
+
+      const duplicateUnit = await tx.unitModel.findFirst({
+        where: {
+          OR: [
+            {
+              name: generatedName,
+              unit: {
+                is: {
+                  towerId,
+                },
+              },
+            },
+            {
+              floor: floorNumber,
+              unitIndex: positionNumber,
+              unit: {
+                is: {
+                  towerId,
+                },
+              },
+            },
+          ],
+        },
+        select: {
+          name: true,
+        },
+      })
+
+      if (duplicateUnit) {
+        const error = new Error(`${duplicateUnit.name || generatedName} already exists in this tower.`)
+        error.statusCode = 409
+        throw error
+      }
+
+      let unitGroup = await tx.unit.findFirst({
+        where: {
+          projectId,
+          towerId,
+          floorId,
+        },
+        orderBy: {
+          id: "desc",
+        },
+      })
+
+      if (!unitGroup) {
+        unitGroup = await tx.unit.create({
+          data: {
+            projectId,
+            towerId,
+            floorId,
+            type: floorPlan.type,
+            category: floorPlan.category,
+            bedrooms: floorPlan.bedrooms,
+            bathrooms: floorPlan.bathrooms === null || floorPlan.bathrooms === undefined ? null : Math.trunc(floorPlan.bathrooms),
+            measure: floorPlan.measure,
+            carpet: floorPlan.carpet,
+            saleable: floorPlan.saleable,
+            loading: floorPlan.loading,
+            description: floorPlan.configurationLabel || floorPlan.name || "",
+          },
+        })
+      }
+
+      const unitItem = await tx.unitModel.create({
+        data: {
+          unitId: unitGroup.id,
+          name: generatedName,
+          floor: floorNumber,
+          unitIndex: positionNumber,
+          baseRate: payload.baseRate === undefined || payload.baseRate === "" ? pricing.baseRate : toNumberOrNull(payload.baseRate),
+          basePrice: payload.basePrice === undefined || payload.basePrice === "" ? pricing.basePrice : toNumberOrNull(payload.basePrice),
+          propertyPurpose: payload.propertyPurpose || floorPlan.unitStream || "Sale Unit",
+          status: normalizeUnitStatus(payload.status, UNIT_STATUS.Available),
+        },
+      })
+
+      return {
+        ...unitGroup,
+        project: floorPlan.project,
+        tower: floorPlan.tower,
+        floor: floorPlan,
+        unitList: [unitItem],
+      }
+    })
+
+    res.status(201).json(result)
+  } catch (error) {
+    console.log(error)
+    res.status(error.statusCode || 500).json({ message: error.message || "Something went wrong" })
+  }
 }
 
 exports.getUnit = async (req, res) => {

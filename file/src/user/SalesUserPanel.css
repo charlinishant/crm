@@ -2304,6 +2304,37 @@ img.sales-avatar {
   padding: 12px 16px;
 }
 
+.sales-mcube-strip {
+  background: #ffffff;
+  border: 1px solid var(--sales-line);
+  border-radius: 10px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 14px 16px;
+}
+
+.sales-mcube-strip div {
+  border-right: 1px solid var(--sales-line);
+  display: grid;
+  gap: 4px;
+}
+
+.sales-mcube-strip div:last-child {
+  border-right: 0;
+}
+
+.sales-mcube-strip span {
+  color: var(--sales-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sales-mcube-strip strong {
+  color: #0f172a;
+  font-size: 15px;
+}
+
 .sales-call-card,
 .sales-call-list-card {
   background: #ffffff;
@@ -3400,8 +3431,20 @@ img.sales-avatar {
   }
 
   .sales-call-meta,
-  .sales-call-stats {
+  .sales-call-stats,
+  .sales-mcube-strip {
     grid-template-columns: 1fr;
+  }
+
+  .sales-mcube-strip div {
+    border-bottom: 1px solid var(--sales-line);
+    border-right: 0;
+    padding-bottom: 10px;
+  }
+
+  .sales-mcube-strip div:last-child {
+    border-bottom: 0;
+    padding-bottom: 0;
   }
 
   .sales-call-meta {
@@ -3564,7 +3607,7 @@ img.sales-avatar {
 .start-call-person strong { color: #0f172a; font-size: 14px; }
 .start-call-person small { color: #64748b; margin-top: 3px; }
 
-.start-call-flow { align-items: center; display: grid; grid-template-columns: 1fr 28px 1fr 28px 1fr; }
+.start-call-flow { align-items: center; display: grid; grid-template-columns: 1fr 28px 1fr; }
 .start-call-flow div {
   align-items: center; color: #334155; display: flex; flex-direction: column;
   font-size: 11px; font-weight: 700; gap: 6px; text-align: center;
@@ -3603,6 +3646,8 @@ img.sales-avatar {
 .start-call-reference { background: #f8fafc; border-radius: 9px; display: grid; gap: 8px; margin-bottom: 20px; padding: 12px 14px; text-align: left; }
 .start-call-reference span { color: #64748b; display: flex; font-size: 12px; justify-content: space-between; }
 .start-call-reference strong { color: #0f172a; text-transform: capitalize; }
+.start-call-success-actions { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
+.start-call-success-actions button { border-radius: 9px; cursor: pointer; font-weight: 800; min-height: 44px; padding: 0 14px; }
 .start-call-primary.full { width: 100%; }
 
 @media (max-width: 520px) {

@@ -21998,26 +21998,71 @@ th{
 
 .floorplan-checkbox,
 .floorplan-checkbox-inline {
-  justify-content: center;
-}
-
-.floorplan-checkbox label,
-.floorplan-checkbox-inline label {
   display: flex;
   align-items: center;
   gap: 8px;
+  justify-content: center;
+}
+
+.floorplan-checkbox-text {
   margin: 0;
   color: #334155;
   font-size: 13px;
   font-weight: 500;
 }
 
+.floorplan-checkbox-box {
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 18px;
+  position: relative;
+  width: 18px;
+}
+
 .floorplan-checkbox input,
 .floorplan-checkbox-inline input {
-  width: 18px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: #ffffff;
+  border: 1px solid #93b4ff;
+  border-radius: 3px;
+  cursor: pointer;
   height: 18px;
-  padding: 0;
-  accent-color: #2563eb;
+  margin: 0;
+  position: relative;
+  transition: background 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
+  width: 18px;
+  z-index: 1;
+}
+
+.floorplan-checkbox input:checked,
+.floorplan-checkbox-inline input:checked {
+  background: #2563eb;
+  border-color: #2563eb;
+}
+
+.floorplan-checkbox-tick {
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  height: 10px;
+  left: 6px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 3px;
+  transform: rotate(45deg);
+  width: 5px;
+  z-index: 2;
+}
+
+.floorplan-checkbox input:checked + .floorplan-checkbox-tick,
+.floorplan-checkbox-inline input:checked + .floorplan-checkbox-tick {
+  opacity: 1;
+}
+
+.floorplan-checkbox input:focus-visible,
+.floorplan-checkbox-inline input:focus-visible {
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
 }
 
 .floorplan-buttons {
@@ -22033,6 +22078,86 @@ th{
 
 .floorplan-buttons .lead-save {
   order: 3;
+}
+
+.add-unit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.add-unit-heading {
+  align-items: flex-start;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  padding: 20px;
+}
+
+.add-unit-heading h2 {
+  color: #0f172a;
+  font-size: 28px;
+  font-weight: 800;
+  margin: 0 0 6px;
+}
+
+.add-unit-heading p {
+  color: #475569;
+  font-size: 14px;
+  margin: 0;
+}
+
+.add-unit-summary {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px 16px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding: 16px;
+}
+
+.add-unit-summary span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.add-unit-summary strong {
+  color: #0f172a;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.add-unit-actions {
+  gap: 10px;
+  margin-top: 0;
+}
+
+.unit-alert.success {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #166534;
+}
+
+@media (max-width: 991px) {
+  .add-unit-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 575px) {
+  .add-unit-heading {
+    flex-direction: column;
+  }
+
+  .add-unit-summary {
+    grid-template-columns: 1fr;
+  }
 }
 
 .task-lead-page {

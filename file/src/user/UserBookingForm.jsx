@@ -203,6 +203,8 @@ const flattenDatabaseUnits = (unitGroups = []) =>
     return models.map((unit, index) => ({
       id: unit?.id || group?.id || unit?.name,
       groupId: group?.id,
+      unitItemId: unit?.id || "",
+      unitId: group?.id || unit?.unitId || "",
       name: unit?.name || group?.name || `Unit ${index + 1}`,
       floor: unit?.floor || floorPlan?.name || group?.floor || "-",
       unitIndex: unit?.unitIndex,
@@ -496,13 +498,15 @@ const UserBookingForm = ({
     updateField("projectDetails", getProjectName(project));
     updateField("unit", "");
     updateField("unitId", "");
+    updateField("unitItemId", "");
     setSelectedTowerId("");
   };
 
   const selectUnit = (unit) => {
     if (["booked", "blocked", "refuge", "investor"].includes(normalizeUnitStatus(unit.status))) return;
     updateField("unit", unit.name);
-    updateField("unitId", unit.id || unit.name);
+    updateField("unitId", unit.unitId || unit.groupId || "");
+    updateField("unitItemId", unit.unitItemId || unit.id || "");
     updateField("saleableArea", unit.saleable);
     updateField("carpetArea", unit.carpet);
     updateField("builtupArea", unit.builtupArea || "");
@@ -899,6 +903,7 @@ const UserBookingForm = ({
                   setSelectedTowerId(event.target.value);
                   updateField("unit", "");
                   updateField("unitId", "");
+                  updateField("unitItemId", "");
                 }}
               >
                 <option value="">

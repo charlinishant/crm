@@ -2155,6 +2155,21 @@ const SalesUserPanel = () => {
                 </div>
               </div>
 
+              <div className="sales-mcube-strip">
+                <div>
+                  <span>MCube Inbound</span>
+                  <strong>8779308386</strong>
+                </div>
+                <div>
+                  <span>MCube Outbound</span>
+                  <strong>08062736834</strong>
+                </div>
+                <div>
+                  <span>Recordings</span>
+                  <strong>After hang up</strong>
+                </div>
+              </div>
+
               <div className="sales-call-note">
                 <Users size={16} />
                 <span>Telecaller mode - You see only leads assigned to you. Dispose each one before moving to the next.</span>
@@ -2723,6 +2738,13 @@ const SalesUserPanel = () => {
         initialAgentPhone={panel.user?.phone || JSON.parse(localStorage.getItem("authUser") || "null")?.phone || ""}
         onClose={() => setCallTarget(null)}
         onStart={(agentPhone) => startLeadCall(callTarget, agentPhone)}
+        onDispose={(callLog) => {
+          if (!callTarget || !callLog) return;
+          const leadId = String(getLeadId(callTarget));
+          setCallLogsByLead((current) => ({ ...current, [leadId]:callLog }));
+          setDispositionInitialValue("");
+          setDispositionTarget({ lead:callTarget, callLog });
+        }}
       />
 
     </div>

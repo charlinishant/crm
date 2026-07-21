@@ -6,6 +6,7 @@ const {
   getRecordingStream,
   verifyWebhookToken,
 } = require("../services/twilioVoice.service")
+const mcubeVoice = require("../services/mcubeVoice.service")
 
 const allowedDispositions = new Set([
   "Qualified",
@@ -21,6 +22,7 @@ const allowedDispositions = new Set([
 ])
 
 const terminalCallStatuses = new Set(["completed", "failed", "no-answer", "busy", "canceled"])
+const activeCallStatuses = ["initiated", "queued", "calling", "ringing", "connected", "in-progress"]
 
 const toNumberOrNull = (value) => {
   if (value === undefined || value === null || value === "") return null
@@ -35,6 +37,19 @@ const toDateOrNull = (value) => {
 }
 
 const cleanPhone = (value) => String(value || "").replace(/\D/g, "")
+
+const toDurationSeconds = (value) => {
+  if (value === undefined || value === null || value === "") return null
+  const text = String(value).trim()
+  if (/^\d+$/.test(text)) return Number(text)
+  const parts = text.split(":").map((item) => Number(item))
+  if (parts.some((item) => Number.isNaN(item))) return null
+  if (parts.length === 3) return (parts[0] * 3600) + (parts[1] * 60) + parts[2]
+  if (parts.length === 2) return (parts[0] * 60) + parts[1]
+  return null
+}
+
+const last10 = (value) => cleanPhone(value).slice(-10)
 
 const getLeadPhone = (lead) => {
   const phones = lead?.phones
@@ -57,6 +72,45 @@ const isSamePhone = (first, second) => {
     firstDigits.slice(-10) === secondDigits.slice(-10)
 }
 
+const matchesPhone = (first, second) => {
+  const firstDigits = last10(first)
+  const secondDigits = last10(second)
+  return Boolean(firstDigits && secondDigits && firstDigits === secondDigits)
+}
+
+const getAllLeadPhones = (lead) => {
+  const phones = lead?.phones
+  const values = []
+  if (Array.isArray(phones)) {
+    phones.forEach((phone) => values.push(typeof phone === "object" ? phone.value || phone.phone || phone.number : phone))
+  } else if (phones && typeof phones === "object") {
+    values.push(phones.value || phones.phone || phones.number)
+  } else if (phones) {
+    values.push(phones)
+  }
+  return values.map(cleanPhone).filter(Boolean)
+}
+
+const findLeadByPhone = async (phone) => {
+  const target = last10(phone)
+  if (!target) return null
+  const leads = await prisma.lead.findMany({
+    where:{ is_delete:false },
+    select:{ id:true, phones:true, teamId:true },
+    orderBy:{ updatedAt:"desc" },
+  })
+  return leads.find((lead) => getAllLeadPhones(lead).some((item) => matchesPhone(item, target))) || null
+}
+
+const findUserByPhone = async (phone) => {
+  const target = last10(phone)
+  if (!target) return null
+  const users = await prisma.user.findMany({
+    select:{ id:true, phone:true, secondaryPhone:true },
+  })
+  return users.find((user) => matchesPhone(user.phone, target) || matchesPhone(user.secondaryPhone, target)) || null
+}
+
 const getUserName = (user) =>
   [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
   user?.username ||
@@ -73,6 +127,7 @@ const normalizeCallStatus = (value) => {
     ringing:"calling",
     "in-progress":"connected",
     answered:"connected",
+    answer:"connected",
     busy:"busy",
     "no-answer":"no-answer",
     noanswer:"no-answer",
@@ -172,13 +227,32 @@ exports.startCall = async (req, res) => {
       return res.status(403).json({ message:"You can call only your assigned leads" })
     }
 
-    const agentPhone = requestedAgentPhone || cleanPhone(agent.phone || agent.secondaryPhone)
+    const agentPhone = requestedAgentPhone || cleanPhone(agent.phone || agent.secondaryPhone || process.env.MCUBE_DEFAULT_AGENT_NUMBER)
     if (!agentPhone || agentPhone.length < 10) {
-      return res.status(400).json({ message:"Agent phone is required before starting call" })
+      return res.status(400).json({ message:"Sales user phone is required before starting call" })
     }
     if (isSamePhone(agentPhone, leadPhone)) {
       return res.status(400).json({
         message:"Agent and lead phone numbers must be different. Enter your own phone as the agent number.",
+      })
+    }
+
+    const activeCall = await prisma.callLog.findFirst({
+      where:{
+        leadId,
+        agentId,
+        provider:String(process.env.CALL_PROVIDER || "twilio").trim().toLowerCase(),
+        status:{ in:activeCallStatuses },
+        createdAt:{ gte:new Date(Date.now() - 10 * 60 * 1000) },
+      },
+      include:callInclude,
+      orderBy:{ createdAt:"desc" },
+    })
+
+    if (activeCall) {
+      return res.status(409).json({
+        message:"A call is already active for this lead. Please wait for it to disconnect, then dispose the call.",
+        callLog:activeCall,
       })
     }
 
@@ -189,7 +263,7 @@ exports.startCall = async (req, res) => {
         phone:leadPhone,
         leadPhone,
         agentPhone,
-        provider:"twilio",
+        provider:String(process.env.CALL_PROVIDER || "twilio").trim().toLowerCase(),
         status:"initiated",
         startedAt:new Date(),
       },
@@ -222,7 +296,7 @@ exports.startCall = async (req, res) => {
     })
 
     res.status(201).json({
-      message:"Call initiated. Twilio will call the agent first.",
+      message:providerResult.message || "Call initiated. The provider will call the agent first.",
       callLog,
       provider:providerResult.provider,
       providerCallId:providerResult.providerCallId,
@@ -604,6 +678,222 @@ exports.webhook = async (req, res) => {
 
 exports.recordingWebhook = exports.webhook
 
+const verifyMcubeWebhook = (req) => {
+  const expected = String(process.env.MCUBE_WEBHOOK_TOKEN || "").trim()
+  if (!expected) return true
+  const supplied =
+    req.headers["x-mcube-token"] ||
+    req.headers["x-webhook-token"] ||
+    req.query.token ||
+    req.body.token ||
+    req.body.secretkey
+  return String(supplied || "").trim() === expected
+}
+
+const getMcubePayloadValue = (req, keys) => firstWebhookValue({ ...req.query, ...req.body }, keys)
+
+const getMcubeCallLookup = (req) => {
+  const providerCallId = getMcubePayloadValue(req, [
+    "callid",
+    "callId",
+    "call_id",
+    "called",
+    "uuid",
+    "calluuid",
+    "sid",
+  ])
+  const callLogId = toNumberOrNull(getMcubePayloadValue(req, ["callLogId", "call_log_id", "id"]))
+  return { providerCallId:providerCallId ? String(providerCallId) : "", callLogId }
+}
+
+const getMcubeWebhookData = async (req, fallbackDirection = "outbound") => {
+  const customerPhone = cleanPhone(getMcubePayloadValue(req, [
+    "customernumber",
+    "customerNumber",
+    "custnumber",
+    "cust_number",
+    "caller",
+    "callerid",
+    "from",
+    "CallFrom",
+    "callto",
+    "callTo",
+    "leadPhone",
+    "phone",
+  ]))
+  const agentPhone = cleanPhone(getMcubePayloadValue(req, [
+    "emp_phone",
+    "agentPhone",
+    "agent_phone",
+    "exenumber",
+    "executive",
+    "to",
+    "CallTo",
+  ]))
+  const virtualNumber = cleanPhone(getMcubePayloadValue(req, [
+    "did",
+    "didnumber",
+    "Didnumber",
+    "virtualNumber",
+    "virtual_number",
+    "businessNumber",
+    "callednumber",
+    "clicktocalldid",
+  ])) || cleanPhone(
+    fallbackDirection === "inbound" ? process.env.MCUBE_INBOUND_NUMBER : process.env.MCUBE_OUTBOUND_NUMBER
+  )
+  const rawStatus = getMcubePayloadValue(req, [
+    "status",
+    "callstatus",
+    "callStatus",
+    "CallStatus",
+    "dialstatus",
+    "DialCallStatus",
+    "msg",
+  ])
+  const durationValue = getMcubePayloadValue(req, [
+    "duration",
+    "CallDuration",
+    "callduration",
+    "talktime",
+    "billsec",
+    "answeredtime",
+  ])
+  const duration = toDurationSeconds(durationValue)
+  const recordingUrl = getMcubePayloadValue(req, [
+    "recording",
+    "recordingUrl",
+    "recording_url",
+    "RecordingUrl",
+    "filename",
+    "audio",
+  ])
+  const startedAt = toDateOrNull(getMcubePayloadValue(req, ["starttime", "startTime", "StartTime", "callstarttime"]))
+  const endedAtFromProvider = toDateOrNull(getMcubePayloadValue(req, ["endtime", "endTime", "EndTime", "callendtime"]))
+  const status = endedAtFromProvider
+    ? normalizeCallStatus(rawStatus || "completed") === "connected" ? "completed" : normalizeCallStatus(rawStatus || "completed")
+    : rawStatus ? normalizeCallStatus(rawStatus) : (fallbackDirection === "inbound" ? "calling" : "initiated")
+  const { providerCallId, callLogId } = getMcubeCallLookup(req)
+  const direction = String(getMcubePayloadValue(req, ["direction", "calltype", "type"]) || fallbackDirection).toLowerCase()
+
+  return {
+    agentPhone,
+    callLogId,
+    customerPhone,
+    direction,
+    duration,
+    endedAtFromProvider,
+    providerCallId,
+    recordingUrl,
+    startedAt,
+    status,
+    virtualNumber,
+  }
+}
+
+const findMcubeCallLog = async ({ providerCallId, callLogId }) => {
+  if (!providerCallId && !callLogId) return null
+  return prisma.callLog.findFirst({
+    where:{
+      provider:"mcube",
+      OR:[
+        ...(providerCallId ? [{ providerCallId }, { callId:providerCallId }] : []),
+        ...(callLogId ? [{ id:callLogId }] : []),
+      ],
+    },
+  })
+}
+
+const saveMcubeWebhookCall = async (req, fallbackDirection) => {
+  if (!verifyMcubeWebhook(req)) {
+    const error = new Error("Invalid MCube webhook token")
+    error.statusCode = 403
+    throw error
+  }
+
+  const data = await getMcubeWebhookData(req, fallbackDirection)
+  const existingCall = await findMcubeCallLog(data)
+  const lead = existingCall ? null : await findLeadByPhone(data.customerPhone)
+  const agent = existingCall ? null : await findUserByPhone(data.agentPhone)
+  const endedAt = terminalCallStatuses.has(data.status) ? data.endedAtFromProvider || new Date() : undefined
+  const connectedAt = data.status === "connected" ? new Date() : undefined
+  const notesPrefix = data.direction === "inbound" ? "MCube inbound" : "MCube outbound"
+  const notes = `${notesPrefix}${data.virtualNumber ? ` via ${data.virtualNumber}` : ""}`
+
+  if (!existingCall && !lead) {
+    return {
+      callLog:null,
+      matched:false,
+      message:"MCube webhook accepted, but caller number did not match an existing lead.",
+    }
+  }
+
+  if (existingCall) {
+    const callLog = await prisma.callLog.update({
+      where:{ id:existingCall.id },
+      data:{
+        ...(data.providerCallId && !existingCall.providerCallId ? {
+          providerCallId:data.providerCallId,
+          callId:data.providerCallId,
+        } : {}),
+        ...(data.status ? { status:data.status } : {}),
+        ...(data.duration !== null ? { duration:data.duration } : {}),
+        ...(data.recordingUrl ? { recordingUrl:String(data.recordingUrl) } : {}),
+        ...(data.startedAt ? { startedAt:data.startedAt } : {}),
+        ...(connectedAt && !existingCall.connectedAt ? { connectedAt } : {}),
+        ...(endedAt ? { endedAt } : {}),
+        notes:existingCall.notes || notes,
+      },
+      include:callInclude,
+    })
+    return { callLog, matched:true, message:"MCube call log updated" }
+  }
+
+  const callLog = await prisma.callLog.create({
+    data:{
+      leadId:lead.id,
+      agentId:agent?.id || lead.teamId || null,
+      phone:data.customerPhone,
+      leadPhone:data.customerPhone,
+      agentPhone:data.agentPhone || null,
+      provider:"mcube",
+      callId:data.providerCallId || null,
+      providerCallId:data.providerCallId || null,
+      status:data.status,
+      duration:data.duration,
+      recordingUrl:data.recordingUrl ? String(data.recordingUrl) : null,
+      notes,
+      startedAt:data.startedAt || new Date(),
+      connectedAt:data.status === "connected" ? new Date() : null,
+      endedAt:endedAt || null,
+    },
+    include:callInclude,
+  })
+  return { callLog, matched:true, message:"MCube call log created" }
+}
+
+exports.mcubeInbound = async (req, res) => {
+  try {
+    const result = await saveMcubeWebhookCall(req, "inbound")
+    res.status(200).json(result)
+  } catch (error) {
+    console.error("MCube inbound webhook error:", error)
+    res.status(error.statusCode || 500).json({ message:error.message || "Unable to process MCube inbound call" })
+  }
+}
+
+exports.mcubeWebhook = async (req, res) => {
+  try {
+    const result = await saveMcubeWebhookCall(req, "outbound")
+    res.status(200).json(result)
+  } catch (error) {
+    console.error("MCube status webhook error:", error)
+    res.status(error.statusCode || 500).json({ message:error.message || "Unable to process MCube call status" })
+  }
+}
+
+exports.mcubeRecordingWebhook = exports.mcubeWebhook
+
 exports.getRecording = async (req, res) => {
   try {
     const id = toNumberOrNull(req.params.id)
@@ -614,7 +904,9 @@ exports.getRecording = async (req, res) => {
     }
     if (!callLog.recordingUrl) return res.status(404).json({ message:"Recording is not available" })
 
-    const recording = await getRecordingStream(callLog.recordingUrl)
+    const recording = callLog.provider === "mcube"
+      ? await mcubeVoice.getRecordingStream(callLog.recordingUrl)
+      : await getRecordingStream(callLog.recordingUrl)
     res.setHeader("Content-Type", recording.headers["content-type"] || "audio/mpeg")
     if (recording.headers["content-length"]) {
       res.setHeader("Content-Length", recording.headers["content-length"])
