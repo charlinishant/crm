@@ -13,10 +13,50 @@ const isNewAssignedLead = (lead) => {
     return !status || status === "new" || status === "fresh lead" || status.includes("fresh")
 }
 
+const validUserRoles = new Set([
+    "PRE_SALES",
+    "SALES",
+    "POST_SALES",
+    "MANAGER",
+    "ADMIN",
+    "AGENCY_USER",
+    "AGENT",
+    "CHANNEL_PARTNER",
+])
+const roleDepartmentMap = {
+    PRE_SALES: "PRE_SALES",
+    SALES: "SALES",
+    POST_SALES: "POST_SALES",
+}
+
+const normalizeUserPayload = (data, { partial = false } = {}) => {
+    const hasRole = Object.prototype.hasOwnProperty.call(data, "role")
+    const hasDepartment = Object.prototype.hasOwnProperty.call(data, "department")
+
+    if(partial && !hasRole && !hasDepartment){
+        return data
+    }
+
+    if(typeof data.role === "string"){
+        data.role = data.role.trim().toUpperCase()
+        if(!validUserRoles.has(data.role)){
+            delete data.role
+        }
+    }
+
+    if(data.role && roleDepartmentMap[data.role]){
+        data.department = roleDepartmentMap[data.role]
+    } else {
+        data.department = null
+    }
+
+    return data
+}
+
 
 exports.createUser = async (req, res)=>{
     try {
-        const data = {...req.body}
+        const data = normalizeUserPayload({...req.body})
         const nullableFields = ["username", "phone", "secondaryPhone", "linkedUrl", "description", "timeZone"]
 
         nullableFields.forEach((field) => {
@@ -142,7 +182,7 @@ exports.getUser  = async (req, res)=>{
 
 exports.updateUser = async (req, res)=>{
     try {
-        const data = {...req.body}
+        const data = normalizeUserPayload({...req.body}, { partial: true })
         const id = req.params.id
         if(!id)
             res.status(400).json("ID is required")    

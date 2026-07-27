@@ -8,7 +8,6 @@ const UnitCountEight = () => {
     leads: [],
     bookings: [],
     tasks: [],
-    projects: [],
     duplicateGroups: [],
   });
   const [loading, setLoading] = useState(true);
@@ -41,16 +40,15 @@ const UnitCountEight = () => {
 
     const loadCounts = async () => {
       setLoading(true);
-      const [leads, bookings, tasks, projects, duplicateGroupsResult] = await Promise.all([
+      const [leads, bookings, tasks, duplicateGroupsResult] = await Promise.all([
         fetchList("/leads"),
         fetchList("/bookings?limit=1000"),
         fetchList("/tasks"),
-        fetchList("/projects/list"),
         fetchList("/leads/duplicates"),
       ]);
       const duplicateGroups = duplicateGroupsResult.length ? duplicateGroupsResult : buildDuplicateLeadGroups(leads);
 
-      setDashboardData({ leads, bookings, tasks, projects, duplicateGroups });
+      setDashboardData({ leads, bookings, tasks, duplicateGroups });
       setLoading(false);
     };
 
@@ -58,9 +56,10 @@ const UnitCountEight = () => {
   }, [API_URL]);
 
   const counts = useMemo(() => {
-    const { leads, bookings, tasks, projects, duplicateGroups } = dashboardData;
+    const { leads, bookings, tasks, duplicateGroups } = dashboardData;
     const nextSevenDays = new Date();
     nextSevenDays.setDate(nextSevenDays.getDate() + 7);
+    const now = new Date();
 
     const isBookedLead = (lead) =>
       String(lead?.status || "").toLowerCase().includes("book") ||
@@ -83,9 +82,34 @@ const UnitCountEight = () => {
       return visitDate >= new Date() && visitDate <= nextSevenDays;
     };
 
+    const isIncomplete = (status) =>
+      !["completed", "complete", "done", "archived", "closed", "cancelled", "canceled"].includes(
+        String(status || "").toLowerCase()
+      );
+
+    const getActivityDate = (item) =>
+      item?.dueDate ||
+      item?.dueOn ||
+      item?.nextFollowUpAt ||
+      item?.followUpAt ||
+      item?.followUpDate ||
+      item?.followupDate ||
+      item?.callbackDate ||
+      item?.activityDate ||
+      item?.scheduledAt;
+
+    const isMissedFutureActivity = (item) => {
+      const status = String(item?.status || item?.followUpStatus || item?.activityStatus || "").toLowerCase();
+      if (status.includes("missed")) return true;
+      if (!isIncomplete(status)) return false;
+
+      const activityDate = new Date(getActivityDate(item));
+      return !Number.isNaN(activityDate.getTime()) && activityDate < now;
+    };
+
     return {
       activeTasks: tasks.filter((task) => !["completed", "archived"].includes(String(task?.status || "").toLowerCase())).length,
-      mfa: projects.length,
+      mfa: [...tasks, ...leads].filter(isMissedFutureActivity).length,
       visitExpiry: leads.filter(hasVisitExpiringSoon).length,
       leadMerge: duplicateGroups.length,
       hotLeads: leads.filter(isHotLead).length,
@@ -97,7 +121,7 @@ const UnitCountEight = () => {
 
   const cards = [
     { title: "Active Tasks", subtitle: "Open Tasks", count: counts.activeTasks },
-    { title: "MFA", subtitle: "Projects", count: counts.mfa },
+    { title: "MFA", subtitle: "Missed Future Activity", count: counts.mfa },
     { title: "Visit Expiry", subtitle: "Soon", count: counts.visitExpiry },
     { title: "Lead Merge", subtitle: "Duplicates", count: counts.leadMerge, path: "/lead-merge" },
     { title: "Hot Leads", subtitle: "Priority", count: counts.hotLeads },
@@ -230,20 +254,19 @@ const UnitCountEight = () => {
 
         return (
           <div className="col-xl-3 col-md-4 col-sm-6" key={index}>
-            <CardTag className={`card dashboard-card shadow-sm border-0${item.path ? " dashboard-card-clickable" : ""}`} {...cardProps}>
+            <CardTag
+              className={`card dashboard-card shadow-sm border-0${item.path ? " dashboard-card-clickable" : ""}`}
+              {...cardProps}
+            >
               <div className="card-body d-flex justify-content-between align-items-center">
-                
-                {/* LEFT TEXT */}
                 <div className="text-content">
                   <p className="custom-title">{item.title}</p>
                   <small className="text-secondary">{item.subtitle}</small>
                 </div>
 
-                {/* RIGHT COUNT */}
                 <div className="count-box">
                   {loading ? "..." : item.count}
                 </div>
-
               </div>
             </CardTag>
           </div>

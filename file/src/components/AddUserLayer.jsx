@@ -216,6 +216,12 @@ const emptyUserFormData = {
     description: '',
 };
 
+const departmentByRole = {
+    PRE_SALES: 'PRE_SALES',
+    SALES: 'SALES',
+    POST_SALES: 'POST_SALES',
+};
+
 const AddUserLayer = () => {
 
     const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
@@ -308,7 +314,10 @@ const AddUserLayer = () => {
         setIsSubmitting(true);
 
         try {
-            const payload = { ...formData };
+            const payload = {
+                ...formData,
+                department: departmentByRole[formData.role] || null,
+            };
 
             if (isEditMode && !payload.password) {
                 delete payload.password;

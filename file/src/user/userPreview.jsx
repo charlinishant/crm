@@ -103,6 +103,17 @@ const getUserName = (user) =>
   user?.email ||
   `User #${user?.id}`;
 
+const bookingSourceOptions = ["Direct", "Bulk Marketing", "Referral", "Channel Partner"];
+
+const normalizeBookingSource = (value) => {
+  const source = String(value || "").trim();
+  if (!source) return "Direct";
+  if (source.toLowerCase() === "channel_partner") return "Channel Partner";
+  return source;
+};
+
+const isChannelPartnerSource = (value) => normalizeBookingSource(value) === "Channel Partner";
+
 const toCleanNumber = (value) => {
   if (value === undefined || value === null || value === "") return 0;
   const number = Number(String(value).replace(/,/g, ""));
@@ -726,10 +737,11 @@ const UserPreview = () => {
 
   const handleBookingChange = (event) => {
     const { name, value } = event.target;
+    const nextValue = name === "source" ? normalizeBookingSource(value) : value;
     setBookingForm((prev) => ({
       ...prev,
-      [name]: value,
-      ...(name === "source" && !["channel_partner", "Channel Partner"].includes(value)
+      [name]: nextValue,
+      ...(name === "source" && !isChannelPartnerSource(nextValue)
         ? { channelPartner: "", channelPartnerId: "" }
         : {}),
     }));
@@ -1196,6 +1208,11 @@ const UserPreview = () => {
     setBookingMessage("");
 
     try {
+      const selectedChannelPartnerId =
+        bookingForm.channelPartnerId ||
+        registeredChannelPartners.find((user) => getUserName(user) === bookingForm.channelPartner)?.id ||
+        "";
+      const normalizedSource = normalizeBookingSource(bookingForm.source || leadSource);
       const response = await fetch(`${API_URL}/bookings`, {
         method: "POST",
         headers: {
@@ -1208,7 +1225,8 @@ const UserPreview = () => {
           unitId: bookingForm.unitId ? Number(bookingForm.unitId) : undefined,
           unitItemId: bookingForm.unitItemId ? Number(bookingForm.unitItemId) : undefined,
           idempotencyKey: bookingForm.idempotencyKey || `booking-${leadId}-${bookingForm.unitItemId || Date.now()}`,
-          source: bookingForm.source || leadSource,
+          source: normalizedSource,
+          channelPartnerId: isChannelPartnerSource(normalizedSource) ? selectedChannelPartnerId : "",
           bookedBy: owner,
           bookedOn: bookingForm.bookedOn || bookingConfirmationDate,
         }),
@@ -3953,6 +3971,7 @@ const UserPreview = () => {
               bookingHoldOwner={owner}
               onClose={handleCloseBookingForm}
               onSubmit={handleSaveBooking}
+              onFieldChange={handleBookingChange}
               onPrevious={() => setBookingStepIndex((current) => Math.max(0, current - 1))}
               onMarkInterested={() =>
                 setBookingProjectMessage(
@@ -4518,13 +4537,10 @@ const UserPreview = () => {
                       </label>
                       <label className="booking-confirmation-input">
                         <span>Source</span>
-                        <select name="source" value={bookingForm.source} onChange={handleBookingChange}>
-                          <option value="">Select Source</option>
-                          <option value="Direct">Direct</option>
-                          <option value="walkin">walkin</option>
-                          <option value="channel_partner">channel_partner</option>
-                          <option value="Channel Partner">Channel Partner</option>
-                          <option value="digital">digital</option>
+                        <select name="source" value={normalizeBookingSource(bookingForm.source)} onChange={handleBookingChange}>
+                          {bookingSourceOptions.map((option) => (
+                            <option key={option} value={option}>{option}</option>
+                          ))}
                         </select>
                       </label>
                       <label className="booking-confirmation-input booking-confirmation-wide">
@@ -4540,7 +4556,7 @@ const UserPreview = () => {
                               channelPartner: selected ? getUserName(selected) : "",
                             }));
                           }}
-                          disabled={!["channel_partner", "Channel Partner"].includes(bookingForm.source)}
+                          disabled={!isChannelPartnerSource(bookingForm.source)}
                         >
                           <option value="">Select Channel Partner</option>
                           {registeredChannelPartners.map((user) => (

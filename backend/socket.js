@@ -1,4 +1,5 @@
 const prisma = require("./lib/prisma")
+const jwt = require("jsonwebtoken")
 let io
 
 const connectedUser = new Map()
@@ -28,12 +29,29 @@ function initSocket(server) {
   })
 
   io.on("connection", socket => {
-    socket.on("register", async (userId)=>{
-      connectedUser.set(userId, socket.id)
-      
-      const notifiactions = await prisma.notification.findMany({where:{userId:Number(userId), isRead:false}})
+    const token = String(socket.handshake?.auth?.token || socket.handshake?.query?.token || "").trim()
+    if (token && process.env.JWT_SECRET) {
+      try {
+        const authUser = jwt.verify(token, process.env.JWT_SECRET)
+        if (authUser?.id) {
+          socket.data.authUserId = String(authUser.id)
+          connectedUser.set(String(authUser.id), socket.id)
+          socket.join(`user:${authUser.id}`)
+        }
+      } catch (error) {
+        // Keep the socket connected for legacy notification flows, but do not join a private room.
+      }
+    }
 
-      socket.emit(`notification-${userId}`, notifiactions)
+    socket.on("register", async (userId)=>{
+      const registeredUserId = socket.data.authUserId
+      if (!registeredUserId || String(userId) !== registeredUserId) return
+      connectedUser.set(registeredUserId, socket.id)
+      socket.join(`user:${registeredUserId}`)
+      
+      const notifiactions = await prisma.notification.findMany({where:{userId:Number(registeredUserId), isRead:false}})
+
+      socket.emit(`notification-${registeredUserId}`, notifiactions)
     })
   })
 

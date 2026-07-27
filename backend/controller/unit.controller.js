@@ -303,7 +303,16 @@ exports.createUnit = async (req, res) => {
             carpet: floorPlan.carpet,
             saleable: floorPlan.saleable,
             loading: floorPlan.loading,
-            description: floorPlan.configurationLabel || floorPlan.name || "",
+            description: payload.description || floorPlan.configurationLabel || floorPlan.name || "",
+          },
+        })
+      } else if (payload.description) {
+        unitGroup = await tx.unit.update({
+          where: {
+            id: unitGroup.id,
+          },
+          data: {
+            description: payload.description,
           },
         })
       }

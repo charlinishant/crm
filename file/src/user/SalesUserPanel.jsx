@@ -9,7 +9,6 @@ import {
   Home,
   History,
   LayoutDashboard,
-  ListFilter,
   LogOut,
   MessageSquare,
   Phone,
@@ -28,6 +27,7 @@ import BookingPreviewModal from "./BookingPreviewModal";
 import CallDispositionModal from "./CallDispositionModal";
 import StartCallModal from "./StartCallModal";
 import CallLogsTable from "../components/CallLogsTable";
+import { getReportsSocket } from "../services/socketClient";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
@@ -68,7 +68,9 @@ const getScreenFromPath = (pathname) =>
       ? "details"
       : pathname.endsWith("/whatsapp")
         ? "whatsapp"
-        : pathname.endsWith("/calls")
+        : pathname.endsWith("/calls/inbound")
+          ? "inboundCalls"
+        : pathname.endsWith("/calls/outbound") || pathname.endsWith("/calls")
           ? "calls"
           : pathname.endsWith("/disposition")
             ? "disposition"
@@ -499,6 +501,7 @@ const SalesUserPanel = () => {
   const [callDispositions, setCallDispositions] = useState({});
   const [callLogsByLead, setCallLogsByLead] = useState({});
   const [callLogCount, setCallLogCount] = useState(0);
+  const [inboundCallCount, setInboundCallCount] = useState(0);
   const [callingLeadId, setCallingLeadId] = useState(null);
   const [callTarget, setCallTarget] = useState(null);
   const [activeCallDispositionTab, setActiveCallDispositionTab] = useState("Callback Later");
@@ -543,6 +546,9 @@ const SalesUserPanel = () => {
     initialScreen === "whatsapp" || initialScreen === "details"
   );
   const [timeGreeting, setTimeGreeting] = useState(() => getTimeGreeting());
+  const [mcubeWidgetUrl, setMcubeWidgetUrl] = useState("");
+  const [inboundCall, setInboundCall] = useState(null);
+  const [isInboundNoticeDismissed, setIsInboundNoticeDismissed] = useState(false);
 
   const loadPanel = useCallback(async (showLoading = true) => {
     if (showLoading) {
@@ -598,37 +604,225 @@ const SalesUserPanel = () => {
   }, [loadPanel]);
 
   useEffect(() => {
+    const token = localStorage.getItem("authToken");
+    if (!token || !panel.user?.id) return;
+
+    let isMounted = true;
+    const loadMcubeWidget = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/calls/browser-phone/widget`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const result = await response.json().catch(() => ({}));
+        if (response.ok && isMounted) setMcubeWidgetUrl(result.widgetUrl || "");
+      } catch (error) {
+        if (isMounted) setMcubeWidgetUrl("");
+      }
+    };
+
+    loadMcubeWidget();
+    return () => {
+      isMounted = false;
+    };
+  }, [panel.user?.id]);
+
+  useEffect(() => {
+    const userId = getUserId(panel.user);
+    if (!userId) return undefined;
+
+    let isMounted = true;
+    const inboundEvents = [
+      "mcube:inbound:ringing",
+      "mcube:inbound:answered",
+      "mcube:inbound:connected",
+      "mcube:inbound:ended",
+      "mcube:inbound:completed",
+      "mcube:inbound:missed",
+      "mcube:inbound:recording-ready",
+      "mcube:inbound:failed",
+    ];
+
+    const handleInboundCall = (call) => {
+      if (!isMounted || !call) return;
+      setInboundCall((current) => {
+        const sameCall = current?.providerCallId === call.providerCallId || current?.callLogId === call.callLogId;
+        if (!sameCall) {
+          setInboundCallCount((count) => count + 1);
+          setCallLogCount((count) => count + 1);
+        }
+        return sameCall ? { ...current, ...call } : call;
+      });
+      setIsInboundNoticeDismissed(false);
+      if (call.lead?.id) {
+        setCallLogsByLead((current) => ({
+          ...current,
+          [call.lead.id]: {
+            ...(current[call.lead.id] || {}),
+            id: call.callLogId,
+            leadId: call.lead.id,
+            status: call.status,
+            startedAt: call.startedAt,
+            connectedAt: call.connectedAt,
+            endedAt: call.endedAt,
+            duration: call.duration,
+            notes: "MCube inbound",
+          },
+        }));
+      }
+    };
+
+    getReportsSocket()
+      .then((socket) => {
+        if (!isMounted) return;
+        socket.emit("register", String(userId));
+        inboundEvents.forEach((eventName) => socket.on(eventName, handleInboundCall));
+      })
+      .catch((socketError) => {
+        console.error("Unable to connect inbound call socket:", socketError);
+      });
+
+    return () => {
+      isMounted = false;
+      getReportsSocket()
+        .then((socket) => inboundEvents.forEach((eventName) => socket.off(eventName, handleInboundCall)))
+        .catch(() => {});
+    };
+  }, [panel.user]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("authToken");
+    const userId = getUserId(panel.user);
+    if (!token || !userId) return;
+
+    let isMounted = true;
+    const toInboundCardCall = (callLog) => {
+      if (!callLog) return null;
+      return {
+        id:callLog.id,
+        callLogId:callLog.id,
+        providerCallId:callLog.providerCallId || callLog.callId || "",
+        direction:"inbound",
+        status:callLog.status || "calling",
+        providerStatus:callLog.providerStatus || "",
+        callerNumber:callLog.callerNumber || callLog.customerNumber || callLog.leadPhone || callLog.phone || "",
+        customerNumber:callLog.customerNumber || callLog.leadPhone || callLog.phone || "",
+        virtualNumber:callLog.virtualNumber || "",
+        agentNumber:callLog.agentNumber || callLog.agentPhone || "",
+        agentExtension:callLog.agentExtension || "",
+        agentName:getName(callLog.agent),
+        campaignId:callLog.campaignName || "",
+        queueId:callLog.queueName || "",
+        startedAt:callLog.startedAt || callLog.createdAt,
+        answeredAt:callLog.answeredAt || callLog.connectedAt || null,
+        connectedAt:callLog.connectedAt || callLog.answeredAt || null,
+        endedAt:callLog.endedAt || null,
+        duration:callLog.duration || 0,
+        recordingUrl:callLog.recordingUrl ? "available" : "",
+        recordingStatus:callLog.recordingUrl ? "available" : "pending",
+        disconnectedBy:callLog.disconnectedBy || "",
+        disposition:callLog.disposition || "",
+        lead:callLog.lead ? {
+          ...callLog.lead,
+          source:callLog.lead.channelPartner || callLog.lead.tags || "",
+          project:callLog.lead.interestedProjects || callLog.lead.propertyType || "",
+        } : null,
+      };
+    };
+
+    const loadActiveInbound = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/calls/active-inbound`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result?.message || "Unable to restore inbound call");
+        if (isMounted && result.callLog) {
+          setInboundCall(toInboundCardCall(result.callLog));
+          setIsInboundNoticeDismissed(false);
+        }
+      } catch (loadError) {
+        console.error("Unable to restore active inbound call:", loadError);
+      }
+    };
+
+    loadActiveInbound();
+    return () => {
+      isMounted = false;
+    };
+  }, [panel.user]);
+
+  useEffect(() => {
     let isMounted = true;
 
-    const loadCallLogCount = async () => {
+    const loadCallCounts = async () => {
       const token = localStorage.getItem("authToken");
       if (!token) {
-        if (isMounted) setCallLogCount(0);
+        if (isMounted) {
+          setCallLogCount(0);
+          setInboundCallCount(0);
+        }
         return;
       }
 
       try {
-        const response = await fetch(`${API_URL}/api/calls/my?limit=1`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(result?.message || "Unable to load call log count");
+        const headers = { Authorization: `Bearer ${token}` };
+        const [allResponse, inboundResponse] = await Promise.all([
+          fetch(`${API_URL}/api/calls/my?limit=1`, { headers }),
+          fetch(`${API_URL}/api/calls/inbound?limit=1`, { headers }),
+        ]);
+        const result = await allResponse.json().catch(() => ({}));
+        const inboundResult = await inboundResponse.json().catch(() => ({}));
+        if (!allResponse.ok) throw new Error(result?.message || "Unable to load call log count");
+        if (!inboundResponse.ok) throw new Error(inboundResult?.message || "Unable to load inbound call count");
         if (isMounted) {
           setCallLogCount(Number(result?.totalItems) || (Array.isArray(result?.data) ? result.data.length : 0));
+          setInboundCallCount(Number(inboundResult?.totalItems) || (Array.isArray(inboundResult?.data) ? inboundResult.data.length : 0));
         }
       } catch (loadError) {
-        console.error("Unable to load call log count", loadError);
+        console.error("Unable to load call counts", loadError);
       }
     };
 
-    loadCallLogCount();
-    const interval = window.setInterval(loadCallLogCount, 15000);
+    loadCallCounts();
+    const interval = window.setInterval(loadCallCounts, 15000);
 
     return () => {
       isMounted = false;
       window.clearInterval(interval);
     };
   }, []);
+
+  useEffect(() => {
+    if (activeScreen !== "inboundCalls" && activeScreen !== "callLogs") return;
+    const token = localStorage.getItem("authToken");
+    if (!token) return;
+
+    let isMounted = true;
+    const refreshVisibleCallCounts = async () => {
+      try {
+        const headers = { Authorization: `Bearer ${token}` };
+        const [allResponse, inboundResponse] = await Promise.all([
+          fetch(`${API_URL}/api/calls/my?limit=1`, { headers }),
+          fetch(`${API_URL}/api/calls/inbound?limit=1`, { headers }),
+        ]);
+        const result = await allResponse.json().catch(() => ({}));
+        const inboundResult = await inboundResponse.json().catch(() => ({}));
+        if (isMounted && allResponse.ok) {
+          setCallLogCount(Number(result?.totalItems) || (Array.isArray(result?.data) ? result.data.length : 0));
+        }
+        if (isMounted && inboundResponse.ok) {
+          setInboundCallCount(Number(inboundResult?.totalItems) || (Array.isArray(inboundResult?.data) ? inboundResult.data.length : 0));
+        }
+      } catch (loadError) {
+        console.error("Unable to refresh visible call counts", loadError);
+      }
+    };
+
+    refreshVisibleCallCounts();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeScreen]);
 
   const updateAttendance = useCallback(async (action) => {
     const token = localStorage.getItem("authToken");
@@ -1452,19 +1646,17 @@ const SalesUserPanel = () => {
     });
   };
 
-  const startLeadCall = async (lead, agentPhone) => {
+  const startBrowserPhoneCall = async (lead) => {
     const leadId = getLeadId(lead);
-    const leadPhone = getActionPhone(lead);
-    const savedUser = JSON.parse(localStorage.getItem("authUser") || "null");
 
-    if (!leadId || !leadPhone) {
-      throw new Error("Lead phone number is missing.");
+    if (!leadId) {
+      throw new Error("Lead is missing.");
     }
 
     try {
       setCallingLeadId(leadId);
       const token = localStorage.getItem("authToken");
-      const response = await fetch(`${API_URL}/api/calls/start`, {
+      const response = await fetch(`${API_URL}/api/calls/mcube/click-to-call`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1472,24 +1664,37 @@ const SalesUserPanel = () => {
         },
         body: JSON.stringify({
           leadId: Number(leadId),
-          agentId: panel.user?.id || savedUser?.id,
-          leadPhone,
-          agentPhone,
         }),
       });
       const result = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(result?.message || "Unable to start call");
+        throw new Error(result?.message || "Unable to initiate call");
       }
 
+      const returnedCallLog = result.callLog || {
+        id:result.data?.callLogId,
+        leadId:Number(leadId),
+        providerCallId:result.data?.providerCallId,
+        callId:result.data?.providerCallId,
+        status:String(result.data?.status || "initiated").toLowerCase(),
+        leadPhone:getActionPhone(lead),
+        phone:getActionPhone(lead),
+        provider:"mcube-webphone",
+      };
       setCallLogsByLead((current) => ({
         ...current,
-        [leadId]: result.callLog,
+        [leadId]: {
+          ...returnedCallLog,
+          status: ["initiated", "queued"].includes(String(returnedCallLog?.status || "").toLowerCase())
+            ? "ringing"
+            : returnedCallLog?.status || "ringing",
+        },
       }));
-      return result.callLog;
+
+      return result;
     } catch (error) {
-      throw new Error(error.message || "Unable to start call");
+      throw new Error(error.message || "Unable to initiate call");
     } finally {
       setCallingLeadId(null);
     }
@@ -1811,6 +2016,9 @@ const SalesUserPanel = () => {
   }, [callQueue, focusedCallLeadId, panel.leads]);
   const currentCallLog = currentCallLead ? callLogsByLead[getLeadId(currentCallLead)] : null;
   const currentCallStatus = String(currentCallLog?.status || "").toLowerCase();
+  const currentCallStatusLabel = currentCallStatus === "ringing" || currentCallStatus === "calling"
+    ? "Call ringing"
+    : currentCallStatus.replace("-", " ");
   const isCurrentCallActive = currentCallLog?.id && !["completed", "failed", "no-answer", "busy", "canceled"].includes(currentCallStatus) && !currentCallLog.disposition;
   const currentCallDuration = currentCallStatus === "connected"
     ? Math.max(0, Math.floor((callNow - new Date(currentCallLog.connectedAt || currentCallLog.startedAt).getTime()) / 1000))
@@ -1818,14 +2026,19 @@ const SalesUserPanel = () => {
   const upNextLeads = callQueue.filter((lead) => getLeadId(lead) !== getLeadId(currentCallLead)).slice(0, 3);
   const todayDialCount = Object.keys(callDispositions).length;
   const qualifiedCount = Object.values(callDispositions).filter((item) => item?.type === "qualified").length;
-  const dispositionLeadCount = callDispositionBuckets.reduce((total, bucket) => total + bucket.leads.length, 0);
+
+  const startSelectedCallLead = (lead) => {
+    if (!lead) return;
+    setFocusedCallLeadId(getLeadId(lead));
+    setCallTarget(lead);
+  };
 
   const navItems = [
     { key: "home", label: "Home", icon: Home },
     { key: "leads", label: "My Leads", icon: Users, count: panel.stats.assignedLeads },
-    // { key: "calls", label: "Calls", icon: Phone, count: callQueue.length },
     { key: "conversation", label: "Conversation", icon: MessageSquare, count: panel.leads.length },
-    { key: "disposition", label: "Disposition", icon: ListFilter, count: dispositionLeadCount },
+    { key: "calls", label: "Outbound Calls", icon: Phone, count: callQueue.length },
+    { key: "inboundCalls", label: "Inbound Calls", icon: Phone, count: inboundCallCount },
     { key: "callLogs", label: "My Call Logs", icon: History, count: callLogCount },
     { key: "followups", label: "Follow-ups", icon: CalendarDays, count: panel.stats.followupsDue },
     { key: "scheduleVisit", label: "Schedule Visit", icon: CalendarDays, count: panel.stats.siteVisits },
@@ -1921,6 +2134,103 @@ const SalesUserPanel = () => {
     </div>
   );
 
+  const renderInboundCalls = () => {
+    const lead = inboundCall?.lead || null;
+    const rawInboundStatus = String(inboundCall?.status || "waiting").toLowerCase();
+    const status = rawInboundStatus === "calling" ? "ringing" : rawInboundStatus.replace(/-/g, " ");
+    const startedAt = inboundCall?.startedAt ? formatTaskDateTime(inboundCall.startedAt) : "-";
+    const isActiveInboundCall = ["initiated", "queued", "calling", "ringing", "connected", "in-progress"].includes(rawInboundStatus);
+    const liveSeconds = isActiveInboundCall && inboundCall?.startedAt
+      ? Math.max(0, Math.floor((callNow - new Date(inboundCall.startedAt).getTime()) / 1000))
+      : Number(inboundCall?.duration) || 0;
+
+    return (
+      <section className="sales-call-workspace sales-inbound-workspace">
+        <div className="sales-call-head">
+          <div>
+            <h2>Inbound Calls</h2>
+            <p>MCube virtual number to browser softphone workflow</p>
+          </div>
+          <button type="button" onClick={() => setInboundCall(null)} disabled={!inboundCall || isActiveInboundCall}>
+            Clear current
+          </button>
+        </div>
+
+        <div className="sales-inbound-grid">
+          <div className="sales-call-card sales-inbound-current">
+            <div className="sales-call-card-head">
+              <div className="sales-lead-name">
+                <span className="sales-avatar call-avatar">{initials(lead ? getLeadName(lead) : "Unknown Caller")}</span>
+                <span>
+                  <strong>{lead ? getLeadName(lead) : "Unknown Caller"}</strong>
+                  <small>{inboundCall?.callerNumber || "Waiting for MCube inbound event"}</small>
+                </span>
+              </div>
+              <div className="sales-call-badges">
+                <span>{status}</span>
+              </div>
+            </div>
+
+            <div className="sales-call-meta">
+              <div><span>Lead ID</span><strong>{lead?.id ? `#${lead.id}` : "-"}</strong></div>
+              <div><span>Project</span><strong>{lead?.project || "-"}</strong></div>
+              <div><span>Source</span><strong>{lead?.source || "-"}</strong></div>
+              <div><span>Agent</span><strong>{inboundCall?.agentName || "-"}</strong></div>
+              <div><span>Extension</span><strong>{inboundCall?.agentExtension || "-"}</strong></div>
+              <div><span>Virtual Number</span><strong>{inboundCall?.virtualNumber || "-"}</strong></div>
+              <div><span>Campaign / Queue</span><strong>{[inboundCall?.campaignId, inboundCall?.queueId].filter(Boolean).join(" / ") || "-"}</strong></div>
+              <div><span>Started</span><strong>{startedAt}</strong></div>
+              <div><span>Duration</span><strong>{formatDuration(liveSeconds)}</strong></div>
+              <div><span>Disconnected By</span><strong>{inboundCall?.disconnectedBy || "-"}</strong></div>
+              <div><span>Recording</span><strong>{inboundCall?.recordingUrl ? "Available" : isActiveInboundCall ? "Pending" : "Processing"}</strong></div>
+            </div>
+
+            <div className="sales-call-sla">
+              {rawInboundStatus === "waiting"
+                ? "Waiting for MCUBE inbound event"
+                : rawInboundStatus === "connected"
+                  ? "Answer and speak through MCUBE browser softphone"
+                  : "CRM notifications do not replace MCUBE Answer/Reject controls."}
+            </div>
+
+            <div className="sales-call-actions">
+              {lead?.id ? (
+                <button type="button" className="primary" onClick={() => navigate(`/user/sales/details?leadId=${lead.id}`)}>
+                  Open lead
+                </button>
+              ) : (
+                <button type="button" className="primary" onClick={() => navigate("/user/sales/add-lead")}>
+                  Create lead
+                </button>
+              )}
+              <button type="button" onClick={() => setIsInboundNoticeDismissed(true)}>
+                Minimize notice
+              </button>
+            </div>
+          </div>
+
+          <div className="sales-call-list-card sales-inbound-widget-card">
+            <div className="sales-card-head">
+              <div>
+                <h2>MCube softphone</h2>
+                <p>Keep extension registered and online</p>
+              </div>
+            </div>
+            {mcubeWidgetUrl ? (
+              <div className="start-call-widget sales-inbound-widget">
+                <iframe title="MCube inbound softphone" src={mcubeWidgetUrl} allow="microphone; autoplay" />
+              </div>
+            ) : (
+              <div className="sales-empty compact">MCube widget is unavailable. Check MCUBE widget environment configuration.</div>
+            )}
+          </div>
+        </div>
+
+        <CallLogsTable scope="sales" direction="inbound" />
+      </section>
+    );
+  };
+
   return (
     <div
       className={`sales-panel ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${
@@ -1930,6 +2240,14 @@ const SalesUserPanel = () => {
       }`}
       style={{ fontSize: "13px" }}
     >
+      {mcubeWidgetUrl && activeScreen !== "inboundCalls" && (
+        <iframe
+          className="sales-mcube-login-frame"
+          title="MCube softphone login"
+          src={mcubeWidgetUrl}
+          allow="microphone; autoplay"
+        />
+      )}
       <aside className="sales-sidebar">
         <div className="sales-brand">
           <img className="sales-logo" src="/assets/images/logo.png" alt="SWAMI" />
@@ -1948,8 +2266,8 @@ const SalesUserPanel = () => {
                 onClick={() => {
                   setActiveScreen(item.key);
                   if (item.key === "bookings") setActiveLeadStage("all");
-                  if (item.key === "calls") navigate("/user/sales/calls");
-                  if (item.key === "disposition") navigate("/user/sales/disposition");
+                  if (item.key === "calls") navigate("/user/sales/calls/outbound");
+                  if (item.key === "inboundCalls") navigate("/user/sales/calls/inbound");
                   if (item.key === "callLogs") navigate("/my-call-logs");
                   if (item.key === "followups") openFollowups(activeFollowupFilter);
                   if (item.key === "conversation") navigate("/user/sales/conversation");
@@ -2010,6 +2328,39 @@ const SalesUserPanel = () => {
         </header>
 
         <section className="sales-content">
+          {inboundCall && !isInboundNoticeDismissed && (
+            <div className="sales-inbound-notice">
+              <div>
+                <span>Incoming Call</span>
+                <strong>{inboundCall.lead ? getLeadName(inboundCall.lead) : "Unknown Caller"}</strong>
+                <small>
+                  {inboundCall.callerNumber || "-"}
+                  {inboundCall.agentExtension ? ` | Ext ${inboundCall.agentExtension}` : ""}
+                  {inboundCall.status ? ` | ${String(inboundCall.status).replace(/-/g, " ")}` : ""}
+                </small>
+              </div>
+              <div className="sales-inbound-notice-actions">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveScreen("inboundCalls");
+                    navigate("/user/sales/calls/inbound");
+                  }}
+                >
+                  Open inbound
+                </button>
+                {inboundCall.lead?.id && (
+                  <button type="button" onClick={() => navigate(`/user/sales/details?leadId=${inboundCall.lead.id}`)}>
+                    Open lead
+                  </button>
+                )}
+                <button type="button" className="ghost" onClick={() => setIsInboundNoticeDismissed(true)}>
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+
           {activeScreen === "home" && (
             <div className="sales-page-head">
               <div>
@@ -2140,6 +2491,8 @@ const SalesUserPanel = () => {
               onScheduleVisitLead={openSalesSiteVisitPage}
               onRefreshPanel={() => loadPanel(false)}
             />
+          ) : activeScreen === "inboundCalls" ? (
+            renderInboundCalls()
           ) : activeScreen === "callLogs" ? (
             <CallLogsTable scope="sales" />
           ) : activeScreen === "disposition" ? (
@@ -2203,7 +2556,7 @@ const SalesUserPanel = () => {
 
                   {currentCallLog && (
                     <div className="sales-live-call-status">
-                      <span className={`status ${currentCallStatus}`}>{currentCallStatus.replace("-", " ")}</span>
+                      <span className={`status ${currentCallStatus}`}>{currentCallStatusLabel}</span>
                       {currentCallStatus === "connected" && <strong>{formatDuration(currentCallDuration)}</strong>}
                       <small>Call #{currentCallLog.id}</small>
                     </div>
@@ -2217,8 +2570,8 @@ const SalesUserPanel = () => {
                       onClick={() => setCallTarget(currentCallLead)}
                     >
                       {String(callingLeadId) === String(getLeadId(currentCallLead)) || isCurrentCallActive
-                        ? currentCallStatus === "connected" ? `Connected · ${formatDuration(currentCallDuration)}` : "Calling..."
-                        : `Call ${getLeadPhone(currentCallLead)}`}
+                        ? currentCallStatus === "connected" ? `Connected - ${formatDuration(currentCallDuration)}` : "Call ringing"
+                        : "Call Lead"}
                     </button>
                     <button
                       type="button"
@@ -2259,7 +2612,7 @@ const SalesUserPanel = () => {
                     type="button"
                     className="sales-call-next-row"
                     key={getLeadId(lead)}
-                    onClick={() => setFocusedCallLeadId(getLeadId(lead))}
+                    onClick={() => startSelectedCallLead(lead)}
                   >
                     <span>
                       <strong>{getLeadName(lead)} - Score {lead.score || 65}</strong>
@@ -2642,7 +2995,13 @@ const SalesUserPanel = () => {
                 </div>
               </div>
               <div className="sales-action-list">
-                <button type="button" onClick={() => openCallPage()}><Phone size={15} /> Call next lead</button>
+                <button type="button" onClick={() => {
+                  if (currentCallLead) {
+                    startSelectedCallLead(currentCallLead);
+                    return;
+                  }
+                  openCallPage();
+                }}><Phone size={15} /> Call next lead</button>
                 <button type="button" onClick={() => openScheduleVisit()}><CalendarDays size={15} /> Schedule visit</button>
               </div>
 
@@ -2736,8 +3095,10 @@ const SalesUserPanel = () => {
         lead={callTarget}
         leadPhone={callTarget ? getActionPhone(callTarget) : ""}
         initialAgentPhone={panel.user?.phone || JSON.parse(localStorage.getItem("authUser") || "null")?.phone || ""}
+        widgetUrl={mcubeWidgetUrl}
+        agentName={getName(panel.user || JSON.parse(localStorage.getItem("authUser") || "null"))}
         onClose={() => setCallTarget(null)}
-        onStart={(agentPhone) => startLeadCall(callTarget, agentPhone)}
+        onBrowserStart={() => startBrowserPhoneCall(callTarget)}
         onDispose={(callLog) => {
           if (!callTarget || !callLog) return;
           const leadId = String(getLeadId(callTarget));

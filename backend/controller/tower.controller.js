@@ -200,7 +200,22 @@ exports.updateTower = async (req, res)=>{
 
         const record = await prisma.tower.findUnique({
             where:{id:parseInt(id)},
-            include:{ _count:{ select:{ floors:true, units:true } } },
+            include:{
+                floors:{ select:{ id:true } },
+                units:{
+                    select:{
+                        id:true,
+                        unitList:{
+                            select:{
+                                id:true,
+                                name:true,
+                                status:true,
+                            },
+                        },
+                    },
+                },
+                _count:{ select:{ floors:true, units:true } },
+            },
         })
         if(!record)
             return res.status(400).json("Tower not found")
@@ -258,18 +273,37 @@ exports.deleteTower = async (req, res)=>{
                 ],
             },
         })
-        const deleteBlockers = []
-        if(record._count.floors) deleteBlockers.push(`${record._count.floors} floor plan${record._count.floors === 1 ? "" : "s"}`)
-        if(record._count.units) deleteBlockers.push(`${record._count.units} unit group${record._count.units === 1 ? "" : "s"}`)
-        if(bookingCount) deleteBlockers.push(`${bookingCount} booking${bookingCount === 1 ? "" : "s"}`)
-
-        if(deleteBlockers.length){
+        if(bookingCount){
             return res.status(409).json({
-                message:`Cannot delete tower because ${deleteBlockers.join(", ")} exist under it. Delete or remap children first.`
+                message:`Cannot delete tower because ${bookingCount} booking${bookingCount === 1 ? "" : "s"} exist under it.`
             })
         }
 
-        const data = await prisma.tower.delete({where:{id:record.id}})
+        const unitModels = record.units.flatMap((unit) => unit.unitList || [])
+        const nonAvailableUnit = unitModels.find((unit) => unit.status && unit.status !== "Available")
+        if(nonAvailableUnit){
+            return res.status(409).json({
+                message:`Cannot delete tower because unit ${nonAvailableUnit.name || nonAvailableUnit.id} is ${nonAvailableUnit.status}. Only available generated units can be deleted with the tower.`
+            })
+        }
+
+        const unitIds = record.units.map((unit) => unit.id)
+        const unitModelIds = unitModels.map((unit) => unit.id)
+        const floorPlanIds = record.floors.map((floor) => floor.id)
+
+        await prisma.$transaction(async (tx) => {
+            if(unitModelIds.length){
+                await tx.unitModel.deleteMany({ where:{ id:{ in:unitModelIds } } })
+            }
+            if(unitIds.length){
+                await tx.unit.deleteMany({ where:{ id:{ in:unitIds } } })
+            }
+            await tx.floorPlanSlot.deleteMany({ where:{ towerId:record.id } })
+            if(floorPlanIds.length){
+                await tx.floorPlan.deleteMany({ where:{ id:{ in:floorPlanIds } } })
+            }
+            await tx.tower.delete({ where:{ id:record.id } })
+        })
 
         res.status(200).json("Tower deleted successfully")
         

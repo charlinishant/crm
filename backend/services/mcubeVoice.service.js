@@ -1,19 +1,26 @@
 const axios = require("axios")
 
 const MCUBE_OUTBOUND_URL = "https://api.mcube.com/Restmcube-api/outbound-calls"
-
-const requiredEnvironment = [
-  "MCUBE_TOKEN",
-]
+const MCUBE_WIDGET_AUTH_URL = "https://mcube.vmc.in/common-widget/Phone/auth"
 
 const cleanPhone = (value) => String(value || "").replace(/\D/g, "")
 
-const getMissingConfiguration = () =>
-  requiredEnvironment.filter((name) => !String(process.env[name] || "").trim())
+const getClickToCallToken = () =>
+  String(process.env.MCUBE_CLICK2CALL_TOKEN || process.env.MCUBE_TOKEN || "").trim()
+
+const getClickToCallUrl = () =>
+  String(process.env.MCUBE_CLICK2CALL_URL || process.env.MCUBE_OUTBOUND_API_URL || MCUBE_OUTBOUND_URL).trim()
+
+const getRequestTimeout = () => {
+  const configured = Number(process.env.MCUBE_REQUEST_TIMEOUT_MS)
+  return Number.isFinite(configured) && configured > 0 ? configured : 20000
+}
 
 const normalizeIndianPhone = (value) => {
   const digits = cleanPhone(value)
-  if (digits.length > 10 && digits.startsWith("91")) return digits.slice(-10)
+  const defaultCountryCode = String(process.env.DEFAULT_PHONE_COUNTRY_CODE || process.env.MCUBE_DEFAULT_COUNTRY_CODE || "91").replace(/\D/g, "")
+  if (digits.length > 10 && defaultCountryCode && digits.startsWith(defaultCountryCode)) return digits.slice(-10)
+  if (digits.length === 11 && digits.startsWith("0")) return digits.slice(1)
   return digits
 }
 
@@ -40,16 +47,43 @@ const isSuccessResponse = (data) => {
 const getProviderCallId = (data, callLogId) =>
   firstValue(data, ["called", "callid", "callId", "call_id", "calluuid", "uuid", "id"]) || `mcube-${callLogId}`
 
-const connectTwoNumbers = async ({ agentPhone, leadPhone, callLogId, leadId }) => {
-  const missing = getMissingConfiguration()
-  if (missing.length) {
-    const error = new Error(`MCube is not configured. Missing: ${missing.join(", ")}`)
+const getProviderErrorMessage = (message, agentPhone) => {
+  const text = String(message || "").trim()
+  const normalizedText = text.toLowerCase()
+
+  if (
+    normalizedText.includes("not opted") ||
+    normalizedText.includes("outbound calls") ||
+    normalizedText.includes("oncall")
+  ) {
+    return `MCube rejected sales number ${agentPhone}. Enable this mobile as an outbound executive in MCube, or wait until the executive is free, then try again.`
+  }
+
+  return text || "MCube did not accept the call request"
+}
+
+const connectTwoNumbers = async ({ agentExtension, agentPhone, leadPhone, callLogId, leadId }) => {
+  const token = getClickToCallToken()
+  if (!token) {
+    const error = new Error("MCube is not configured. Missing: MCUBE_CLICK2CALL_TOKEN")
     error.statusCode = 503
     throw error
   }
 
   const normalizedAgentPhone = normalizeIndianPhone(agentPhone)
   const normalizedLeadPhone = normalizeIndianPhone(leadPhone)
+  const normalizedAgentExtension = String(agentExtension || "").trim()
+
+  if (!/^\d{10}$/.test(normalizedLeadPhone)) {
+    const error = new Error("Customer phone number is unavailable.")
+    error.statusCode = 400
+    throw error
+  }
+  if (!normalizedAgentExtension && !/^\d{10}$/.test(normalizedAgentPhone)) {
+    const error = new Error("MCUBE calling number is not configured for this user.")
+    error.statusCode = 400
+    throw error
+  }
 
   if (isConfiguredVirtualNumber(normalizedAgentPhone)) {
     const error = new Error("Enter the sales user's mobile number as Agent phone. Do not enter the MCube inbound or outbound virtual number.")
@@ -58,24 +92,38 @@ const connectTwoNumbers = async ({ agentPhone, leadPhone, callLogId, leadId }) =
   }
 
   const payload = {
-    HTTP_AUTHORIZATION:String(process.env.MCUBE_TOKEN || "").trim(),
+    HTTP_AUTHORIZATION:token,
     exenumber:normalizedAgentPhone,
     custnumber:normalizedLeadPhone,
-    refurl:"1",
+    refurl:String(process.env.MCUBE_CALLBACK_URL || callLogId),
+    refid:String(callLogId),
+    crmCallLogId:String(callLogId),
+    crmLeadId:leadId ? String(leadId) : "",
+  }
+  if (normalizedAgentExtension) {
+    payload.ext = normalizedAgentExtension
+    payload.extension = normalizedAgentExtension
+    payload.exten = normalizedAgentExtension
+    payload.agentExt = normalizedAgentExtension
+    payload.sipExt = normalizedAgentExtension
+    payload.extInfo = normalizedAgentExtension
   }
 
   try {
     const response = await axios.post(
-      String(process.env.MCUBE_OUTBOUND_API_URL || MCUBE_OUTBOUND_URL).trim(),
+      getClickToCallUrl(),
       payload,
       {
         headers:{ "Content-Type":"application/json" },
-        timeout:20000,
+        timeout:getRequestTimeout(),
       }
     )
 
     if (!isSuccessResponse(response.data)) {
-      const message = firstValue(response.data, ["msg", "message", "error", "detail"]) || "MCube did not accept the call request"
+      const message = getProviderErrorMessage(
+        firstValue(response.data, ["msg", "message", "error", "detail"]),
+        normalizedAgentPhone
+      )
       const error = new Error(message)
       error.statusCode = 502
       throw error
@@ -90,10 +138,13 @@ const connectTwoNumbers = async ({ agentPhone, leadPhone, callLogId, leadId }) =
     }
   } catch (error) {
     if (error.statusCode) throw error
-    const wrapped = new Error(
+    const providerMessage =
       error.response?.data?.message ||
       error.response?.data?.msg ||
-      error.message ||
+      error.response?.data?.error ||
+      error.message
+    const wrapped = new Error(
+      getProviderErrorMessage(providerMessage, normalizedAgentPhone) ||
       "MCube call failed"
     )
     wrapped.statusCode = error.response?.status || 502
@@ -107,11 +158,113 @@ const getRecordingStream = (recordingUrl) =>
     timeout:30000,
   })
 
+const getBrowserPhoneConfig = () => {
+  const baseUrl = String(
+    process.env.MCUBE_WEBPHONE_URL ||
+    process.env.MCUBE_SOFTPHONE_URL ||
+    MCUBE_WIDGET_AUTH_URL
+  ).trim()
+  const token = String(
+    process.env.MCUBE_WEBPHONE_TOKEN ||
+    process.env.MCUBE_SOFTPHONE_TOKEN ||
+    process.env.MCUBE_TOKEN ||
+    ""
+  ).trim()
+  if (!token) return null
+
+  return {
+    baseUrl,
+    token,
+    tokenParam:String(process.env.MCUBE_WEBPHONE_TOKEN_PARAM || "auth_token").trim() || "auth_token",
+  }
+}
+
+const buildBrowserPhoneUrl = ({ agentEmail, agentExtension, agentPhone, leadPhone, callLogId, leadId, agentId, agentName, leadName }) => {
+  const config = getBrowserPhoneConfig()
+  if (!config) {
+    const error = new Error("MCube browser softphone is not configured. Add MCUBE_TOKEN or MCUBE_WEBPHONE_TOKEN to backend .env.")
+    error.statusCode = 503
+    throw error
+  }
+  if (!String(agentEmail || "").trim()) {
+    const error = new Error("Sales user email is required for MCube browser softphone login.")
+    error.statusCode = 400
+    throw error
+  }
+
+  const addWidgetParams = (url, includeAuth = false) => {
+    url.searchParams.set("username", String(agentEmail).trim())
+    if (includeAuth && config.token) url.searchParams.set(config.tokenParam, config.token)
+    if (normalizedLeadPhone) {
+      url.searchParams.set("callto", normalizedLeadPhone)
+      url.searchParams.set("callTo", normalizedLeadPhone)
+      url.searchParams.set("call_to", normalizedLeadPhone)
+      url.searchParams.set("custnumber", normalizedLeadPhone)
+      url.searchParams.set("custNumber", normalizedLeadPhone)
+      url.searchParams.set("customer_number", normalizedLeadPhone)
+      url.searchParams.set("customerNumber", normalizedLeadPhone)
+      url.searchParams.set("customerMobile", normalizedLeadPhone)
+      url.searchParams.set("customer_mobile", normalizedLeadPhone)
+      url.searchParams.set("leadPhone", normalizedLeadPhone)
+      url.searchParams.set("phone", normalizedLeadPhone)
+      url.searchParams.set("number", normalizedLeadPhone)
+      url.searchParams.set("dialNumber", normalizedLeadPhone)
+      url.searchParams.set("dial_number", normalizedLeadPhone)
+      url.searchParams.set("destination", normalizedLeadPhone)
+      url.searchParams.set("to", normalizedLeadPhone)
+      url.searchParams.set("mobileNumber", normalizedLeadPhone)
+      url.searchParams.set("outboundNumber", normalizedLeadPhone)
+      url.searchParams.set("outbound_number", normalizedLeadPhone)
+    }
+    url.searchParams.set("mode", "outbound")
+    url.searchParams.set("callMode", "outbound")
+    url.searchParams.set("direction", "outbound")
+    url.searchParams.set("campaign", "outbound")
+    url.searchParams.set("callType", "outbound")
+    url.searchParams.set("type", "outbound")
+    url.searchParams.set("widgetMode", "outbound")
+    url.searchParams.set("defaultCampaign", "outbound")
+    url.searchParams.set("autocall", "1")
+    url.searchParams.set("autoCall", "1")
+    url.searchParams.set("autoDial", "1")
+    url.searchParams.set("startCall", "1")
+    if (normalizedAgentPhone) {
+      url.searchParams.set("exenumber", normalizedAgentPhone)
+      url.searchParams.set("agentPhone", normalizedAgentPhone)
+      url.searchParams.set("mobile", normalizedAgentPhone)
+    }
+    if (normalizedAgentExtension) {
+      url.searchParams.set("ext", normalizedAgentExtension)
+      url.searchParams.set("extension", normalizedAgentExtension)
+      url.searchParams.set("exten", normalizedAgentExtension)
+      url.searchParams.set("agentExt", normalizedAgentExtension)
+      url.searchParams.set("sipExt", normalizedAgentExtension)
+      url.searchParams.set("extInfo", normalizedAgentExtension)
+    }
+    if (callLogId) url.searchParams.set("crmCallLogId", String(callLogId))
+    if (leadId) url.searchParams.set("crmLeadId", String(leadId))
+    if (agentId) url.searchParams.set("crmAgentId", String(agentId))
+    if (agentName) url.searchParams.set("agentName", String(agentName))
+    if (leadName) url.searchParams.set("leadName", String(leadName))
+    return url
+  }
+
+  const normalizedLeadPhone = normalizeIndianPhone(leadPhone)
+  const normalizedAgentPhone = normalizeIndianPhone(agentPhone)
+  const normalizedAgentExtension = String(agentExtension || "").trim()
+  const authUrl = addWidgetParams(new URL(config.baseUrl), true).toString()
+  return { authUrl, phoneUrl:authUrl }
+}
+
 module.exports = {
+  buildBrowserPhoneUrl,
   cleanPhone,
   connectTwoNumbers,
   firstValue,
   getRecordingStream,
+  getBrowserPhoneConfig,
+  getClickToCallToken,
+  getClickToCallUrl,
   isConfiguredVirtualNumber,
   normalizeIndianPhone,
 }

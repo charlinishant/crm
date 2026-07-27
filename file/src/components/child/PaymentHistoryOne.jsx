@@ -48,7 +48,7 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
     const fetchUsers = async () => {
       try {
         setIsLoadingUsers(true);
-        const response = await fetch(`${API_URL}/users`);
+        const response = await fetch(`${API_URL}/users?limit=1000`);
         if (!response.ok) throw new Error("Unable to load users");
         const result = await response.json();
         const userList = Array.isArray(result) ? result : result?.data || result?.users || [];

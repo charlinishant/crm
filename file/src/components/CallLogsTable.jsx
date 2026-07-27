@@ -24,9 +24,12 @@ const getStatusLabel = (value) => {
 };
 
 const getDirectionLabel = (log) => {
+  const direction = String(log.direction || "").toLowerCase();
+  if (direction === "inbound") return "Inbound Calling";
+  if (direction === "outbound") return "Outbound Calling";
   const notes = String(log.notes || "").toLowerCase();
-  if (notes.includes("inbound")) return "Inbound";
-  if (notes.includes("outbound")) return "Outbound";
+  if (notes.includes("inbound")) return "Inbound Calling";
+  if (notes.includes("outbound")) return "Outbound Calling";
   return "-";
 };
 
@@ -71,7 +74,7 @@ const ProtectedRecording = ({ callId, status }) => {
   }
   return (
     <div className="call-log-recording-box">
-      <span className="call-log-recording-saved"><Headphones size={13} /> Saved</span>
+      <span className="call-log-recording-saved"><Headphones size={13} /> Saved in CRM</span>
       <button type="button" className="call-log-load-recording" onClick={loadRecording} disabled={loading}>
         {loading ? "Loading..." : "Play"}
       </button>
@@ -94,20 +97,30 @@ const RecordingCell = ({ log }) => {
   );
 };
 
-const CallLogsTable = ({ scope = "admin" }) => {
+const CallLogsTable = ({ scope = "admin", direction = "" }) => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState("");
+  const [searchFilter, setSearchFilter] = useState("");
+  const [recordingFilter, setRecordingFilter] = useState("");
+  const [directionFilter, setDirectionFilter] = useState("");
   const recordsPerPage = 10;
+  const effectiveDirection = direction || directionFilter;
 
   const loadLogs = useCallback(async (showLoading = true) => {
     if (showLoading) setLoading(true);
     if (showLoading) setError("");
     try {
       const token = localStorage.getItem("authToken");
-      const endpoint = scope === "admin" ? "/api/calls/admin/all" : "/api/calls/my";
-      const response = await fetch(`${API_URL}${endpoint}?limit=100`, {
+      const endpoint = effectiveDirection === "inbound" && scope !== "admin" ? "/api/calls/inbound" : scope === "admin" ? "/api/calls/admin/all" : "/api/calls/my";
+      const params = new URLSearchParams({ limit:"100" });
+      if (effectiveDirection) params.set("direction", effectiveDirection);
+      if (statusFilter) params.set("status", statusFilter);
+      if (searchFilter) params.set("callerNumber", searchFilter);
+      if (recordingFilter) params.set("recordingAvailable", recordingFilter);
+      const response = await fetch(`${API_URL}${endpoint}?${params.toString()}`, {
         headers:token ? { Authorization:`Bearer ${token}` } : {},
       });
       const result = await response.json().catch(() => ({}));
@@ -121,7 +134,7 @@ const CallLogsTable = ({ scope = "admin" }) => {
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, [scope]);
+  }, [effectiveDirection, recordingFilter, scope, searchFilter, statusFilter]);
 
   useEffect(() => {
     loadLogs();
@@ -137,6 +150,8 @@ const CallLogsTable = ({ scope = "admin" }) => {
     () => logs.slice(pageStart, pageStart + recordsPerPage),
     [logs, pageStart]
   );
+  const inboundCount = logs.filter((log) => getDirectionLabel(log).startsWith("Inbound")).length;
+  const outboundCount = logs.filter((log) => getDirectionLabel(log).startsWith("Outbound")).length;
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));
@@ -157,7 +172,7 @@ const CallLogsTable = ({ scope = "admin" }) => {
         .call-log-summary-card span { color:#64748b; display:block; font-size:11px; font-weight:700; text-transform:uppercase; }
         .call-log-summary-card strong { color:#0f172a; display:block; font-size:22px; line-height:1; margin-top:8px; }
         .call-log-table-wrap { border-top:1px solid #e2e8f0; overflow-x:auto; padding:24px; }
-        .call-log-table { border-collapse:collapse; color:#334155; font-size:14px; min-width:1460px; width:100%; }
+        .call-log-table { border-collapse:collapse; color:#334155; font-size:14px; min-width:1540px; width:100%; }
         .call-log-table th { background:#487fff; border:0; color:#ffffff; font-size:14px; font-weight:700; letter-spacing:0; padding:18px 20px; text-align:left; text-transform:none; white-space:nowrap; }
         .call-log-table th:first-child { border-radius:8px 0 0 8px; }
         .call-log-table th:last-child { border-radius:0 8px 8px 0; }
@@ -175,6 +190,8 @@ const CallLogsTable = ({ scope = "admin" }) => {
         .call-log-recording-box.muted span { color:#94a3b8; font-size:14px; font-weight:700; }
         .call-log-recording-saved { align-items:center; color:#166534; display:inline-flex; font-size:11px; font-weight:800; gap:5px; text-transform:uppercase; }
         .call-log-recording-error { color:#dc2626; display:block; font-size:10px; margin-top:4px; max-width:180px; }
+        .call-log-filters { border-top:1px solid #e2e8f0; display:grid; gap:12px; grid-template-columns:2fr 1fr 1fr 1fr; padding:16px 20px; }
+        .call-log-filters input, .call-log-filters select { background:#fff; border:1px solid #cbd5e1; border-radius:8px; color:#0f172a; font-size:13px; min-height:38px; padding:0 12px; }
         .call-log-empty { color:#64748b; padding:42px 20px; text-align:center; }
         .call-log-error { color:#dc2626; padding:18px 20px; }
         .call-log-notes { max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -185,7 +202,7 @@ const CallLogsTable = ({ scope = "admin" }) => {
         .call-log-page-actions button { background:#ffffff; border:1px solid #cbd5e1; border-radius:8px; color:#0f172a; cursor:pointer; font-size:14px; font-weight:700; min-height:38px; padding:0 16px; }
         .call-log-page-actions button:hover:not(:disabled) { background:#eff6ff; border-color:#93c5fd; color:#2563eb; }
         .call-log-page-actions button:disabled { color:#94a3b8; cursor:not-allowed; opacity:.7; }
-        @media (max-width:900px) { .call-log-head { align-items:flex-start; flex-direction:column; } .call-log-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+        @media (max-width:900px) { .call-log-head { align-items:flex-start; flex-direction:column; } .call-log-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } .call-log-filters { grid-template-columns:1fr; } }
         @media (max-width:560px) { .call-log-summary { grid-template-columns:1fr; } .call-log-pagination { align-items:flex-start; flex-direction:column; } }
       `}</style>
       <div className="call-log-head">
@@ -195,27 +212,52 @@ const CallLogsTable = ({ scope = "admin" }) => {
       {!loading && !error && logs.length > 0 && (
         <div className="call-log-summary">
           <div className="call-log-summary-card"><span>Total calls</span><strong>{logs.length}</strong></div>
+          <div className="call-log-summary-card"><span>Inbound calls</span><strong>{inboundCount}</strong></div>
+          <div className="call-log-summary-card"><span>Outbound calls</span><strong>{outboundCount}</strong></div>
           <div className="call-log-summary-card"><span>Recordings saved</span><strong>{logs.filter((log) => log.recordingUrl).length}</strong></div>
-          <div className="call-log-summary-card"><span>Connected</span><strong>{logs.filter((log) => String(log.status).toLowerCase() === "connected" || String(log.status).toLowerCase() === "completed").length}</strong></div>
-          <div className="call-log-summary-card"><span>Failed / missed</span><strong>{logs.filter((log) => ["failed", "no-answer", "busy", "canceled"].includes(String(log.status).toLowerCase())).length}</strong></div>
         </div>
       )}
+      <div className="call-log-filters">
+        <input value={searchFilter} onChange={(event) => setSearchFilter(event.target.value)} placeholder={effectiveDirection === "inbound" ? "Caller number" : "Phone number"} />
+        {!direction && (
+          <select value={directionFilter} onChange={(event) => setDirectionFilter(event.target.value)}>
+            <option value="">All directions</option>
+            <option value="inbound">Inbound Calling</option>
+            <option value="outbound">Outbound Calling</option>
+          </select>
+        )}
+        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+          <option value="">All statuses</option>
+          <option value="calling">Ringing</option>
+          <option value="connected">Connected</option>
+          <option value="completed">Completed</option>
+          <option value="missed">Missed</option>
+          <option value="busy">Busy</option>
+          <option value="failed">Failed</option>
+        </select>
+        <select value={recordingFilter} onChange={(event) => setRecordingFilter(event.target.value)}>
+          <option value="">All recordings</option>
+          <option value="true">Recording available</option>
+          <option value="false">Recording pending</option>
+        </select>
+      </div>
       {error ? <div className="call-log-error">{error}</div> : loading ? <div className="call-log-empty">Loading call logs...</div> : logs.length === 0 ? <div className="call-log-empty">No call logs found.</div> : (
         <>
         <div className="call-log-table-wrap"><table className="call-log-table"><thead><tr>
-          <th>Lead</th><th>Provider</th><th>Direction</th><th>Lead Number</th><th>Lead Status</th><th>Agent</th><th>Call Status</th><th>Duration</th><th>Disposition</th><th>After Call Recording</th><th>Notes</th><th>Created</th>
+          <th>Lead</th><th>Provider</th><th>Direction</th><th>Disposition</th><th>{effectiveDirection === "inbound" ? "Caller Number" : "Lead Number"}</th><th>Agent</th><th>Extension</th><th>Campaign / Queue</th><th>Call Status</th><th>Duration</th><th>Disconnected By</th><th>After Call Recording</th><th>Created</th>
         </tr></thead><tbody>{paginatedLogs.map((log) => <tr key={log.id}>
-          <td><span className="call-log-name">{getName(log.lead, `Lead #${log.leadId}`)}</span><span className="call-log-sub">#{log.leadId}</span></td>
+          <td><span className="call-log-name">{log.lead ? getName(log.lead, `Lead #${log.leadId}`) : "Unknown Caller"}</span><span className="call-log-sub">{log.leadId ? `#${log.leadId}` : "No linked lead"}</span></td>
           <td>{String(log.provider || "-").toUpperCase()}</td>
           <td>{getDirectionLabel(log)}</td>
-          <td>{log.leadPhone || log.phone || "-"}</td>
-          <td>{String(log.lead?.status || "-").replace(/_/g, " ")}</td>
+          <td>{log.disposition || "-"}</td>
+          <td>{log.callerNumber || log.customerNumber || log.leadPhone || log.phone || "-"}</td>
           <td><span className="call-log-name">{getName(log.agent, "-")}</span></td>
+          <td>{log.agentExtension || "-"}</td>
+          <td>{[log.campaignName, log.queueName].filter(Boolean).join(" / ") || "-"}</td>
           <td><span className="call-log-status">{getStatusLabel(log.status)}</span></td>
           <td>{formatDuration(log.duration)}</td>
-          <td>{log.disposition || "-"}</td>
+          <td>{log.disconnectedBy || "-"}</td>
           <td><RecordingCell log={log} /></td>
-          <td><div className="call-log-notes" title={log.notes || ""}>{log.notes || "-"}</div></td>
           <td>{formatDate(log.createdAt)}</td>
         </tr>)}</tbody></table></div>
         <div className="call-log-pagination">

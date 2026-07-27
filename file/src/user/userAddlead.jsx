@@ -453,6 +453,17 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                   {formErrors.phones && <p className="lead-error">{formErrors.phones}</p>}
                 </div>
 
+                {/* GENDER */}
+                <div className="lead-group lead-full">
+                  <label>GENDER</label>
+                  <select name="gender" value={formData.gender || ""} onChange={handleChange}>
+                    <option value="">Select Gender</option>
+                    <option value="MALE">Male</option>
+                    <option value="FEMALE">Female</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </div>
+
                 {/* TIMEZONE */}
                 <div className="lead-group lead-full">
                   <label>Time zone</label>
@@ -610,10 +621,10 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                   </select>
                 </div>
 
-                {/* CARPET AREA */}
+                {/* CAPITAL */}
                 <div className="lead-group lead-full">
-                  <label>CARPET AREA</label>
-                  <input type="text" name="carpetArea" placeholder="Carpet Area" onChange={handleChange} />
+                  <label>CAPITAL</label>
+                  <input type="text" name="carpetArea" placeholder="Capital" onChange={handleChange} />
                 </div>
 
                 {/* SEATS */}
@@ -640,12 +651,6 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                   </select>
                 </div>
 
-                {/* GENDER */}
-                <div className="lead-group lead-full">
-                  <label>GENDER</label>
-                  <input type="text" name="gender" placeholder="Gender" onChange={handleChange} />
-                </div>
-
                 {/* OCCUPATIONS */}
                 <div className="lead-group lead-full">
                   <label>OCCUPATIONS</label>
@@ -663,7 +668,7 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
             {/* ===================== PERSONAL DETAILS ===================== */}
             {activeTab === "personal" && (
               <>
-                {/* AGE, BIRTHDAY, GENDER */}
+                {/* AGE & BIRTHDAY */}
                 <div className="personal-top-grid">
                   <div className="lead-group">
                     <label>AGE</label>
@@ -678,16 +683,6 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                   <div className="lead-group">
                     <label>BIRTHDAY</label>
                     <input type="date" name="birthday" onChange={handleChange} />
-                  </div>
-
-                  <div className="lead-group">
-                    <label>GENDER</label>
-                    <select name="gender" onChange={handleChange}>
-                      <option value="">Select Gender</option>
-                      <option>Male</option>
-                      <option>Female</option>
-                      <option>Other</option>
-                    </select>
                   </div>
                 </div>
 
@@ -720,68 +715,6 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                   <input type="text" name="industry" placeholder="Industry" onChange={handleChange} />
                 </div>
 
-                {/* ADDRESSES */}
-                <AddSection
-                  label="ADDRESSES"
-                  renderFields={(item, index, onChange, onRemove) => (
-                    <>
-                      <div className="address-type-wrapper">
-                        <div className="address-type-inner">
-                          <label>ADDRESS TYPE</label>
-                          <select
-                            value={item.type}
-                            onChange={(e) => onChange(index, "type", e.target.value)}
-                          >
-                            <option>Home Address</option>
-                            <option>Work Address</option>
-                            <option>Other</option>
-                          </select>
-                        </div>
-                        <button
-                          type="button"
-                          className="section-delete-btn"
-                          onClick={() => onRemove(index)}
-                        >
-                          Delete
-                        </button>
-                      </div>
-
-                      <div className="section-field">
-                        <label>ADDRESS & STREET</label>
-                        <div className="section-grid-2">
-                          <input placeholder="Address" value={item.address} onChange={(e) => onChange(index, "address", e.target.value)} />
-                          <input placeholder="Street/Suburb/Town" value={item.street} onChange={(e) => onChange(index, "street", e.target.value)} />
-                        </div>
-                      </div>
-
-                      <div className="section-field">
-                        <label>COUNTRY & STATE</label>
-                        <div className="section-grid-2">
-                          <select value={item.country} onChange={(e) => onChange(index, "country", e.target.value)}>
-                            <option value="">Select country</option>
-                            <option>India</option>
-                            <option>USA</option>
-                            <option>UK</option>
-                          </select>
-                          <select value={item.state} onChange={(e) => onChange(index, "state", e.target.value)}>
-                            <option value="">Select country First</option>
-                            <option>Maharashtra</option>
-                            <option>Delhi</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="section-field">
-                        <label>CITY & ZIP</label>
-                        <div className="section-grid-2">
-                          <input placeholder="City" value={item.city} onChange={(e) => onChange(index, "city", e.target.value)} />
-                          <input placeholder="Zip" value={item.zip} onChange={(e) => onChange(index, "zip", e.target.value)} />
-                        </div>
-                      </div>
-                    </>
-                  )}
-                  defaultItem={{ type: "Home Address", address: "", street: "", country: "", state: "", city: "", zip: "" }}
-                />
 
                 {/* URL */}
                 <AddSection

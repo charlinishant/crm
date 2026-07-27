@@ -21,9 +21,11 @@ const loadSocketIoScript = () => {
 export const getReportsSocket = async () => {
   if (!socket) {
     const io = await loadSocketIoScript();
+    const token = localStorage.getItem("authToken") || "";
     socket = io(API_URL, {
       transports: ["websocket", "polling"],
       autoConnect: true,
+      auth: token ? { token } : undefined,
     });
   }
 

@@ -315,6 +315,8 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/user/sales' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/leads' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/calls' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/calls/outbound' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/calls/inbound' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/disposition' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/my-call-logs' element={<MyCallLogs />} />
         <Route exact path='/my-call-logs' element={<MyCallLogs />} />
@@ -485,6 +487,8 @@ function App() {
         <Route exact path='/user/sales' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/leads' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/calls' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/calls/outbound' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/calls/inbound' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/disposition' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/conversation' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/whatsapp' element={<SalesUserPanel />} />

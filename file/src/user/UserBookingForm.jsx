@@ -152,6 +152,17 @@ const getUserName = (user) =>
   user?.email ||
   `User #${user?.id}`;
 
+const sourceOptions = ["Direct", "Bulk Marketing", "Referral", "Channel Partner"];
+
+const normalizeBookingSource = (value) => {
+  const source = String(value || "").trim();
+  if (!source) return "Direct";
+  if (source.toLowerCase() === "channel_partner") return "Channel Partner";
+  return source;
+};
+
+const isChannelPartnerSource = (value) => normalizeBookingSource(value) === "Channel Partner";
+
 const normalizeProjectTypeValue = (value) =>
   String(value || "")
     .toLowerCase()
@@ -1242,16 +1253,17 @@ const UserBookingForm = ({
             <label className="ubf-confirm-field">
               <span>Source</span>
               <select
-                value={bookingForm.source || "Direct"}
+                value={normalizeBookingSource(bookingForm.source)}
                 onChange={(event) => {
-                  updateField("source", event.target.value);
-                  if (event.target.value !== "Channel Partner") {
+                  const source = normalizeBookingSource(event.target.value);
+                  updateField("source", source);
+                  if (!isChannelPartnerSource(source)) {
                     updateField("channelPartnerId", "");
                     updateField("channelPartner", "");
                   }
                 }}
               >
-                {["Direct", "Bulk Marketing", "Referral", "Channel Partner", bookingForm.source].filter(Boolean).map((option, index) => (
+                {[...sourceOptions, !sourceOptions.includes(normalizeBookingSource(bookingForm.source)) ? normalizeBookingSource(bookingForm.source) : ""].filter(Boolean).map((option, index) => (
                   <option key={`${option}-${index}`} value={option}>{option}</option>
                 ))}
               </select>
@@ -1265,7 +1277,7 @@ const UserBookingForm = ({
                   updateField("channelPartnerId", event.target.value);
                   updateField("channelPartner", selected ? getUserName(selected) : "");
                 }}
-                disabled={bookingForm.source !== "Channel Partner"}
+                disabled={!isChannelPartnerSource(bookingForm.source)}
               >
                 <option value="">Select Channel Partner</option>
                 {channelPartners.map((user) => (

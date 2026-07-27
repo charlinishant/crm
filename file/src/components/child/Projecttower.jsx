@@ -245,16 +245,29 @@ export default function Projecttower() {
   };
 
   const handleDelete = async (id) => {
-    const tower = towers.find((item) => item.id === id);
-    const updatedTowers = towers.filter((tower) => tower.id !== id);
-    setTowers(updatedTowers);
-
-    if (tower?.source !== "backend") return;
+    const previousTowers = towers;
+    setError('');
+    setActiveMenuId(null);
+    setTowers((current) => current.filter((tower) => tower.id !== id));
 
     try {
-      await fetch(`${API_URL}/tower/${id}`, { method: "DELETE" });
+      const response = await fetch(`${API_URL}/tower/${id}`, { method: "DELETE" });
+      let result = null;
+      try {
+        result = await response.json();
+      } catch {
+        result = null;
+      }
+
+      if (!response.ok) {
+        throw new Error(result?.message || result || "Unable to delete tower");
+      }
+
+      await fetchTowers();
     } catch (error) {
       console.error("Unable to delete tower:", error);
+      setTowers(previousTowers);
+      setError(error.message || "Unable to delete tower");
     }
   };
 
