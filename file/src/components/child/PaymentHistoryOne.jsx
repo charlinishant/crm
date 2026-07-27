@@ -544,7 +544,10 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
         method: "DELETE",
       });
 
-      if (!response.ok) throw new Error("Unable to permanently delete lead");
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(result?.message || result || "Unable to permanently delete lead");
+      }
       setLeadData((current) =>
         current.filter((item) => (item.id || item._id || item.lead_id) !== leadId)
       );
@@ -1026,6 +1029,45 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
           padding: 0 12px;
         }
 
+        .lead-table-toolbar {
+          align-items: center;
+          display: flex;
+          justify-content: flex-end;
+          margin-bottom: 16px;
+        }
+
+        .crm-table-search {
+          align-items: center;
+          background: #ffffff;
+          border: 1px solid #cbd5e1;
+          border-radius: 8px;
+          color: #64748b;
+          display: flex;
+          gap: 10px;
+          max-width: 520px;
+          min-height: 46px;
+          padding: 0 14px;
+          width: 100%;
+        }
+
+        .crm-table-search:focus-within {
+          border-color: #3b82f6;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+        }
+
+        .crm-table-search input {
+          border: 0;
+          color: #0f172a;
+          flex: 1;
+          font-size: 15px;
+          outline: 0;
+          width: 100%;
+        }
+
+        .crm-table-search input::placeholder {
+          color: #94a3b8;
+        }
+
         .table-section table tbody tr:nth-child(even) {
           background: #f8fafc;
         }
@@ -1062,6 +1104,14 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
           .lead-pagination-btn {
             flex: 1;
           }
+
+          .lead-table-toolbar {
+            justify-content: stretch;
+          }
+
+          .crm-table-search {
+            max-width: none;
+          }
         }
       `}</style>
 
@@ -1077,6 +1127,19 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
             aria-label="Search leads"
           />
          </label> */}
+
+        <div className="lead-table-toolbar">
+          <label className="crm-table-search">
+            <span aria-hidden="true">Search</span>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search lead ID, name, source, stage, requirement, team..."
+              aria-label="Search all leads"
+            />
+          </label>
+        </div>
 
         <table border="1" cellPadding="0" cellSpacing="0">
           <thead>

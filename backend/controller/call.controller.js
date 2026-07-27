@@ -447,7 +447,15 @@ const buildWhereFromQuery = (query) => {
     const direction = String(query.direction).trim().toLowerCase()
     if (direction === "inbound" || direction === "outbound") where.direction = direction
   }
-  if (query.callerNumber) where.callerNumber = { contains:cleanPhone(query.callerNumber).slice(-10) || String(query.callerNumber) }
+  if (query.callerNumber) {
+    const phoneQuery = cleanPhone(query.callerNumber).slice(-10) || String(query.callerNumber)
+    where.OR = [
+      ...(where.OR || []),
+      { customerNumber:{ contains:phoneQuery } },
+      { leadPhone:{ contains:phoneQuery } },
+      { phone:{ contains:phoneQuery } },
+    ]
+  }
   if (query.agentExtension) where.agentExtension = { contains:String(query.agentExtension).replace(/\D/g, "") }
   if (query.campaign) where.OR = [...(where.OR || []), { campaignName:{ contains:String(query.campaign) } }, { queueName:{ contains:String(query.campaign) } }]
   if (query.recordingAvailable === "true") where.recordingUrl = { not:null }
@@ -770,31 +778,6 @@ exports.clickToCallLead = async (req, res) => {
       return res.status(400).json({ message:"MCUBE calling number is not configured for this user." })
     }
 
-    const activeCall = await prisma.callLog.findFirst({
-      where:{
-        leadId,
-        agentId,
-        provider:{ in:["mcube", "mcube-webphone"] },
-        status:{ in:activeCallStatuses },
-        createdAt:{ gte:new Date(Date.now() - 10 * 60 * 1000) },
-      },
-      include:callInclude,
-      orderBy:{ createdAt:"desc" },
-    })
-
-    if (activeCall) {
-      return res.status(409).json({
-        message:"A call is already being initiated for this lead.",
-        success:false,
-        data:{
-          callLogId:activeCall.id,
-          providerCallId:activeCall.providerCallId || activeCall.callId || "",
-          leadId,
-          status:String(activeCall.status || "initiated").toUpperCase(),
-        },
-      })
-    }
-
     callLog = await prisma.callLog.create({
       data:{
         leadId,
@@ -958,31 +941,57 @@ exports.disposeCall = async (req, res) => {
         include:{ lead:true, agent:true },
       })
     } else {
-      if (!leadId) return res.status(400).json({ message:"leadId or callLogId is required" })
       const authUserId = toNumberOrNull(req.authUser?.id)
       const requestedAgentId = toNumberOrNull(req.body.agentId)
       const agentId = isAdminUser(req) ? requestedAgentId || authUserId : authUserId
       if (!agentId) return res.status(400).json({ message:"agentId is required" })
 
       const [lead, agent] = await Promise.all([
-        prisma.lead.findUnique({ where:{ id:leadId } }),
+        leadId ? prisma.lead.findUnique({ where:{ id:leadId } }) : Promise.resolve(null),
         prisma.user.findUnique({ where:{ id:agentId } }),
       ])
-      if (!lead) return res.status(404).json({ message:"Lead not found" })
+      if (leadId && !lead) return res.status(404).json({ message:"Lead not found" })
       if (!agent) return res.status(404).json({ message:"Agent not found" })
-      if (!isAdminUser(req) && lead.teamId && lead.teamId !== agentId) {
+      if (!isAdminUser(req) && lead?.teamId && lead.teamId !== agentId) {
         return res.status(403).json({ message:"You can dispose only your assigned leads" })
+      }
+
+      const isInboundCall = String(req.body.direction || "").toLowerCase() === "inbound"
+      const callPhone = cleanPhone(req.body.leadPhone || req.body.phone || req.body.callerNumber || req.body.customerNumber) || (lead ? getLeadPhone(lead) : "") || "-"
+      let callLead = lead
+      let callLeadId = leadId || null
+
+      if (!callLeadId && isInboundCall) {
+        const matchedLead = callPhone === "-" ? null : await findLeadByPhone(callPhone)
+        callLead = matchedLead || await prisma.lead.create({
+          data:{
+            firstName:"Unknown",
+            lastName:"Caller",
+            phones:callPhone === "-" ? [] : [{ type:"Mobile", value:callPhone, primary:true }],
+            status:"New",
+            teamId:agentId,
+            seats:0,
+            tenure:0,
+            industry:"",
+            is_delete:false,
+            is_active:true,
+          },
+        })
+        callLeadId = callLead.id
       }
 
       existingCall = await prisma.callLog.create({
         data:{
-          leadId,
+          leadId:callLeadId,
           agentId,
-          phone:cleanPhone(req.body.leadPhone || req.body.phone) || getLeadPhone(lead) || "-",
-          leadPhone:cleanPhone(req.body.leadPhone || req.body.phone) || getLeadPhone(lead) || null,
+          phone:callPhone,
+          leadPhone:callPhone === "-" ? null : callPhone,
+          customerNumber:callPhone === "-" ? null : callPhone,
           agentPhone:cleanPhone(req.body.agentPhone || agent.phone || agent.secondaryPhone) || null,
+          direction:isInboundCall ? "inbound" : "outbound",
           provider:"manual",
           status:callStatus,
+          notes:isInboundCall ? "Manual inbound disposition" : null,
           startedAt:new Date(),
           endedAt:terminalCallStatuses.has(callStatus) ? new Date() : null,
         },
@@ -993,6 +1002,38 @@ exports.disposeCall = async (req, res) => {
     if (!existingCall) return res.status(404).json({ message:"Call log not found" })
     if (!isAdminUser(req) && existingCall.agentId !== toNumberOrNull(req.authUser?.id)) {
       return res.status(403).json({ message:"You can dispose only your own calls" })
+    }
+
+    if (String(existingCall.direction || req.body.direction || "").toLowerCase() === "inbound" && !existingCall.leadId) {
+      const inboundPhone = cleanPhone(
+        existingCall.callerNumber ||
+        existingCall.customerNumber ||
+        existingCall.leadPhone ||
+        existingCall.phone ||
+        req.body.callerNumber ||
+        req.body.customerNumber ||
+        req.body.phone ||
+        req.body.leadPhone
+      )
+      const matchedLead = inboundPhone ? await findLeadByPhone(inboundPhone) : null
+      const canLinkMatchedLead = matchedLead && (
+        isAdminUser(req) ||
+        !matchedLead.teamId ||
+        matchedLead.teamId === toNumberOrNull(req.authUser?.id)
+      )
+      if (canLinkMatchedLead) {
+        existingCall = await prisma.callLog.update({
+          where:{ id:existingCall.id },
+          data:{
+            leadId:matchedLead.id,
+            customerNumber:inboundPhone || existingCall.customerNumber,
+            leadPhone:inboundPhone || existingCall.leadPhone,
+            phone:inboundPhone || existingCall.phone,
+            direction:"inbound",
+          },
+          include:{ lead:true, agent:true },
+        })
+      }
     }
 
     let callbackFollowUp = null
@@ -1014,28 +1055,30 @@ exports.disposeCall = async (req, res) => {
         include:callInclude,
       })
 
-      const leadUpdate = {
-        status:nextLeadStatus,
-        interestedProjects:interestedProject || existingCall.lead.interestedProjects,
-        budget:budget || existingCall.lead.budget,
+      if (existingCall.leadId && existingCall.lead) {
+        const leadUpdate = {
+          status:nextLeadStatus,
+          interestedProjects:interestedProject || existingCall.lead.interestedProjects,
+          budget:budget || existingCall.lead.budget,
+        }
+        if (nextLeadStatus === "Unqualified") {
+          leadUpdate.unqualifiedReason = disposition
+          leadUpdate.unqualifiedNote = notes
+        }
+        if (disposition === "Site Visit Scheduled") {
+          leadUpdate.conductSiteVisit = interestedProject || existingCall.lead.interestedProjects
+          leadUpdate.conductSiteDate = visitDateTime
+          leadUpdate.siteVisitProject = interestedProject || existingCall.lead.interestedProjects
+          leadUpdate.siteVisitStatus = "Scheduled"
+          leadUpdate.visitStatus = "Scheduled"
+          leadUpdate.conductSiteStatus = "Scheduled"
+          leadUpdate.siteVisitDate = visitDateTime
+          leadUpdate.siteVisitNote = notes
+        }
+        await tx.lead.update({ where:{ id:existingCall.leadId }, data:leadUpdate })
       }
-      if (nextLeadStatus === "Unqualified") {
-        leadUpdate.unqualifiedReason = disposition
-        leadUpdate.unqualifiedNote = notes
-      }
-      if (disposition === "Site Visit Scheduled") {
-        leadUpdate.conductSiteVisit = interestedProject || existingCall.lead.interestedProjects
-        leadUpdate.conductSiteDate = visitDateTime
-        leadUpdate.siteVisitProject = interestedProject || existingCall.lead.interestedProjects
-        leadUpdate.siteVisitStatus = "Scheduled"
-        leadUpdate.visitStatus = "Scheduled"
-        leadUpdate.conductSiteStatus = "Scheduled"
-        leadUpdate.siteVisitDate = visitDateTime
-        leadUpdate.siteVisitNote = notes
-      }
-      await tx.lead.update({ where:{ id:existingCall.leadId }, data:leadUpdate })
 
-      if (["Callback Later", "Follow-up Required"].includes(disposition)) {
+      if (existingCall.leadId && ["Callback Later", "Follow-up Required"].includes(disposition)) {
         callbackFollowUp = await tx.followUp.create({
           data:{
             leadId:existingCall.leadId,
@@ -1051,7 +1094,7 @@ exports.disposeCall = async (req, res) => {
         })
       }
 
-      if (disposition === "Site Visit Scheduled") {
+      if (existingCall.leadId && existingCall.lead && disposition === "Site Visit Scheduled") {
         await tx.scheduleVisit.upsert({
           where:{ leadId:existingCall.leadId },
           create:{
@@ -1074,16 +1117,18 @@ exports.disposeCall = async (req, res) => {
         })
       }
 
-      await tx.leadActivity.create({
-        data:{
-          leadId:existingCall.leadId,
-          userId:existingCall.agentId,
-          type:"CALL_DISPOSITION",
-          message:`Call disposed as ${disposition}${notes ? `: ${notes}` : ""}`,
-          oldStatus:String(existingCall.lead.status || "New"),
-          newStatus:nextLeadStatus,
-        },
-      })
+      if (existingCall.leadId && existingCall.lead) {
+        await tx.leadActivity.create({
+          data:{
+            leadId:existingCall.leadId,
+            userId:existingCall.agentId,
+            type:"CALL_DISPOSITION",
+            message:`Call disposed as ${disposition}${notes ? `: ${notes}` : ""}`,
+            oldStatus:String(existingCall.lead.status || "New"),
+            newStatus:nextLeadStatus,
+          },
+        })
+      }
       return callLog
     })
     if (callbackFollowUp) handleCallbackFollowUpSaved(callbackFollowUp)
@@ -1589,7 +1634,6 @@ const getWebhookCommonUpdate = (existingCall, data, notes) => {
     ...(data.customerPhone ? {
       phone:data.customerPhone || "-",
       leadPhone:data.customerPhone || null,
-      callerNumber:data.direction === "inbound" ? data.customerPhone : existingCall?.callerNumber || null,
       customerNumber:data.customerPhone,
     } : {}),
     ...(data.agentPhone ? {
@@ -1716,7 +1760,6 @@ const saveMcubeWebhookCall = async (req, fallbackDirection) => {
       leadPhone:data.customerPhone,
       agentPhone:data.agentPhone || null,
       direction:data.direction,
-      callerNumber:data.direction === "inbound" ? data.customerPhone || null : null,
       customerNumber:data.customerPhone || null,
       agentNumber:data.agentPhone || null,
       agentExtension:data.agentExtension || null,

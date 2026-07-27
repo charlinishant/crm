@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 import {
   Bell,
   CalendarDays,
@@ -15,6 +16,7 @@ import {
   Search,
   Smartphone,
   Users,
+  X,
 } from "lucide-react";
 import "./SalesUserPanel.css";
 import UserAddlead from "./userAddlead";
@@ -25,7 +27,6 @@ import SalesFollowups from "../pages/sales/SalesFollowups";
 import UserBookingForm from "./UserBookingForm";
 import BookingPreviewModal from "./BookingPreviewModal";
 import CallDispositionModal from "./CallDispositionModal";
-import StartCallModal from "./StartCallModal";
 import CallLogsTable from "../components/CallLogsTable";
 import { getReportsSocket } from "../services/socketClient";
 
@@ -201,6 +202,27 @@ const getLeadPhone = (lead) => {
 
 const getActionPhone = (lead) => getLeadPhone(lead).replace(/[^\d+]/g, "");
 
+const normalizePhoneDigits = (value) => String(value || "").replace(/\D/g, "");
+
+const phoneMatches = (first, second) => {
+  const firstDigits = normalizePhoneDigits(first);
+  const secondDigits = normalizePhoneDigits(second);
+  if (!firstDigits || !secondDigits) return false;
+  if (firstDigits === secondDigits) return true;
+  return firstDigits.length >= 10 &&
+    secondDigits.length >= 10 &&
+    firstDigits.slice(-10) === secondDigits.slice(-10);
+};
+
+const findLeadByPhoneInList = (leads, phone) =>
+  (leads || []).find((lead) => phoneMatches(getLeadPhone(lead), phone)) || null;
+
+const enrichLeadForInbound = (lead) => lead ? {
+  ...lead,
+  source:lead.source || lead.channelPartner || lead.tags || "",
+  project:lead.project || lead.interestedProjects || lead.propertyType || "",
+} : null;
+
 const getLeadId = (lead) => lead?.id || lead?._id || lead?.lead_id || "";
 
 const getLatestDisposition = (lead) =>
@@ -251,9 +273,14 @@ const getLeadStage = (lead) => {
   return "new";
 };
 
+const isConfirmedBooking = (booking) => {
+  const stage = normalizeStageText(booking?.stage || booking?.status);
+  return stage === "booked" || stage === "confirmed";
+};
+
 const isBookedLead = (lead) =>
   getLeadStage(lead) === "booked" ||
-  (lead?.bookings || []).some((booking) => normalizeStageText(booking?.stage) === "booked");
+  (lead?.bookings || []).some(isConfirmedBooking);
 
 const taskStatusOptions = ["Open", "Completed", "Archived"];
 
@@ -430,6 +457,23 @@ const getDispositionDetail = (callLog) => {
   return callLog.notes || callLog.interestedProject || formatTaskDateTime(callLog.createdAt);
 };
 
+const leadHasScheduledSiteVisit = (lead) =>
+  Boolean(
+    lead?.conductSiteVisit ||
+    lead?.conductSiteDate ||
+    lead?.siteVisitProject ||
+    lead?.siteVisitDate ||
+    lead?.siteVisitStatus ||
+    lead?.visitStatus ||
+    lead?.conductSiteStatus
+  );
+
+const getLeadSiteVisitDetail = (lead) => {
+  const visitDate = lead?.conductSiteDate || lead?.siteVisitDate || lead?.siteVisitConductedOn;
+  if (visitDate) return `Visit: ${formatTaskDateTime(visitDate)}`;
+  return lead?.siteVisitProject || lead?.conductSiteVisit || lead?.siteVisitStatus || "Visit scheduled";
+};
+
 const getDateKey = (value) => {
   if (!value) return "";
   const date = new Date(value);
@@ -502,8 +546,8 @@ const SalesUserPanel = () => {
   const [callLogsByLead, setCallLogsByLead] = useState({});
   const [callLogCount, setCallLogCount] = useState(0);
   const [inboundCallCount, setInboundCallCount] = useState(0);
-  const [callingLeadId, setCallingLeadId] = useState(null);
   const [callTarget, setCallTarget] = useState(null);
+  const [startingCallLeadId, setStartingCallLeadId] = useState(null);
   const [activeCallDispositionTab, setActiveCallDispositionTab] = useState("Callback Later");
   const [disposedLeadIds, setDisposedLeadIds] = useState([]);
   const [dispositionTarget, setDispositionTarget] = useState(null);
@@ -644,27 +688,32 @@ const SalesUserPanel = () => {
 
     const handleInboundCall = (call) => {
       if (!isMounted || !call) return;
+      const matchedLead = call.lead || findLeadByPhoneInList(
+        panel.leads,
+        call.callerNumber || call.customerNumber || call.leadPhone || call.phone
+      );
+      const enrichedCall = matchedLead ? { ...call, lead:enrichLeadForInbound(matchedLead) } : call;
       setInboundCall((current) => {
-        const sameCall = current?.providerCallId === call.providerCallId || current?.callLogId === call.callLogId;
+        const sameCall = current?.providerCallId === enrichedCall.providerCallId || current?.callLogId === enrichedCall.callLogId;
         if (!sameCall) {
           setInboundCallCount((count) => count + 1);
           setCallLogCount((count) => count + 1);
         }
-        return sameCall ? { ...current, ...call } : call;
+        return sameCall ? { ...current, ...enrichedCall } : enrichedCall;
       });
       setIsInboundNoticeDismissed(false);
-      if (call.lead?.id) {
+      if (enrichedCall.lead?.id) {
         setCallLogsByLead((current) => ({
           ...current,
-          [call.lead.id]: {
-            ...(current[call.lead.id] || {}),
-            id: call.callLogId,
-            leadId: call.lead.id,
-            status: call.status,
-            startedAt: call.startedAt,
-            connectedAt: call.connectedAt,
-            endedAt: call.endedAt,
-            duration: call.duration,
+          [enrichedCall.lead.id]: {
+            ...(current[enrichedCall.lead.id] || {}),
+            id: enrichedCall.callLogId,
+            leadId: enrichedCall.lead.id,
+            status: enrichedCall.status,
+            startedAt: enrichedCall.startedAt,
+            connectedAt: enrichedCall.connectedAt,
+            endedAt: enrichedCall.endedAt,
+            duration: enrichedCall.duration,
             notes: "MCube inbound",
           },
         }));
@@ -687,7 +736,7 @@ const SalesUserPanel = () => {
         .then((socket) => inboundEvents.forEach((eventName) => socket.off(eventName, handleInboundCall)))
         .catch(() => {});
     };
-  }, [panel.user]);
+  }, [panel.leads, panel.user]);
 
   useEffect(() => {
     const token = localStorage.getItem("authToken");
@@ -697,6 +746,10 @@ const SalesUserPanel = () => {
     let isMounted = true;
     const toInboundCardCall = (callLog) => {
       if (!callLog) return null;
+      const matchedLead = callLog.lead || findLeadByPhoneInList(
+        panel.leads,
+        callLog.callerNumber || callLog.customerNumber || callLog.leadPhone || callLog.phone
+      );
       return {
         id:callLog.id,
         callLogId:callLog.id,
@@ -721,11 +774,7 @@ const SalesUserPanel = () => {
         recordingStatus:callLog.recordingUrl ? "available" : "pending",
         disconnectedBy:callLog.disconnectedBy || "",
         disposition:callLog.disposition || "",
-        lead:callLog.lead ? {
-          ...callLog.lead,
-          source:callLog.lead.channelPartner || callLog.lead.tags || "",
-          project:callLog.lead.interestedProjects || callLog.lead.propertyType || "",
-        } : null,
+        lead:enrichLeadForInbound(matchedLead),
       };
     };
 
@@ -1202,8 +1251,50 @@ const SalesUserPanel = () => {
     siteVisitForm.executiveId,
   ]);
 
+  const bookingLeadRows = useMemo(() => {
+    const leadsById = new Map((panel.leads || []).map((lead) => [String(getLeadId(lead)), lead]));
+    const rows = [];
+    const seenLeadIds = new Set();
+
+    (panel.bookings || [])
+      .filter(isConfirmedBooking)
+      .forEach((booking) => {
+        const leadId = booking.leadId || booking.lead?.id || "";
+        const leadKey = String(leadId || `booking-${booking.id}`);
+        if (seenLeadIds.has(leadKey)) return;
+        seenLeadIds.add(leadKey);
+
+        const matchedLead = leadsById.get(String(leadId)) || booking.lead || null;
+        const bookingLead = matchedLead
+          ? {
+              ...matchedLead,
+              status:"Booked",
+              bookings:[
+                booking,
+                ...((matchedLead.bookings || []).filter((item) => String(item?.id) !== String(booking.id))),
+              ],
+            }
+          : {
+              id:leadId || `booking-${booking.id}`,
+              firstName:booking.customerName || "Booked",
+              lastName:booking.customerName ? "" : "Lead",
+              phones:booking.phone ? [{ type:"Mobile", value:booking.phone }] : [],
+              status:"Booked",
+              interestedProjects:booking.projectDetails || booking.project?.name || "",
+              propertyType:booking.unit || booking.unitNumber || "",
+              configration:booking.unit || booking.unitNumber || "",
+              budget:booking.basePrice || booking.agreementValue || booking.totalConsideration || "",
+              bookings:[booking],
+            };
+
+        rows.push(bookingLead);
+      });
+
+    return rows;
+  }, [panel.bookings, panel.leads]);
+
   const filteredLeads = useMemo(() => {
-    let leads = panel.leads;
+    let leads = activeScreen === "bookings" ? bookingLeadRows : panel.leads;
     const activeDisposition = getDispositionFilterValue(activeLeadStage);
 
     if (activeScreen === "followups") {
@@ -1214,12 +1305,15 @@ const SalesUserPanel = () => {
     }
 
     if (activeScreen === "bookings") {
-      leads = leads.filter((lead) => normalizeStageText(lead.status) === "booked");
+      leads = leads.filter(isBookedLead);
     }
 
     if (activeScreen !== "bookings") {
       if (activeDisposition) {
-        leads = leads.filter((lead) => getLeadDisposition(lead)?.disposition === activeDisposition);
+        leads = leads.filter((lead) => {
+          if (activeDisposition === "Site Visit Scheduled" && leadHasScheduledSiteVisit(lead)) return true;
+          return getLeadDisposition(lead)?.disposition === activeDisposition;
+        });
       } else if (activeLeadStage === "visited") {
         leads = leads.filter((lead) => lead.conductSiteVisit || lead.conductSiteDate);
       } else if (activeLeadStage !== "all") {
@@ -1228,7 +1322,7 @@ const SalesUserPanel = () => {
     }
 
     return leads;
-  }, [activeLeadStage, activeScreen, callbackLeadIds, getLeadDisposition, panel.leads]);
+  }, [activeLeadStage, activeScreen, bookingLeadRows, callbackLeadIds, getLeadDisposition, panel.leads]);
 
   const isPaginatedLeadTable = activeScreen === "home" || activeScreen === "leads" || activeScreen === "bookings";
   const isSearchableLeadTable = activeScreen === "leads" || activeScreen === "bookings";
@@ -1540,37 +1634,37 @@ const SalesUserPanel = () => {
     }));
 
     try {
+      const token = localStorage.getItem("authToken");
+      const authHeaders = {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+
       const response = await fetch(`${API_URL}/leads/${leadId}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: authHeaders,
         body: JSON.stringify(updates),
       });
 
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.message || "Unable to schedule visit");
 
-      try {
-        await fetch(`${API_URL}/schedule-visits`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            leadId: Number(leadId),
-            project: siteVisitForm.project,
-            status: siteVisitForm.status,
-            meetingPoint: siteVisitForm.location,
-            salesExecutive: selectedExecutiveName,
-            note: siteVisitForm.note,
-            initiatedBy: panel.user?.firstName || panel.user?.username || panel.user?.email || "",
-            scheduledOn: new Date(siteVisitForm.visitDateTime).toISOString(),
-          }),
-        });
-      } catch (error) {
-        console.error("Unable to save schedule visit table row:", error);
-      }
+      const visitResponse = await fetch(`${API_URL}/schedule-visits`, {
+        method: "POST",
+        headers: authHeaders,
+        body: JSON.stringify({
+          leadId: Number(leadId),
+          project: siteVisitForm.project,
+          status: siteVisitForm.status,
+          meetingPoint: siteVisitForm.location,
+          salesExecutive: selectedExecutiveName,
+          note: siteVisitForm.note,
+          initiatedBy: panel.user?.firstName || panel.user?.username || panel.user?.email || "",
+          scheduledOn: new Date(siteVisitForm.visitDateTime).toISOString(),
+        }),
+      });
+      const savedVisit = await visitResponse.json().catch(() => ({}));
+      if (!visitResponse.ok) throw new Error(savedVisit?.message || "Unable to save site visit schedule");
 
       try {
         const cachedUpdates = JSON.parse(localStorage.getItem("siteVisitStatusUpdates") || "{}");
@@ -1587,11 +1681,21 @@ const SalesUserPanel = () => {
       setPanel((current) => ({
         ...current,
         leads: current.leads.map((lead) =>
-          String(getLeadId(lead)) === String(leadId) ? { ...lead, ...result, ...updates } : lead
+          String(getLeadId(lead)) === String(leadId)
+            ? {
+                ...lead,
+                ...result,
+                ...updates,
+                scheduleVisits:[
+                  savedVisit,
+                  ...((lead.scheduleVisits || []).filter((visit) => String(visit?.id) !== String(savedVisit?.id))),
+                ],
+              }
+            : lead
         ),
       }));
-      setSiteVisitLead((current) => (current ? { ...current, ...result, ...updates } : current));
-      setSiteVisitMessage("Site visit saved. Admin conversation/site visit status can read this lead status.");
+      setSiteVisitLead((current) => (current ? { ...current, ...result, ...updates, scheduleVisits:[savedVisit] } : current));
+      setSiteVisitMessage("Site visit scheduled and saved in this lead.");
     } catch (err) {
       setPanel((current) => ({ ...current, stats: previousStats, leads: previousLeads }));
       setSiteVisitMessage(err.message || "Unable to schedule visit.");
@@ -1644,60 +1748,6 @@ const SalesUserPanel = () => {
     navigate(`/user/sales/site-visit${params.toString() ? `?${params.toString()}` : ""}`, {
       state: lead ? { lead, status } : undefined,
     });
-  };
-
-  const startBrowserPhoneCall = async (lead) => {
-    const leadId = getLeadId(lead);
-
-    if (!leadId) {
-      throw new Error("Lead is missing.");
-    }
-
-    try {
-      setCallingLeadId(leadId);
-      const token = localStorage.getItem("authToken");
-      const response = await fetch(`${API_URL}/api/calls/mcube/click-to-call`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          leadId: Number(leadId),
-        }),
-      });
-      const result = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(result?.message || "Unable to initiate call");
-      }
-
-      const returnedCallLog = result.callLog || {
-        id:result.data?.callLogId,
-        leadId:Number(leadId),
-        providerCallId:result.data?.providerCallId,
-        callId:result.data?.providerCallId,
-        status:String(result.data?.status || "initiated").toLowerCase(),
-        leadPhone:getActionPhone(lead),
-        phone:getActionPhone(lead),
-        provider:"mcube-webphone",
-      };
-      setCallLogsByLead((current) => ({
-        ...current,
-        [leadId]: {
-          ...returnedCallLog,
-          status: ["initiated", "queued"].includes(String(returnedCallLog?.status || "").toLowerCase())
-            ? "ringing"
-            : returnedCallLog?.status || "ringing",
-        },
-      }));
-
-      return result;
-    } catch (error) {
-      throw new Error(error.message || "Unable to initiate call");
-    } finally {
-      setCallingLeadId(null);
-    }
   };
 
   const openCallDisposition = (lead, type = "") => {
@@ -2019,7 +2069,6 @@ const SalesUserPanel = () => {
   const currentCallStatusLabel = currentCallStatus === "ringing" || currentCallStatus === "calling"
     ? "Call ringing"
     : currentCallStatus.replace("-", " ");
-  const isCurrentCallActive = currentCallLog?.id && !["completed", "failed", "no-answer", "busy", "canceled"].includes(currentCallStatus) && !currentCallLog.disposition;
   const currentCallDuration = currentCallStatus === "connected"
     ? Math.max(0, Math.floor((callNow - new Date(currentCallLog.connectedAt || currentCallLog.startedAt).getTime()) / 1000))
     : Number(currentCallLog?.duration) || 0;
@@ -2027,22 +2076,74 @@ const SalesUserPanel = () => {
   const todayDialCount = Object.keys(callDispositions).length;
   const qualifiedCount = Object.values(callDispositions).filter((item) => item?.type === "qualified").length;
 
-  const startSelectedCallLead = (lead) => {
+  const startSelectedCallLead = async (lead) => {
     if (!lead) return;
+    if (!mcubeWidgetUrl) {
+      toast.error("MCUBE widget is unavailable.");
+      return;
+    }
+    const leadId = getLeadId(lead);
+    if (!leadId) {
+      toast.error("Lead is missing.");
+      return;
+    }
+    const leadPhone = getActionPhone(lead);
+    const digits = String(leadPhone || "").replace(/\D/g, "");
+    if (digits.length < 10) {
+      toast.error("Lead number is unavailable.");
+      return;
+    }
+
     setFocusedCallLeadId(getLeadId(lead));
     setCallTarget(lead);
+
+    if (String(startingCallLeadId) === String(leadId)) return;
+
+    try {
+      setStartingCallLeadId(leadId);
+      const token = localStorage.getItem("authToken");
+      const response = await fetch(`${API_URL}/api/calls/browser-phone/start`, {
+        method:"POST",
+        headers:{
+          "Content-Type":"application/json",
+          ...(token ? { Authorization:`Bearer ${token}` } : {}),
+        },
+        body:JSON.stringify({
+          leadId:Number(leadId),
+          leadPhone,     
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || "Unable to start call");
+      if (result?.callLog) {
+        setCallLogsByLead((current) => ({ ...current, [leadId]:result.callLog }));
+      }
+      if (result?.widgetUrl) {
+        setMcubeWidgetUrl(result.widgetUrl);
+      }
+    } catch (callError) {
+      toast.error(callError.message || "Unable to start call");
+    } finally {
+      setStartingCallLeadId(null);
+    }
+  };
+
+  const sidebarLeadCounts = {
+    assignedLeads: panel.leads.length,
+    scheduledSiteVisits: panel.leads.filter(leadHasScheduledSiteVisit).length,
+    bookings: bookingLeadRows.length,
   };
 
   const navItems = [
     { key: "home", label: "Home", icon: Home },
-    { key: "leads", label: "My Leads", icon: Users, count: panel.stats.assignedLeads },
+    { key: "leads", label: "My Leads", icon: Users, count: sidebarLeadCounts.assignedLeads },
     { key: "conversation", label: "Conversation", icon: MessageSquare, count: panel.leads.length },
     { key: "calls", label: "Outbound Calls", icon: Phone, count: callQueue.length },
     { key: "inboundCalls", label: "Inbound Calls", icon: Phone, count: inboundCallCount },
     { key: "callLogs", label: "My Call Logs", icon: History, count: callLogCount },
     { key: "followups", label: "Follow-ups", icon: CalendarDays, count: panel.stats.followupsDue },
-    { key: "scheduleVisit", label: "Schedule Visit", icon: CalendarDays, count: panel.stats.siteVisits },
-    { key: "bookings", label: "Bookings", icon: LayoutDashboard, count: panel.stats.bookings },
+    { key: "scheduleVisit", label: "Schedule Visit", icon: CalendarDays, count: sidebarLeadCounts.scheduledSiteVisits },
+    { key: "bookings", label: "Bookings", icon: LayoutDashboard, count: sidebarLeadCounts.bookings },
    
     { key: "whatsapp", label: "WhatsApp", icon: Smartphone, count: panel.leads.filter((lead) => getActionPhone(lead).replace(/\D/g, "")).length },
     { key: "tasks", label: "Tasks", icon: LayoutDashboard, count: panel.stats.tasks },
@@ -2136,6 +2237,7 @@ const SalesUserPanel = () => {
 
   const renderInboundCalls = () => {
     const lead = inboundCall?.lead || null;
+    const inboundCallerNumber = inboundCall?.callerNumber || inboundCall?.customerNumber || inboundCall?.leadPhone || inboundCall?.phone || "";
     const rawInboundStatus = String(inboundCall?.status || "waiting").toLowerCase();
     const status = rawInboundStatus === "calling" ? "ringing" : rawInboundStatus.replace(/-/g, " ");
     const startedAt = inboundCall?.startedAt ? formatTaskDateTime(inboundCall.startedAt) : "-";
@@ -2163,7 +2265,7 @@ const SalesUserPanel = () => {
                 <span className="sales-avatar call-avatar">{initials(lead ? getLeadName(lead) : "Unknown Caller")}</span>
                 <span>
                   <strong>{lead ? getLeadName(lead) : "Unknown Caller"}</strong>
-                  <small>{inboundCall?.callerNumber || "Waiting for MCube inbound event"}</small>
+                  <small>{inboundCallerNumber || "Waiting for MCube inbound event"}</small>
                 </span>
               </div>
               <div className="sales-call-badges">
@@ -2195,16 +2297,47 @@ const SalesUserPanel = () => {
 
             <div className="sales-call-actions">
               {lead?.id ? (
-                <button type="button" className="primary" onClick={() => navigate(`/user/sales/details?leadId=${lead.id}`)}>
-                  Open lead
+                <button type="button" className="primary" onClick={() => navigate(`/user/sales/details?leadId=${lead.id}`, { state:{ lead } })}>
+                  Fetch details
                 </button>
               ) : (
-                <button type="button" className="primary" onClick={() => navigate("/user/sales/add-lead")}>
-                  Create lead
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => {
+                    setActiveScreen("addLead");
+                    navigate("/user/sales/add-lead", {
+                      state:{
+                        inboundCallerNumber,
+                        inboundCall,
+                      },
+                    });
+                  }}
+                >
+                  Create new lead
                 </button>
               )}
-              <button type="button" onClick={() => setIsInboundNoticeDismissed(true)}>
-                Minimize notice
+              <button
+                type="button"
+                onClick={() => {
+                  setDispositionInitialValue("");
+                  setDispositionTarget({
+                    lead,
+                    callLog:{
+                      id:inboundCall?.callLogId || inboundCall?.id || null,
+                      leadId:lead?.id || inboundCall?.leadId || null,
+                      leadPhone:inboundCall?.customerNumber || inboundCall?.callerNumber || "",
+                      phone:inboundCall?.customerNumber || inboundCall?.callerNumber || "",
+                      callerNumber:inboundCall?.callerNumber || "",
+                      customerNumber:inboundCall?.customerNumber || inboundCall?.callerNumber || "",
+                      direction:"inbound",
+                      provider:inboundCall?.provider || "mcube",
+                      status:rawInboundStatus === "waiting" ? "completed" : inboundCall?.status || "completed",
+                    },
+                  });
+                }}
+              >
+                Dispose call
               </button>
             </div>
           </div>
@@ -2212,7 +2345,7 @@ const SalesUserPanel = () => {
           <div className="sales-call-list-card sales-inbound-widget-card">
             <div className="sales-card-head">
               <div>
-                <h2>MCube softphone</h2>
+                <h2>Inbound Call</h2>
                 <p>Keep extension registered and online</p>
               </div>
             </div>
@@ -2241,12 +2374,49 @@ const SalesUserPanel = () => {
       style={{ fontSize: "13px" }}
     >
       {mcubeWidgetUrl && activeScreen !== "inboundCalls" && (
-        <iframe
-          className="sales-mcube-login-frame"
-          title="MCube softphone login"
-          src={mcubeWidgetUrl}
-          allow="microphone; autoplay"
-        />
+        <div className={`sales-mcube-widget-shell ${callTarget ? "is-open" : "is-hidden"}`}>
+          {callTarget && (
+            <button type="button" className="start-call-widget-close" onClick={() => setCallTarget(null)} aria-label="Close widget">
+              <X size={17} />
+            </button>
+          )}
+          <iframe
+            className="sales-mcube-login-frame"
+            title="MCube softphone"
+            src={mcubeWidgetUrl}
+            allow="microphone; autoplay"
+          />
+          {callTarget && (
+            <div className="sales-mcube-widget-number">
+              <span>Lead number</span>
+              <strong>{getActionPhone(callTarget)}</strong>
+              <button
+                type="button"
+                onClick={() => navigator.clipboard?.writeText(getActionPhone(callTarget))}
+              >
+                Copy
+              </button>
+            </div>
+          )}
+          {callTarget && (
+            <div className="sales-mcube-widget-actions">
+              <button type="button" className="secondary" onClick={() => setCallTarget(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="primary"
+                onClick={() => {
+                  const lead = callTarget;
+                  setCallTarget(null);
+                  openCallDisposition(lead);
+                }}
+              >
+                Dispose call
+              </button>
+            </div>
+          )}
+        </div>
       )}
       <aside className="sales-sidebar">
         <div className="sales-brand">
@@ -2349,9 +2519,24 @@ const SalesUserPanel = () => {
                 >
                   Open inbound
                 </button>
-                {inboundCall.lead?.id && (
-                  <button type="button" onClick={() => navigate(`/user/sales/details?leadId=${inboundCall.lead.id}`)}>
-                    Open lead
+                {inboundCall.lead?.id ? (
+                  <button type="button" onClick={() => navigate(`/user/sales/details?leadId=${inboundCall.lead.id}`, { state:{ lead:inboundCall.lead } })}>
+                    Fetch details
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveScreen("addLead");
+                      navigate("/user/sales/add-lead", {
+                        state:{
+                          inboundCallerNumber:inboundCall.callerNumber || inboundCall.customerNumber || "",
+                          inboundCall,
+                        },
+                      });
+                    }}
+                  >
+                    Create new lead
                   </button>
                 )}
                 <button type="button" className="ghost" onClick={() => setIsInboundNoticeDismissed(true)}>
@@ -2508,21 +2693,6 @@ const SalesUserPanel = () => {
                 </div>
               </div>
 
-              <div className="sales-mcube-strip">
-                <div>
-                  <span>MCube Inbound</span>
-                  <strong>8779308386</strong>
-                </div>
-                <div>
-                  <span>MCube Outbound</span>
-                  <strong>08062736834</strong>
-                </div>
-                <div>
-                  <span>Recordings</span>
-                  <strong>After hang up</strong>
-                </div>
-              </div>
-
               <div className="sales-call-note">
                 <Users size={16} />
                 <span>Telecaller mode - You see only leads assigned to you. Dispose each one before moving to the next.</span>
@@ -2566,12 +2736,10 @@ const SalesUserPanel = () => {
                     <button
                       className="primary"
                       type="button"
-                      disabled={String(callingLeadId) === String(getLeadId(currentCallLead)) || isCurrentCallActive}
-                      onClick={() => setCallTarget(currentCallLead)}
+                      disabled={String(startingCallLeadId) === String(getLeadId(currentCallLead))}
+                      onClick={() => startSelectedCallLead(currentCallLead)}
                     >
-                      {String(callingLeadId) === String(getLeadId(currentCallLead)) || isCurrentCallActive
-                        ? currentCallStatus === "connected" ? `Connected - ${formatDuration(currentCallDuration)}` : "Call ringing"
-                        : "Call Lead"}
+                      {String(startingCallLeadId) === String(getLeadId(currentCallLead)) ? "Calling..." : "Call Lead"}
                     </button>
                     <button
                       type="button"
@@ -2902,6 +3070,14 @@ const SalesUserPanel = () => {
                 {tableLeads.map((lead) => {
                   const leadId = getLeadId(lead);
                   const latestDisposition = getLeadDisposition(lead);
+                  const dispositionLabel =
+                    activeDispositionFilter === "Site Visit Scheduled" && leadHasScheduledSiteVisit(lead)
+                      ? "Site Visit Scheduled"
+                      : latestDisposition?.disposition || "-";
+                  const dispositionDetail =
+                    activeDispositionFilter === "Site Visit Scheduled" && leadHasScheduledSiteVisit(lead)
+                      ? getLeadSiteVisitDetail(lead)
+                      : getDispositionDetail(latestDisposition);
 
                   return (
                   <div
@@ -2931,8 +3107,8 @@ const SalesUserPanel = () => {
                     </span>
                     {activeDispositionFilter && (
                       <span className="sales-disposition-cell">
-                        <strong>{latestDisposition?.disposition || "-"}</strong>
-                        <small>{getDispositionDetail(latestDisposition)}</small>
+                        <strong>{dispositionLabel}</strong>
+                        <small>{dispositionDetail}</small>
                       </span>
                     )}
                     <span className="sales-row-actions" onClick={(event) => event.stopPropagation()}>
@@ -3073,38 +3249,36 @@ const SalesUserPanel = () => {
           setDispositionInitialValue("");
         }}
         onSaved={(savedCallLog) => {
-          const leadId = String(savedCallLog.leadId);
-          setCallLogsByLead((current) => ({ ...current, [leadId]:savedCallLog }));
-          setCallDispositions((current) => ({
-            ...current,
-            [leadId]:{
-              type:savedCallLog.disposition,
-              label:savedCallLog.disposition,
-              time:new Date().toISOString(),
-            },
-          }));
-          setDisposedLeadIds((current) => current.includes(leadId) ? current : [...current, leadId]);
-          const nextLead = panel.leads.find((item) => String(getLeadId(item)) !== leadId && !disposedLeadIds.includes(String(getLeadId(item))));
-          setFocusedCallLeadId(nextLead ? getLeadId(nextLead) : null);
+          const leadId = savedCallLog?.leadId ? String(savedCallLog.leadId) : "";
+          if (leadId) {
+            setCallLogsByLead((current) => ({ ...current, [leadId]:savedCallLog }));
+            setCallDispositions((current) => ({
+              ...current,
+              [leadId]:{
+                type:savedCallLog.disposition,
+                label:savedCallLog.disposition,
+                time:new Date().toISOString(),
+              },
+            }));
+            setDisposedLeadIds((current) => current.includes(leadId) ? current : [...current, leadId]);
+            const nextLead = panel.leads.find((item) => String(getLeadId(item)) !== leadId && !disposedLeadIds.includes(String(getLeadId(item))));
+            setFocusedCallLeadId(nextLead ? getLeadId(nextLead) : null);
+          }
+          if (String(savedCallLog?.direction || "").toLowerCase() === "inbound") {
+            setInboundCall((current) => current ? {
+              ...current,
+              lead:enrichLeadForInbound(savedCallLog.lead || current.lead),
+              callerNumber:savedCallLog.callerNumber || savedCallLog.customerNumber || savedCallLog.leadPhone || savedCallLog.phone || current.callerNumber,
+              customerNumber:savedCallLog.customerNumber || savedCallLog.callerNumber || savedCallLog.leadPhone || savedCallLog.phone || current.customerNumber,
+              status:savedCallLog.status || current.status,
+              disposition:savedCallLog.disposition || current.disposition,
+              duration:savedCallLog.duration || current.duration,
+              endedAt:savedCallLog.endedAt || current.endedAt,
+            } : current);
+            setCallLogCount((count) => count + (savedCallLog?.id ? 0 : 1));
+          }
           setDispositionTarget(null);
           setDispositionInitialValue("");
-        }}
-      />
-
-      <StartCallModal
-        lead={callTarget}
-        leadPhone={callTarget ? getActionPhone(callTarget) : ""}
-        initialAgentPhone={panel.user?.phone || JSON.parse(localStorage.getItem("authUser") || "null")?.phone || ""}
-        widgetUrl={mcubeWidgetUrl}
-        agentName={getName(panel.user || JSON.parse(localStorage.getItem("authUser") || "null"))}
-        onClose={() => setCallTarget(null)}
-        onBrowserStart={() => startBrowserPhoneCall(callTarget)}
-        onDispose={(callLog) => {
-          if (!callTarget || !callLog) return;
-          const leadId = String(getLeadId(callTarget));
-          setCallLogsByLead((current) => ({ ...current, [leadId]:callLog }));
-          setDispositionInitialValue("");
-          setDispositionTarget({ lead:callTarget, callLog });
         }}
       />
 

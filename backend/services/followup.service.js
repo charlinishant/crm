@@ -374,6 +374,9 @@ const updateLeadStatus = async (user, leadId, body, tx = prisma) => {
   }
 
   const lead = await getScopedLead(leadId, user, tx)
+  if (lead.status === "Booked" && normalizedStatus !== "Booked") {
+    throw Object.assign(new Error("Booked lead status cannot be changed"), { statusCode: 409 })
+  }
   const data = {
     status: normalizedStatus,
   }

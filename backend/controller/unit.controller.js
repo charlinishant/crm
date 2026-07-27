@@ -161,6 +161,18 @@ const isFloorPlanGeneratedUnitItem = (item, claimedSlotKeys) => {
     String(item.name || "").trim().toUpperCase() === expectedName
 }
 
+const getUnitItemTowerFloorPositionKey = (item) => {
+  const floorNumber = toNumberOrNull(item.floor)
+  const unitPosition = formatUnitPosition(item.unitIndex)
+  if (!item.unit?.towerId || floorNumber === null || !unitPosition) return ""
+  return `${item.unit.towerId}:${Math.trunc(floorNumber)}:${unitPosition}`
+}
+
+const getFloorSortValue = (value) => {
+  const number = Number(value)
+  return Number.isNaN(number) ? Number.NEGATIVE_INFINITY : number
+}
+
 exports.createUnit = async (req, res) => {
   try {
     const payload = req.body || {}
@@ -431,12 +443,8 @@ exports.getUnit = async (req, res) => {
       const page = parseInt(req.query.page) || 1
       const limit = parseInt(req.query.limit) || 10
 
-      const skip = (page - 1) * limit
-
       const unitItems = await prisma.unitModel.findMany({
         where: unitItemConditions,
-        skip: skip,
-        take: limit,
         orderBy: [
           { floor: "desc" },
           { unitIndex: "asc" },
@@ -510,23 +518,76 @@ exports.getUnit = async (req, res) => {
         },
       })
       const claimedSlotKeys = await getClaimedSlotKeys(unitItems)
-      const validUnitItems = unitItems.filter((item) => isFloorPlanGeneratedUnitItem(item, claimedSlotKeys))
+      const generatedUnitItems = unitItems.filter((item) => isFloorPlanGeneratedUnitItem(item, claimedSlotKeys))
       const orphanUnitItems = unitItems.filter((item) => !isFloorPlanGeneratedUnitItem(item, claimedSlotKeys))
-      const result = validUnitItems.map(({ unit, ...item }) => ({
-        id: unit?.id,
-        unitList: [item],
-        project: unit?.project,
-        tower: unit?.tower,
-        floor: unit?.floor,
-        description: unit?.description,
-      }))
+      const seenTowerFloorPositions = new Set()
+      const duplicateUnitItems = []
+      const validUnitItems = generatedUnitItems.filter((item) => {
+        const slotKey = getUnitItemTowerFloorPositionKey(item)
+        if (!slotKey) return false
+        if (seenTowerFloorPositions.has(slotKey)) {
+          duplicateUnitItems.push(item)
+          return false
+        }
+        seenTowerFloorPositions.add(slotKey)
+        return true
+      })
+      const floorGroups = Array.from(validUnitItems.reduce((groups, { unit, ...item }) => {
+        const groupKey = [
+          unit?.project?.id || "project",
+          unit?.tower?.id || "tower",
+          unit?.floor?.id || "floor",
+          item.floor ?? "floor-number",
+        ].join(":")
+
+        if (!groups.has(groupKey)) {
+          groups.set(groupKey, {
+            id: unit?.id,
+            unitList: [],
+            project: unit?.project,
+            tower: unit?.tower,
+            floor: unit?.floor,
+            floorNumber: item.floor,
+            description: unit?.description,
+          })
+        }
+
+        groups.get(groupKey).unitList.push(item)
+        return groups
+      }, new Map()).values()).map((group) => ({
+        ...group,
+        unitList: group.unitList.sort((a, b) => {
+          const positionA = Number(a.unitIndex)
+          const positionB = Number(b.unitIndex)
+          if (!Number.isNaN(positionA) && !Number.isNaN(positionB) && positionA !== positionB) {
+            return positionA - positionB
+          }
+          return String(a.name || "").localeCompare(String(b.name || ""))
+        }),
+      })).sort((a, b) => {
+        const floorDiff = getFloorSortValue(b.floorNumber) - getFloorSortValue(a.floorNumber)
+        if (floorDiff) return floorDiff
+        const projectDiff = String(a.project?.name || "").localeCompare(String(b.project?.name || ""))
+        if (projectDiff) return projectDiff
+        const towerDiff = String(a.tower?.name || "").localeCompare(String(b.tower?.name || ""))
+        if (towerDiff) return towerDiff
+        return String(a.floor?.configurationLabel || a.floor?.name || "").localeCompare(String(b.floor?.configurationLabel || b.floor?.name || ""))
+      })
+
+      const totalFloors = floorGroups.length
+      const totalPages = Math.max(1, Math.ceil(totalFloors / limit))
+      const safePage = Math.min(Math.max(page, 1), totalPages)
+      const startIndex = (safePage - 1) * limit
+      const result = floorGroups.slice(startIndex, startIndex + limit)
 
       let context = {
-        page: page,
+        page: safePage,
         limit: limit,
         totalItems: validUnitItems.length,
-        orphanUnitCount: orphanUnitItems.length,
-        orphanUnits: orphanUnitItems.map((item) => ({
+        totalFloors,
+        totalPages,
+        orphanUnitCount: orphanUnitItems.length + duplicateUnitItems.length,
+        orphanUnits: [...orphanUnitItems, ...duplicateUnitItems].map((item) => ({
           id: item.id,
           name: item.name,
           floor: item.floor,
@@ -534,6 +595,7 @@ exports.getUnit = async (req, res) => {
           floorPlanId: item.unit?.floorId,
           towerId: item.unit?.towerId,
           expectedName: getExpectedGeneratedUnitName(item),
+          reason: duplicateUnitItems.includes(item) ? "Duplicate tower/floor/unit position" : "Not generated by this floor plan",
         })),
         data: result,
       }

@@ -25,11 +25,11 @@ const getStatusLabel = (value) => {
 
 const getDirectionLabel = (log) => {
   const direction = String(log.direction || "").toLowerCase();
-  if (direction === "inbound") return "Inbound Calling";
-  if (direction === "outbound") return "Outbound Calling";
+  if (direction === "inbound") return "inbound";
+  if (direction === "outbound") return "outbound";
   const notes = String(log.notes || "").toLowerCase();
-  if (notes.includes("inbound")) return "Inbound Calling";
-  if (notes.includes("outbound")) return "Outbound Calling";
+  if (notes.includes("inbound")) return "inbound";
+  if (notes.includes("outbound")) return "outbound";
   return "-";
 };
 
@@ -150,8 +150,8 @@ const CallLogsTable = ({ scope = "admin", direction = "" }) => {
     () => logs.slice(pageStart, pageStart + recordsPerPage),
     [logs, pageStart]
   );
-  const inboundCount = logs.filter((log) => getDirectionLabel(log).startsWith("Inbound")).length;
-  const outboundCount = logs.filter((log) => getDirectionLabel(log).startsWith("Outbound")).length;
+  const inboundCount = logs.filter((log) => getDirectionLabel(log) === "inbound").length;
+  const outboundCount = logs.filter((log) => getDirectionLabel(log) === "outbound").length;
 
   useEffect(() => {
     setCurrentPage((page) => Math.min(page, totalPages));

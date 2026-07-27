@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import "./addLead.css";
 
 
@@ -58,6 +58,8 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
   
   const navigate = useNavigate()
+  const location = useLocation()
+  const inboundCallerNumber = String(location.state?.inboundCallerNumber || "").replace(/\D/g, "").slice(-10);
   const localUser = JSON.parse(localStorage.getItem("authUser") || "null");
   const savedUser = currentUser?.id ? currentUser : localUser;
   const savedUserId = savedUser?.id ? String(savedUser.id) : "";
@@ -131,6 +133,23 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
   const [users, setUsers] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [formErrors, setFormErrors] = useState({});
+
+  useEffect(() => {
+    if (!inboundCallerNumber) return;
+    setFormData((current) => {
+      const phones = Array.isArray(current.phones) && current.phones.length
+        ? current.phones
+        : [{ type: "Work", value: "" }];
+      if (phones[0]?.value) return current;
+      return {
+        ...current,
+        phones: [
+          { ...phones[0], value: inboundCallerNumber },
+          ...phones.slice(1),
+        ],
+      };
+    });
+  }, [inboundCallerNumber]);
 
   const getUserName = (user) =>
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
@@ -329,11 +348,28 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
       }
 
       window.alert("Lead created successfully!");
+      if (inboundCallerNumber && result?.id) {
+        navigate(`/user/sales/details?leadId=${result.id}`, {
+          state:{
+            lead:result,
+            refreshPanel:true,
+          },
+        });
+        return;
+      }
       navigate("/user/sales/leads", { state: { refreshLeads: Date.now() } });
     } catch (err) {
       alert(err.message || "Unable to add lead");
     }
 
+  };
+
+  const handleCancel = () => {
+    if (inboundCallerNumber || location.state?.inboundCall) {
+      navigate("/user/sales/calls/inbound");
+      return;
+    }
+    navigate("/user/sales/leads");
   };
 
   return (
@@ -965,7 +1001,7 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
 
             <div className="lead-buttons">
               <button type="submit" className="lead-save" >Save</button>
-              <button type="button" className="lead-cancel">Cancel</button>
+              <button type="button" className="lead-cancel" onClick={handleCancel}>Cancel</button>
             </div>
 
           </form>

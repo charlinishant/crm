@@ -380,12 +380,33 @@ exports.getAccessPanel = async (req, res)=>{
         try {
             bookings = await prisma.booking.findMany({
                 where:{
-                    stage:"Booked",
+                    stage:{in:["Booked", "booked", "Confirmed", "confirmed"]},
                     leadId:{
                         in:leads.map(lead => lead.id)
                     }
                 },
                 take:10,
+                include:{
+                    lead:{
+                        select:{
+                            id:true,
+                            salutation:true,
+                            firstName:true,
+                            lastName:true,
+                            emails:true,
+                            phones:true,
+                            status:true,
+                            tags:true,
+                            interestedProjects:true,
+                            teamId:true,
+                            channelPartner:true,
+                            companyName:true,
+                            propertyType:true,
+                            configration:true,
+                            budget:true,
+                        }
+                    }
+                },
                 orderBy:{createdAt:"desc"}
             })
         } catch (error) {
@@ -518,7 +539,15 @@ exports.getAccessPanel = async (req, res)=>{
                 upcomingFollowups:followupStats.upcoming,
                 highPriorityFollowups:followupStats.highPriority,
                 callbacksDue:followupStats.callbacksDue || 0,
-                siteVisits:leads.filter(lead => lead.conductSiteVisit).length,
+                siteVisits:leads.filter(lead =>
+                    lead.conductSiteVisit ||
+                    lead.conductSiteDate ||
+                    lead.siteVisitProject ||
+                    lead.siteVisitDate ||
+                    lead.siteVisitStatus ||
+                    lead.visitStatus ||
+                    lead.conductSiteStatus
+                ).length,
                 bookings:bookings.length,
                 tasks:tasks.length
             },

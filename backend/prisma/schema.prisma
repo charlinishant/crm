@@ -191,6 +191,7 @@ model UnitModel {
   unit            Unit       @relation(fields: [unitId], references: [id])
   bookings        Booking[]
 
+  @@unique([unitId, floor, unitIndex])
   @@index([status])
   @@index([heldBy])
   @@index([heldUntil])

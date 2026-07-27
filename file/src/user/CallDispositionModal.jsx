@@ -33,6 +33,7 @@ const CallDispositionModal = ({ lead, callLog, projects = [], initialDisposition
   const [form, setForm] = useState({
     callStatus:"completed",
     disposition:"Qualified",
+    phone:"",
     notes:"",
     nextFollowUpAt:getDefaultDateTime(),
     interestedProjectId:"",
@@ -59,6 +60,7 @@ const CallDispositionModal = ({ lead, callLog, projects = [], initialDisposition
           ? "busy"
           : callStatuses.includes(savedStatus) ? savedStatus : "completed",
       disposition:initialDisposition || callLog.disposition || "Qualified",
+      phone:callLog.leadPhone || callLog.phone || callLog.callerNumber || callLog.customerNumber || lead?.leadPhone || lead?.phone || "",
       notes:callLog.notes || "",
       nextFollowUpAt:getDefaultDateTime(),
       interestedProjectId:savedProject ? String(getProjectId(savedProject)) : "",
@@ -69,10 +71,12 @@ const CallDispositionModal = ({ lead, callLog, projects = [], initialDisposition
     setError("");
   }, [callLog, initialDisposition, lead, projects]);
 
-  if (!lead || !callLog) return null;
+  if (!callLog) return null;
 
   const needsFollowUp = ["Callback Later", "Follow-up Required"].includes(form.disposition);
   const needsVisit = form.disposition === "Site Visit Scheduled";
+  const isInboundDisposition = String(callLog.direction || "").toLowerCase() === "inbound";
+  const showPhoneField = !lead && !(callLog.leadPhone || callLog.phone || callLog.callerNumber || callLog.customerNumber);
   const update = (name, value) => setForm((current) => ({ ...current, [name]:value }));
   const updateInterestedProject = (projectId) => {
     const project = projects.find((item) => String(getProjectId(item)) === String(projectId));
@@ -97,8 +101,12 @@ const CallDispositionModal = ({ lead, callLog, projects = [], initialDisposition
         },
         body:JSON.stringify({
           callLogId:callLog.id || null,
-          leadId:lead.id || callLog.leadId,
-          leadPhone:callLog.leadPhone || callLog.phone || lead.leadPhone || lead.phone || "",
+          leadId:lead?.id || callLog.leadId || null,
+          leadPhone:form.phone || callLog.leadPhone || callLog.phone || lead?.leadPhone || lead?.phone || "",
+          phone:form.phone || callLog.phone || "",
+          callerNumber:form.phone || callLog.callerNumber || "",
+          customerNumber:form.phone || callLog.customerNumber || "",
+          direction:callLog.direction || "",
           ...form,
           interestedProjectId:form.interestedProjectId || null,
           nextFollowUpAt:needsFollowUp ? form.nextFollowUpAt : null,
@@ -123,7 +131,7 @@ const CallDispositionModal = ({ lead, callLog, projects = [], initialDisposition
         <div className="call-disposition-head">
           <div>
             <h3 id="call-disposition-title">Call disposition</h3>
-            <p>{[lead.firstName, lead.lastName].filter(Boolean).join(" ") || `Lead #${lead.id}`} - {callLog.id ? `Call #${callLog.id}` : "Manual call log"}</p>
+            <p>{lead ? [lead.firstName, lead.lastName].filter(Boolean).join(" ") || `Lead #${lead.id}` : "Unknown Caller"} - {callLog.id ? `Call #${callLog.id}` : "Manual call log"}</p>
           </div>
           <button type="button" onClick={onClose} disabled={saving} aria-label="Close"><X size={18} /></button>
         </div>
@@ -136,6 +144,7 @@ const CallDispositionModal = ({ lead, callLog, projects = [], initialDisposition
             <label><span>Disposition</span><select value={form.disposition} onChange={(e) => update("disposition", e.target.value)}>
               {dispositions.map((item) => <option key={item} value={item}>{item}</option>)}
             </select></label>
+            {(showPhoneField || isInboundDisposition) && <label className="wide"><span>Caller number</span><input value={form.phone} readOnly={!showPhoneField} onChange={(e) => update("phone", e.target.value)} placeholder="Enter caller number" /></label>}
             <label><span>Interested project</span>
               <select value={form.interestedProjectId} onChange={(e) => updateInterestedProject(e.target.value)}>
                 <option value="">{projects.length ? "Select project" : "No projects found"}</option>

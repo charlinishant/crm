@@ -64,6 +64,8 @@ const leadStatusScoreMap = {
 const getLeadStageScore = (status) =>
   leadStatusScoreMap[normalizeLeadStatusValue(status) || "New"] || leadStatusScoreMap.New
 
+const isBookedLeadStatus = (status) => normalizeLeadStatusValue(status) === "Booked"
+
 const withLeadStageScore = (lead) => {
   if (!lead) return lead
   const stageScore = getLeadStageScore(lead.status)
@@ -744,7 +746,12 @@ exports.updateLead = async (req, res) => {
 
     if (source.emails !== undefined) data.emails = Array.isArray(source.emails) ? source.emails : []
     if (source.phones !== undefined) data.phones = Array.isArray(source.phones) ? source.phones : []
-    if (source.status !== undefined) data.status = normalizeLeadStatusValue(source.status)
+    if (source.status !== undefined) {
+      data.status = normalizeLeadStatusValue(source.status)
+      if (isBookedLeadStatus(lead.status) && data.status !== "Booked") {
+        return res.status(409).json({ message: "Booked lead status cannot be changed." })
+      }
+    }
     if (source.teamId !== undefined) data.teamId = toNullableInt(source.teamId)
     if (source.seats !== undefined) data.seats = toInt(source.seats, 0)
     if (source.tenure !== undefined) data.tenure = toFloat(source.tenure, 0)
@@ -873,15 +880,38 @@ exports.permanentlyDeleteLead = async (req, res) => {
     const lead = await prisma.lead.findUnique({ where: { id: Number(id) } })
     if (!lead) return res.status(404).json("Lead not found")
 
-    const result = await prisma.$transaction([
-      prisma.leadAddress.deleteMany({ where: { leadId: lead.id } }),
-      prisma.personalAddress.deleteMany({ where: { leadId: lead.id } }),
-      prisma.lead.delete({ where: { id: lead.id } }),
-    ])
+    const result = await prisma.$transaction(async (tx) => {
+      const followUps = await tx.followUp.findMany({
+        where: { leadId: lead.id },
+        select: { id: true },
+      })
+      const followUpIds = followUps.map((followUp) => followUp.id)
+
+      if (followUpIds.length) {
+        await tx.followUp.updateMany({
+          where: { rescheduledFromId: { in: followUpIds } },
+          data: { rescheduledFromId: null },
+        })
+      }
+      await tx.callLog.deleteMany({ where: { leadId: lead.id } })
+      await tx.booking.updateMany({
+        where: { leadId: lead.id },
+        data: { leadId: null },
+      })
+      await tx.scheduleVisit.deleteMany({ where: { leadId: lead.id } })
+      await tx.whatsAppMessage.deleteMany({ where: { leadId: lead.id } })
+      await tx.followUp.deleteMany({ where: { leadId: lead.id } })
+      await tx.leadActivity.deleteMany({ where: { leadId: lead.id } })
+      await tx.leadNote.deleteMany({ where: { leadId: lead.id } })
+      await tx.leadAddress.deleteMany({ where: { leadId: lead.id } })
+      await tx.personalAddress.deleteMany({ where: { leadId: lead.id } })
+
+      return tx.lead.delete({ where: { id: lead.id } })
+    })
     res.status(200).json(result)
   } catch (err) {
     console.log(err)
-    res.status(500).json("something went wrong")
+    res.status(500).json({ message: err.message || "Unable to permanently delete lead" })
   }
 }
 

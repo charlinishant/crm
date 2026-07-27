@@ -108,6 +108,15 @@ const firstNumber = (...values) => {
   }
   return 0;
 };
+const getFloorSortValue = (value) => {
+  const number = Number(value);
+  return Number.isNaN(number) ? Number.NEGATIVE_INFINITY : number;
+};
+const getUnitPositionSortValue = (unit) => {
+  const value = unit.unitIndex ?? unit.position ?? unit.name;
+  const number = Number(value);
+  return Number.isNaN(number) ? Number.MAX_SAFE_INTEGER : number;
+};
 const getRateBasisArea = ({ rateBasis, carpet, builtupArea, saleable }) => {
   if (rateBasis === "On Built-up") return toNumber(builtupArea, 0);
   if (rateBasis === "On Saleable") return toNumber(saleable, 0);
@@ -560,13 +569,42 @@ const UserBookingForm = ({
     (bookingStepIndex === 1 && !bookingForm.unit) ||
     (bookingStepIndex === 2 && !bookingForm.customerName && !leadName);
 
-  const unitsPerPage = 6;
-  const totalUnitPages = Math.max(1, Math.ceil(filteredCatalogUnits.length / unitsPerPage));
+  const floorsPerPage = 6;
+  const allFloorGroups = useMemo(() => {
+    const groups = new Map();
+
+    filteredCatalogUnits.forEach((unit) => {
+      const floor = unit.floor ?? "-";
+      if (!groups.has(floor)) {
+        groups.set(floor, {
+          floor,
+          units: [],
+        });
+      }
+      groups.get(floor).units.push(unit);
+    });
+
+    return Array.from(groups.values())
+      .sort((a, b) => {
+        const floorDiff = getFloorSortValue(b.floor) - getFloorSortValue(a.floor);
+        if (floorDiff) return floorDiff;
+        return String(b.floor).localeCompare(String(a.floor));
+      })
+      .map((group) => ({
+        ...group,
+        units: group.units.slice().sort((a, b) => {
+          const positionDiff = getUnitPositionSortValue(a) - getUnitPositionSortValue(b);
+          if (positionDiff) return positionDiff;
+          return String(a.name || "").localeCompare(String(b.name || ""));
+        }),
+      }));
+  }, [filteredCatalogUnits]);
+  const totalUnitPages = Math.max(1, Math.ceil(allFloorGroups.length / floorsPerPage));
   const activeUnitPage = Math.min(unitPage, totalUnitPages);
-  const unitPageStart = (activeUnitPage - 1) * unitsPerPage;
-  const visibleCatalogUnits = filteredCatalogUnits.slice(unitPageStart, unitPageStart + unitsPerPage);
-  const visibleUnitEnd = Math.min(unitPageStart + visibleCatalogUnits.length, filteredCatalogUnits.length);
-  const floorGroups = Array.from(new Set(visibleCatalogUnits.map((unit) => unit.floor))).sort((a, b) => Number(b) - Number(a));
+  const floorPageStart = (activeUnitPage - 1) * floorsPerPage;
+  const visibleFloorGroups = allFloorGroups.slice(floorPageStart, floorPageStart + floorsPerPage);
+  const visibleCatalogUnits = visibleFloorGroups.flatMap((group) => group.units);
+  const visibleFloorEnd = Math.min(floorPageStart + visibleFloorGroups.length, allFloorGroups.length);
 
   useEffect(() => {
     setUnitPage(1);
@@ -948,11 +986,11 @@ const UserBookingForm = ({
           {filteredCatalogUnits.length === 0 && (
             <div className="ubf-unit-empty">No units found for this project tower.</div>
           )}
-          {floorGroups.map((floor) => (
+          {visibleFloorGroups.map(({ floor, units }) => (
             <React.Fragment key={floor}>
               <div className="ubf-floor-label">Floor {floor}</div>
               <div className="ubf-units-line">
-                {visibleCatalogUnits.filter((unit) => unit.floor === floor).map((unit) => {
+                {units.map((unit) => {
                   const status = normalizeUnitStatus(unit.status);
                   const tone = bookingForm.unit === unit.name ? "selected" : interestedUnits.has(unit.name) ? "interested" : status;
                   const isLocked = ["booked", "blocked", "refuge", "investor"].includes(status);
@@ -984,10 +1022,11 @@ const UserBookingForm = ({
             </React.Fragment>
           ))}
         </div>
-        {filteredCatalogUnits.length > unitsPerPage && (
+        {allFloorGroups.length > floorsPerPage && (
           <div className="ubf-unit-pagination">
             <span>
-              Showing <b>{unitPageStart + 1}-{visibleUnitEnd}</b> of <b>{filteredCatalogUnits.length}</b> units
+              Showing floors <b>{floorPageStart + 1}-{visibleFloorEnd}</b> of <b>{allFloorGroups.length}</b>
+              {" "}(<b>{filteredCatalogUnits.length}</b> units)
             </span>
             <div>
               <button

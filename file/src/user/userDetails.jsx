@@ -454,6 +454,7 @@ const UserDetails = ({
   const source = valueOf(lead, ["source", "channelPartner", "tags"], "-");
   const owner = getOwnerName(lead);
   const currentStatus = selectedStatus || getCrmStatusFromLead(lead);
+  const isBookedStatusLocked = currentStatus === "Booked";
   const leadScoreNumber = getStatusScore(currentStatus);
   const createdDate = valueOf(lead, ["createdAt", "created_at", "received_on"], "");
   const isSalesContext =
@@ -598,6 +599,10 @@ const UserDetails = ({
 
   const saveStatus = async (status) => {
     if (!leadId) return false;
+    if (isBookedStatusLocked && status !== "Booked") {
+      setStatusMessage("Booked lead status cannot be changed.");
+      return false;
+    }
     setIsSavingStatus(true);
     setStatusMessage("");
     const backendStatus = backendStatusMap[status] || String(status || "New").replace(/\s+/g, "_");
@@ -1800,7 +1805,7 @@ const UserDetails = ({
                   <label className="crm-status-field">
                     <select
                       className="crm-status-select"
-                      disabled={isSavingStatus}
+                      disabled={isSavingStatus || isBookedStatusLocked}
                       value={stageStatusValue}
                       onChange={(event) => handleStatusChange(event.target.value)}
                     >
@@ -1818,13 +1823,14 @@ const UserDetails = ({
                   </label>
                   <button
                     className="crm-small-btn primary crm-status-save"
-                    disabled={isSavingStatus || !stageStatusValue}
+                    disabled={isSavingStatus || !stageStatusValue || isBookedStatusLocked}
                     type="button"
                     onClick={() => saveStatus(stageStatusValue)}
                   >
                     <FaSave /> {isSavingStatus ? "Saving..." : "Save"}
                   </button>
                 </div>
+                {isBookedStatusLocked && <div className="crm-muted">Booked lead status cannot be changed.</div>}
               </div>
               <div className="crm-more-wrap">
                 <button

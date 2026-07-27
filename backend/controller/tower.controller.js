@@ -260,7 +260,22 @@ exports.deleteTower = async (req, res)=>{
 
         const record = await prisma.tower.findUnique({
             where:{id:parseInt(id)},
-            include:{ _count:{ select:{ floors:true, units:true } } },
+            include:{
+                floors:{ select:{ id:true } },
+                units:{
+                    select:{
+                        id:true,
+                        unitList:{
+                            select:{
+                                id:true,
+                                name:true,
+                                status:true,
+                            },
+                        },
+                    },
+                },
+                _count:{ select:{ floors:true, units:true } },
+            },
         })
         if(!record)
             return res.status(400).json("Tower not found")
@@ -309,7 +324,7 @@ exports.deleteTower = async (req, res)=>{
         
     } catch (error) {
         console.log(error);
-        res.status(500).json("Something went wrong")
+        res.status(500).json({ message:error.message || "Unable to delete tower" })
     }
 }
 

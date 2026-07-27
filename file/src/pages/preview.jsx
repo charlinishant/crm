@@ -180,6 +180,7 @@ const Preview = () => {
   );
   const leadId = getLeadValue(lead, ["id", "_id", "lead_id"], "10702");
   const leadStatus = normalizeStatus(getLeadValue(lead, ["status", "lead_status", "stage"], "New"));
+  const isBookedStatusLocked = leadStatus === "Booked";
   const leadSource = getLeadValue(lead, ["source", "lead_source"], "channel_partner");
   const leadSubSource = getLeadValue(lead, ["sub_source", "subSource", "channel_partner"], "Zeeshan Khan (Our N...");
   const projectName = getLeadValue(lead, ["project_name", "projectName", "interestedProjects"], "Binghatti Hills");
@@ -251,6 +252,10 @@ const Preview = () => {
   };
 
   const handleSaveStatus = async () => {
+    if (isBookedStatusLocked && selectedStatus !== "Booked") {
+      setStatusMessage("Booked lead status cannot be changed.");
+      return;
+    }
     setIsSavingStatus(true);
     setStatusMessage("");
 
@@ -1214,6 +1219,7 @@ const Preview = () => {
                         <select
                           className="lead-preview-select"
                           value={selectedStatus}
+                          disabled={isBookedStatusLocked}
                           onChange={(event) => {
                             setSelectedStatus(event.target.value);
                             setStatusMessage("");
@@ -1229,11 +1235,14 @@ const Preview = () => {
                           type="button"
                           className="lead-preview-save-status"
                           onClick={handleSaveStatus}
-                          disabled={isSavingStatus || (selectedStatus === leadStatus && selectedStatus !== "Booked")}
+                          disabled={isSavingStatus || isBookedStatusLocked || (selectedStatus === leadStatus && selectedStatus !== "Booked")}
                         >
                           {isSavingStatus ? "Saving..." : "Save"}
                         </button>
                       </div>
+                      {isBookedStatusLocked && (
+                        <div className="lead-preview-status-message">Booked lead status cannot be changed.</div>
+                      )}
                       {statusMessage && (
                         <div className="lead-preview-status-message">{statusMessage}</div>
                       )}
