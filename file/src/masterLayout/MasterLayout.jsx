@@ -136,24 +136,12 @@ const MasterLayout = ({ children }) => {
         console.error("Unable to update attendance login:", error);
       });
     };
-    const markLoggedOut = () => {
-      const latestToken = localStorage.getItem("authToken");
-      if (!latestToken) return;
-
-      fetch(`${API_URL}/attendance/logout`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${latestToken}` },
-        keepalive: true,
-      }).catch(() => {});
-    };
 
     markAvailable();
     const heartbeatId = window.setInterval(markAvailable, 60000);
-    window.addEventListener("pagehide", markLoggedOut);
 
     return () => {
       window.clearInterval(heartbeatId);
-      window.removeEventListener("pagehide", markLoggedOut);
     };
   }, []);
 

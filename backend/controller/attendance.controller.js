@@ -150,7 +150,6 @@ const getOpenAttendance = (userId) =>
 
 const startOrResumeAttendance = async (userId) => {
   const now = new Date()
-  await closeStaleOpenAttendances(userId)
   const openAttendance = await getOpenAttendance(userId)
 
   if (openAttendance) {
@@ -311,7 +310,6 @@ exports.endBreak = async (req, res) => {
 exports.getMyAttendance = async (req, res) => {
   try {
     const userId = Number(req.authUser.id)
-    await closeStaleOpenAttendances(userId)
     const attendance = await getOpenAttendance(userId)
     const data = attendance
       ? await withTodaySummary(attendance)

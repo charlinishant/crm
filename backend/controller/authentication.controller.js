@@ -65,7 +65,6 @@ const normalizeDepartment = (department, role) => {
 
 const startOrResumeAttendance = async (userId) => {
     const now = new Date()
-    await closeStaleOpenAttendances(userId)
     const attendance = await prisma.userAttendance.findFirst({
         where:{userId, logoutAt: null},
         orderBy:{loginAt:"desc"}

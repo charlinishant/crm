@@ -3757,92 +3757,155 @@ img.sales-avatar {
 
 .sales-mcube-widget-shell.is-open {
   align-items: center;
-  background: rgba(15, 23, 42, 0.62);
+  background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(2px);
   display: flex;
   inset: 0;
   justify-content: center;
   padding: 20px;
   position: fixed;
-  z-index: 1400;
+  z-index: 1000;
 }
 
-.sales-mcube-widget-shell.is-open .sales-mcube-login-frame {
+.sales-mcube-widget-modal {
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+  display: flex;
+  flex-direction: column;
+  height: min(680px, calc(100vh - 40px));
+  max-width: calc(100vw - 32px);
+  overflow: hidden;
+  width: min(420px, calc(100vw - 32px));
+  z-index: 1001;
+}
+
+.sales-mcube-widget-header {
+  align-items: center;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 52px;
+  padding: 8px 10px 8px 16px;
+}
+
+.sales-mcube-widget-header span,
+.sales-mcube-widget-header small {
+  display: block;
+}
+
+.sales-mcube-widget-header span {
+  color: #0f172a;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.sales-mcube-widget-header small {
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 2px;
+  text-transform: capitalize;
+}
+
+.sales-mcube-widget-close {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #dbe5ef;
+  border-radius: 9px;
+  color: #475569;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+
+.sales-mcube-widget-close:hover,
+.sales-mcube-widget-close:focus-visible {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  outline: 0;
+}
+
+.sales-mcube-widget-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sales-mcube-widget-body .sales-mcube-login-frame {
   background: #ffffff;
   border: 0;
-  border-radius: 10px 10px 0 0;
-  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.3);
   display: block;
-  height: min(560px, 72vh);
+  height: 100%;
   opacity: 1;
   pointer-events: auto;
   position: static;
-  width: min(700px, 96vw);
+  width: 100%;
   z-index: auto;
 }
 
-.sales-mcube-widget-actions {
-  background: #ffffff;
-  border-radius: 0 0 10px 10px;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
-  display: grid;
-  gap: 12px;
-  grid-template-columns: 1fr 1fr;
-  padding: 12px;
-  width: min(700px, 96vw);
-}
-
-.sales-mcube-widget-number {
-  align-items: center;
+.sales-mcube-widget-footer {
   background: #ffffff;
   border-top: 1px solid #e2e8f0;
   display: grid;
-  gap: 10px;
-  grid-template-columns: 1fr auto auto;
-  padding: 10px 12px;
-  width: min(700px, 96vw);
+  flex: 0 0 auto;
+  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+  padding: 12px 14px 14px;
 }
 
-.sales-mcube-widget-number span {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.sales-mcube-widget-number strong {
-  color: #0f172a;
-  font-size: 16px;
-  font-weight: 900;
-}
-
-.sales-mcube-widget-number button {
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  border-radius: 8px;
-  color: #1d4ed8;
-  cursor: pointer;
-  font-weight: 800;
-  min-height: 34px;
-  padding: 0 12px;
-}
-
-.sales-mcube-widget-actions button {
+.sales-mcube-widget-footer button {
   border-radius: 9px;
   cursor: pointer;
   font-weight: 800;
-  min-height: 44px;
+  min-height: 46px;
   padding: 0 14px;
 }
 
-.sales-mcube-widget-actions .secondary {
+.sales-mcube-widget-footer .secondary {
   background: #ffffff;
   border: 1px solid #cbd5e1;
   color: #334155;
 }
 
-.sales-mcube-widget-actions .primary {
+.sales-mcube-widget-footer .primary {
   background: #1f6ec7;
   border: 1px solid #1f6ec7;
   color: #ffffff;
+}
+
+.sales-mcube-widget-footer button:focus-visible {
+  box-shadow: 0 0 0 3px rgba(47, 134, 237, .16);
+  outline: 0;
+}
+
+@media (max-width: 640px) {
+  .sales-mcube-widget-shell.is-open {
+    padding: 8px;
+  }
+
+  .sales-mcube-widget-modal {
+    border-radius: 10px;
+    height: calc(100dvh - 16px);
+    max-height: none;
+    width: 100%;
+  }
+
+  .sales-mcube-widget-header {
+    min-height: 50px;
+    padding-left: 12px;
+  }
+
+  .sales-mcube-widget-footer {
+    grid-template-columns: 1fr;
+    padding: 10px 12px 12px;
+  }
 }
 
 .start-call-success { padding: 30px 24px 24px; text-align: center; }

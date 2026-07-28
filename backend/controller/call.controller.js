@@ -773,8 +773,7 @@ exports.clickToCallLead = async (req, res) => {
     const agentPhone = getMcubeAgentNumber(agent, req.authUser)
     const agentExtension = getMcubeAgentExtension(agent, req.authUser)
     const agentMode = getMcubeAgentMode(agent, req.authUser)
-    const clickToCallAgentNumber = getMcubeClickToCallAgentNumber({ agentMode, agentPhone, agentExtension })
-    if (!clickToCallAgentNumber) {
+    if (!agentPhone) {
       return res.status(400).json({ message:"MCUBE calling number is not configured for this user." })
     }
 
@@ -785,7 +784,7 @@ exports.clickToCallLead = async (req, res) => {
         phone:leadPhone,
         leadPhone,
         agentPhone:agentPhone || null,
-        provider:"mcube-webphone",
+        provider:"mcube",
         status:"initiating",
         notes:"MCube outbound click2call",
         startedAt:new Date(),
@@ -795,7 +794,7 @@ exports.clickToCallLead = async (req, res) => {
 
     const providerResult = await mcubeVoice.connectTwoNumbers({
       agentExtension,
-      agentPhone:clickToCallAgentNumber,
+      agentPhone,
       leadPhone,
       callLogId:callLog.id,
       leadId,
@@ -817,6 +816,7 @@ exports.clickToCallLead = async (req, res) => {
       callLogId:callLog.id,
       providerCallId:providerResult.providerCallId,
       providerStatus:providerResult.status,
+      agentMode,
       durationMs:Date.now() - startedAtMs,
     })
 

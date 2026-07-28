@@ -201,6 +201,14 @@ const SalesFollowupsTable = () => {
   };
 
   const handleCall = (row) => {
+    const leadId = row.rawLeadId || row.lead?.id || row.leadId;
+    if (leadId) {
+      navigate(`/user/sales/calls?leadId=${leadId}`, {
+        state: row.lead ? { lead: row.lead } : undefined,
+      });
+      return;
+    }
+
     const phone = String(row.phone || "").replace(/[^\d+]/g, "");
     if (!phone) return;
     window.location.href = `tel:${phone}`;

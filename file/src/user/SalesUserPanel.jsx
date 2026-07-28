@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
@@ -515,6 +515,13 @@ const secondsSince = (timestamp, now) => {
 const withAttendanceLoadedAt = (attendance) =>
   attendance ? { ...attendance, loadedAt: Date.now() } : null;
 
+const attendanceSecondsValue = (primary, fallback = 0) => {
+  const value = Number(primary);
+  if (Number.isFinite(value)) return value;
+  const fallbackValue = Number(fallback);
+  return Number.isFinite(fallbackValue) ? fallbackValue : 0;
+};
+
 const getTimeGreeting = () => {
   const hour = new Date().getHours();
 
@@ -591,6 +598,9 @@ const SalesUserPanel = () => {
   );
   const [timeGreeting, setTimeGreeting] = useState(() => getTimeGreeting());
   const [mcubeWidgetUrl, setMcubeWidgetUrl] = useState("");
+  const [mcubeWidgetMeta, setMcubeWidgetMeta] = useState({});
+  const [activeModal, setActiveModal] = useState(null);
+  const mcubeCloseButtonRef = useRef(null);
   const [inboundCall, setInboundCall] = useState(null);
   const [isInboundNoticeDismissed, setIsInboundNoticeDismissed] = useState(false);
 
@@ -658,9 +668,19 @@ const SalesUserPanel = () => {
           headers: { Authorization: `Bearer ${token}` },
         });
         const result = await response.json().catch(() => ({}));
-        if (response.ok && isMounted) setMcubeWidgetUrl(result.widgetUrl || "");
+        if (response.ok && isMounted) {
+          setMcubeWidgetUrl(result.widgetUrl || "");
+          setMcubeWidgetMeta({
+            agentExtension:result.agentExtension || "",
+            agentCallingMode:result.agentCallingMode || "",
+            mcubeUsername:result.mcubeUsername || "",
+          });
+        }
       } catch (error) {
-        if (isMounted) setMcubeWidgetUrl("");
+        if (isMounted) {
+          setMcubeWidgetUrl("");
+          setMcubeWidgetMeta({});
+        }
       }
     };
 
@@ -669,6 +689,30 @@ const SalesUserPanel = () => {
       isMounted = false;
     };
   }, [panel.user?.id]);
+
+  const isMcubeWidgetOpen = Boolean(mcubeWidgetUrl && callTarget && activeModal === "mcube" && activeScreen !== "inboundCalls");
+  const closeMcubeWidget = useCallback(() => {
+    setCallTarget(null);
+    setActiveModal(null);
+  }, []);
+
+  useEffect(() => {
+    if (!isMcubeWidgetOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const focusTimer = window.setTimeout(() => mcubeCloseButtonRef.current?.focus(), 0);
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") closeMcubeWidget();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.clearTimeout(focusTimer);
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [closeMcubeWidget, isMcubeWidgetOpen]);
 
   useEffect(() => {
     const userId = getUserId(panel.user);
@@ -944,6 +988,33 @@ const SalesUserPanel = () => {
   }, []);
 
   useEffect(() => {
+    const token = localStorage.getItem("authToken");
+    if (!token) return undefined;
+
+    let isMounted = true;
+    const markAttendanceActive = async () => {
+      try {
+        const response = await fetch(`${API_URL}/attendance/login`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const result = await response.json().catch(() => ({}));
+        if (isMounted && response.ok && result?.data) {
+          setAttendance(withAttendanceLoadedAt(result.data));
+        }
+      } catch (error) {
+        console.error("Unable to refresh attendance heartbeat", error);
+      }
+    };
+
+    const heartbeatId = window.setInterval(markAttendanceActive, 60000);
+    return () => {
+      isMounted = false;
+      window.clearInterval(heartbeatId);
+    };
+  }, []);
+
+  useEffect(() => {
     const intervalId = window.setInterval(() => {
       setTimeGreeting(getTimeGreeting());
     }, 60000);
@@ -1056,6 +1127,11 @@ const SalesUserPanel = () => {
       setActiveFollowupFilter(new URLSearchParams(location.search).get("filter") || "today");
     }
 
+    const focusedLeadId = new URLSearchParams(location.search).get("leadId");
+    if (screenFromPath === "calls" && focusedLeadId) {
+      setFocusedCallLeadId(focusedLeadId);
+    }
+
     if (location.state?.refreshPanel) {
       loadPanel(false);
     }
@@ -1130,6 +1206,8 @@ const SalesUserPanel = () => {
             const lead = panel.leads.find((item) => String(getLeadId(item)) === String(nextLog.leadId));
             if (lead) {
               setDispositionInitialValue(nextLog.status === "no-answer" ? "No Answer" : nextLog.status === "busy" ? "Busy" : "");
+              setCallTarget(null);
+              setActiveModal("disposition");
               setDispositionTarget((current) => current || { lead, callLog:nextLog });
             }
           }
@@ -1767,6 +1845,8 @@ const SalesUserPanel = () => {
       followUp: "Follow-up Required",
     };
     const callLog = callLogsByLead[leadId];
+    setCallTarget(null);
+    setActiveModal("disposition");
     setDispositionInitialValue(dispositionLabels[type] || type);
     setDispositionTarget({
       lead,
@@ -2042,12 +2122,13 @@ const SalesUserPanel = () => {
 
   const attendanceStatus = attendance?.status || "Available";
   const isOnBreak = attendanceStatus === "On Break";
+  const attendanceLoadedElapsedSeconds = attendance ? secondsSince(attendance.loadedAt, attendanceNow) : 0;
   const liveTodayLoginSeconds =
-    (Number(attendance?.todayLoginSeconds) || 0) +
-    (attendance && !attendance.logoutAt ? secondsSince(attendance.loadedAt, attendanceNow) : 0);
+    attendanceSecondsValue(attendance?.todayLoginSeconds, attendance?.currentSessionSeconds) +
+    (attendance && !attendance.logoutAt ? attendanceLoadedElapsedSeconds : 0);
   const liveTodayBreakSeconds =
-    (Number(attendance?.todayBreakSeconds) || 0) +
-    (attendance?.breakStartedAt && !attendance?.breakEndedAt ? secondsSince(attendance.loadedAt, attendanceNow) : 0);
+    attendanceSecondsValue(attendance?.todayBreakSeconds, attendance?.currentBreakSeconds) +
+    (attendance?.breakStartedAt && !attendance?.breakEndedAt ? attendanceLoadedElapsedSeconds : 0);
 
   const toggleBreak = () => {
     updateAttendance(isOnBreak ? "break/end" : "break/start");
@@ -2078,10 +2159,6 @@ const SalesUserPanel = () => {
 
   const startSelectedCallLead = async (lead) => {
     if (!lead) return;
-    if (!mcubeWidgetUrl) {
-      toast.error("MCUBE widget is unavailable.");
-      return;
-    }
     const leadId = getLeadId(lead);
     if (!leadId) {
       toast.error("Lead is missing.");
@@ -2095,14 +2172,16 @@ const SalesUserPanel = () => {
     }
 
     setFocusedCallLeadId(getLeadId(lead));
-    setCallTarget(lead);
-
-    if (String(startingCallLeadId) === String(leadId)) return;
+    if (mcubeWidgetUrl) {
+      setDispositionTarget(null);
+      setActiveModal("mcube");
+      setCallTarget(lead);
+    }
 
     try {
       setStartingCallLeadId(leadId);
       const token = localStorage.getItem("authToken");
-      const response = await fetch(`${API_URL}/api/calls/browser-phone/start`, {
+      const response = await fetch(`${API_URL}/api/calls/mcube/click-to-call`, {
         method:"POST",
         headers:{
           "Content-Type":"application/json",
@@ -2110,7 +2189,6 @@ const SalesUserPanel = () => {
         },
         body:JSON.stringify({
           leadId:Number(leadId),
-          leadPhone,     
         }),
       });
       const result = await response.json().catch(() => ({}));
@@ -2118,10 +2196,20 @@ const SalesUserPanel = () => {
       if (result?.callLog) {
         setCallLogsByLead((current) => ({ ...current, [leadId]:result.callLog }));
       }
-      if (result?.widgetUrl) {
-        setMcubeWidgetUrl(result.widgetUrl);
+      if (result?.agentExtension || result?.agentCallingMode || result?.mcubeUsername) {
+        setMcubeWidgetMeta((current) => ({
+          ...current,
+          agentExtension:result.agentExtension || current.agentExtension || "",
+          agentCallingMode:result.agentCallingMode || current.agentCallingMode || "",
+          mcubeUsername:result.mcubeUsername || current.mcubeUsername || "",
+        }));
       }
+      toast.success(result?.message || "Call initiated successfully");
     } catch (callError) {
+      if (!mcubeWidgetUrl) {
+        setCallTarget(null);
+        setActiveModal(null);
+      }
       toast.error(callError.message || "Unable to start call");
     } finally {
       setStartingCallLeadId(null);
@@ -2321,6 +2409,8 @@ const SalesUserPanel = () => {
                 type="button"
                 onClick={() => {
                   setDispositionInitialValue("");
+                  setCallTarget(null);
+                  setActiveModal("disposition");
                   setDispositionTarget({
                     lead,
                     callLog:{
@@ -2374,47 +2464,68 @@ const SalesUserPanel = () => {
       style={{ fontSize: "13px" }}
     >
       {mcubeWidgetUrl && activeScreen !== "inboundCalls" && (
-        <div className={`sales-mcube-widget-shell ${callTarget ? "is-open" : "is-hidden"}`}>
-          {callTarget && (
-            <button type="button" className="start-call-widget-close" onClick={() => setCallTarget(null)} aria-label="Close widget">
-              <X size={17} />
-            </button>
-          )}
-          <iframe
-            className="sales-mcube-login-frame"
-            title="MCube softphone"
-            src={mcubeWidgetUrl}
-            allow="microphone; autoplay"
-          />
-          {callTarget && (
-            <div className="sales-mcube-widget-number">
-              <span>Lead number</span>
-              <strong>{getActionPhone(callTarget)}</strong>
-              <button
-                type="button"
-                onClick={() => navigator.clipboard?.writeText(getActionPhone(callTarget))}
-              >
-                Copy
-              </button>
+        <div className={`sales-mcube-widget-shell ${isMcubeWidgetOpen ? "is-open" : "is-hidden"}`}>
+          {isMcubeWidgetOpen ? (
+            <div
+              className="sales-mcube-widget-modal"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="sales-mcube-widget-title"
+            >
+              <div className="sales-mcube-widget-header">
+                <div>
+                  <span id="sales-mcube-widget-title">MCUBE Softphone</span>
+                  <small>
+                    {mcubeWidgetMeta.agentExtension ? `Ext: ${mcubeWidgetMeta.agentExtension}` : "Registered"}
+                    {mcubeWidgetMeta.agentCallingMode ? ` | ${mcubeWidgetMeta.agentCallingMode}` : ""}
+                  </small>
+                </div>
+                <button
+                  type="button"
+                  className="sales-mcube-widget-close"
+                  onClick={closeMcubeWidget}
+                  aria-label="Close MCUBE softphone"
+                  ref={mcubeCloseButtonRef}
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="sales-mcube-widget-body">
+                <iframe
+                  className="sales-mcube-login-frame"
+                  title="MCube softphone"
+                  src={mcubeWidgetUrl}
+                  allow="microphone; autoplay"
+                />
+              </div>
+              <div className="sales-mcube-widget-footer">
+                <button type="button" className="secondary" onClick={closeMcubeWidget}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => {
+                    const lead = callTarget;
+                    if (!lead) {
+                      closeMcubeWidget();
+                      return;
+                    }
+                    setCallTarget(null);
+                    openCallDisposition(lead);
+                  }}
+                >
+                  Dispose Call
+                </button>
+              </div>
             </div>
-          )}
-          {callTarget && (
-            <div className="sales-mcube-widget-actions">
-              <button type="button" className="secondary" onClick={() => setCallTarget(null)}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="primary"
-                onClick={() => {
-                  const lead = callTarget;
-                  setCallTarget(null);
-                  openCallDisposition(lead);
-                }}
-              >
-                Dispose call
-              </button>
-            </div>
+          ) : (
+            <iframe
+              className="sales-mcube-login-frame"
+              title="MCube softphone"
+              src={mcubeWidgetUrl}
+              allow="microphone; autoplay"
+            />
           )}
         </div>
       )}
@@ -3239,48 +3350,52 @@ const SalesUserPanel = () => {
         onClose={() => setBookingPreview(null)}
       />
 
-      <CallDispositionModal
-        lead={dispositionTarget?.lead || null}
-        callLog={dispositionTarget?.callLog || null}
-        projects={projects}
-        initialDisposition={dispositionInitialValue}
-        onClose={() => {
-          setDispositionTarget(null);
-          setDispositionInitialValue("");
-        }}
-        onSaved={(savedCallLog) => {
-          const leadId = savedCallLog?.leadId ? String(savedCallLog.leadId) : "";
-          if (leadId) {
-            setCallLogsByLead((current) => ({ ...current, [leadId]:savedCallLog }));
-            setCallDispositions((current) => ({
-              ...current,
-              [leadId]:{
-                type:savedCallLog.disposition,
-                label:savedCallLog.disposition,
-                time:new Date().toISOString(),
-              },
-            }));
-            setDisposedLeadIds((current) => current.includes(leadId) ? current : [...current, leadId]);
-            const nextLead = panel.leads.find((item) => String(getLeadId(item)) !== leadId && !disposedLeadIds.includes(String(getLeadId(item))));
-            setFocusedCallLeadId(nextLead ? getLeadId(nextLead) : null);
-          }
-          if (String(savedCallLog?.direction || "").toLowerCase() === "inbound") {
-            setInboundCall((current) => current ? {
-              ...current,
-              lead:enrichLeadForInbound(savedCallLog.lead || current.lead),
-              callerNumber:savedCallLog.callerNumber || savedCallLog.customerNumber || savedCallLog.leadPhone || savedCallLog.phone || current.callerNumber,
-              customerNumber:savedCallLog.customerNumber || savedCallLog.callerNumber || savedCallLog.leadPhone || savedCallLog.phone || current.customerNumber,
-              status:savedCallLog.status || current.status,
-              disposition:savedCallLog.disposition || current.disposition,
-              duration:savedCallLog.duration || current.duration,
-              endedAt:savedCallLog.endedAt || current.endedAt,
-            } : current);
-            setCallLogCount((count) => count + (savedCallLog?.id ? 0 : 1));
-          }
-          setDispositionTarget(null);
-          setDispositionInitialValue("");
-        }}
-      />
+      {activeModal !== "mcube" && (
+        <CallDispositionModal
+          lead={dispositionTarget?.lead || null}
+          callLog={dispositionTarget?.callLog || null}
+          projects={projects}
+          initialDisposition={dispositionInitialValue}
+          onClose={() => {
+            setDispositionTarget(null);
+            setDispositionInitialValue("");
+            setActiveModal(null);
+          }}
+          onSaved={(savedCallLog) => {
+            const leadId = savedCallLog?.leadId ? String(savedCallLog.leadId) : "";
+            if (leadId) {
+              setCallLogsByLead((current) => ({ ...current, [leadId]:savedCallLog }));
+              setCallDispositions((current) => ({
+                ...current,
+                [leadId]:{
+                  type:savedCallLog.disposition,
+                  label:savedCallLog.disposition,
+                  time:new Date().toISOString(),
+                },
+              }));
+              setDisposedLeadIds((current) => current.includes(leadId) ? current : [...current, leadId]);
+              const nextLead = panel.leads.find((item) => String(getLeadId(item)) !== leadId && !disposedLeadIds.includes(String(getLeadId(item))));
+              setFocusedCallLeadId(nextLead ? getLeadId(nextLead) : null);
+            }
+            if (String(savedCallLog?.direction || "").toLowerCase() === "inbound") {
+              setInboundCall((current) => current ? {
+                ...current,
+                lead:enrichLeadForInbound(savedCallLog.lead || current.lead),
+                callerNumber:savedCallLog.callerNumber || savedCallLog.customerNumber || savedCallLog.leadPhone || savedCallLog.phone || current.callerNumber,
+                customerNumber:savedCallLog.customerNumber || savedCallLog.callerNumber || savedCallLog.leadPhone || savedCallLog.phone || current.customerNumber,
+                status:savedCallLog.status || current.status,
+                disposition:savedCallLog.disposition || current.disposition,
+                duration:savedCallLog.duration || current.duration,
+                endedAt:savedCallLog.endedAt || current.endedAt,
+              } : current);
+              setCallLogCount((count) => count + (savedCallLog?.id ? 0 : 1));
+            }
+            setDispositionTarget(null);
+            setDispositionInitialValue("");
+            setActiveModal(null);
+          }}
+        />
+      )}
 
     </div>
   );
