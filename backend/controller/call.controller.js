@@ -19,7 +19,9 @@ const allowedDispositions = new Set([
 ])
 
 const terminalCallStatuses = new Set(["completed", "failed", "no-answer", "missed", "busy", "canceled", "rejected"])
-const activeCallStatuses = ["initiated", "queued", "calling", "ringing", "connected", "in-progress"]
+const activeCallStatuses = ["initiating", "initiated", "queued", "calling", "ringing", "connected", "in-progress"]
+const liveCallStatuses = new Set(["connected", "in-progress"])
+const MCUBE_STALE_ACTIVE_CALL_MS = Number(process.env.MCUBE_STALE_ACTIVE_CALL_MS) || 2 * 60 * 1000
 
 const toNumberOrNull = (value) => {
   if (value === undefined || value === null || value === "") return null
@@ -366,19 +368,24 @@ const normalizeCallStatus = (value) => {
     answer:"connected",
     answered:"connected",
     connected:"connected",
+    calling:"initiating",
     queued:"initiated",
-    ringing:"calling",
+    ringing:"ringing",
     "in-progress":"connected",
     disconnected:"completed",
     disconnect:"completed",
+    hangup:"completed",
+    "hang-up":"completed",
     complete:"completed",
     completed:"completed",
     busy:"busy",
     "no-answer":"no-answer",
+    "no-answered":"no-answer",
+    no_answer:"no-answer",
     noanswer:"no-answer",
     missed:"missed",
     reject:"rejected",
-    rejected:"rejected",
+    rejected:"failed",
     failed:"failed",
     canceled:"canceled",
     cancelled:"canceled",
@@ -387,6 +394,7 @@ const normalizeCallStatus = (value) => {
 }
 
 const callStatusPriority = {
+  initiating:1,
   initiated:1,
   queued:1,
   calling:2,
@@ -451,7 +459,6 @@ const buildWhereFromQuery = (query) => {
     const phoneQuery = cleanPhone(query.callerNumber).slice(-10) || String(query.callerNumber)
     where.OR = [
       ...(where.OR || []),
-      { customerNumber:{ contains:phoneQuery } },
       { leadPhone:{ contains:phoneQuery } },
       { phone:{ contains:phoneQuery } },
     ]
@@ -751,9 +758,11 @@ exports.clickToCallLead = async (req, res) => {
   try {
     const leadId = toNumberOrNull(req.body.leadId)
     const agentId = toNumberOrNull(req.authUser?.id)
+    const requestId = String(req.body.requestId || `${Date.now()}-${Math.random()}`).trim()
 
     if (!leadId) return res.status(400).json({ message:"leadId is required" })
     if (!agentId) return res.status(401).json({ message:"Authentication is required" })
+    if (!requestId) return res.status(400).json({ message:"requestId is required" })
 
     const [lead, agent] = await Promise.all([
       prisma.lead.findUnique({ where:{ id:leadId } }),
@@ -777,6 +786,47 @@ exports.clickToCallLead = async (req, res) => {
       return res.status(400).json({ message:"MCUBE calling number is not configured for this user." })
     }
 
+    const activeCall = await prisma.callLog.findFirst({
+      where:{
+        agentId,
+        provider:{ in:["mcube", "mcube-webphone"] },
+        status:{ in:activeCallStatuses },
+      },
+      include:callInclude,
+      orderBy:{ createdAt:"desc" },
+    })
+
+    if (activeCall) {
+      const activeStatus = normalizeCallStatus(activeCall.status)
+      const activeAt = activeCall.startedAt || activeCall.createdAt
+      const activeAgeMs = activeAt ? Date.now() - new Date(activeAt).getTime() : 0
+
+      if (liveCallStatuses.has(activeStatus) && activeAgeMs < 30 * 60 * 1000) {
+        return res.status(409).json({
+          success:false,
+          message:"Another call is currently active. Please complete it before starting a new call.",
+          callLog:activeCall,
+        })
+      }
+
+      if (!liveCallStatuses.has(activeStatus) && activeAgeMs > MCUBE_STALE_ACTIVE_CALL_MS) {
+        await prisma.callLog.update({
+          where:{ id:activeCall.id },
+          data:{
+            status:"canceled",
+            endedAt:new Date(),
+            notes:activeCall.notes || "MCube outbound call was canceled after becoming stale.",
+          },
+        }).catch(() => null)
+      } else {
+        return res.status(409).json({
+          success:false,
+          message:"Another call is currently active. Please wait before starting a new call.",
+          callLog:activeCall,
+        })
+      }
+    }
+
     callLog = await prisma.callLog.create({
       data:{
         leadId,
@@ -786,7 +836,7 @@ exports.clickToCallLead = async (req, res) => {
         agentPhone:agentPhone || null,
         provider:"mcube",
         status:"initiating",
-        notes:"MCube outbound click2call",
+        notes:`MCube outbound click2call request ${requestId}`,
         startedAt:new Date(),
       },
       include:callInclude,
@@ -798,6 +848,7 @@ exports.clickToCallLead = async (req, res) => {
       leadPhone,
       callLogId:callLog.id,
       leadId,
+      requestId,
     })
 
     callLog = await prisma.callLog.update({
@@ -805,7 +856,7 @@ exports.clickToCallLead = async (req, res) => {
       data:{
         callId:providerResult.providerCallId,
         providerCallId:providerResult.providerCallId,
-        status:"initiated",
+        status:normalizeCallStatus(providerResult.status || "initiated"),
       },
       include:callInclude,
     })
@@ -828,6 +879,7 @@ exports.clickToCallLead = async (req, res) => {
         providerCallId:callLog.providerCallId || callLog.callId || "",
         leadId,
         status:String(callLog.status || "initiated").toUpperCase(),
+        requestId,
       },
       callLog,
     })
@@ -986,10 +1038,7 @@ exports.disposeCall = async (req, res) => {
           agentId,
           phone:callPhone,
           leadPhone:callPhone === "-" ? null : callPhone,
-          customerNumber:callPhone === "-" ? null : callPhone,
           agentPhone:cleanPhone(req.body.agentPhone || agent.phone || agent.secondaryPhone) || null,
-          direction:isInboundCall ? "inbound" : "outbound",
-          provider:"manual",
           status:callStatus,
           notes:isInboundCall ? "Manual inbound disposition" : null,
           startedAt:new Date(),
@@ -1026,7 +1075,6 @@ exports.disposeCall = async (req, res) => {
           where:{ id:existingCall.id },
           data:{
             leadId:matchedLead.id,
-            customerNumber:inboundPhone || existingCall.customerNumber,
             leadPhone:inboundPhone || existingCall.leadPhone,
             phone:inboundPhone || existingCall.phone,
             direction:"inbound",
@@ -1036,6 +1084,7 @@ exports.disposeCall = async (req, res) => {
       }
     }
 
+    const isInboundDisposition = String(existingCall.direction || req.body.direction || "").toLowerCase() === "inbound"
     let callbackFollowUp = null
     const result = await prisma.$transaction(async (tx) => {
       const nextLeadStatus = getDispositionLeadStatus(disposition)
@@ -1133,7 +1182,45 @@ exports.disposeCall = async (req, res) => {
     })
     if (callbackFollowUp) handleCallbackFollowUpSaved(callbackFollowUp)
 
-    res.status(200).json({ message:"Call disposition saved", callLog:result })
+    let mcubeDisposition = null
+    if (isInboundDisposition) {
+      const mcubeCallId = result.providerCallId || result.callId || existingCall.providerCallId || existingCall.callId || req.body.callid || req.body.callId || ""
+      if (mcubeCallId) {
+        try {
+          mcubeDisposition = await mcubeVoice.submitInboundDisposition({
+            callId:mcubeCallId,
+            disposition,
+            notes,
+            phone:result.callerNumber || result.leadPhone || result.phone || req.body.callerNumber || req.body.phone || "",
+            leadName:result.lead ? getLeadName(result.lead) : "",
+            callLogId:result.id,
+          })
+        } catch (mcubeError) {
+          console.error("MCube inbound disposition sync error:", {
+            callLogId:result.id,
+            message:mcubeError.message,
+            statusCode:mcubeError.statusCode || 500,
+          })
+          mcubeDisposition = {
+            success:false,
+            message:mcubeError.message || "MCube inbound disposition sync failed",
+          }
+        }
+      } else {
+        mcubeDisposition = {
+          success:false,
+          message:"MCube callid is unavailable for this inbound call.",
+        }
+      }
+    }
+
+    res.status(200).json({
+      message:mcubeDisposition?.success === false
+        ? "Call disposition saved in CRM. MCube disposition sync failed."
+        : "Call disposition saved",
+      callLog:result,
+      ...(isInboundDisposition ? { mcubeDisposition } : {}),
+    })
   } catch (error) {
     console.error("Dispose call error:", error)
     res.status(500).json({ message:error.message || "Unable to save call disposition" })
@@ -1634,7 +1721,7 @@ const getWebhookCommonUpdate = (existingCall, data, notes) => {
     ...(data.customerPhone ? {
       phone:data.customerPhone || "-",
       leadPhone:data.customerPhone || null,
-      customerNumber:data.customerPhone,
+      callerNumber:data.direction === "inbound" ? data.customerPhone : existingCall?.callerNumber || null,
     } : {}),
     ...(data.agentPhone ? {
       agentPhone:data.agentPhone,
@@ -1760,7 +1847,7 @@ const saveMcubeWebhookCall = async (req, fallbackDirection) => {
       leadPhone:data.customerPhone,
       agentPhone:data.agentPhone || null,
       direction:data.direction,
-      customerNumber:data.customerPhone || null,
+      callerNumber:data.direction === "inbound" ? data.customerPhone || null : null,
       agentNumber:data.agentPhone || null,
       agentExtension:data.agentExtension || null,
       virtualNumber:data.virtualNumber || null,

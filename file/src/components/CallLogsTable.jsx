@@ -172,7 +172,7 @@ const CallLogsTable = ({ scope = "admin", direction = "" }) => {
         .call-log-summary-card span { color:#64748b; display:block; font-size:11px; font-weight:700; text-transform:uppercase; }
         .call-log-summary-card strong { color:#0f172a; display:block; font-size:22px; line-height:1; margin-top:8px; }
         .call-log-table-wrap { border-top:1px solid #e2e8f0; overflow-x:auto; padding:24px; }
-        .call-log-table { border-collapse:collapse; color:#334155; font-size:14px; min-width:1540px; width:100%; }
+        .call-log-table { border-collapse:collapse; color:#334155; font-size:14px; min-width:1180px; width:100%; }
         .call-log-table th { background:#487fff; border:0; color:#ffffff; font-size:14px; font-weight:700; letter-spacing:0; padding:18px 20px; text-align:left; text-transform:none; white-space:nowrap; }
         .call-log-table th:first-child { border-radius:8px 0 0 8px; }
         .call-log-table th:last-child { border-radius:0 8px 8px 0; }
@@ -244,16 +244,13 @@ const CallLogsTable = ({ scope = "admin", direction = "" }) => {
       {error ? <div className="call-log-error">{error}</div> : loading ? <div className="call-log-empty">Loading call logs...</div> : logs.length === 0 ? <div className="call-log-empty">No call logs found.</div> : (
         <>
         <div className="call-log-table-wrap"><table className="call-log-table"><thead><tr>
-          <th>Lead</th><th>Provider</th><th>Direction</th><th>Disposition</th><th>{effectiveDirection === "inbound" ? "Caller Number" : "Lead Number"}</th><th>Agent</th><th>Extension</th><th>Campaign / Queue</th><th>Call Status</th><th>Duration</th><th>Disconnected By</th><th>After Call Recording</th><th>Created</th>
+          <th>Lead</th><th>Direction</th><th>Disposition</th><th>{effectiveDirection === "inbound" ? "Caller Number" : "Lead Number"}</th><th>Agent</th><th>Call Status</th><th>Duration</th><th>Disconnected By</th><th>After Call Recording</th><th>Created</th>
         </tr></thead><tbody>{paginatedLogs.map((log) => <tr key={log.id}>
           <td><span className="call-log-name">{log.lead ? getName(log.lead, `Lead #${log.leadId}`) : "Unknown Caller"}</span><span className="call-log-sub">{log.leadId ? `#${log.leadId}` : "No linked lead"}</span></td>
-          <td>{String(log.provider || "-").toUpperCase()}</td>
           <td>{getDirectionLabel(log)}</td>
           <td>{log.disposition || "-"}</td>
           <td>{log.callerNumber || log.customerNumber || log.leadPhone || log.phone || "-"}</td>
           <td><span className="call-log-name">{getName(log.agent, "-")}</span></td>
-          <td>{log.agentExtension || "-"}</td>
-          <td>{[log.campaignName, log.queueName].filter(Boolean).join(" / ") || "-"}</td>
           <td><span className="call-log-status">{getStatusLabel(log.status)}</span></td>
           <td>{formatDuration(log.duration)}</td>
           <td>{log.disconnectedBy || "-"}</td>

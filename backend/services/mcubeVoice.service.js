@@ -2,6 +2,7 @@ const axios = require("axios")
 
 const MCUBE_OUTBOUND_URL = "https://api.mcube.com/Restmcube-api/outbound-calls"
 const MCUBE_WIDGET_AUTH_URL = "https://mcube.vmc.in/common-widget/Phone/auth"
+const MCUBE_DISPOSITION_URL = "https://config.mcube.com/business/disposition-api/disposition"
 
 const cleanPhone = (value) => String(value || "").replace(/\D/g, "")
 
@@ -10,6 +11,12 @@ const getClickToCallToken = () =>
 
 const getClickToCallUrl = () =>
   String(process.env.MCUBE_CLICK2CALL_URL || process.env.MCUBE_OUTBOUND_API_URL || MCUBE_OUTBOUND_URL).trim()
+
+const getDispositionToken = () =>
+  String(process.env.MCUBE_DISPOSITION_TOKEN || process.env.MCUBE_TOKEN || "").trim()
+
+const getDispositionUrl = () =>
+  String(process.env.MCUBE_DISPOSITION_URL || MCUBE_DISPOSITION_URL).trim()
 
 const getRequestTimeout = () => {
   const configured = Number(process.env.MCUBE_REQUEST_TIMEOUT_MS)
@@ -62,7 +69,7 @@ const getProviderErrorMessage = (message, agentPhone) => {
   return text || "MCube did not accept the call request"
 }
 
-const connectTwoNumbers = async ({ agentExtension, agentPhone, leadPhone, callLogId, leadId }) => {
+const connectTwoNumbers = async ({ agentExtension, agentPhone, leadPhone, callLogId, leadId, requestId }) => {
   const token = getClickToCallToken()
   if (!token) {
     const error = new Error("MCube is not configured. Missing: MCUBE_CLICK2CALL_TOKEN")
@@ -96,7 +103,7 @@ const connectTwoNumbers = async ({ agentExtension, agentPhone, leadPhone, callLo
     exenumber:normalizedAgentPhone,
     custnumber:normalizedLeadPhone,
     refurl:String(process.env.MCUBE_CALLBACK_URL || callLogId),
-    refid:String(callLogId),
+    refid:String(requestId || callLogId),
     crmCallLogId:String(callLogId),
     crmLeadId:leadId ? String(leadId) : "",
   }
@@ -158,6 +165,63 @@ const getRecordingStream = (recordingUrl) =>
     timeout:30000,
   })
 
+const submitInboundDisposition = async ({ callId, disposition, notes, phone, leadName, callLogId }) => {
+  const token = getDispositionToken()
+  const normalizedCallId = String(callId || "").trim()
+
+  if (!token) {
+    const error = new Error("MCube disposition API is not configured. Missing: MCUBE_DISPOSITION_TOKEN or MCUBE_TOKEN")
+    error.statusCode = 503
+    throw error
+  }
+  if (!normalizedCallId) {
+    const error = new Error("MCube callid is required before sending inbound disposition.")
+    error.statusCode = 400
+    throw error
+  }
+
+  const payload = {
+    Authorization:token,
+    callid:normalizedCallId,
+    custom1:String(disposition || "").trim(),
+    custom2:String(notes || "").trim(),
+    custom3:String(phone || "").trim(),
+    custom4:String(leadName || callLogId || "").trim(),
+  }
+
+  try {
+    const response = await axios.post(
+      getDispositionUrl(),
+      payload,
+      {
+        headers:{ "Content-Type":"application/json" },
+        timeout:getRequestTimeout(),
+      }
+    )
+    if (!isSuccessResponse(response.data)) {
+      const providerMessage = firstValue(response.data, ["msg", "message", "error", "detail"])
+      const error = new Error(providerMessage || "MCube did not accept the inbound disposition.")
+      error.statusCode = 502
+      throw error
+    }
+    return {
+      success:true,
+      provider:"mcube",
+      raw:response.data,
+    }
+  } catch (error) {
+    if (error.statusCode) throw error
+    const providerMessage =
+      error.response?.data?.message ||
+      error.response?.data?.msg ||
+      error.response?.data?.error ||
+      error.message
+    const wrapped = new Error(providerMessage || "MCube inbound disposition failed")
+    wrapped.statusCode = error.response?.status || 502
+    throw wrapped
+  }
+}
+
 const getBrowserPhoneConfig = () => {
   const baseUrl = String(
     process.env.MCUBE_WEBPHONE_URL ||
@@ -195,39 +259,6 @@ const buildBrowserPhoneUrl = ({ agentEmail, agentExtension, agentPhone, leadPhon
   const addWidgetParams = (url, includeAuth = false) => {
     url.searchParams.set("username", String(agentEmail).trim())
     if (includeAuth && config.token) url.searchParams.set(config.tokenParam, config.token)
-    if (normalizedLeadPhone) {
-      url.searchParams.set("callto", normalizedLeadPhone)
-      url.searchParams.set("callTo", normalizedLeadPhone)
-      url.searchParams.set("call_to", normalizedLeadPhone)
-      url.searchParams.set("custnumber", normalizedLeadPhone)
-      url.searchParams.set("custNumber", normalizedLeadPhone)
-      url.searchParams.set("customer_number", normalizedLeadPhone)
-      url.searchParams.set("customerNumber", normalizedLeadPhone)
-      url.searchParams.set("customerMobile", normalizedLeadPhone)
-      url.searchParams.set("customer_mobile", normalizedLeadPhone)
-      url.searchParams.set("leadPhone", normalizedLeadPhone)
-      url.searchParams.set("phone", normalizedLeadPhone)
-      url.searchParams.set("number", normalizedLeadPhone)
-      url.searchParams.set("dialNumber", normalizedLeadPhone)
-      url.searchParams.set("dial_number", normalizedLeadPhone)
-      url.searchParams.set("destination", normalizedLeadPhone)
-      url.searchParams.set("to", normalizedLeadPhone)
-      url.searchParams.set("mobileNumber", normalizedLeadPhone)
-      url.searchParams.set("outboundNumber", normalizedLeadPhone)
-      url.searchParams.set("outbound_number", normalizedLeadPhone)
-    }
-    url.searchParams.set("mode", "outbound")
-    url.searchParams.set("callMode", "outbound")
-    url.searchParams.set("direction", "outbound")
-    url.searchParams.set("campaign", "outbound")
-    url.searchParams.set("callType", "outbound")
-    url.searchParams.set("type", "outbound")
-    url.searchParams.set("widgetMode", "outbound")
-    url.searchParams.set("defaultCampaign", "outbound")
-    url.searchParams.set("autocall", "1")
-    url.searchParams.set("autoCall", "1")
-    url.searchParams.set("autoDial", "1")
-    url.searchParams.set("startCall", "1")
     if (normalizedAgentPhone) {
       url.searchParams.set("exenumber", normalizedAgentPhone)
       url.searchParams.set("agentPhone", normalizedAgentPhone)
@@ -249,7 +280,6 @@ const buildBrowserPhoneUrl = ({ agentEmail, agentExtension, agentPhone, leadPhon
     return url
   }
 
-  const normalizedLeadPhone = normalizeIndianPhone(leadPhone)
   const normalizedAgentPhone = normalizeIndianPhone(agentPhone)
   const normalizedAgentExtension = String(agentExtension || "").trim()
   const authUrl = addWidgetParams(new URL(config.baseUrl), true).toString()
@@ -267,4 +297,5 @@ module.exports = {
   getClickToCallUrl,
   isConfiguredVirtualNumber,
   normalizeIndianPhone,
+  submitInboundDisposition,
 }
