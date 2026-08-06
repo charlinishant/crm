@@ -229,6 +229,13 @@ const getLatestDisposition = (lead) =>
     ? lead.callLogs.find((call) => call?.disposition) || null
     : lead?.latestDisposition || null;
 
+const isLeadDisposedFromCalling = (lead, localCallLog = null) => {
+  const dispositionCall = localCallLog?.disposition ? localCallLog : getLatestDisposition(lead);
+  if (!dispositionCall?.disposition) return false;
+  const disposition = String(dispositionCall.disposition || "").trim();
+  return Boolean(disposition);
+};
+
 const getDispositionFilterValue = (filterKey) =>
   String(filterKey || "").startsWith("disposition:")
     ? String(filterKey).slice("disposition:".length)
@@ -529,6 +536,17 @@ const getTimeGreeting = () => {
   return "Good evening";
 };
 
+const formatNotificationTime = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 const SalesUserPanel = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -554,6 +572,7 @@ const SalesUserPanel = () => {
   const [inboundCallCount, setInboundCallCount] = useState(0);
   const [callTarget, setCallTarget] = useState(null);
   const [activeCallId, setActiveCallId] = useState(null);
+  const [activeBlockedCall, setActiveBlockedCall] = useState(null);
   const [currentCallRequest, setCurrentCallRequest] = useState(null);
   const [outboundCallStatus, setOutboundCallStatus] = useState("idle");
   const [callError, setCallError] = useState("");
@@ -609,6 +628,9 @@ const SalesUserPanel = () => {
   const outboundRequestInProgressRef = useRef(false);
   const [inboundCall, setInboundCall] = useState(null);
   const [isInboundNoticeDismissed, setIsInboundNoticeDismissed] = useState(false);
+  const [isInboundPopupOpen, setIsInboundPopupOpen] = useState(false);
+  const [salesNotifications, setSalesNotifications] = useState([]);
+  const [isSalesNotificationsOpen, setIsSalesNotificationsOpen] = useState(false);
 
   const loadPanel = useCallback(async (showLoading = true) => {
     if (showLoading) {
@@ -736,6 +758,7 @@ const SalesUserPanel = () => {
     setCallTarget(null);
     setStartingCallLeadId(null);
     setCallError("");
+    setActiveBlockedCall(null);
   }, []);
   const hideMcubeWidget = useCallback(() => setMcubeWidgetVisible(false), []);
   const showMcubeWidget = useCallback(() => setMcubeWidgetVisible(true), []);
@@ -774,6 +797,7 @@ const SalesUserPanel = () => {
         return sameCall ? { ...current, ...enrichedCall } : enrichedCall;
       });
       setIsInboundNoticeDismissed(false);
+      setIsInboundPopupOpen(true);
       if (enrichedCall.lead?.id) {
         setCallLogsByLead((current) => ({
           ...current,
@@ -809,6 +833,64 @@ const SalesUserPanel = () => {
         .catch(() => {});
     };
   }, [panel.leads, panel.user]);
+
+  const loadSalesNotifications = useCallback(async () => {
+    const userId = getUserId(panel.user);
+    if (!userId) return;
+    try {
+      const response = await fetch(`${API_URL}/notification/get?userId=${userId}`);
+      const result = await response.json().catch(() => []);
+      if (!response.ok) throw new Error(result?.message || "Unable to load notifications");
+      setSalesNotifications(
+        (Array.isArray(result) ? result : [])
+          .sort((first, second) => new Date(second.createdAt || 0) - new Date(first.createdAt || 0))
+          .slice(0, 20)
+      );
+    } catch (notificationError) {
+      console.error("Unable to load sales notifications:", notificationError);
+    }
+  }, [panel.user]);
+
+  useEffect(() => {
+    const userId = getUserId(panel.user);
+    if (!userId) return undefined;
+
+    let isMounted = true;
+    const mergeNotification = (notification) => {
+      if (!isMounted || !notification) return;
+      setSalesNotifications((current) => [notification, ...current.filter((item) => item.id !== notification.id)].slice(0, 20));
+    };
+    const replaceNotifications = (notifications) => {
+      if (!isMounted || !Array.isArray(notifications)) return;
+      setSalesNotifications(
+        notifications
+          .sort((first, second) => new Date(second.createdAt || 0) - new Date(first.createdAt || 0))
+          .slice(0, 20)
+      );
+    };
+
+    loadSalesNotifications();
+    getReportsSocket()
+      .then((socket) => {
+        if (!isMounted) return;
+        socket.emit("register", String(userId));
+        socket.on(`notification-${userId}`, replaceNotifications);
+        socket.on(`newNotification-${userId}`, mergeNotification);
+      })
+      .catch((socketError) => {
+        console.error("Unable to connect sales notification socket:", socketError);
+      });
+
+    return () => {
+      isMounted = false;
+      getReportsSocket()
+        .then((socket) => {
+          socket.off(`notification-${userId}`, replaceNotifications);
+          socket.off(`newNotification-${userId}`, mergeNotification);
+        })
+        .catch(() => {});
+    };
+  }, [loadSalesNotifications, panel.user]);
 
   useEffect(() => {
     const token = localStorage.getItem("authToken");
@@ -1019,6 +1101,8 @@ const SalesUserPanel = () => {
     const token = localStorage.getItem("authToken");
     if (!token) return undefined;
 
+
+
     let isMounted = true;
     const markAttendanceActive = async () => {
       try {
@@ -1046,6 +1130,8 @@ const SalesUserPanel = () => {
     const intervalId = window.setInterval(() => {
       setTimeGreeting(getTimeGreeting());
     }, 60000);
+
+
 
     return () => window.clearInterval(intervalId);
   }, []);
@@ -1172,9 +1258,14 @@ const SalesUserPanel = () => {
 
   const userName = getName(panel.user);
   const userProfilePhoto = getProfilePhoto(panel.user);
+  const unreadSalesNotifications = salesNotifications.filter((notification) => !notification.isRead).length;
   const callQueue = useMemo(() => {
-    return panel.leads.filter((lead) => !disposedLeadIds.includes(String(getLeadId(lead))));
-  }, [disposedLeadIds, panel.leads]);
+    return panel.leads.filter((lead) => {
+      const leadId = String(getLeadId(lead));
+      if (disposedLeadIds.includes(leadId)) return false;
+      return !isLeadDisposedFromCalling(lead, callLogsByLead[leadId]);
+    });
+  }, [callLogsByLead, disposedLeadIds, panel.leads]);
 
   const getLeadDisposition = useCallback(
     (lead) => {
@@ -1729,10 +1820,10 @@ const SalesUserPanel = () => {
       conductSiteStatus: siteVisitForm.status,
       meetingPoint: siteVisitForm.location,
     };
-
+    
+    const leadId = siteVisitForm.leadId;
     const previousLeads = panel.leads;
     const previousStats = panel.stats;
-    const leadId = siteVisitForm.leadId;
 
     setIsSavingSiteVisit(true);
     setSiteVisitMessage("");
@@ -1898,6 +1989,23 @@ const SalesUserPanel = () => {
         status:"completed",
         provider:"manual",
       },
+    });
+  };
+
+  const completeActiveBlockedCall = () => {
+    if (!activeBlockedCall?.id) return;
+    const blockedLeadId = activeBlockedCall.leadId ? String(activeBlockedCall.leadId) : "";
+    const lead =
+      activeBlockedCall.lead ||
+      panel.leads.find((item) => String(getLeadId(item)) === blockedLeadId) ||
+      null;
+
+    setCallTarget(null);
+    setActiveModal("disposition");
+    setDispositionInitialValue("");
+    setDispositionTarget({
+      lead,
+      callLog:activeBlockedCall,
     });
   };
 
@@ -2183,8 +2291,8 @@ const SalesUserPanel = () => {
 
   const assignedTasks = panel.tasks || [];
   const currentCallLead = useMemo(() => {
-    return panel.leads.find((lead) => String(getLeadId(lead)) === String(focusedCallLeadId)) || callQueue[0] || null;
-  }, [callQueue, focusedCallLeadId, panel.leads]);
+    return callQueue.find((lead) => String(getLeadId(lead)) === String(focusedCallLeadId)) || callQueue[0] || null;
+  }, [callQueue, focusedCallLeadId]);
   const currentCallLog = currentCallLead ? callLogsByLead[getLeadId(currentCallLead)] : null;
   const currentCallStatus = String(currentCallLog?.status || "").toLowerCase();
   const currentCallStatusLabel = currentCallStatus === "ringing" || currentCallStatus === "calling"
@@ -2252,7 +2360,20 @@ const SalesUserPanel = () => {
         }),
       });
       const result = await response.json().catch(() => ({}));
-      if (!response.ok || result?.success === false) throw new Error(result?.message || "Unable to start call");
+      if (!response.ok || result?.success === false) {
+        if (response.status === 409 && result?.callLog) {
+          const blockedStatus = normalizeOutboundStatus(result.callLog.status || "ringing");
+          const blockedLeadId = result.callLog.leadId ? String(result.callLog.leadId) : "";
+          setActiveBlockedCall(result.callLog);
+          setActiveCallId(result.callLog.id || null);
+          setOutboundCallStatus(blockedStatus);
+          if (blockedLeadId) {
+            setCallLogsByLead((current) => ({ ...current, [blockedLeadId]:result.callLog }));
+          }
+        }
+        throw new Error(result?.message || "Unable to start call");
+      }
+      setActiveBlockedCall(null);
       if (result?.callLog) {
         setCallLogsByLead((current) => ({ ...current, [leadId]:result.callLog }));
       }
@@ -2556,7 +2677,6 @@ const SalesUserPanel = () => {
           </div>
         </div>
 
-        <CallLogsTable scope="sales" direction="inbound" />
       </section>
     );
   };
@@ -2700,9 +2820,41 @@ const SalesUserPanel = () => {
               {isOnBreak ? "Return" : "Take break"}
             </button>
           </div>
-          <button className="sales-icon-btn" type="button" title="Notifications">
-            <Bell size={17} />
-          </button>
+          <div className="sales-notification-menu">
+            <button
+              className="sales-icon-btn sales-notification-btn"
+              type="button"
+              title="Notifications"
+              aria-expanded={isSalesNotificationsOpen}
+              onClick={() => setIsSalesNotificationsOpen((current) => !current)}
+            >
+              <Bell size={17} />
+              {unreadSalesNotifications > 0 && (
+                <span className="sales-notification-count">{Math.min(unreadSalesNotifications, 99)}</span>
+              )}
+            </button>
+            {isSalesNotificationsOpen && (
+              <div className="sales-notification-dropdown">
+                <div className="sales-notification-head">
+                  <strong>Notifications</strong>
+                  <span>{salesNotifications.length}</span>
+                </div>
+                <div className="sales-notification-list">
+                  {salesNotifications.length === 0 ? (
+                    <div className="sales-notification-empty">No notifications</div>
+                  ) : (
+                    salesNotifications.slice(0, 8).map((notification) => (
+                      <div className={`sales-notification-item ${notification.isRead ? "" : "unread"}`} key={notification.id}>
+                        <strong>{notification.titile || notification.title || "Notification"}</strong>
+                        <p>{notification.description || "-"}</p>
+                        <small>{formatNotificationTime(notification.createdAt)}</small>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
           <div className="sales-role">
             {userProfilePhoto ? (
               <img className="sales-avatar" src={userProfilePhoto} alt={userName} />
@@ -2766,6 +2918,74 @@ const SalesUserPanel = () => {
                   Dismiss
                 </button>
               </div>
+            </div>
+          )}
+
+          {inboundCall && isInboundPopupOpen && (
+            <div className="sales-inbound-popup-backdrop" role="presentation">
+              <section className="sales-inbound-popup" role="dialog" aria-modal="true" aria-labelledby="inbound-popup-title">
+                <div className="sales-inbound-popup-head">
+                  <span>Incoming Call</span>
+                  <button type="button" onClick={() => setIsInboundPopupOpen(false)} aria-label="Close inbound call popup">
+                    ×
+                  </button>
+                </div>
+                <div className="sales-inbound-popup-body">
+                  <div className="sales-avatar call-avatar">
+                    {initials(inboundCall.lead ? getLeadName(inboundCall.lead) : "Unknown Caller")}
+                  </div>
+                  <div>
+                    <h2 id="inbound-popup-title">{inboundCall.lead ? getLeadName(inboundCall.lead) : "Unknown Caller"}</h2>
+                    <p>{inboundCall.callerNumber || inboundCall.customerNumber || "-"}</p>
+                    <small>
+                      {[inboundCall.agentExtension ? `Ext ${inboundCall.agentExtension}` : "", inboundCall.status ? String(inboundCall.status).replace(/-/g, " ") : ""].filter(Boolean).join(" | ")}
+                    </small>
+                  </div>
+                </div>
+                <div className="sales-inbound-popup-actions">
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={() => {
+                      setIsInboundPopupOpen(false);
+                      setActiveScreen("inboundCalls");
+                      navigate("/user/sales/calls/inbound");
+                    }}
+                  >
+                    Open inbound
+                  </button>
+                  {inboundCall.lead?.id ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsInboundPopupOpen(false);
+                        navigate(`/user/sales/details?leadId=${inboundCall.lead.id}`, { state:{ lead:inboundCall.lead } });
+                      }}
+                    >
+                      Fetch details
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsInboundPopupOpen(false);
+                        setActiveScreen("addLead");
+                        navigate("/user/sales/add-lead", {
+                          state:{
+                            inboundCallerNumber:inboundCall.callerNumber || inboundCall.customerNumber || "",
+                            inboundCall,
+                          },
+                        });
+                      }}
+                    >
+                      Create new lead
+                    </button>
+                  )}
+                  <button type="button" className="ghost" onClick={() => setIsInboundPopupOpen(false)}>
+                    Dismiss
+                  </button>
+                </div>
+              </section>
             </div>
           )}
 
@@ -2966,7 +3186,16 @@ const SalesUserPanel = () => {
                       <small>Request {String(currentCallRequest.requestId).slice(0, 8)}</small>
                     </div>
                   )}
-                  {callError && <div className="sales-inline-error">{callError}</div>}
+                  {callError && (
+                    <div className="sales-inline-error">
+                      <span>{callError}</span>
+                      {activeBlockedCall?.id && (
+                        <button type="button" onClick={completeActiveBlockedCall}>
+                          Complete active call
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   <div className="sales-call-actions">
                     <button
@@ -3501,7 +3730,12 @@ const SalesUserPanel = () => {
                 },
               }));
               setDisposedLeadIds((current) => current.includes(leadId) ? current : [...current, leadId]);
-              const nextLead = panel.leads.find((item) => String(getLeadId(item)) !== leadId && !disposedLeadIds.includes(String(getLeadId(item))));
+              const nextLead = panel.leads.find((item) => {
+                const itemLeadId = String(getLeadId(item));
+                return itemLeadId !== leadId &&
+                  !disposedLeadIds.includes(itemLeadId) &&
+                  !isLeadDisposedFromCalling(item, callLogsByLead[itemLeadId]);
+              });
               setFocusedCallLeadId(nextLead ? getLeadId(nextLead) : null);
             }
             if (String(savedCallLog?.direction || "").toLowerCase() === "inbound") {

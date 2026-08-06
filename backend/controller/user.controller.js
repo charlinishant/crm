@@ -228,20 +228,38 @@ exports.updateUser = async (req, res)=>{
 exports.deleteUser = async (req, res)=>{
     try {
         const id = req.params.id
-        if(!id)
-            res.status(400).json("ID is required")    
+        if(!id) {
+            return res.status(400).json("ID is required")
+        }
 
         const user = await prisma.user.findUnique({where:{id:parseInt(id)}})
-        if(!user)
-            res.status(400).json("User not found")    
+        if(!user) {
+            return res.status(400).json("User not found")
+        }
 
-        const deletedUser = await prisma.user.delete({where:{id:user.id}})
+        try {
+            await prisma.user.delete({where:{id:user.id}})
+            emitReportsUpdate("user:deleted")
+            return res.status(200).json("User deleted successfully")
+        } catch (deleteError) {
+            if(deleteError?.code !== "P2003") {
+                throw deleteError
+            }
 
-        res.status(200).json("User deleted successfully")
+            const deactivatedUser = await prisma.user.update({
+                where:{id:user.id},
+                data:{isActive:false}
+            })
+            emitReportsUpdate("user:updated")
+            return res.status(200).json({
+                message:"User has linked CRM records, so it was deactivated instead of deleted.",
+                user:deactivatedUser
+            })
+        }
         
     } catch (error) {
         console.log(error);
-        res.status(500).json("Something went wrong")
+        res.status(500).json(error.message || "Something went wrong")
     }
 }
 
@@ -306,9 +324,6 @@ exports.getAccessPanel = async (req, res)=>{
                     locationPreferences:true,
                     bookings:true,
                     callLogs:{
-                        where:{
-                            disposition:{not:null}
-                        },
                         orderBy:{createdAt:"desc"},
                         take:1,
                         select:{

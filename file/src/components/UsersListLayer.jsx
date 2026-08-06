@@ -244,6 +244,70 @@ const adminUserStyles = `
   align-items: center;
   justify-content: center;
   gap: 8px;
+  position: relative;
+}
+
+.admin-user-action-menu-btn {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 22px;
+  font-weight: 800;
+  height: 36px;
+  justify-content: center;
+  line-height: 1;
+  width: 42px;
+}
+
+.admin-user-action-menu-btn:hover {
+  background: #e4f1ff;
+  border-color: #95c7ff;
+  color: #487fff;
+}
+
+.admin-user-action-menu {
+  background: #ffffff;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, .16);
+  display: grid;
+  min-width: 145px;
+  padding: 6px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+}
+
+.admin-user-action-menu button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #334155;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+  min-height: 34px;
+  padding: 0 10px;
+  text-align: left;
+}
+
+.admin-user-action-menu button:hover {
+  background: #f1f5f9;
+  color: #2563eb;
+}
+
+.admin-user-action-menu button.danger {
+  color: #dc2626;
+}
+
+.admin-user-action-menu button.danger:hover {
+  background: #fff1f2;
+  color: #be123c;
 }
 
 .admin-user-btn {
@@ -581,6 +645,7 @@ const UsersListLayer = () => {
   const [savingStatusId, setSavingStatusId] = useState(null);
   const [statusMessage, setStatusMessage] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [openActionUserId, setOpenActionUserId] = useState(null);
 
   useEffect(() => {
     setAdminUsers(Array.isArray(users) ? users : []);
@@ -642,6 +707,12 @@ const UsersListLayer = () => {
     setCurrentPage((page) => Math.min(page, totalPages));
   }, [totalPages]);
 
+  useEffect(() => {
+    const closeMenu = () => setOpenActionUserId(null);
+    window.addEventListener("click", closeMenu);
+    return () => window.removeEventListener("click", closeMenu);
+  }, []);
+
   const updateUserStatus = async (user, nextStatus) => {
     setSavingStatusId(user.id);
     setStatusMessage("");
@@ -670,6 +741,32 @@ const UsersListLayer = () => {
       setStatusMessage(err.message || "Unable to update user status.");
     } finally {
       setSavingStatusId(null);
+    }
+  };
+
+  const deleteUser = async (user) => {
+    setOpenActionUserId(null);
+    if (!window.confirm(`Delete ${getUserName(user)}?`)) return;
+    setStatusMessage("");
+
+    try {
+      const response = await fetch(`${API_URL}/users/${user.id}`, {
+        method: "DELETE",
+      });
+      const result = await response.json().catch(() => "");
+      if (!response.ok) throw new Error(result?.message || result || "Unable to delete user");
+
+      if (result?.user) {
+        setAdminUsers((current) => current.map((item) => item.id === user.id ? result.user : item));
+        setSelectedUser((current) => current?.id === user.id ? result.user : current);
+        setStatusMessage(result.message || `${getUserName(user)} deactivated successfully.`);
+      } else {
+        setAdminUsers((current) => current.filter((item) => item.id !== user.id));
+        setSelectedUser((current) => current?.id === user.id ? null : current);
+        setStatusMessage(`${getUserName(user)} deleted successfully.`);
+      }
+    } catch (err) {
+      setStatusMessage(err.message || "Unable to delete user.");
     }
   };
 
@@ -809,18 +906,32 @@ const UsersListLayer = () => {
                       <div className="admin-user-actions">
                         <button
                           type="button"
-                          className="admin-user-btn"
-                          onClick={() => setSelectedUser(user)}
+                          className="admin-user-action-menu-btn"
+                          aria-label={`Actions for ${getUserName(user)}`}
+                          aria-expanded={openActionUserId === user.id}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setOpenActionUserId((current) => current === user.id ? null : user.id);
+                          }}
                         >
-                          Details
+                          ⋮
                         </button>
-                        <button
-                          type="button"
-                          className="admin-user-btn primary"
-                          onClick={() => navigate(`/add-user?id=${user.id}`)}
-                        >
-                          Edit
-                        </button>
+                        {openActionUserId === user.id && (
+                          <div className="admin-user-action-menu" onClick={(event) => event.stopPropagation()}>
+                            <button type="button" onClick={() => {
+                              setSelectedUser(user);
+                              setOpenActionUserId(null);
+                            }}>
+                              Details
+                            </button>
+                            <button type="button" onClick={() => navigate(`/add-user?id=${user.id}`)}>
+                              Edit
+                            </button>
+                            <button type="button" className="danger" onClick={() => deleteUser(user)}>
+                              Delete
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </td>
                   </tr>

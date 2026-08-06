@@ -26332,3 +26332,130 @@ th{
     justify-content: flex-start;
   }
 }
+.sales-inline-error {
+  align-items: center;
+  background: #fff1f2;
+  border: 1px solid #fecdd3;
+  border-radius: 8px;
+  color: #be123c;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.sales-inline-error button {
+  background: #ffffff;
+  border: 1px solid #fda4af;
+  border-radius: 8px;
+  color: #be123c;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+  min-height: 30px;
+  padding: 0 12px;
+}
+
+.sales-inline-error button:hover {
+  background: #ffe4e6;
+}
+
+.sales-inbound-popup-backdrop {
+  align-items: center;
+  background: rgba(15, 23, 42, .45);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 1200;
+}
+
+.sales-inbound-popup {
+  background: #ffffff;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, .22);
+  max-width: 430px;
+  overflow: hidden;
+  width: min(430px, 100%);
+}
+
+.sales-inbound-popup-head {
+  align-items: center;
+  background: #eff6ff;
+  color: #075985;
+  display: flex;
+  font-size: 13px;
+  font-weight: 800;
+  justify-content: space-between;
+  padding: 14px 16px;
+  text-transform: uppercase;
+}
+
+.sales-inbound-popup-head button {
+  background: transparent;
+  border: 0;
+  color: #0f172a;
+  cursor: pointer;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.sales-inbound-popup-body {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  padding: 22px 18px;
+}
+
+.sales-inbound-popup-body h2 {
+  color: #0f172a;
+  font-size: 22px;
+  margin: 0 0 4px;
+}
+
+.sales-inbound-popup-body p {
+  color: #111827;
+  font-size: 18px;
+  font-weight: 800;
+  margin: 0 0 4px;
+}
+
+.sales-inbound-popup-body small {
+  color: #64748b;
+  display: block;
+  font-size: 13px;
+}
+
+.sales-inbound-popup-actions {
+  border-top: 1px solid #e2e8f0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+  padding: 16px;
+}
+
+.sales-inbound-popup-actions button {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #0f172a;
+  cursor: pointer;
+  font-weight: 800;
+  min-height: 42px;
+  padding: 0 14px;
+}
+
+.sales-inbound-popup-actions button.primary {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+}
+
+.sales-inbound-popup-actions button.ghost {
+  grid-column: 1 / -1;
+}

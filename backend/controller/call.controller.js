@@ -96,7 +96,7 @@ const findLeadByPhone = async (phone) => {
   const leads = await prisma.lead.findMany({
     where:{ is_delete:false },
     select:{ id:true, phones:true, teamId:true },
-    orderBy:{ updatedAt:"desc" },
+    orderBy:{ id:"desc" },
   })
   return leads.find((lead) => getAllLeadPhones(lead).some((item) => matchesPhone(item, target))) || null
 }
@@ -125,7 +125,7 @@ const findLeadMatchesByPhone = async (phone, agentId = null) => {
       budgetMin:true,
       budgetMax:true,
     },
-    orderBy:{ updatedAt:"desc" },
+    orderBy:{ id:"desc" },
   })
   return leads.filter((lead) => getAllLeadPhones(lead).some((item) => matchesPhone(item, target)))
 }
@@ -137,6 +137,15 @@ const findUserByPhone = async (phone) => {
     select:{ id:true, phone:true, secondaryPhone:true },
   })
   return users.find((user) => matchesPhone(user.phone, target) || matchesPhone(user.secondaryPhone, target)) || null
+}
+
+const findUserByEmail = async (email) => {
+  const normalizedEmail = String(email || "").trim().toLowerCase()
+  if (!normalizedEmail) return null
+  return prisma.user.findFirst({
+    where:{ email:normalizedEmail, isActive:true },
+    select:{ id:true, email:true, phone:true, secondaryPhone:true, firstName:true, lastName:true, username:true },
+  })
 }
 
 const findUserByMcubeAgentId = async (agentProviderId) => {
@@ -345,6 +354,33 @@ const findUserByMcubeExtension = async (extension, agentLogin = "") => {
     return (normalizedExtension && configuredExtension === normalizedExtension) ||
       (login && emails.includes(login))
   }) || null
+}
+
+const findAvailableInboundAgent = async () => {
+  const configuredEmail = String(process.env.MCUBE_INBOUND_AGENT_EMAIL || "").trim().toLowerCase()
+  const configuredPhone = cleanPhone(process.env.MCUBE_INBOUND_AGENT_PHONE || process.env.MCUBE_DEFAULT_AGENT_NUMBER)
+  const configuredAgent =
+    await findUserByEmail(configuredEmail) ||
+    await findUserByPhone(configuredPhone)
+  if (configuredAgent) return configuredAgent
+
+  const attendance = await prisma.userAttendance.findFirst({
+    where:{
+      logoutAt:null,
+      status:{ in:["Available", "On Call"] },
+      user:{
+        isActive:true,
+        role:{ in:["SALES", "PRE_SALES", "MANAGER"] },
+      },
+    },
+    include:{
+      user:{
+        select:{ id:true, email:true, phone:true, secondaryPhone:true, firstName:true, lastName:true, username:true },
+      },
+    },
+    orderBy:{ updatedAt:"desc" },
+  })
+  return attendance?.user || null
 }
 
 const isAdminUser = (req) =>
@@ -1336,6 +1372,25 @@ exports.getCallDetail = async (req, res) => {
   }
 }
 
+exports.deleteCallLog = async (req, res) => {
+  try {
+    const id = toNumberOrNull(req.params.id)
+    if (!id) return res.status(400).json({ message:"Call id is required" })
+
+    const callLog = await prisma.callLog.findUnique({
+      where:{ id },
+      include:{ lead:{ select:{ teamId:true } } },
+    })
+    if (!callLog) return res.status(404).json({ message:"Call log not found" })
+    if (!canAccessCallLog(req, callLog)) return res.status(403).json({ message:"Access denied" })
+
+    await prisma.callLog.delete({ where:{ id } })
+    res.status(200).json({ message:"Call log deleted", id, leadId:callLog.leadId || null })
+  } catch (error) {
+    res.status(500).json({ message:error.message || "Unable to delete call log" })
+  }
+}
+
 exports.linkCallLead = async (req, res) => {
   try {
     const id = toNumberOrNull(req.params.id)
@@ -1443,14 +1498,23 @@ const getMcubeCallLookup = (req) => {
 const normalizeRecordingUrl = (value) => {
   const recordingUrl = String(value || "").trim()
   if (!recordingUrl || ["na", "null", "undefined", "none", "-"].includes(recordingUrl.toLowerCase())) return ""
+  const recordingBaseUrl = String(process.env.MCUBE_RECORDING_BASE_URL || "").trim()
   try {
     const parsed = new URL(recordingUrl)
     if (!["https:", "http:"].includes(parsed.protocol)) return ""
-    if (parsed.protocol === "http:" && String(process.env.ALLOW_INSECURE_RECORDING_URLS || "").toLowerCase() !== "true") return ""
+    if (
+      parsed.protocol === "http:" &&
+      String(process.env.ALLOW_INSECURE_RECORDING_URLS || "true").toLowerCase() !== "true"
+    ) return ""
+    return parsed.toString()
   } catch (error) {
-    return ""
+    if (!recordingBaseUrl) return ""
+    try {
+      return new URL(recordingUrl.replace(/^\/+/, ""), `${recordingBaseUrl.replace(/\/+$/, "")}/`).toString()
+    } catch (baseUrlError) {
+      return ""
+    }
   }
-  return recordingUrl
 }
 
 const getSafeWebhookPayload = (req) => {
@@ -1460,6 +1524,22 @@ const getSafeWebhookPayload = (req) => {
   })
   return payload
 }
+
+const hasMcubeWebhookSignal = (data) => Boolean(
+  data.providerCallId ||
+  data.callLogId ||
+  data.customerPhone ||
+  data.agentPhone ||
+  data.agentExtension ||
+  data.agentProviderId ||
+  data.agentLogin ||
+  data.providerStatus ||
+  data.recordingUrl ||
+  data.startedAt ||
+  data.endedAtFromProvider ||
+  data.campaignId ||
+  data.queueId
+)
 
 const getAnsweredAt = (startedAt, answerDelay, rawAnsweredAt) => {
   const parsedAnsweredAt = toDateOrNull(rawAnsweredAt)
@@ -1583,10 +1663,20 @@ const getMcubeWebhookData = async (req, fallbackDirection = "outbound") => {
   const recordingUrl = getMcubePayloadValue(req, [
     "recording",
     "recordingUrl",
+    "recordingurl",
     "recording_url",
     "RecordingUrl",
     "recordurl",
     "recordUrl",
+    "recordinglink",
+    "recordingLink",
+    "recording_link",
+    "url",
+    "downloadurl",
+    "downloadUrl",
+    "download_url",
+    "mp3",
+    "wav",
     "record_url",
     "filename",
     "fileName",
@@ -1599,8 +1689,12 @@ const getMcubeWebhookData = async (req, fallbackDirection = "outbound") => {
     "audio_url",
     "recordingfile",
     "recordingFile",
+    "recording_file",
     "voicefile",
     "voiceFile",
+    "voice_file",
+    "recfile",
+    "recFile",
   ])
   const startedAt = toDateOrNull(getMcubePayloadValue(req, ["starttime", "startTime", "StartTime", "callstarttime"]))
   const endedAtFromProvider = toDateOrNull(getMcubePayloadValue(req, ["endtime", "endTime", "EndTime", "callendtime"]))
@@ -1689,6 +1783,33 @@ const findRecentMcubeCallLogByPhones = async ({ customerPhone, agentPhone, direc
     return matchesPhone(call.leadPhone || call.phone, customerPhone) &&
       (!agentPhone || !call.agentPhone || matchesPhone(call.agentPhone, agentPhone)) &&
       (!direction || !notes.includes("mcube") || notes.includes(direction))
+  }) || null
+}
+
+const findRecentMcubeRecordingTarget = async (data) => {
+  if (!data.recordingUrl) return null
+  const candidates = await prisma.callLog.findMany({
+    where:{
+      provider:{ in:["mcube", "mcube-webphone"] },
+      direction:data.direction || "inbound",
+      recordingUrl:null,
+      createdAt:{ gte:new Date(Date.now() - 24 * 60 * 60 * 1000) },
+    },
+    orderBy:{ createdAt:"desc" },
+    take:50,
+  })
+
+  return candidates.find((call) => {
+    const phoneMatches = data.customerPhone
+      ? matchesPhone(call.leadPhone || call.phone || call.callerNumber || call.customerNumber, data.customerPhone)
+      : true
+    const agentMatches = data.agentPhone
+      ? matchesPhone(call.agentPhone || call.agentNumber, data.agentPhone)
+      : true
+    const virtualMatches = data.virtualNumber
+      ? !call.virtualNumber || matchesPhone(call.virtualNumber, data.virtualNumber)
+      : true
+    return phoneMatches && agentMatches && virtualMatches
   }) || null
 }
 
@@ -1806,7 +1927,7 @@ const emitInboundCallEvent = (callLog, data, matched = true) => {
   }
 }
 
-const saveMcubeWebhookCall = async (req, fallbackDirection) => {
+const saveMcubeWebhookCall = async (req, fallbackDirection, options = {}) => {
   if (!verifyMcubeWebhook(req)) {
     const error = new Error("Invalid MCube webhook token")
     error.statusCode = 403
@@ -1814,14 +1935,35 @@ const saveMcubeWebhookCall = async (req, fallbackDirection) => {
   }
 
   const data = await getMcubeWebhookData(req, fallbackDirection)
+  if (!hasMcubeWebhookSignal(data)) {
+    const error = new Error("No MCube call data received")
+    error.statusCode = 400
+    throw error
+  }
+  if (options.requireRecording && !data.recordingUrl) {
+    const error = new Error("MCube recording URL is required for recording webhook")
+    error.statusCode = 400
+    throw error
+  }
+  const exactCall = await findMcubeCallLog(data)
+  const recordingTarget = !exactCall && data.recordingUrl
+    ? await findRecentMcubeRecordingTarget(data)
+    : null
   const existingCall =
-    await findMcubeCallLog(data) ||
+    exactCall ||
+    recordingTarget ||
     await findRecentBrowserPhoneCallLog(data) ||
     await findRecentMcubeCallLogByPhones(data)
+  if (options.requireRecording && !existingCall && !data.customerPhone && !data.providerCallId && !data.callLogId) {
+    const error = new Error("Matching call details are required for MCube recording webhook")
+    error.statusCode = 400
+    throw error
+  }
   const agent = existingCall ? null : (
     await findUserByMcubeAgentId(data.agentProviderId) ||
     await findUserByMcubeExtension(data.agentExtension, data.agentLogin) ||
-    await findUserByPhone(data.agentPhone)
+    await findUserByPhone(data.agentPhone) ||
+    (data.direction === "inbound" ? await findAvailableInboundAgent() : null)
   )
   const leadMatches = existingCall ? [] : await findLeadMatchesByPhone(data.customerPhone, agent?.id || null)
   const lead = leadMatches.length === 1 ? leadMatches[0] : null
@@ -1906,7 +2048,15 @@ exports.mcubeWebhook = async (req, res) => {
   }
 }
 
-exports.mcubeRecordingWebhook = exports.mcubeWebhook
+exports.mcubeRecordingWebhook = async (req, res) => {
+  try {
+    const result = await saveMcubeWebhookCall(req, "inbound", { requireRecording:true })
+    res.status(200).json(result)
+  } catch (error) {
+    console.error("MCube recording webhook error:", error)
+    res.status(error.statusCode || 500).json({ message:error.message || "Unable to process MCube recording" })
+  }
+}
 
 exports.getRecording = async (req, res) => {
   try {

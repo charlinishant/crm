@@ -267,6 +267,7 @@ const markFollowUpDone = async (user, id, body = {}) => {
       }, tx)
     }
 
+    let serializedNext = null
     if (body.nextAction === "create-next-follow-up" && body.nextFollowUp) {
       const nextFollowUp = await tx.followUp.create({
         data: {
@@ -281,12 +282,11 @@ const markFollowUpDone = async (user, id, body = {}) => {
         },
         include: { lead: true },
       })
-      handleCallbackFollowUpSaved(serializeFollowUp(nextFollowUp))
+      serializedNext = serializeFollowUp(nextFollowUp)
+      handleCallbackFollowUpSaved(serializedNext)
     }
 
-    const serializedNext = serializeFollowUp(next)
-    handleCallbackFollowUpSaved(serializedNext)
-    return serializedNext
+    return serializedNext || serializeFollowUp(updated)
   })
 }
 
@@ -294,7 +294,7 @@ const rescheduleFollowUp = async (user, id, body) => {
   const followUpDate = combineDateAndTime(body.followUpDate, body.followUpTime)
   if (!followUpDate) throw Object.assign(new Error("New follow-up date and time are required"), { statusCode: 400 })
 
-  return prisma.$transaction(async (tx) => {
+  const savedFollowUp = await prisma.$transaction(async (tx) => {
     const current = await tx.followUp.findFirst({
       where: getFollowUpWhere(user, id),
       include: { lead: true },
@@ -335,6 +335,9 @@ const rescheduleFollowUp = async (user, id, body) => {
 
     return serializeFollowUp(next)
   })
+
+  handleCallbackFollowUpSaved(savedFollowUp)
+  return savedFollowUp
 }
 
 const cancelFollowUp = async (user, id, body = {}) => {

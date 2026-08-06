@@ -17,6 +17,7 @@ const {
   getMyCalls,
   getAdminCalls,
   getAnalytics,
+  deleteCallLog,
   mcubeInbound,
   mcubeRecordingWebhook,
   mcubeWebhook,
@@ -46,6 +47,7 @@ router.get("/my", authenticate, getMyCalls)
 router.get("/admin/all", authenticate, getAdminCalls)
 router.get("/admin/analytics", authenticate, getAnalytics)
 router.get("/recording/:id", authenticate, getRecording)
+router.delete("/:id", authenticate, deleteCallLog)
 router.post("/mcube/inbound", mcubeInbound)
 router.post("/mcube/status", mcubeWebhook)
 router.post("/mcube/recording", mcubeRecordingWebhook)
