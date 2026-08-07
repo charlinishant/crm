@@ -1,2 +1,0 @@
-ALTER TABLE `CallLog`
-  MODIFY COLUMN `provider` VARCHAR(191) NOT NULL DEFAULT 'twilio';

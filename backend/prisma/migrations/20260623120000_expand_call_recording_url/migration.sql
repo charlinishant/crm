@@ -1,2 +1,0 @@
-ALTER TABLE `CallLog`
-  MODIFY COLUMN `recordingUrl` TEXT NULL;
