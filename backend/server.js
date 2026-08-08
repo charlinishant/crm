@@ -1,0 +1,104 @@
+require("dotenv").config()
+
+const express = require("express")
+const http = require("http")
+const cors = require("cors")
+const path = require("path")
+
+const prisma = require("./lib/prisma")
+const {initSocket} = require("./socket")
+const { initializeCallbackReminders } = require("./services/callbackReminder.service")
+const { initializeUnitHoldReleaseJob } = require("./services/unitHold.service")
+
+const app = express()
+const BODY_LIMIT = process.env.BODY_LIMIT || "250mb"
+
+const server = http.createServer(app)
+
+initSocket(server)
+
+
+const projectRouter = require("./routes/project.routes")
+const authRouter = require("./routes/authentication.routes")
+const leadNoteRouter = require("./routes/leadNote.routes")
+const leadActivityRouter = require("./routes/leadActivity.routes")
+const userRouter = require("./routes/user.routes")
+const teamRouter = require("./routes/team.routes")
+const towerRouter = require("./routes/tower.routes")
+const floorRouter = require("./routes/floorplan.routes")
+const unitRouter = require("./routes/unit.routes")
+const bookingRouter = require("./routes/booking.routes")
+const taskRouter = require("./routes/task.routes")
+const callRouter = require("./routes/call.routes")
+const callRecordingUpload = require("./middleware/callRecordingUpload.middleware")
+const { mcubeInbound, mcubeRecordingWebhook, mcubeWebhook } = require("./controllers/call.controller")
+const whatsappRouter = require("./routes/whatsapp.routes")
+const scheduleVisitRouter = require("./routes/scheduleVisit.routes")
+const attendanceRouter = require("./routes/attendance.routes")
+const followupRouter = require("./routes/followup.routes")
+const notifiactionRouter = require("./routes/notification.routes")
+const adminReportRouter = require("./routes/adminReport.routes")
+const demandRouter = require("./controllers/demands")
+const postSalesRouter = require("./routes/postSales.routes")
+const leadRouter = require("./routes/lead.routes")
+const emailRouetr = require("./routes/email.routes")
+
+
+app.use(cors({ origin: "*" }))
+app.use(express.json({ limit: BODY_LIMIT }))
+app.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }))
+app.use("/uploads", express.static(path.join(__dirname, "uploads")))
+app.use("/projects", projectRouter)
+app.use("/auth", authRouter)
+app.use("/lead-notes", leadNoteRouter)
+app.use("/lead-activities", leadActivityRouter)
+app.use("/leads", leadRouter)
+app.use("/users", userRouter)
+app.use("/teams", teamRouter)
+app.use("/tower", towerRouter)
+app.use("/floor", floorRouter)
+app.use("/unit", unitRouter)
+app.use("/bookings", bookingRouter)
+app.use("/tasks", taskRouter)
+app.use("/schedule-visits", scheduleVisitRouter)
+app.use("/api/schedule-visits", scheduleVisitRouter)
+app.use("/attendance", attendanceRouter)
+app.use("/api/attendance", attendanceRouter)
+app.use("/api/sales", followupRouter)
+app.use("/api/admin/reports", adminReportRouter)
+app.use("/calls", callRouter)
+app.use("/api/calls", callRouter)
+app.post("/api/integrations/mcube/inbound", mcubeInbound)
+app.get("/api/integrations/mcube/inbound", mcubeInbound)
+app.post("/api/integrations/mcube/inbound/events", mcubeInbound)
+app.get("/api/integrations/mcube/inbound/events", mcubeInbound)
+app.post("/api/integrations/mcube/call-status", mcubeWebhook)
+app.get("/api/integrations/mcube/call-status", mcubeWebhook)
+app.post("/api/integrations/mcube/recording", callRecordingUpload, mcubeRecordingWebhook)
+app.get("/api/integrations/mcube/recording", mcubeRecordingWebhook)
+app.use("/api/whatsapp", whatsappRouter)
+app.use("/api/email", emailRouetr)
+app.use("/api/demands", demandRouter)
+// app.use('/all-users', userRouter)
+app.use("/notification", notifiactionRouter)
+app.use("/post-sales", postSalesRouter)
+app.use("/api/post-sales", postSalesRouter)
+
+app.use((error, req, res, next) => {
+  if (error?.type === "entity.too.large") {
+    return res.status(413).json({
+      message: `Uploaded floor plan data is too large. Current request limit is ${BODY_LIMIT}.`,
+    })
+  }
+
+  return next(error)
+})
+
+const PORT = process.env.PORT || 5000
+server.listen(PORT, () => {
+  console.log(`Server running on ${PORT}`)
+  initializeCallbackReminders().catch((error) => {
+    console.error("Unable to initialize callback reminders:", error)
+  })
+  initializeUnitHoldReleaseJob()
+})

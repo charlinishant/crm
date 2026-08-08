@@ -1,0 +1,812 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model Project {
+  id                 Int                @id @default(autoincrement())
+  name               String
+  description        String?            @db.Text
+  reraProjectId      Int?
+  salesId            Int?
+  projectType        String
+  possession         Boolean            @default(false)
+  postSales          Boolean            @default(false)
+  address            String?            @db.Text
+  street             String?
+  locality           String?
+  city               String?
+  state              String?
+  country            String?
+  zip                String?
+  longitude          String?
+  latitude           String?
+  inventory          Boolean            @default(false)
+  noOfTowers         Int                @default(0)
+  createdAt          DateTime           @default(now())
+  integratedPortals  String             @default("")
+  active             Boolean            @default(true)
+  tower              Tower[]            @relation("Project")
+  floor              FloorPlan[]        @relation("Project")
+  unit               Unit[]             @relation("Project")
+  salesUsers         ProjectSalesUser[]
+  interestedCallLogs CallLog[]          @relation("CallLogInterestedProject")
+}
+
+model ProjectSalesUser {
+  projectId  Int
+  userId     Int
+  assignedAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId])
+}
+
+model Tower {
+  id                       Int             @id @default(autoincrement())
+  name                     String
+  wingCode                 String?
+  floorNumberingConvention String          @default("GROUND_IS_FLOOR_1")
+  skippedFloors            String?         @default("[]")
+  projectId                Int
+  project                  Project         @relation("Project", fields: [projectId], references: [id], onDelete: Restrict)
+  totalFloor               Int?            @default(0)
+  reraTowerId              String?
+  floors                   FloorPlan[]     @relation("Tower")
+  units                    Unit[]          @relation("Tower")
+  floorPlanSlots           FloorPlanSlot[]
+}
+
+model FloorPlan {
+  id                 Int       @id @default(autoincrement())
+  name               String
+  projectId          Int
+  project            Project   @relation("Project", fields: [projectId], references: [id], onDelete: Restrict)
+  towerId            Int
+  tower              Tower     @relation("Tower", fields: [towerId], references: [id], onDelete: Restrict)
+  configurationLabel String?
+  status             String?   @default("Active")
+  unitStream         String?   @default("Sale Unit")
+  reraReference      String?
+  reraNumber         String?
+  reraDate           DateTime?
+  possessionDate     DateTime?
+  type               String?
+  category           String?
+  bedrooms           Int?
+  bathrooms          Float?
+  balconies          Int?
+  kitchenType        String?
+  additionalRooms    Json?
+
+  // Position and inventory
+  applicableFloorFrom Int?
+  applicableFloorTo   Int?
+  unitPosition        String?
+  skippedFloors       String?  @default("[]")
+  unitNumbers         String?  @db.Text
+  totalUnitsOfPlan    Int?
+  facing              String?
+  cornerUnit          Boolean? @default(false)
+  view                Json?
+
+  // Area
+  autoCalc               Boolean? @default(true)
+  measure                String?
+  carpet                 Float?
+  saleable               Float?
+  loading                Float?
+  coverArea              Float?
+  builtupArea            Float?
+  loadingBasis           String?  @default("On Carpet")
+  balconyArea            Float?
+  enclosedBalconyUtility Float?
+  terraceArea            Float?
+  flowerBedPocketTerrace Float?
+  serviceSlabAcLedge     Float?
+  refugeAreaShare        Float?
+
+  // Parking and extras
+  parkingRequired   String?
+  carParkingSlots   Int?
+  parkingType       String?
+  twoWheelerSlots   Int?
+  basementStoreroom Float?
+
+  //costing
+  rateBasis String? @default("On Carpet")
+  baseRate  Float?
+
+  basePrice             Float?
+  floorRisePerSqft      Float?
+  baseFloorForFloorRise Int?
+  cornerPlcPercent      Float?
+  viewPlcPercent        Float?
+  facingPlcPercent      Float?
+
+  // Other charges
+  clubMembership                       Float?
+  infrastructureDevelopmentCharges     Float?
+  infrastructureDevelopmentChargeBasis String?
+  legalDocumentation                   Float?
+  gstPercent                           Float?  @default(5)
+  stampDutyPercent                     Float?  @default(6)
+  registrationPercent                  Float?  @default(1)
+  registrationAmount                   Float?
+  parkingCharges                       Float?
+  advanceMaintenanceMonths             Int?
+  maintenanceRatePerSqftPerMonth       Float?
+  sinkingFundCorpus                    Float?
+  societyFormationCharges              Float?
+
+  // Documents and linked entities
+  floorPlanImages         Json?
+  brochurePageReference   String?
+  walkthrough3dLink       String?
+  paymentPlan             String?
+  allotmentLetterTemplate String?
+  agreementTemplate       String?
+
+  units Unit[]          @relation("Floor")
+  slots FloorPlanSlot[]
+}
+
+model FloorPlanSlot {
+  id           Int       @id @default(autoincrement())
+  floorPlanId  Int
+  floorPlan    FloorPlan @relation(fields: [floorPlanId], references: [id], onDelete: Cascade)
+  towerId      Int
+  tower        Tower     @relation(fields: [towerId], references: [id], onDelete: Restrict)
+  floor        Int
+  unitPosition String
+  createdAt    DateTime  @default(now())
+
+  @@unique([towerId, floor, unitPosition])
+  @@index([floorPlanId])
+}
+
+model UnitModel {
+  id              Int        @id @default(autoincrement())
+  name            String
+  floor           Int?
+  unitIndex       Int?
+  baseRate        Float?
+  basePrice       Float?
+  propertyPurpose String?
+  status          UnitStatus @default(Available)
+  heldBy          String?
+  heldUntil       DateTime?
+  unitId          Int
+  unit            Unit       @relation(fields: [unitId], references: [id])
+  bookings        Booking[]
+
+  @@unique([unitId, floor, unitIndex])
+  @@index([status])
+  @@index([heldBy])
+  @@index([heldUntil])
+}
+
+enum UnitStatus {
+  Available
+  Held
+  Blocked
+  Booked
+  Registered
+  Possession_Given
+  Cancelled
+  Refuge
+  Investor
+}
+
+model Unit {
+  id        Int         @id @default(autoincrement())
+  unitList  UnitModel[]
+  projectId Int
+  project   Project     @relation("Project", fields: [projectId], references: [id], onDelete: Restrict)
+  towerId   Int
+  tower     Tower       @relation("Tower", fields: [towerId], references: [id], onDelete: Restrict)
+  floorId   Int
+  floor     FloorPlan   @relation("Floor", fields: [floorId], references: [id], onDelete: Restrict)
+  type      String?
+  category  String?
+  bedrooms  Int?
+  bathrooms Int?
+
+  measure     String?
+  carpet      Float?
+  saleable    Float?
+  loading     Float?
+  description String  @db.Text
+
+  bookings Booking[]
+}
+
+enum Role {
+  PRE_SALES
+  SALES
+  POST_SALES
+  MANAGER
+  ADMIN
+  AGENCY_USER
+  AGENT
+  CHANNEL_PARTNER
+}
+
+enum Department {
+  PRE_SALES
+  SALES
+  POST_SALES
+}
+
+model User {
+  id       Int     @id @default(autoincrement())
+  isActive Boolean @default(true)
+
+  //personal details
+  username       String? @unique
+  email          String  @unique
+  password       String?
+  firstName      String?
+  lastName       String?
+  phone          String? @unique @db.Char(10)
+  secondaryPhone String? @db.Char(10)
+  timeZone       String?
+
+  //custom fields
+  linkedUrl   String?
+  description String?
+  profilePhoto String? @db.LongText
+
+  // Professional details
+  role       Role?
+  department Department?
+
+  defaultRouting     Boolean? @default(false)
+  defaultRoutingRule Boolean? @default(false)
+  autoRoster         Boolean? @default(false)
+  teamId             Int?
+  team               Team?    @relation("Team", fields: [teamId], references: [id])
+
+  leads            Lead[]
+  callLogs         CallLog[]          @relation("AgentCallLogs")
+  tasks            Task[]             @relation("AssignedTo")
+  assignedTasks    Task[]             @relation("AssignedBy")
+  attendanceLogs   UserAttendance[]
+  followUps        FollowUp[]         @relation("SalesUserFollowUps")
+  leadActivities   LeadActivity[]     @relation("UserLeadActivities")
+  notifications    Notification[]     @relation("UserId")
+  salesProjects    ProjectSalesUser[]
+  whatsAppMessages WhatsAppMessage[]
+  // Other settings
+  pushNotification Boolean?           @default(false)
+  gpsTracking      Boolean?           @default(false)
+}
+
+enum ContactType {
+  OFFICE
+  PERSONAL
+}
+
+enum Type {
+  MEETINGROOMS
+  DESKS
+  PRIVATEOFFICES
+  CABINS
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum AddressType {
+  HOME
+  OFFICE
+}
+
+enum Status {
+  New
+  Qualified
+  Nurture
+  In_sourcing
+  In_closing
+  Booked
+  Unqualified
+}
+
+model Lead {
+  id        Int       @id @default(autoincrement())
+  deletedAt DateTime?
+
+  is_active            Boolean       @default(true)
+  is_delete            Boolean       @default(false)
+  // basic profile
+  salutation           String?
+  firstName            String?
+  lastName             String?
+  emails               Json?
+  phones               Json?
+  status               Status?
+  timeZone             String?
+  tags                 String?
+  interestedProjects   String?
+  teamId               Int?
+  team                 User?         @relation(fields: [teamId], references: [id])
+  channelPartner       String?
+  conductSiteVisit     String?
+  conductSiteDate      DateTime?
+  siteVisitProject     String?
+  siteVisitStatus      String?       @default("Scheduled")
+  visitStatus          String?       @default("Scheduled")
+  conductSiteStatus    String?       @default("Scheduled")
+  siteVisitLocation    String?
+  meetingPoint         String?
+  siteVisitExecutive   String?
+  siteVisitNote        String?       @db.Text
+  siteVisitInitiatedBy String?
+  siteVisitDate        DateTime?
+  siteVisitConductedOn DateTime?
+  callAttemptCount     Int           @default(0)
+  unqualifiedReason    String?
+  unqualifiedNote      String?       @db.Text
+  leadAddress          LeadAddress[]
+  companyName          String?
+  type                 String?
+  carpetArea           String?
+  seats                Int
+  tenure               Float
+  leadReassigned       Boolean?      @default(false)
+  gender               Gender?
+  occupations          String?
+
+  // personal details
+  age             Int?
+  birthday        DateTime?
+  maritalStatus   Boolean?
+  anniversary     DateTime?
+  industry        String
+  personalAddress PersonalAddress[]
+  url             Json?
+  education       Json?
+  companyTitle    Json?
+  income          Json?
+
+  // requirement
+  purpose             Json?
+  nri                 Boolean @default(false)
+  budgetMin           Int?    @default(0)
+  budgetMax           Int?    @default(0)
+  possessionMin       String?
+  possessionMax       String?
+  area                String?
+  fundingSource       String?
+  transactionType     String? @default("")
+  propertyType        String?
+  configration        String?
+  budget              String?
+  bathroomPreferences String?
+  furnishing          String?
+  facing              String?
+  locationPreferences String?
+
+  bookings         Booking[]
+  callLogs         CallLog[]
+  scheduleVisits   ScheduleVisit[]
+  followUps        FollowUp[]
+  activities       LeadActivity[]
+  whatsAppMessages WhatsAppMessage[]
+}
+
+model FollowUp {
+  id                Int        @id @default(autoincrement())
+  leadId            Int
+  lead              Lead       @relation(fields: [leadId], references: [id])
+  salesUserId       Int
+  salesUser         User       @relation("SalesUserFollowUps", fields: [salesUserId], references: [id])
+  type              String
+  followUpDate      DateTime
+  followUpTime      String
+  priority          String     @default("Medium")
+  notes             String?    @db.Text
+  status            String     @default("Pending")
+  completedAt       DateTime?
+  rescheduledFromId Int?
+  rescheduledFrom   FollowUp?  @relation("FollowUpReschedules", fields: [rescheduledFromId], references: [id])
+  reschedules       FollowUp[] @relation("FollowUpReschedules")
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  @@index([leadId])
+  @@index([salesUserId])
+  @@index([status])
+  @@index([followUpDate])
+}
+
+model LeadActivity {
+  id        Int      @id @default(autoincrement())
+  leadId    Int
+  lead      Lead     @relation(fields: [leadId], references: [id])
+  userId    Int?
+  user      User?    @relation("UserLeadActivities", fields: [userId], references: [id])
+  type      String
+  message   String   @db.Text
+  oldStatus String?
+  newStatus String?
+  createdAt DateTime @default(now())
+
+  @@index([leadId])
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model UserAttendance {
+  id                Int       @id @default(autoincrement())
+  userId            Int
+  user              User      @relation(fields: [userId], references: [id])
+  status            String    @default("Available")
+  loginAt           DateTime  @default(now())
+  logoutAt          DateTime?
+  breakStartedAt    DateTime?
+  breakEndedAt      DateTime?
+  totalBreakSeconds Int       @default(0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([loginAt])
+}
+
+model ScheduleVisit {
+  id             Int       @id @default(autoincrement())
+  leadId         Int       @unique
+  lead           Lead      @relation(fields: [leadId], references: [id])
+  project        String?
+  status         String    @default("Scheduled")
+  meetingPoint   String?
+  salesExecutive String?
+  note           String?   @db.Text
+  initiatedBy    String?
+  scheduledOn    DateTime?
+  conductedOn    DateTime?
+  conductedBy    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([status])
+  @@index([scheduledOn])
+}
+
+model CallLog {
+  id                   Int       @id @default(autoincrement())
+  leadId               Int?
+  lead                 Lead?     @relation(fields: [leadId], references: [id])
+  agentId              Int?
+  agent                User?     @relation("AgentCallLogs", fields: [agentId], references: [id])
+  phone                String
+  leadPhone            String?
+  agentPhone           String?
+  direction            String    @default("outbound")
+  callerNumber         String?
+  customerNumber       String?
+  agentNumber          String?
+  agentExtension       String?
+  virtualNumber        String?
+  campaignName         String?
+  queueName            String?
+  providerAgentName    String?
+  provider             String    @default("mcube")
+  callId               String?   @unique
+  providerCallId       String?   @unique
+  providerStatus       String?
+  status               String    @default("initiated")
+  duration             Int?
+  recordingUrl         String?   @db.Text
+  disposition          String?
+  notes                String?   @db.Text
+  answeredAt           DateTime?
+  answerDelay          Int?
+  disconnectedBy       String?
+  followUpRequired     Boolean   @default(false)
+  failureReason        String?   @db.Text
+  rawPayload           Json?
+  connectedAt          DateTime?
+  nextFollowUpAt       DateTime?
+  interestedProjectId  Int?
+  interestedProjectRef Project?  @relation("CallLogInterestedProject", fields: [interestedProjectId], references: [id], onDelete: SetNull)
+  interestedProject    String?
+  budget               String?
+  visitDateTime        DateTime?
+  startedAt            DateTime?
+  endedAt              DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([leadId])
+  @@index([agentId])
+  @@index([direction])
+  @@index([callerNumber])
+  @@index([providerCallId])
+  @@index([provider, providerCallId])
+  @@index([status])
+  @@index([disposition])
+  @@index([interestedProjectId])
+  @@index([startedAt])
+  @@index([createdAt])
+}
+
+model WhatsAppMessage {
+  id                Int       @id @default(autoincrement())
+  leadId            Int
+  lead              Lead      @relation(fields: [leadId], references: [id])
+  userId            Int?
+  user              User?     @relation(fields: [userId], references: [id])
+  direction         String
+  from              String
+  to                String
+  body              String    @db.Text
+  provider          String    @default("twilio")
+  providerMessageId String?   @unique
+  status            String    @default("queued")
+  errorCode         String?
+  errorMessage      String?   @db.Text
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([leadId, createdAt])
+  @@index([userId])
+  @@index([status])
+}
+
+model Booking {
+  id               Int        @id @default(autoincrement())
+  leadId           Int?
+  lead             Lead?      @relation(fields: [leadId], references: [id])
+  unitCount        Int?
+  unitId           Int?
+  unit             Unit?      @relation(fields: [unitId], references: [id])
+  unitItemId       Int?
+  unitItem         UnitModel? @relation(fields: [unitItemId], references: [id], onDelete: SetNull)
+  activeUnitItemId Int?       @unique
+  idempotencyKey   String?    @unique
+  customerName     String?
+  stage            String?    @default("Tentative")
+  projectDetails   String?
+  bookedOn         DateTime?
+  carpetArea       Float?
+  builtupArea      Float?
+  saleableArea     Float?
+  rateBasis        String?
+  priceArea        Float?
+  priceFrozenAt    DateTime?
+  basePrice        Float?
+  baseRate         Float?
+  source           String?
+  channelPartnerId Int?
+  bookedBy         String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  costSheet          CostSheet[]
+  paymentSchedule    PaymentSchedule[]
+  demands            Demand[]
+  receipts           Receipt[]
+  ledgerEntries      LedgerEntry[]
+  generatedDocuments GeneratedDocument[]
+  documentAuditLogs  DocumentAuditLog[]
+}
+
+model Demand {
+  id                Int       @id @default(autoincrement())
+  demandNo          String    @unique
+  bookingId         Int
+  booking           Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  description       String?   @db.Text
+  amount            Float     @default(0)
+  principal         Float     @default(0)
+  gst               Float     @default(0)
+  paidAmount        Float     @default(0)
+  outstandingAmount Float     @default(0)
+  status            String    @default("DRAFT")
+  dueDate           DateTime?
+  issuedAt          DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  receipts Receipt[]
+
+  @@index([bookingId])
+  @@index([status])
+}
+
+model Receipt {
+  id              Int      @id @default(autoincrement())
+  receiptNo       String   @unique
+  bookingId       Int
+  booking         Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  demandId        Int?
+  demand          Demand?  @relation(fields: [demandId], references: [id], onDelete: SetNull)
+  amount          Float    @default(0)
+  mode            String   @default("CASH")
+  status          String   @default("POSTED")
+  referenceNumber String?
+  receivedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([demandId])
+}
+
+model LedgerEntry {
+  id          Int      @id @default(autoincrement())
+  bookingId   Int
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  type        String
+  amount      Float    @default(0)
+  description String?  @db.Text
+  date        DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([bookingId])
+  @@index([date])
+}
+
+model GeneratedDocument {
+  id          Int      @id @default(autoincrement())
+  bookingId   Int
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  type        String
+  title       String?
+  htmlContent String?  @db.Text
+  pdfUrl      String?
+  createdAt   DateTime @default(now())
+
+  @@index([bookingId])
+}
+
+model DocumentAuditLog {
+  id          Int      @id @default(autoincrement())
+  bookingId   Int
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  type        String // Document type: WELCOME_LETTER, etc.
+  action      String // Action: GENERATE, PREVIEW, DOWNLOAD, PRINT
+  details     String   @db.Text
+  performedBy String?
+  createdAt   DateTime @default(now())
+
+  @@index([bookingId])
+}
+
+model CostSheet {
+  id           Int    @id @default(autoincrement())
+  fieldName    String
+  orignalValue Float?
+  costType     String @default("Discount")
+  inputField   Float?
+  newValue     Float
+
+  bookingId Int     @unique
+  booking   Booking @relation(fields: [bookingId], references: [id])
+}
+
+model PaymentSchedule {
+  id             Int    @id @default(autoincrement())
+  name           String
+  towerMilestone String
+  value          Float?
+  amount         Float?
+  taxes          Float?
+  tds            Float?
+  grandTotal     Float
+
+  bookingId Int     @unique
+  booking   Booking @relation(fields: [bookingId], references: [id])
+}
+
+model LeadAddress {
+  id      Int     @id @default(autoincrement())
+  address String?
+  street  String?
+  city    String?
+  state   String?
+  country String?
+  zip     String?
+  leadId  Int
+  lead    Lead    @relation(fields: [leadId], references: [id])
+}
+
+model PersonalAddress {
+  id      Int          @id @default(autoincrement())
+  type    AddressType?
+  address String?
+  street  String?
+  city    String?
+  state   String?
+  country String?
+  zip     String?
+  leadId  Int
+  lead    Lead         @relation(fields: [leadId], references: [id])
+}
+
+model LeadNote {
+  id        Int      @id @default(autoincrement())
+  leadId    Int
+  note      String   @db.Text
+  owner     String?
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Team {
+  id       Int     @id @default(autoincrement())
+  name     String
+  location String?
+  parentId Int?
+  parent   Team?   @relation("ParentTeam", fields: [parentId], references: [id])
+  teams    Team[]  @relation("ParentTeam")
+  users    User[]  @relation("Team")
+}
+
+model Task {
+  id             Int       @id @default(autoincrement())
+  title          String
+  description    String?   @db.Text
+  remark         String?   @db.Text
+  type           String?   @default("Folllow up")
+  status         String?   @default("Open")
+  priority       String?   @default("Medium")
+  dueDate        DateTime?
+  dueTime        String?
+  assigneeId     Int?
+  assigneeName   String?
+  assign         User?     @relation("AssignedTo", fields: [assigneeId], references: [id])
+  assignedById   Int?
+  assignedByName String?
+  assignedBy     User?     @relation("AssignedBy", fields: [assignedById], references: [id])
+  attachments    Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model EmailLog {
+  id           Int      @id @default(autoincrement())
+  createdAt    DateTime @default(now())
+  from         String
+  to           String
+  subject      String?
+  body         String?  @db.Text
+  leadId       Int?
+  leadName     String?
+  sentByUserId Int?
+  sentByName   String?
+  sentByEmail  String?
+  success      Boolean  @default(false)
+  error        String?
+}
+
+model Notification {
+  id          Int      @id @default(autoincrement())
+  titile      String
+  description String?
+  link        String?  @default("")
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  userId      Int
+  user        User     @relation("UserId", fields: [userId], references: [id])
+}

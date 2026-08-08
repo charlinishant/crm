@@ -1,0 +1,25 @@
+
+> backend@1.0.0 dev
+> node --watch server.js
+
+◇ injected env (24) from .env // tip: ◈ secrets for agents [www.dotenvx.com]
+Server running on 5000
+Restarting 'server.js'
+◇ injected env (24) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+Failed running 'server.js'. Waiting for file changes before restarting...
+Restarting 'server.js'
+◇ injected env (24) from .env // tip: ⌘ suppress logs { quiet: true }
+Restarting 'server.js'
+◇ injected env (24) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+Restarting 'server.js'
+◇ injected env (24) from .env // tip: ⌘ override existing { override: true }
+Restarting 'server.js'
+◇ injected env (24) from .env // tip: ⌘ custom filepath { path: '/custom/path/.env' }
+Restarting 'server.js'
+◇ injected env (24) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+Restarting 'server.js'
+◇ injected env (24) from .env // tip: ⌘ enable debugging { debug: true }
+Restarting 'server.js'
+◇ injected env (24) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+Server running on 5000
+Failed running 'server.js'. Waiting for file changes before restarting...
