@@ -28,12 +28,15 @@ const Newtower = ({ onClose }) => {
   useEffect(() => {
     const fetchProjects = async () => {
       try {
-        const res = await fetch(`${API_URL}/projects`);
+        const res = await fetch(`${API_URL}/projects/list`);
+        if (!res.ok) throw new Error("Unable to load projects");
         const data = await res.json();
-        setProjectOptions(data);
+        const list = Array.isArray(data) ? data : (data?.data || []);
+        setProjectOptions(list);
       } catch (err) {
         console.error(err);
         setError("Unable to load projects");
+        setProjectOptions([]);
       }
     };
 

@@ -81,8 +81,8 @@ export default function Projecttower() {
         const mapped = towerList.map((tower) => ({
           id: tower.id,
           name: tower.name,
-          project: tower.project?.name || tower.project || "-",
-          projectId: tower.project?.id,
+          project: tower.project?.name || (typeof tower.project === "string" ? tower.project : "-"),
+          projectId: tower.projectId ?? tower.project?.id,
           floorPlans: tower._count?.floors ?? tower.floorPlans ?? 0,
           totalFloors: tower.totalFloor ?? tower.totalFloors ?? 0,
           source: "backend",
@@ -109,8 +109,8 @@ export default function Projecttower() {
     const mapped = list.map((tower) => ({
       id: tower.id,
       name: tower.name,
-      project: tower.project?.name || tower.project || "-",
-      projectId: tower.project?.id,
+      project: tower.project?.name || (typeof tower.project === "string" ? tower.project : "-"),
+      projectId: tower.projectId ?? tower.project?.id,
       floorPlans: tower._count?.floors ?? tower.floorPlans ?? 0,
       totalFloors: tower.totalFloor ?? tower.totalFloors ?? 0,
       source: "backend",
