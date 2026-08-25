@@ -11717,6 +11717,7 @@ img.sales-avatar {
   display: flex;
   align-items: center;
   flex: 1;
+  width: 100%;
   min-width: 240px;
 }
 
@@ -11728,7 +11729,8 @@ img.sales-avatar {
   border-radius: 6px;
   padding: 0 10px;
   height: 38px;
-  width: min(300px, 100%);
+  width: 100%;
+  flex: 1;
   transition: border-color 0.15s ease;
 }
 

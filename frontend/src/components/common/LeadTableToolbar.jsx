@@ -94,55 +94,57 @@ const LeadTableToolbar = ({
       </div>
 
       {/* RIGHT SIDE: Action Buttons */}
-      <div className="lead-tb-right">
-        {showImport && onImport && (
-          <button
-            type="button"
-            className="lead-tb-btn secondary"
-            onClick={onImport}
-            title="Import Leads CSV"
-          >
-            <FaFileCsv className="lead-tb-csv-icon" />
-            <span>Import</span>
-          </button>
-        )}
+      {((showImport && onImport) || (showExport && onExport) || (showExportAll && onExportAll) || (showAddLead && onAddLead)) && (
+        <div className="lead-tb-right">
+          {showImport && onImport && (
+            <button
+              type="button"
+              className="lead-tb-btn secondary"
+              onClick={onImport}
+              title="Import Leads CSV"
+            >
+              <FaFileCsv className="lead-tb-csv-icon" />
+              <span>Import</span>
+            </button>
+          )}
 
-        {showExport && onExport && (
-          <button
-            type="button"
-            className="lead-tb-btn secondary"
-            onClick={onExport}
-            title="Export Leads CSV"
-          >
-            <FaFileCsv className="lead-tb-csv-icon" />
-            <span>Export</span>
-          </button>
-        )}
+          {showExport && onExport && (
+            <button
+              type="button"
+              className="lead-tb-btn secondary"
+              onClick={onExport}
+              title="Export Leads CSV"
+            >
+              <FaFileCsv className="lead-tb-csv-icon" />
+              <span>Export</span>
+            </button>
+          )}
 
-        {showExportAll && onExportAll && (
-          <button
-            type="button"
-            className="lead-tb-btn secondary"
-            onClick={onExportAll}
-            title="Export All Leads CSV"
-          >
-            <FaFileCsv className="lead-tb-csv-icon" />
-            <span>Export All</span>
-          </button>
-        )}
+          {showExportAll && onExportAll && (
+            <button
+              type="button"
+              className="lead-tb-btn secondary"
+              onClick={onExportAll}
+              title="Export All Leads CSV"
+            >
+              <FaFileCsv className="lead-tb-csv-icon" />
+              <span>Export All</span>
+            </button>
+          )}
 
-        {showAddLead && onAddLead && (
-          <button
-            type="button"
-            className="lead-tb-btn primary"
-            onClick={onAddLead}
-            title="Add New Lead"
-          >
-            <FaPlus className="lead-tb-plus-icon" />
-            <span>Add Lead</span>
-          </button>
-        )}
-      </div>
+          {showAddLead && onAddLead && (
+            <button
+              type="button"
+              className="lead-tb-btn primary"
+              onClick={onAddLead}
+              title="Add New Lead"
+            >
+              <FaPlus className="lead-tb-plus-icon" />
+              <span>Add Lead</span>
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 };

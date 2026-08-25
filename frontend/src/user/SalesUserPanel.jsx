@@ -3847,14 +3847,10 @@ const SalesUserPanel = () => {
                   onRefresh={() => {
                     loadPanel();
                   }}
-                  onExport={() => {
-                    exportSalesLeadsCsv(searchedLeads, `${activeScreen || "sales"}-leads.csv`);
-                  }}
-                  onAddLead={() => {
-                    navigate("/user/sales/add-lead");
-                  }}
                   showImport={false}
+                  showExport={false}
                   showExportAll={false}
+                  showAddLead={false}
                   placeholder={activeScreen === "bookings" ? "Search booked leads..." : "Search leads..."}
                 />
               )}

@@ -142,6 +142,15 @@ exports.login = async (req, res)=>{
         if(!normalizedEmail || !password){
             return res.status(400).json({"message":"Email and password are required"})
         }
+
+        const user = await prisma.user.findUnique({
+            where: { email: normalizedEmail }
+        })
+
+        if (!user) {
+            return res.status(404).json({ "message": "User not found" })
+        }
+
         if(!user.password){
             return res.status(400).json({"message":"Password is not set for this user"})
         }

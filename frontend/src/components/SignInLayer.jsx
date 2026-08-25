@@ -256,9 +256,15 @@ const SignInLayer = () => {
               marginTop: "24px",
               transition: "opacity 0.2s ease",
               opacity: isSubmitting ? 0.7 : 1,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              textAlign: "center",
             }}
           >
-            {isSubmitting ? "Signing in..." : "Sign In"}
+            <span style={{ width: "100%", textAlign: "center", display: "block" }}>
+              {isSubmitting ? "Signing in..." : "Sign In"}
+            </span>
           </button>
         </form>
       </div>

@@ -93,13 +93,18 @@ app.use("/post-sales", postSalesRouter)
 app.use("/api/post-sales", postSalesRouter)
 
 app.use((error, req, res, next) => {
+  if (error instanceof SyntaxError && error.status === 400 && "body" in error) {
+    return res.status(400).json({ message: "Invalid JSON payload format" })
+  }
+
   if (error?.type === "entity.too.large") {
     return res.status(413).json({
       message: `Uploaded floor plan data is too large. Current request limit is ${BODY_LIMIT}.`,
     })
   }
 
-  return next(error)
+  console.error("Unhandled Server Error:", error)
+  return res.status(error.status || 500).json({ message: error.message || "Internal Server Error" })
 })
 
 const PORT = process.env.PORT || 5000
