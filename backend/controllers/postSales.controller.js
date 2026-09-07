@@ -466,6 +466,22 @@ const buildRichContext = (booking, type) => {
     ? `₹${Number(soldPriceValue).toLocaleString("en-IN")}`
     : "₹0";
 
+  const formatCurrency = (value) => Number(value || 0) > 0 ? `Rs ${Number(value).toLocaleString("en-IN")}` : "NIL";
+  const fixedOtherChargesValue = [
+    booking.registrationAmount,
+    booking.legalDocumentationCharges,
+    booking.infrastructureDevelopmentCharges,
+    booking.societyFormationCharges,
+    booking.clubMembershipCharges,
+    booking.sinkingFundCorpus,
+  ].reduce((total, value) => total + Number(value || 0), 0);
+  const customOtherChargesValue = Array.isArray(booking.bookingCharges)
+    ? booking.bookingCharges
+        .filter((charge) => charge.code === "CUSTOM")
+        .reduce((total, charge) => total + Number(charge.amount || 0), 0)
+    : 0;
+  const otherChargesValue = fixedOtherChargesValue + customOtherChargesValue;
+
   // Dates
   const bookingDate = booking.bookedOn
     ? new Date(booking.bookedOn).toLocaleDateString("en-IN", { day: "2-digit", month: "long", year: "numeric" })
@@ -506,7 +522,8 @@ const buildRichContext = (booking, type) => {
     milestonePercent: "10",
     principalAmount: "As per payment plan",
     gstAmount: "@5% on principal",
-    otherCharges: "NIL",
+    parkingCharges: formatCurrency(booking.parkingCharges),
+    otherCharges: formatCurrency(otherChargesValue),
     interestAmount: "NIL",
     priorOutstanding: "NIL",
     totalPayable: basePrice,
@@ -699,6 +716,7 @@ exports.generateDocument = async (req, res) => {
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
       include: {
+        bookingCharges: true,
         lead: true,
         unit: { include: { project: true, tower: true } }
       }

@@ -1,5 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Icon } from "@iconify/react/dist/iconify.js";
+import TableSelectionCheckbox from "./table/TableSelectionCheckbox";
+import { useTableSelection } from "./table/useTableSelection";
+import BulkActionToolbar from "./table/BulkActionToolbar";
 import {
   cancelFollowup,
   createFollowup,
@@ -110,12 +114,14 @@ const formatFollowupDateTime = (followup) => {
   };
 };
 
-const normalizeStatusClass = (status) =>
-  String(status || "Pending")
-    .toLowerCase()
-    .replace(/[_-]/g, " ")
-    .trim()
-    .replace(/\s+/g, "-");
+const getStatusBadgeClass = (status) => {
+  const s = String(status || "").toLowerCase();
+  if (s === "done" || s === "completed") return "bg-success-focus text-success-main";
+  if (s === "missed") return "bg-danger-focus text-danger-main";
+  if (s === "rescheduled") return "bg-warning-focus text-warning-main";
+  if (s === "cancelled") return "bg-neutral-200 text-neutral-600";
+  return "bg-info-focus text-info-main";
+};
 
 const followupToRow = (followup) => {
   const lead = followup.lead || {};
@@ -147,8 +153,11 @@ const SalesFollowupsTable = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
   const [nextActions, setNextActions] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
   const recordsPerPage = 10;
 
   const loadSalesFollowups = useCallback(async (showLoading = true) => {
@@ -360,30 +369,74 @@ const SalesFollowupsTable = () => {
   }, [followupRows]);
 
   const filteredTableData = useMemo(() => {
-    if (statusFilter === "All") return followupRows;
-    return followupRows.filter((row) => row.status === statusFilter);
-  }, [followupRows, statusFilter]);
+    const query = searchQuery.trim().toLowerCase();
+    return followupRows.filter((row) => {
+      if (statusFilter !== "All" && row.status !== statusFilter) return false;
+      if (!query) return true;
+
+      const leadName = String(row.leadName || "").toLowerCase();
+      const leadId = String(row.leadId || "").toLowerCase();
+      const id = String(row.id || "").toLowerCase();
+      const phone = String(row.phone || "").toLowerCase();
+      const salesUser = String(row.salesUser || "").toLowerCase();
+      const notes = String(row.notes || "").toLowerCase();
+      const type = String(row.type || "").toLowerCase();
+
+      return (
+        leadName.includes(query) ||
+        leadId.includes(query) ||
+        id.includes(query) ||
+        phone.includes(query) ||
+        salesUser.includes(query) ||
+        notes.includes(query) ||
+        type.includes(query)
+      );
+    });
+  }, [followupRows, statusFilter, searchQuery]);
 
   const totalPages = Math.max(1, Math.ceil(filteredTableData.length / recordsPerPage));
   const activePage = Math.min(currentPage, totalPages);
   const pageStartIndex = (activePage - 1) * recordsPerPage;
   const tableData = filteredTableData.slice(pageStartIndex, pageStartIndex + recordsPerPage);
   const pageEndIndex = Math.min(pageStartIndex + tableData.length, filteredTableData.length);
+  const showingFrom = filteredTableData.length === 0 ? 0 : pageStartIndex + 1;
+  const showingTo = pageEndIndex;
+
+  const tableSelection = useTableSelection({
+    rows: tableData,
+    getRowId: (item) => item.rawId,
+    disabled: bulkDeleting,
+    pruneOnRowsChange: true,
+  });
+
+  const handleBulkDelete = () => {
+    if (tableSelection.selectedCount === 0) return;
+    if (!window.confirm(`Are you sure you want to dismiss/clear ${tableSelection.selectedCount} selected follow-up(s)?`)) {
+      return;
+    }
+    setBulkDeleting(true);
+    setFollowupRows((prev) => prev.filter((item) => !tableSelection.selectedIds.includes(item.rawId)));
+    tableSelection.clearSelection();
+    setStatusMessage("Selected follow-ups cleared.");
+    setBulkDeleting(false);
+    setTimeout(() => setStatusMessage(""), 4000);
+  };
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [statusFilter]);
+  }, [statusFilter, searchQuery]);
 
   return (
-    <div className="table-section site-visits-section fa-2x">
-      <div className="site-visits-title-row">
-        {/* <p>Sales User Follow-ups</p> */}
-        {/* <div className="site-visits-filter-row"> */}
-          <div className="dropdown-wrapper followups-filter-wrapper">
+    <div className="floor-dashboard booking-dashboard">
+      <div className="floor-card booking-card">
+        {/* Header Controls */}
+        <div className="floor-header d-flex justify-content-between align-items-center flex-wrap gap-3">
+          <div className="d-flex align-items-center gap-3">
             <select
-              className="form-select"
+              className="form-select booking-dropdown"
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value)}
+              aria-label="Filter follow-up status"
             >
               {statusOptions.map((status) => (
                 <option key={status} value={status}>
@@ -391,130 +444,219 @@ const SalesFollowupsTable = () => {
                 </option>
               ))}
             </select>
+            <span className="item-count">{filteredTableData.length} items.</span>
           </div>
 
-          {/* <div className="filter-badge">
-            <Icon icon="mdi:filter" width={16} height={16} />
-            {followupRows.length > 0 && <span className="badge-count">{followupRows.length}</span>}
-          </div> */}
-        {/* </div> */}
-      </div>
-
-      {loading && <div className="site-visit-message">Loading sales follow-ups...</div>}
-      {error && <div className="site-visit-message error">{error}.</div>}
-
-      <div className="table-responsive">
-        <table border="1" cellPadding="0" cellSpacing="0">
-          <thead>
-            <tr>
-              <th style={{ borderStartStartRadius: "8px", borderEndStartRadius: "8px" }}>Follow-up ID</th>
-              <th>Lead ID</th>
-              <th>Lead Name</th>
-              <th>Phone</th>
-              <th>Type</th>
-              <th>Priority</th>
-              <th>Status</th>
-              <th>Lead Status</th>
-              <th>Sales User</th>
-              <th>Follow-up On</th>
-              <th>Notes</th>
-              <th style={{ borderStartEndRadius: "8px", borderEndEndRadius: "8px" }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {tableData.map((row) => (
-              <tr key={row.id}>
-                <td className="text-muted">{row.id}</td>
-                <td className="text-muted">{row.leadId}</td>
-                <td>
-                  <div className="lead-name-main" style={{ fontSize: "14px" }}>
-                    {row.leadName}
-                  </div>
-                </td>
-                <td>{row.phone}</td>
-                <td>{row.type}</td>
-                <td>{row.priority}</td>
-                <td>
-                  <span className={`status-pill status-${normalizeStatusClass(row.status)}`}>
-                    {row.status}
-                  </span>
-                </td>
-                <td>{row.leadStatus}</td>
-                <td>{row.salesUser}</td>
-                <td>
-                  <div className="scheduled-wrapper">
-                    <span className="main-time">{row.scheduledOn}</span>
-                    <span className="sub-time">{row.createdAt}</span>
-                  </div>
-                </td>
-                <td>{row.notes}</td>
-                <td>
-                  <div className="followup-actions">
-                    <div className="followup-next-action">
-                      <select
-                        value={nextActions[row.rawId] || ""}
-                        onChange={(event) =>
-                          setNextActions((current) => ({ ...current, [row.rawId]: event.target.value }))
-                        }
-                      >
-                        {nextActionOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => handleProceed(row)}
-                        disabled={isActionDisabled(row, nextActions[row.rawId] || "")}
-                      >
-                        Proceed
-                      </button>
-                    </div>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {!loading && tableData.length === 0 && (
-              <tr>
-                <td colSpan="12" className="site-visit-empty">
-                  No sales follow-ups found.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {filteredTableData.length > 0 && (
-        <div className="lead-pagination">
-          <div className="lead-pagination-info">
-            Showing <strong>{pageStartIndex + 1}</strong> to <strong>{pageEndIndex}</strong> of{" "}
-            <strong>{filteredTableData.length}</strong> follow-ups
-          </div>
-          <div className="lead-pagination-actions">
+          <div className="action-wrapper d-flex align-items-center gap-2">
+            <div className="search-container">
+              <input
+                type="text"
+                className="form-control form-control-sm search-input-override"
+                placeholder="Search follow-ups..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <span className="search-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+              </span>
+            </div>
             <button
               type="button"
-              className="lead-pagination-btn"
-              onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
-              disabled={activePage === 1}
+              className="btn btn-outline-primary d-inline-flex align-items-center gap-2 flex-shrink-0"
+              style={{ height: "40px", borderRadius: "8px", fontWeight: 600, fontSize: "14px", padding: "0 16px", whiteSpace: "nowrap" }}
+              onClick={() => loadSalesFollowups(true)}
+              disabled={loading}
+              title="Refresh follow-ups"
             >
-              Previous
-            </button>
-            <span className="lead-pagination-page">
-              {activePage} / {totalPages}
-            </span>
-            <button
-              type="button"
-              className="lead-pagination-btn"
-              onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-              disabled={activePage === totalPages}
-            >
-              Next
+              <Icon icon="tabler:refresh" className={loading ? "spin" : ""} /> Refresh
             </button>
           </div>
         </div>
-      )}
+
+        {/* Status Messages */}
+        {statusMessage && (
+          <div className="booking-status-message mb-3">{statusMessage}</div>
+        )}
+        {error && <div className="admin-email-error mb-3">{error}.</div>}
+
+        {/* Bulk Action Toolbar */}
+        {tableSelection.selectedCount > 0 && (
+          <BulkActionToolbar
+            count={tableSelection.selectedCount}
+            entityLabel="follow-ups"
+            isDeleting={bulkDeleting}
+            onClear={() => {
+              tableSelection.clearSelection();
+              setStatusMessage("");
+            }}
+            onDelete={handleBulkDelete}
+            deleteLabel="Clear selected"
+          />
+        )}
+
+        {/* Table View */}
+        <div className="table-responsive">
+          <table className="floor-table">
+            <thead>
+              <tr>
+                <th style={{ borderStartStartRadius: "8px", borderEndStartRadius: "8px", width: "48px", textAlign: "center", padding: "14px 12px" }}>
+                  <TableSelectionCheckbox
+                    checked={tableSelection.allVisibleSelected}
+                    indeterminate={tableSelection.isHeaderIndeterminate}
+                    label="Select visible follow-ups"
+                    onChange={tableSelection.toggleVisible}
+                    disabled={bulkDeleting || tableData.length === 0}
+                  />
+                </th>
+                <th>Follow-up ID</th>
+                <th>Lead ID</th>
+                <th>Lead Name</th>
+                <th>Phone</th>
+                <th>Type</th>
+                <th>Priority</th>
+                <th>Status</th>
+                <th>Lead Status</th>
+                <th>Sales User</th>
+                <th>Follow-up On</th>
+                <th>Notes</th>
+                <th style={{ borderStartEndRadius: "8px", borderEndEndRadius: "8px", textAlign: "center" }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td colSpan="13" className="text-center py-4 text-muted">
+                    Loading sales follow-ups...
+                  </td>
+                </tr>
+              ) : tableData.length === 0 ? (
+                <tr>
+                  <td colSpan="13" className="text-center py-5 text-muted">
+                    <div style={{ fontSize: "15px", fontWeight: 600, color: "#475569", marginBottom: "4px" }}>
+                      {searchQuery ? "No matching follow-ups found" : "No sales follow-ups found."}
+                    </div>
+                    <div style={{ fontSize: "13px", color: "#94a3b8" }}>
+                      All clear! No pending follow-ups in this view.
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                tableData.map((row) => (
+                  <tr
+                    key={row.rawId || row.id}
+                    className={tableSelection.isSelected(row.rawId) ? "selected" : ""}
+                  >
+                    <td style={{ textAlign: "center", padding: "14px 12px" }}>
+                      <TableSelectionCheckbox
+                        checked={tableSelection.isSelected(row.rawId)}
+                        label={`Select follow-up ${row.id}`}
+                        onChange={() => tableSelection.toggleRow(row.rawId)}
+                        disabled={bulkDeleting}
+                      />
+                    </td>
+                    <td>
+                      <span className="admin-email-id">{row.id}</span>
+                    </td>
+                    <td className="text-muted">{row.leadId}</td>
+                    <td>
+                      <strong style={{ color: "#0f172a", fontSize: "14px" }}>
+                        {row.leadName}
+                      </strong>
+                    </td>
+                    <td>{row.phone}</td>
+                    <td>{row.type}</td>
+                    <td>{row.priority}</td>
+                    <td>
+                      <span
+                        className={`badge ${getStatusBadgeClass(row.status)}`}
+                        style={{ fontSize: "12px", padding: "6px 12px", borderRadius: "20px" }}
+                      >
+                        {row.status}
+                      </span>
+                    </td>
+                    <td>{row.leadStatus}</td>
+                    <td>{row.salesUser}</td>
+                    <td>
+                      <div className="scheduled-wrapper">
+                        <span style={{ fontWeight: 600, color: "#1e293b", fontSize: "13px", display: "block" }}>
+                          {row.scheduledOn}
+                        </span>
+                        <span style={{ fontSize: "11px", color: "#64748b", display: "block", marginTop: "2px" }}>
+                          {row.createdAt}
+                        </span>
+                      </div>
+                    </td>
+                    <td style={{ maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={row.notes}>
+                      {row.notes}
+                    </td>
+                    <td>
+                      <div className="d-flex align-items-center gap-2">
+                        <select
+                          className="form-select form-select-sm"
+                          style={{ minWidth: "120px", fontSize: "12px", height: "34px", borderRadius: "6px" }}
+                          value={nextActions[row.rawId] || ""}
+                          onChange={(event) =>
+                            setNextActions((current) => ({ ...current, [row.rawId]: event.target.value }))
+                          }
+                          aria-label={`Select action for ${row.id}`}
+                        >
+                          {nextActionOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-primary"
+                          style={{ height: "34px", padding: "0 12px", fontWeight: 600, fontSize: "12px", borderRadius: "6px", whiteSpace: "nowrap" }}
+                          onClick={() => handleProceed(row)}
+                          disabled={isActionDisabled(row, nextActions[row.rawId] || "")}
+                        >
+                          Proceed
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        {!loading && filteredTableData.length > 0 && (
+          <div className="booking-pagination">
+            <span className="booking-pagination-info">
+              Showing {showingFrom}-{showingTo} of {filteredTableData.length}
+            </span>
+            <div className="booking-pagination-actions">
+              <button
+                type="button"
+                className="booking-page-button"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={activePage === 1}
+              >
+                Previous
+              </button>
+              <span className="booking-page-count">
+                Page {activePage} of {totalPages}
+              </span>
+              <button
+                type="button"
+                className="booking-page-button"
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                disabled={activePage === totalPages}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

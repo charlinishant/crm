@@ -6,6 +6,11 @@ import Breadcrumb from "../components/Breadcrumb";
 
 const ROWS_PER_PAGE = 10;
 
+const normalizeConfigurationLabel = (value) => {
+    const label = String(value || "").trim();
+    return label === "2 BHK, 3 BHK Jodi" ? "2 BHK, 3 BHK Mix" : label;
+};
+
 const Floorplans = () => {
     const navigate = useNavigate();
     const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
@@ -37,6 +42,7 @@ const Floorplans = () => {
                 projectName: plan.project?.name || "-",
                 towerName: plan.tower?.name || "-",
                 typeLabel: plan.type || "-",
+                configurationLabel: normalizeConfigurationLabel(plan.configurationLabel),
             }));
 
             setFloorplans(mapped);
@@ -98,10 +104,10 @@ const Floorplans = () => {
         setOpenActionId(null);
         setViewLoading(true);
         setModalMode("view");
-    
+
         try {
             const response = await fetch(`${API_URL}/floor/${plan.id}`);
-            if (!response.ok) throw new Error("Unable to load floor plan details");      
+            if (!response.ok) throw new Error("Unable to load floor plan details");
             const detail = await response.json();
             setSelectedPlan({
                 ...plan,
@@ -111,6 +117,7 @@ const Floorplans = () => {
                 saleableArea: detail.saleable ?? plan.saleableArea,
                 carpetArea: detail.carpet ?? plan.carpetArea,
                 typeLabel: detail.type || plan.typeLabel,
+                configurationLabel: normalizeConfigurationLabel(detail.configurationLabel || plan.configurationLabel),
             });
         } catch (err) {
             alert(err.message || "Unable to load floor plan details");
@@ -140,7 +147,7 @@ const Floorplans = () => {
         <MasterLayout>
             <div className="container-fluid px-0 floor-dashboard">
                 <Breadcrumb title="Floor Plans" />
-                
+
 
                 <div className="floor-card">
                     <div className="floor-header d-flex justify-content-between align-items-center">
@@ -347,44 +354,17 @@ const detailSections = [
         ],
     },
     {
-        title: "Parking & Extras",
-        fields: [
-            ["Parking Required", "parkingRequired"],
-            ["Car Parking Slots", "carParkingSlots"],
-            ["Parking Type", "parkingType"],
-            ["Two Wheeler Slots", "twoWheelerSlots"],
-            ["Basement Storeroom", "basementStoreroom"],
-        ],
-    },
-    {
         title: "Costing",
         fields: [
             ["Rate Basis", "rateBasis"],
             ["Base Rate", "baseRate"],
             ["Base Price", "basePrice"],
+            ["Floor Rise", "floorRiseEnabled"],
             ["Floor Rise / Sqft", "floorRisePerSqft"],
             ["Base Floor For Floor Rise", "baseFloorForFloorRise"],
             ["Corner PLC %", "cornerPlcPercent"],
             ["View PLC %", "viewPlcPercent"],
             ["Facing PLC %", "facingPlcPercent"],
-            ["Club Membership", "clubMembership"],
-        ],
-    },
-    {
-        title: "Other Charges",
-        fields: [
-            ["Development Charges", "infrastructureDevelopmentCharges"],
-            ["Development Charge Basis", "infrastructureDevelopmentChargeBasis"],
-            ["Legal Documentation", "legalDocumentation"],
-            ["GST %", "gstPercent"],
-            ["Stamp Duty %", "stampDutyPercent"],
-            ["Registration %", "registrationPercent"],
-            ["Registration Amount", "registrationAmount"],
-            ["Parking Charges", "parkingCharges"],
-            ["Advance Maintenance Months", "advanceMaintenanceMonths"],
-            ["Maintenance Rate / Sqft / Month", "maintenanceRatePerSqftPerMonth"],
-            ["Sinking Fund Corpus", "sinkingFundCorpus"],
-            ["Society Formation Charges", "societyFormationCharges"],
         ],
     },
     {

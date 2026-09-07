@@ -432,7 +432,20 @@ exports.getAccessPanel = async (req, res)=>{
                     configration:true,
                     budget:true,
                     locationPreferences:true,
-                    bookings:true,
+                    bookings:{
+                        select:{
+                            id:true,
+                            leadId:true,
+                            customerName:true,
+                            stage:true,
+                            projectDetails:true,
+                            bookedOn:true,
+                            createdAt:true,
+                            basePrice:true,
+                            agreementValue:true,
+                            totalPrice:true,
+                        }
+                    },
                     callLogs:{
                         orderBy:{createdAt:"desc"},
                         take:1,
@@ -511,7 +524,17 @@ exports.getAccessPanel = async (req, res)=>{
                     }
                 },
                 take:10,
-                include:{
+                select:{
+                    id:true,
+                    leadId:true,
+                    customerName:true,
+                    stage:true,
+                    projectDetails:true,
+                    bookedOn:true,
+                    createdAt:true,
+                    basePrice:true,
+                    agreementValue:true,
+                    totalPrice:true,
                     lead:{
                         select:{
                             id:true,

@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { isErrorAlertMessage } from "./components/AppAlertDialog";
 import BulkDeleteConfirmation from "./components/table/BulkDeleteConfirmation";
 import { filterDashboardRecords } from "./utils/dashboardResultFilters";
 
@@ -49,4 +50,8 @@ test("dashboard filters return active tasks and overdue activity", () => {
 
   expect(filterDashboardRecords("active-tasks", { tasks }).map((task) => task.id)).toEqual([1]);
   expect(filterDashboardRecords("mfa", { tasks }).map((task) => task.id)).toEqual([1]);
+});
+
+test("duplicate lead popup is treated as an error", () => {
+  expect(isErrorAlertMessage("Duplicate lead already exists with the same email or phone number")).toBe(true);
 });

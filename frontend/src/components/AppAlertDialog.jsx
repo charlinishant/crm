@@ -4,9 +4,14 @@ const AppAlertContext = createContext(() => {});
 
 export const useAppAlert = () => useContext(AppAlertContext);
 
+export const isErrorAlertMessage = (message) =>
+  /\b(error|failed|fail|unable|missing|invalid|wrong|please|required|could not|no leads|duplicate|already exists|exists)\b/i.test(
+    String(message || "")
+  );
+
 const AppAlertDialog = ({ message, onClose }) => {
   const okButtonRef = useRef(null);
-  const isError = /\b(error|failed|unable|missing|invalid|wrong|please|required|could not|no leads)\b/i.test(message);
+  const isError = isErrorAlertMessage(message);
 
   useEffect(() => {
     if (!message) return undefined;

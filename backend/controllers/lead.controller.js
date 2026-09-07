@@ -850,6 +850,15 @@ exports.updateLead = async (req, res) => {
     if (source.phones !== undefined) data.phones = Array.isArray(source.phones) ? source.phones : []
     if (source.status !== undefined) {
       data.status = normalizeLeadStatusValue(source.status)
+      if (data.status === "Booked" && !isBookedLeadStatus(lead.status)) {
+        const existingBooking = await prisma.booking.findFirst({
+          where: { leadId: lead.id, stage: { in: ["Booked", "booked", "Confirmed", "confirmed"] } },
+          select: { id: true },
+        })
+        if (!existingBooking) {
+          return res.status(400).json({ message: "A lead can only be marked Booked after booking confirmation" })
+        }
+      }
       if (isBookedLeadStatus(lead.status) && data.status !== "Booked") {
         return res.status(409).json({ message: "Booked lead status cannot be changed." })
       }

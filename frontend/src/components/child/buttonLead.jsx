@@ -27,7 +27,6 @@ const ButtonLead = () => {
       onSearch={handleSearch}
       onRefresh={handleRefresh}
       onImport={() => navigate("/import-leads")}
-      onExport={() => emitLeadAction({ type: "export" })}
       onExportAll={() => emitLeadAction({ type: "exportAll" })}
       onAddLead={() => {
         window.sessionStorage.removeItem("selectedLeadEdit");

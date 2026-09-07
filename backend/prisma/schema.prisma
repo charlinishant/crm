@@ -126,6 +126,7 @@ model FloorPlan {
   baseRate  Float?
 
   basePrice             Float?
+  floorRiseEnabled      Boolean @default(false)
   floorRisePerSqft      Float?
   baseFloorForFloorRise Int?
   cornerPlcPercent      Float?
@@ -571,45 +572,118 @@ model WhatsAppMessage {
 }
 
 model Booking {
-  id               Int        @id @default(autoincrement())
-  leadId           Int?
-  lead             Lead?      @relation(fields: [leadId], references: [id])
-  unitCount        Int?
-  unitId           Int?
-  unit             Unit?      @relation(fields: [unitId], references: [id])
-  unitItemId       Int?
-  unitItem         UnitModel? @relation(fields: [unitItemId], references: [id], onDelete: SetNull)
-  activeUnitItemId Int?       @unique
-  idempotencyKey   String?    @unique
-  customerName     String?
-  stage            String?    @default("Tentative")
-  projectDetails   String?
-  bookedOn         DateTime?
-  carpetArea       Float?
-  builtupArea      Float?
-  saleableArea     Float?
-  rateBasis        String?
-  priceArea        Float?
-  priceFrozenAt    DateTime?
-  basePrice        Float?
-  baseRate         Float?
-  closingBaseRate  Float?
-  totalPrice       Float?
-  soldPrice        Float?
-  agreementValue   Float?
-  source           String?
-  channelPartnerId Int?
-  bookedBy         String?
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  id                               Int        @id @default(autoincrement())
+  leadId                           Int?
+  lead                             Lead?      @relation(fields: [leadId], references: [id])
+  unitCount                        Int?
+  unitId                           Int?
+  unit                             Unit?      @relation(fields: [unitId], references: [id])
+  unitItemId                       Int?
+  unitItem                         UnitModel? @relation(fields: [unitItemId], references: [id], onDelete: SetNull)
+  activeUnitItemId                 Int?       @unique
+  idempotencyKey                   String?    @unique
+  customerName                     String?
+  bookingName                      String?
+  stage                            String?    @default("Tentative")
+  projectDetails                   String?
+  projectId                        Int?
+  towerId                          Int?
+  floorPlanId                      Int?
+  bookedOn                         DateTime?
+  bookingDate                      DateTime?
+  carpetArea                       Float?
+  builtupArea                      Float?
+  saleableArea                     Float?
+  rateBasis                        String?
+  priceArea                        Float?
+  priceFrozenAt                    DateTime?
+  basePrice                        Float?
+  baseRate                         Float?
+  closingRate                      Float?
+  closingBaseRate                  Float?
+  totalFlatPrice                   Float?
+  totalPrice                       Float?
+  soldPrice                        Float?
+  agreementValue                   Float?
+  floorRiseEnabled                 Boolean    @default(false)
+  floorRisePerSqft                 Float?
+  baseFloorForFloorRise            Int?
+  floorNumber                      Int?
+  riseSteps                        Int?
+  floorRiseCalculatedAmount        Float?
+  calculatedUnitPrice              Float?
+  priceSnapshot                    Json?
+  parkingRequired                  Boolean    @default(false)
+  carParkingSlots                  Int?
+  parkingType                      String?
+  parkingSlotNumber                String?
+  parkingAmount                    Float?     @default(0)
+  twoWheelerSlots                  Int?
+  basementStoreroomArea            Float?
+  parkingCharges                   Float?     @default(0)
+  gstPercent                       Float?
+  gstAmount                        Float?
+  stampDutyPercent                 Float?
+  stampDutyAmount                  Float?
+  registrationAmount               Float?
+  registrationCharges              Float?
+  legalDocumentationCharges        Float?
+  legalCharges                     Float?
+  otherExpenseTotal                Float?     @default(0)
+  totalTaxes                       Float?     @default(0)
+  totalAllInclusiveCost            Float?     @default(0)
+  infrastructureDevelopmentCharges Float?
+  societyFormationCharges          Float?
+  clubMembershipCharges            Float?
+  maintenanceAdvanceMonths         Int?
+  maintenanceRatePerSqftPerMonth   Float?
+  sinkingFundCorpus                Float?
+  customOtherCharges               Json?
+  source                           String?
+  channelPartnerId                 Int?
+  channelPartnerName               String?
+  channelPartnerReraId             String?
+  bookedBy                         String?
+  createdAt                        DateTime   @default(now())
+  updatedAt                        DateTime   @updatedAt
 
   costSheet          CostSheet[]
+  bookingCharges     BookingCharge[]
+  bookingExpenses    BookingExpense[]
   paymentSchedule    PaymentSchedule[]
   demands            Demand[]
   receipts           Receipt[]
   ledgerEntries      LedgerEntry[]
   generatedDocuments GeneratedDocument[]
   documentAuditLogs  DocumentAuditLog[]
+}
+
+model BookingExpense {
+  id        Int      @id @default(autoincrement())
+  bookingId Int
+  booking   Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  name      String
+  amount    Float
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([bookingId])
+}
+
+model BookingCharge {
+  id         Int      @id @default(autoincrement())
+  bookingId  Int
+  booking    Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  code       String?
+  name       String
+  chargeType String
+  rate       Float?
+  amount     Float
+  taxable    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([bookingId])
 }
 
 model Demand {
@@ -700,9 +774,12 @@ model CostSheet {
   costType     String @default("Discount")
   inputField   Float?
   newValue     Float
+  sortOrder    Int?
 
-  bookingId Int     @unique
-  booking   Booking @relation(fields: [bookingId], references: [id])
+  bookingId Int
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
 }
 
 model PaymentSchedule {
@@ -714,9 +791,12 @@ model PaymentSchedule {
   taxes          Float?
   tds            Float?
   grandTotal     Float
+  sortOrder      Int?
 
-  bookingId Int     @unique
-  booking   Booking @relation(fields: [bookingId], references: [id])
+  bookingId Int
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
 }
 
 model LeadAddress {

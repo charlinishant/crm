@@ -1,5 +1,58 @@
 const prisma = require("../lib/prisma")
 
+const toPositiveInt = (value) => {
+    if(value === undefined || value === null || value === "") return null
+    const number = Number(value)
+    return Number.isInteger(number) && number > 0 ? number : null
+}
+
+const getTowerErrorMessage = (error, fallback = "Unable to process tower request") => {
+    if(!error) return fallback
+    if(error.statusCode && error.message) return error.message
+    if(error.code === "P2003") return "Selected project was not found."
+    if(error.code === "P2025") return "Tower not found"
+    return fallback
+}
+
+const towerSelect = {
+    id:true,
+    name:true,
+    projectId:true,
+    totalFloor:true,
+    reraTowerId:true,
+    project:{
+        select:{
+            id:true,
+            name:true
+        }
+    },
+    _count:{
+        select:{
+            floors:true,
+            units:true
+        }
+    }
+}
+
+const formatTowerResponse = (tower) => {
+    if(!tower || typeof tower !== "object") return tower
+
+    return {
+        id: tower.id,
+        name: tower.name,
+        towerName: tower.name,
+        projectId: tower.projectId,
+        projectName: tower.project?.name || "",
+        totalFloor: tower.totalFloor,
+        totalFloors: tower.totalFloor,
+        reraTowerId: tower.reraTowerId,
+        project: tower.project,
+        floorPlanCount: tower._count?.floors ?? 0,
+        unitCount: tower._count?.units ?? 0,
+        _count: tower._count,
+    }
+}
+
 const buildTowerPayload = (body = {}, { requireRequiredFields = false } = {}) => {
     const data = {}
 
@@ -9,8 +62,16 @@ const buildTowerPayload = (body = {}, { requireRequiredFields = false } = {}) =>
     }
 
     const rawProjectId = body.projectId ?? body.project
-    if(rawProjectId !== undefined && rawProjectId !== null && rawProjectId !== ""){
-        data.projectId = Number(rawProjectId)
+    if(rawProjectId !== undefined){
+        const projectId = toPositiveInt(rawProjectId)
+        if(projectId){
+            data.projectId = projectId
+        }
+        else if(rawProjectId !== null && rawProjectId !== ""){
+            const error = new Error("Please select a valid project.")
+            error.statusCode = 400
+            throw error
+        }
     }
 
     const rawTotalFloor = body.totalFloor ?? body.totalFloors
@@ -46,6 +107,7 @@ const buildTowerPayload = (body = {}, { requireRequiredFields = false } = {}) =>
             error.statusCode = 400
             throw error
         }
+
     }
 
     return data
@@ -95,28 +157,34 @@ exports.createTower = async (req, res)=>{
     try {
         const data = buildTowerPayload(req.body, { requireRequiredFields: true })
         if (!data.projectId) {
-            return res.status(400).json({ message: "Project is required before creating a tower." })
+            return res.status(400).json({ success:false, message: "Please select a project." })
         }
 
         if (!(await projectExists(data.projectId))) {
-            return res.status(400).json({ message: "Selected project was not found." })
+            return res.status(404).json({ success:false, message: "Project not found" })
         }
 
-        const tower = await prisma.tower.create({data:data})
+        const tower = await prisma.tower.create({
+            data:data,
+            select:towerSelect
+        })
         await syncProjectTowerCount(data.projectId)
+        const formattedTower = formatTowerResponse(tower)
 
         res.status(201).json({
-            "id":tower.id,
-            "message":"tower created successfully"
+            success:true,
+            id:tower.id,
+            message:"Tower created successfully",
+            data:formattedTower
         })
 
     } catch (error) {
-        console.log(error);
+        console.error("Create tower error:", error);
         if(error.statusCode){
-            return res.status(error.statusCode).json({ message: error.message })
+            return res.status(error.statusCode).json({ success:false, message: error.message })
         }
         
-        res.status(500).json("Something went wrong")
+        res.status(500).json({ success:false, message: getTowerErrorMessage(error) })
     }
 }
 
@@ -127,31 +195,22 @@ exports.getTower  = async (req, res)=>{
         if(id){
             const result = await prisma.tower.findUnique({
                 where:{id:Number(id)},
-                include:{
-                    project:{
-                        select:{
-                            id:true,
-                            name:true
-                        }
-                    },
-                    _count:{
-                        select:{
-                            floors:true,
-                            units:true
-                        }
-                    }
-                }
+                select:towerSelect
             })
             if(!result)
-                res.status(404).json({ message: "Tower not found" })
+                res.status(404).json({ success:false, message: "Tower not found" })
             else{
-                res.status(200).json(result)
+                res.status(200).json(formatTowerResponse(result))
             }
         }
         else{
             let conditions = {}
             if (req.query.projectId) {
-                conditions.projectId = parseInt(req.query.projectId)
+                const projectId = toPositiveInt(req.query.projectId)
+                if(!projectId){
+                    return res.status(400).json({ success:false, message:"Please select a valid project." })
+                }
+                conditions.projectId = projectId
             }
             const page = parseInt(req.query.page) || 1
             const limit = parseInt(req.query.limit) || 10
@@ -165,39 +224,21 @@ exports.getTower  = async (req, res)=>{
                 skip:skip,
                 take:limit,
                 orderBy:{id:"desc"},
-                select:{
-                 id:true,
-                 name: true,
-                 projectId: true,
-                 totalFloor: true,
-                 reraTowerId: true,
-                 project:{
-                    select:{
-                    id:true,
-                    name:true
-                    }
-                 },
-                 _count:{
-                    select:{
-                    floors:true,
-                    units:true
-                    }
-                 }
-                }
+                select:towerSelect
             })
 
             let context = {
                 page:page,
                 limit:limit,
                 totalItems:totalItems,
-                data:result
+                data:result.map(formatTowerResponse)
             }
             res.status(200).json(context)
         }
     }
     catch(error){
-        console.log(error);
-        res.status(500).json("something went wrong")
+        console.error("Load towers error:", error);
+        res.status(500).json({ success:false, message: getTowerErrorMessage(error) })
     }
 }
 
@@ -206,10 +247,10 @@ exports.updateTower = async (req, res)=>{
         const data = buildTowerPayload(req.body)
         const id = req.params.id
         if(!id)
-            return res.status(400).json("ID is required")
+            return res.status(400).json({ success:false, message: "ID is required" })
 
         if(data.projectId === null || data.projectId === ""){
-            return res.status(400).json({ message: "Tower must remain linked to a project." })
+            return res.status(400).json({ success:false, message: "Tower must remain linked to a project." })
         }
 
         const record = await prisma.tower.findUnique({
@@ -232,17 +273,18 @@ exports.updateTower = async (req, res)=>{
             },
         })
         if(!record)
-            return res.status(400).json("Tower not found")
+            return res.status(404).json({ success:false, message: "Tower not found" })
 
         const oldProjectId = record.projectId
 
         if(data.projectId !== undefined && Number(data.projectId) !== Number(record.projectId)){
             if (!(await projectExists(data.projectId))) {
-                return res.status(400).json({ message: "Selected project was not found." })
+                return res.status(404).json({ success:false, message: "Project not found" })
             }
 
             if(record._count.floors || record._count.units){
                 return res.status(409).json({
+                    success:false,
                     message:"Cannot move tower to another project because floor plans or units exist under it."
                 })
             }
@@ -250,12 +292,13 @@ exports.updateTower = async (req, res)=>{
 
         const floorPlanValidationError = await validateTowerTotalFloorAgainstFloorPlans(record.id, data.totalFloor)
         if(floorPlanValidationError){
-            return res.status(400).json({ message: floorPlanValidationError })
+            return res.status(400).json({ success:false, message: floorPlanValidationError })
         }
 
         const result = await  prisma.tower.update({
             where:{id:parseInt(record.id)},
-            data:data
+            data:data,
+            select:towerSelect
         })
 
         if(data.projectId && Number(data.projectId) !== Number(oldProjectId)){
@@ -263,13 +306,17 @@ exports.updateTower = async (req, res)=>{
             await syncProjectTowerCount(data.projectId)
         }
 
-        res.status(200).json(result)
+        res.status(200).json({
+            success:true,
+            message:"Tower updated successfully",
+            data:formatTowerResponse(result)
+        })
     } catch (error) {
-        console.log(error);
+        console.error("Update tower error:", error);
         if(error.statusCode){
-            return res.status(error.statusCode).json({ message: error.message })
+            return res.status(error.statusCode).json({ success:false, message: error.message })
         }
-        res.status(500).json("Something went wrong")
+        res.status(500).json({ success:false, message: getTowerErrorMessage(error) })
     }
 }
 
@@ -277,7 +324,7 @@ exports.deleteTower = async (req, res)=>{
     try {
         const id = req.params.id
         if(!id)
-            res.status(400).json("ID is required")    
+            return res.status(400).json({ success:false, message:"ID is required" })    
 
         const record = await prisma.tower.findUnique({
             where:{id:parseInt(id)},
@@ -299,7 +346,7 @@ exports.deleteTower = async (req, res)=>{
             },
         })
         if(!record)
-            return res.status(400).json("Tower not found")
+            return res.status(404).json({ success:false, message:"Tower not found" })
 
         const bookingCount = await prisma.booking.count({
             where: {
@@ -311,6 +358,7 @@ exports.deleteTower = async (req, res)=>{
         })
         if(bookingCount){
             return res.status(409).json({
+                success:false,
                 message:`Cannot delete tower because ${bookingCount} booking${bookingCount === 1 ? "" : "s"} exist under it.`
             })
         }
@@ -319,6 +367,7 @@ exports.deleteTower = async (req, res)=>{
         const nonAvailableUnit = unitModels.find((unit) => unit.status && unit.status !== "Available")
         if(nonAvailableUnit){
             return res.status(409).json({
+                success:false,
                 message:`Cannot delete tower because unit ${nonAvailableUnit.name || nonAvailableUnit.id} is ${nonAvailableUnit.status}. Only available generated units can be deleted with the tower.`
             })
         }
@@ -343,40 +392,39 @@ exports.deleteTower = async (req, res)=>{
             await syncProjectTowerCount(projectId, tx)
         })
 
-        res.status(200).json("Tower deleted successfully")
+        res.status(200).json({ success:true, message:"Tower deleted successfully" })
         
     } catch (error) {
-        console.log(error);
-        res.status(500).json({ message:error.message || "Unable to delete tower" })
+        console.error("Delete tower error:", error);
+        res.status(500).json({ success:false, message:getTowerErrorMessage(error, "Unable to delete tower") })
     }
 }
 
 exports.listTower = async (req, res)=>{
-    const projectId =  req.query.projectId || null
-    if(projectId)
-    {
-        const record = await prisma.tower.findMany({
-            where:{projectId:parseInt(projectId)},
-            select:{
-                id:true,
-                name:true,
-                projectId:true,
-                totalFloor:true,
-                reraTowerId:true
+    try {
+        const where = {}
+        if(req.query.projectId){
+            const projectId = toPositiveInt(req.query.projectId)
+            if(!projectId){
+                return res.status(400).json({ success:false, message:"Please select a valid project." })
             }
+            where.projectId = projectId
+        }
+
+        const record = await prisma.tower.findMany({
+            where,
+            orderBy:{id:"desc"},
+            select:towerSelect
         })
-        res.status(200).json(record)
+        res.status(200).json({
+            success:true,
+            data:record.map(formatTowerResponse)
+        })
+    } catch (error) {
+        console.error("Tower list API failed:", error)
+        res.status(500).json({
+            success:false,
+            message:getTowerErrorMessage(error)
+        })
     }
-    else{
-        const record = await prisma.tower.findMany({
-            select:{
-                id:true,
-                name:true,
-                projectId:true,
-                totalFloor:true,
-                reraTowerId:true
-            }
-        })
-        res.status(200).json(record)
-    }   
 }

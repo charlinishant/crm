@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { MoreVertical } from 'lucide-react';
 import BookingPreviewModal from '../user/BookingPreviewModal';
+import TableSelectionCheckbox from './table/TableSelectionCheckbox';
+import { useTableSelection } from './table/useTableSelection';
+import BulkActionToolbar from './table/BulkActionToolbar';
 
 const Booking = () => {
     const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
@@ -10,6 +13,7 @@ const Booking = () => {
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
     const [updatingBookingId, setUpdatingBookingId] = useState(null);
+    const [bulkDeleting, setBulkDeleting] = useState(false);
     const [statusMessage, setStatusMessage] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [previewBooking, setPreviewBooking] = useState(null);
@@ -165,6 +169,35 @@ const Booking = () => {
     const showingFrom = filteredBookings.length === 0 ? 0 : (currentPage - 1) * RECORDS_PER_PAGE + 1;
     const showingTo = Math.min(currentPage * RECORDS_PER_PAGE, filteredBookings.length);
 
+    const tableSelection = useTableSelection({
+        rows: currentBookings,
+        getRowId: (item) => item.id,
+        disabled: bulkDeleting,
+        pruneOnRowsChange: true,
+    });
+
+    const handleBulkDelete = async () => {
+        if (tableSelection.selectedCount === 0) return;
+        if (!window.confirm(`Are you sure you want to delete ${tableSelection.selectedCount} selected booking(s)?`)) {
+            return;
+        }
+        setBulkDeleting(true);
+        try {
+            const deletePromises = tableSelection.selectedIds.map((id) =>
+                fetch(`${API_URL}/bookings/${id}`, { method: "DELETE" })
+            );
+            await Promise.all(deletePromises);
+            setBookings((prev) => prev.filter((b) => !tableSelection.selectedIds.includes(b.id)));
+            tableSelection.clearSelection();
+            setStatusMessage("Selected bookings deleted successfully.");
+        } catch (err) {
+            console.error("Bulk delete failed:", err);
+            setStatusMessage("Failed to delete selected bookings.");
+        } finally {
+            setBulkDeleting(false);
+        }
+    };
+
     const goToPreviousPage = () => {
         setCurrentPage((page) => Math.max(1, page - 1));
     };
@@ -179,8 +212,7 @@ const Booking = () => {
                 <div className="floor-header d-flex justify-content-between align-items-center">
                     <div className="d-flex align-items-center gap-3">
                         <select
-                            className="form-select form-select-sm booking-dropdown"
-                            style={{ width: "160px" }}
+                            className="form-select booking-dropdown"
                             value={bookingFilter}
                             onChange={(e) => setBookingFilter(e.target.value)}
                         >
@@ -216,10 +248,32 @@ const Booking = () => {
                     {statusMessage && (
                         <div className="booking-status-message">{statusMessage}</div>
                     )}
-                    <table className="floor-table">
+                    {tableSelection.selectedCount > 0 && (
+                        <BulkActionToolbar
+                            count={tableSelection.selectedCount}
+                            entityLabel="bookings"
+                            isDeleting={bulkDeleting}
+                            onClear={() => {
+                                tableSelection.clearSelection();
+                                setStatusMessage('');
+                            }}
+                            onDelete={handleBulkDelete}
+                            deleteLabel="Delete selected"
+                        />
+                    )}
+                    <table className="floor-table booking-table-wide">
                         <thead>
                             <tr>
-                                <th style={{ borderStartStartRadius: '8px', borderEndStartRadius: '8px' }}>Lead Id</th>
+                                <th style={{ borderStartStartRadius: '8px', borderEndStartRadius: '8px', width: '48px', textAlign: 'center', padding: '14px 12px' }}>
+                                    <TableSelectionCheckbox
+                                        checked={tableSelection.allVisibleSelected}
+                                        indeterminate={tableSelection.isHeaderIndeterminate}
+                                        label="Select visible bookings"
+                                        onChange={tableSelection.toggleVisible}
+                                        disabled={bulkDeleting || currentBookings.length === 0}
+                                    />
+                                </th>
+                                <th>Lead Id</th>
                                 <th>Booking Name</th>
                                 <th>Applicant Name</th>
                                 <th>Project</th>
@@ -242,13 +296,21 @@ const Booking = () => {
                         <tbody>
                             {filteredBookings.length === 0 ? (
                                 <tr>
-                                    <td colSpan="17" className="text-center py-4">
+                                    <td colSpan="18" className="text-center py-4">
                                         {loading ? "Loading bookings..." : "No bookings found."}
                                     </td>
                                 </tr>
                             ) : (
                                 currentBookings.map((item) => (
-                                    <tr key={item.id}>
+                                    <tr key={item.id} className={tableSelection.isSelected(item.id) ? "selected" : ""}>
+                                        <td style={{ textAlign: 'center', padding: '14px 12px' }}>
+                                            <TableSelectionCheckbox
+                                                checked={tableSelection.isSelected(item.id)}
+                                                label={`Select booking ${item.id}`}
+                                                onChange={() => tableSelection.toggleRow(item.id)}
+                                                disabled={bulkDeleting}
+                                            />
+                                        </td>
                                         <td className="text-muted">{item.leadId}</td>
                                         <td>
                                             <strong>{item.bookingName}</strong>

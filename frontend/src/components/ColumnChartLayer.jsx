@@ -9,10 +9,10 @@ const normalizeList = (data) =>
   Array.isArray(data)
     ? data
     : Array.isArray(data?.data)
-    ? data.data
-    : Array.isArray(data?.items)
-    ? data.items
-    : [];
+      ? data.data
+      : Array.isArray(data?.items)
+        ? data.items
+        : [];
 
 const formatDate = (value) => {
   const date = new Date(value);
@@ -185,7 +185,7 @@ const ColumnChartLayer = () => {
 
   return (
     <>
-      
+
 
       <div className="project-wrapper">
         <div className="project-topbar">

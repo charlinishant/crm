@@ -21,6 +21,16 @@ const leadStatusMap = {
   Unqualified: "Unqualified",
 }
 
+const salesLeadStatusTransitions = {
+  New: new Set(["Qualified", "Nurture", "Unqualified"]),
+  Qualified: new Set(["Nurture", "In_sourcing", "In_closing", "Unqualified"]),
+  Nurture: new Set(["Qualified", "Unqualified"]),
+  In_sourcing: new Set(["In_closing", "Nurture", "Unqualified"]),
+  In_closing: new Set(["Nurture", "Unqualified"]),
+  Booked: new Set([]),
+  Unqualified: new Set([]),
+}
+
 const getLeadDisplayName = (lead) =>
   [lead?.firstName, lead?.lastName].filter(Boolean).join(" ") ||
   lead?.companyName ||
@@ -442,13 +452,25 @@ const cancelFollowUp = async (user, id, body = {}) => {
 const updateLeadStatus = async (user, leadId, body, tx = prisma) => {
   const normalizedStatus = leadStatusMap[body.status] || leadStatusMap[body.newStatus]
   if (!normalizedStatus) throw Object.assign(new Error("Valid lead status is required"), { statusCode: 400 })
+  if (normalizedStatus === "Booked") {
+    throw Object.assign(new Error("A lead can only be marked Booked after booking confirmation"), { statusCode: 400 })
+  }
   if (normalizedStatus === "Unqualified" && !body.reason) {
     throw Object.assign(new Error("Reason is required when marking lead Unqualified"), { statusCode: 400 })
   }
 
   const lead = await getScopedLead(leadId, user, tx)
+  const currentStatus = leadStatusMap[lead.status] || "New"
   if (lead.status === "Booked" && normalizedStatus !== "Booked") {
     throw Object.assign(new Error("Booked lead status cannot be changed"), { statusCode: 409 })
+  }
+  const isSalesUser = String(user?.role || "").toUpperCase() !== "ADMIN"
+  if (
+    isSalesUser &&
+    currentStatus !== normalizedStatus &&
+    !salesLeadStatusTransitions[currentStatus]?.has(normalizedStatus)
+  ) {
+    throw Object.assign(new Error(`Status cannot be changed from ${currentStatus} to ${normalizedStatus}`), { statusCode: 403 })
   }
   const data = {
     status: normalizedStatus,

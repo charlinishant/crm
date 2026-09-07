@@ -1,95 +1,117 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Icon } from "@iconify/react";
 import { useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
 import Breadcrumb from "./Breadcrumb";
 
+const initialFormData = {
+  towerName: "",
+  project: "",
+  totalFloors: "",
+};
+
 const Newtower = ({ onClose }) => {
   const navigate = useNavigate();
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
-  const [formData, setFormData] = useState({
-    towerName: "",
-    project: "",
-    totalFloors: "",
-  });
+  const normalizeList = (data) => {
+    if (Array.isArray(data)) return data;
+    if (Array.isArray(data?.data)) return data.data;
+    if (Array.isArray(data?.projects)) return data.projects;
+    if (Array.isArray(data?.towers)) return data.towers;
+    return [];
+  };
+  const getProjectId = (project) => project?.id ?? project?.projectId;
+  const getProjectName = (project) =>
+    project?.name || project?.projectName || project?.title || (project?.id ? `Project #${project.id}` : "Project");
 
+  const [formData, setFormData] = useState(initialFormData);
   const [projectOptions, setProjectOptions] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingProjects, setLoadingProjects] = useState(false);
   const [error, setError] = useState("");
 
-  // ✅ Handle Input
   const handleChange = (e) => {
     const { name, value } = e.target;
+    setError("");
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // ✅ Fetch Projects
   useEffect(() => {
     const fetchProjects = async () => {
       try {
+        setLoadingProjects(true);
+        setError("");
         const res = await fetch(`${API_URL}/projects/list`);
-        if (!res.ok) throw new Error("Unable to load projects");
-        const data = await res.json();
-        const list = Array.isArray(data) ? data : (data?.data || []);
-        setProjectOptions(list);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data?.message || "Unable to load projects");
+        setProjectOptions(normalizeList(data));
       } catch (err) {
-        console.error(err);
-        setError("Unable to load projects");
+        console.error(
+          "Project API failed:",
+          err?.response?.status,
+          err?.response?.data,
+          err?.message || err
+        );
+        setError("Unable to load projects. Please try again.");
         setProjectOptions([]);
+      } finally {
+        setLoadingProjects(false);
       }
     };
 
     fetchProjects();
   }, [API_URL]);
 
-  // ✅ Submit Form
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError("");
 
-    const body = {
-      name: formData.towerName,
-      projectId: formData.project ? Number(formData.project) : null,
-      totalFloor: formData.totalFloors
-        ? Number(formData.totalFloors)
-        : 0,
-    };
+    const totalFloors = Number(formData.totalFloors);
+    if (!formData.project) {
+      setError("Please select a project.");
+      return;
+    }
+    if (!formData.towerName.trim()) {
+      setError("Tower name is required.");
+      return;
+    }
+    if (!Number.isInteger(totalFloors) || totalFloors < 1) {
+      setError("Total floors must be greater than 0.");
+      return;
+    }
 
     try {
+      setLoading(true);
       const res = await fetch(`${API_URL}/tower`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          name: formData.towerName.trim(),
+          projectId: Number(formData.project),
+          totalFloor: totalFloors,
+        }),
       });
 
-      let result;
-      try {
-        result = await res.json(); // safe parse
-      } catch {
-        result = {};
-      }
-
+      const result = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(result.message || "Failed to create tower");
+        throw new Error(result?.message || "Failed to create tower");
       }
 
-      console.log("Saved:", result);
+      window.alert(result?.message || "Tower created successfully");
+      setFormData(initialFormData);
 
-      // ✅ Success Alert
-      alert("Tower Created Successfully ✅");
-
-      // ✅ Close modal if exists
       if (onClose) onClose();
-
-      // ✅ Navigate
       navigate("/towers", { replace: true });
-
     } catch (err) {
-      console.error(err);
+      console.error(
+        "Tower API failed:",
+        err?.response?.status,
+        err?.response?.data,
+        err?.message || err
+      );
       setError(err.message || "Something went wrong");
     } finally {
       setLoading(false);
@@ -121,8 +143,6 @@ const Newtower = ({ onClose }) => {
             <div className="card radius-12 shadow-sm border-0">
               <div className="card-body p-30">
                 <form onSubmit={handleSubmit}>
-                  
-                  {/* Header */}
                   <div className="d-flex justify-content-between align-items-start mb-4">
                     <div>
                       <h5 className="mb-1">Add New Tower</h5>
@@ -139,9 +159,7 @@ const Newtower = ({ onClose }) => {
                     )}
                   </div>
 
-                  {/* Form */}
                   <div className="row gy-4">
-
                     <div className="col-md-6">
                       <label className="form-label fw-semibold">
                         Project *
@@ -151,12 +169,13 @@ const Newtower = ({ onClose }) => {
                         value={formData.project}
                         onChange={handleChange}
                         className="form-control"
+                        disabled={loadingProjects}
                         required
                       >
-                        <option value="">Select Project</option>
-                        {projectOptions.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
+                        <option value="">{loadingProjects ? "Loading projects..." : "Select Project"}</option>
+                        {projectOptions.map((project) => (
+                          <option key={getProjectId(project)} value={getProjectId(project)}>
+                            {getProjectName(project)}
                           </option>
                         ))}
                       </select>
@@ -194,24 +213,21 @@ const Newtower = ({ onClose }) => {
                       />
                     </div>
 
-                    {/* Submit */}
                     <div className="col-12">
                       <button
                         type="submit"
                         className="btn btn-primary"
-                        disabled={loading}
+                        disabled={loading || loadingProjects}
                       >
                         {loading ? "Saving..." : "Save"}
                       </button>
                     </div>
-
                   </div>
                 </form>
               </div>
             </div>
           </div>
         </div>
-
       </div>
     </MasterLayout>
   );

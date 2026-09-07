@@ -126,6 +126,7 @@ const getFloorPlanErrorMessage = (error, fallback = "Something went wrong") => {
 }
 
 const validateFloorPlan = (data) => {
+    const validationErrors = {}
     if (!data.projectId) {
         return "Project is required for every floor plan"
     }
@@ -150,12 +151,19 @@ const validateFloorPlan = (data) => {
         return "Base Rate must be zero or more"
     }
 
-    if (data.floorRisePerSqft !== null && data.floorRisePerSqft < 0) {
-        return "Floor Rise / Sqft must be zero or more"
+    if (data.floorRiseEnabled) {
+        if (data.floorRisePerSqft === null || data.floorRisePerSqft < 0) {
+            validationErrors.floorRisePerSqft = "Floor Rise / Sqft must be zero or more"
+        }
+        if (data.baseFloorForFloorRise === null) {
+            validationErrors.baseFloorForFloorRise = "Base Floor for Floor Rise is required"
+        }
+    } else if (data.floorRisePerSqft !== null || data.baseFloorForFloorRise !== null) {
+        validationErrors.floorRiseEnabled = "Floor-rise values must be empty when Floor Rise is No"
     }
 
     if (data.baseFloorForFloorRise !== null && data.baseFloorForFloorRise < 1) {
-        return "Base Floor for Floor Rise must be at least 1"
+        validationErrors.baseFloorForFloorRise = "Base Floor for Floor Rise must be at least 1"
     }
 
     if (
@@ -176,29 +184,25 @@ const validateFloorPlan = (data) => {
 
     if (
         data.baseFloorForFloorRise !== null &&
+        data.applicableFloorFrom !== null &&
+        data.baseFloorForFloorRise < data.applicableFloorFrom
+    ) {
+        validationErrors.baseFloorForFloorRise = "Base Floor for Floor Rise cannot be before Applicable Floor From"
+    }
+
+    if (
+        data.baseFloorForFloorRise !== null &&
         data.applicableFloorTo !== null &&
         data.baseFloorForFloorRise > data.applicableFloorTo
     ) {
-        return "Base Floor for Floor Rise cannot exceed Applicable Floor To"
+        validationErrors.baseFloorForFloorRise = "Base Floor for Floor Rise cannot exceed Applicable Floor To"
     }
 
     if (
         data.baseFloorForFloorRise !== null &&
         parseSkippedFloorSet(data.skippedFloors).has(data.baseFloorForFloorRise)
     ) {
-        return "Base Floor for Floor Rise cannot be a skipped floor."
-    }
-
-    if (data.loading !== null && (data.loading < 0 || data.loading > 100)) {
-        return "Loading % must be between 0 and 100"
-    }
-
-    if (data.gstPercent !== null && data.gstPercent > 18) {
-        return "GST % cannot exceed 18"
-    }
-
-    if (data.stampDutyPercent !== null && data.stampDutyPercent > 10) {
-        return "Stamp Duty % cannot exceed 10"
+        validationErrors.baseFloorForFloorRise = "Base floor cannot be a skipped floor"
     }
 
     if (
@@ -215,6 +219,13 @@ const validateFloorPlan = (data) => {
         (!Array.isArray(data.floorPlanImages) || data.floorPlanImages.length === 0)
     ) {
         return "Floor Plan Image is required before publishing a floor plan"
+    }
+
+    if (Object.keys(validationErrors).length) {
+        const error = new Error("Validation failed")
+        error.statusCode = 400
+        error.validationErrors = validationErrors
+        throw error
     }
 
     return null
@@ -409,31 +420,14 @@ const normalizeFloorPlanPayload = (body) => {
         flowerBedPocketTerrace: toNumberOrNull(body.flowerBedPocketTerrace),
         serviceSlabAcLedge: toNumberOrNull(body.serviceSlabAcLedge),
         refugeAreaShare: toNumberOrNull(body.refugeAreaShare),
-        parkingRequired: body.parkingRequired || null,
-        carParkingSlots: toIntOrNull(body.carParkingSlots),
-        parkingType: body.parkingType || null,
-        twoWheelerSlots: toIntOrNull(body.twoWheelerSlots),
-        basementStoreroom: toNumberOrNull(body.basementStoreroom),
         rateBasis: body.rateBasis || "On Carpet",
         baseRate: toNumberOrNull(body.baseRate),
-        floorRisePerSqft: toNumberOrNull(body.floorRisePerSqft),
-        baseFloorForFloorRise: toIntOrNull(body.baseFloorForFloorRise),
+        floorRiseEnabled: toBoolean(body.floorRiseEnabled),
+        floorRisePerSqft: toBoolean(body.floorRiseEnabled) ? toNumberOrNull(body.floorRisePerSqft) : null,
+        baseFloorForFloorRise: toBoolean(body.floorRiseEnabled) ? toIntOrNull(body.baseFloorForFloorRise) : null,
         cornerPlcPercent: toNumberOrNull(body.cornerPlcPercent),
         viewPlcPercent: toNumberOrNull(body.viewPlcPercent),
         facingPlcPercent: toNumberOrNull(body.facingPlcPercent),
-        clubMembership: toNumberOrNull(body.clubMembership),
-        infrastructureDevelopmentCharges: toNumberOrNull(body.infrastructureDevelopmentCharges),
-        infrastructureDevelopmentChargeBasis: body.infrastructureDevelopmentChargeBasis || null,
-        legalDocumentation: toNumberOrNull(body.legalDocumentation),
-        gstPercent: toNumberOrNull(body.gstPercent) ?? 5,
-        stampDutyPercent: toNumberOrNull(body.stampDutyPercent) ?? 6,
-        registrationPercent: toNumberOrNull(body.registrationPercent) ?? 1,
-        registrationAmount: toNumberOrNull(body.registrationAmount),
-        parkingCharges: toNumberOrNull(body.parkingCharges),
-        advanceMaintenanceMonths: toIntOrNull(body.advanceMaintenanceMonths),
-        maintenanceRatePerSqftPerMonth: toNumberOrNull(body.maintenanceRatePerSqftPerMonth),
-        sinkingFundCorpus: toNumberOrNull(body.sinkingFundCorpus),
-        societyFormationCharges: toNumberOrNull(body.societyFormationCharges),
         floorPlanImages: toArray(body.floorPlanImages),
         brochurePageReference: body.brochurePageReference || null,
         walkthrough3dLink: body.walkthrough3dLink || null,
@@ -534,8 +528,6 @@ const formatFloorPlanResponse = (floorPlan) => {
 }
 
 const createUnitsFromFloorPlanTemplate = async (tx, floorPlan) => {
-    if (!isPublishedStatus(floorPlan.status)) return null
-
     const generatedUnits = getClaimedSlots(floorPlan)
         .map((slot) => ({
             name: buildGeneratedUnitNumber(slot.floor, slot.unitPosition),
@@ -758,7 +750,11 @@ exports.createFloor = async (req, res)=>{
     } catch (error) {
         console.log(error);
         if (error.statusCode) {
-            return res.status(error.statusCode).json({ message: error.message })
+            return res.status(error.statusCode).json({
+                success: false,
+                message: error.message,
+                ...(error.validationErrors ? { errors: error.validationErrors } : {}),
+            })
         }
 
         res.status(500).json({
@@ -824,6 +820,7 @@ exports.getFloor  = async (req, res)=>{
                     measure:true,
                     baseRate:true,
                     basePrice:true,
+                    floorRiseEnabled:true,
                     floorRisePerSqft:true,
                     baseFloorForFloorRise:true,
                     applicableFloorFrom:true,
@@ -893,10 +890,8 @@ exports.updateFloor = async (req, res)=>{
             })
             await replaceFloorPlanSlotClaims(tx, updated)
             await removeUnitsNoLongerClaimed(tx, updated)
-            if (isPublishedStatus(updated.status)) {
-                await createUnitsFromFloorPlanTemplate(tx, updated)
-                await refreshGeneratedUnitPricing(tx, updated)
-            }
+            await createUnitsFromFloorPlanTemplate(tx, updated)
+            await refreshGeneratedUnitPricing(tx, updated)
 
             return updated
         })
@@ -905,7 +900,11 @@ exports.updateFloor = async (req, res)=>{
     } catch (error) {
         console.log(error);
         if (error.statusCode) {
-            return res.status(error.statusCode).json({ message: error.message })
+            return res.status(error.statusCode).json({
+                success: false,
+                message: error.message,
+                ...(error.validationErrors ? { errors: error.validationErrors } : {}),
+            })
         }
         res.status(500).json({
             message: getFloorPlanErrorMessage(error, "Failed to update floor plan"),

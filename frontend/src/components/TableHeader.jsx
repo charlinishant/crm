@@ -15,7 +15,6 @@ const TableHeader = ({ onSearch, onRefresh }) => {
         onSearch={onSearch || ((query) => emitLeadAction({ type: "search", query }))}
         onRefresh={onRefresh || (() => emitLeadAction({ type: "refresh" }))}
         onImport={() => navigate("/import-leads")}
-        onExport={() => emitLeadAction({ type: "export" })}
         onExportAll={() => emitLeadAction({ type: "exportAll" })}
         onAddLead={() => navigate("/add-lead", { state: { mode: "create" } })}
       />

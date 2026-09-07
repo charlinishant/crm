@@ -7,6 +7,7 @@ router.post("/", createTower)
 router.get("/list", listTower)
 router.get("/", getTower)
 router.get("/:id", getTower)
+router.put("/:id", updateTower)
 router.patch("/:id", updateTower)
 router.delete("/:id", deleteTower   )
 

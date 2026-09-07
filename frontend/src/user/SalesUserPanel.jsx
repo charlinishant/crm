@@ -430,11 +430,30 @@ const emptyBookingForm = {
   saleableArea: "",
   basePrice: "",
   baseRate: "",
+  closingRate: "",
   closingBaseRate: "",
   totalPrice: "",
   agreementValue: "",
+  parkingRequired: "No",
+  carParkingSlots: "",
+  parkingType: "",
+  parkingSlotNumber: "",
+  twoWheelerSlots: "",
+  basementStoreroomArea: "",
+  parkingCharges: "0",
+  gstPercent: "5",
+  stampDutyPercent: "6",
+  registrationAmount: "",
+  legalDocumentationCharges: "",
+  infrastructureDevelopmentCharges: "",
+  societyFormationCharges: "",
+  clubMembershipCharges: "",
+  maintenanceAdvanceMonths: "",
+  maintenanceRatePerSqftPerMonth: "",
+  sinkingFundCorpus: "",
+  customOtherCharges: [],
   campaign: "walkin",
-  source: "",
+  source: "Walk-in",
   subSource: "",
   channelPartner: "",
   companyName: "",
@@ -457,6 +476,15 @@ const bookingSteps = [
   "Booking Confirmation",
 ];
 const salesTablePageSize = 10;
+
+const normalizeBookingSource = (value) => {
+  const source = String(value || "").trim();
+  if (!source) return "Walk-in";
+  if (source.toLowerCase() === "channel_partner") return "Channel Partner";
+  return source;
+};
+
+const isChannelPartnerSource = (value) => normalizeBookingSource(value) === "Channel Partner";
 
 const getDefaultVisitDateTime = () => {
   const date = new Date();
@@ -688,6 +716,17 @@ const SalesUserPanel = () => {
     new URLSearchParams(window.location.search).get("filter") || "today"
   );
   const [openActionLeadId, setOpenActionLeadId] = useState(null);
+
+  useEffect(() => {
+    if (!openActionLeadId) return;
+    const handleOutsideClick = (e) => {
+      if (!e.target.closest(".sales-row-actions")) {
+        setOpenActionLeadId(null);
+      }
+    };
+    window.addEventListener("click", handleOutsideClick);
+    return () => window.removeEventListener("click", handleOutsideClick);
+  }, [openActionLeadId]);
   const [focusedCallLeadId, setFocusedCallLeadId] = useState(
     new URLSearchParams(window.location.search).get("leadId") || null
   );
@@ -730,6 +769,8 @@ const SalesUserPanel = () => {
   const [bookingStepIndex, setBookingStepIndex] = useState(0);
   const [isBookingSuccess, setIsBookingSuccess] = useState(false);
   const [bookingPreview, setBookingPreview] = useState(null);
+  const bookingStartKeyRef = useRef("");
+  const bookingPreviewKeyRef = useRef("");
   const [viewTask, setViewTask] = useState(null);
   const [leadTableSearch, setLeadTableSearch] = useState("");
   const [leadTablePage, setLeadTablePage] = useState(1);
@@ -808,6 +849,7 @@ const SalesUserPanel = () => {
       }
   }, []);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadPanel();
   }, [loadPanel]);
@@ -2307,7 +2349,29 @@ const SalesUserPanel = () => {
 
   const handleBookingFieldChange = (event) => {
     const { name, value } = event.target;
-    setBookingForm((current) => ({ ...current, [name]: value }));
+    const nextValue = name === "source" ? normalizeBookingSource(value) : value;
+    setBookingForm((current) => ({
+      ...current,
+      [name]: nextValue,
+      ...(name === "closingRate" ? { closingBaseRate: nextValue } : {}),
+      ...(name === "source" && !isChannelPartnerSource(nextValue)
+        ? {
+            channelPartnerId: "",
+            channelPartner: "",
+            cpReraNumber: "",
+          }
+        : {}),
+      ...(name === "parkingRequired" && value === "No"
+        ? {
+            carParkingSlots: "",
+            parkingType: "",
+            parkingSlotNumber: "",
+            twoWheelerSlots: "",
+            basementStoreroomArea: "",
+            parkingCharges: "0",
+          }
+        : {}),
+    }));
   };
 
   const handleSaveBooking = async (event) => {
@@ -2348,9 +2412,7 @@ const SalesUserPanel = () => {
 
     const priceValidationMessage = [
       ["baseRate", "Base Rate"],
-      ["closingBaseRate", "Closing Base Rate"],
-      ["totalPrice", "Total Price"],
-      ["agreementValue", "Agreement Value"],
+      [bookingForm.closingRate !== "" ? "closingRate" : "closingBaseRate", "Closing Rate"],
     ]
       .map(([field, label]) => validateBookingPriceValue(bookingForm[field], label))
       .find(Boolean);
@@ -2371,7 +2433,6 @@ const SalesUserPanel = () => {
         },
         body: JSON.stringify({
           ...bookingForm,
-          soldPrice: Number(bookingForm.totalPrice || 0),
           leadId: Number(leadId),
           stage: "Booked",
           unitId: bookingForm.unitId ? Number(bookingForm.unitId) : undefined,
@@ -2379,8 +2440,14 @@ const SalesUserPanel = () => {
           bookedBy: userName,
           idempotencyKey: bookingForm.idempotencyKey || `booking-${leadId}-${bookingForm.unitItemId || Date.now()}`,
           bookedOn: bookingForm.bookedOn || new Date().toISOString().slice(0, 10),
+          bookingDate: bookingForm.bookingDate || bookingForm.bookedOn || new Date().toISOString().slice(0, 10),
           saleableArea: bookingForm.saleableArea || bookingForm.carpetArea,
-          source: bookingForm.source || bookingForm.campaign,
+          closingRate: bookingForm.closingRate ?? bookingForm.closingBaseRate ?? bookingForm.baseRate,
+          otherExpenses: bookingForm.customOtherCharges,
+          source: bookingForm.source ?? "Walk-in",
+          channelPartnerId: isChannelPartnerSource(bookingForm.source) ? bookingForm.channelPartnerId : undefined,
+          channelPartnerName: isChannelPartnerSource(bookingForm.source) ? bookingForm.channelPartner : undefined,
+          channelPartnerReraId: isChannelPartnerSource(bookingForm.source) ? bookingForm.cpReraNumber : undefined,
         }),
       });
 
@@ -2449,6 +2516,59 @@ const SalesUserPanel = () => {
     navigate(leadId ? `/user/sales/details?leadId=${leadId}` : "/user/sales/details", { state: { lead } });
   };
 
+  useEffect(() => {
+    if (activeScreen !== "bookings") return;
+
+    const params = new URLSearchParams(location.search);
+    const shouldStartBooking = params.get("startBooking") === "1" || location.state?.startBooking;
+    const leadId = params.get("leadId") || getLeadId(location.state?.lead);
+    const startKey = `${location.key}:${leadId}`;
+
+    if (!shouldStartBooking || !leadId || bookingStartKeyRef.current === startKey) return;
+
+    const lead =
+      panel.leads.find((item) => String(getLeadId(item)) === String(leadId)) ||
+      location.state?.lead ||
+      null;
+
+    if (!lead) return;
+    bookingStartKeyRef.current = startKey;
+    openBookingForm(lead);
+  }, [activeScreen, location.key, location.search, location.state, panel.leads]);
+
+  useEffect(() => {
+    if (activeScreen !== "bookings") return;
+
+    const params = new URLSearchParams(location.search);
+    const bookingId = params.get("bookingId");
+    const previewKey = `${location.key}:${bookingId}`;
+    if (!bookingId || bookingPreviewKeyRef.current === previewKey) return;
+
+    const leadId = params.get("leadId") || getLeadId(location.state?.lead);
+    const lead =
+      panel.leads.find((item) => String(getLeadId(item)) === String(leadId)) ||
+      location.state?.lead ||
+      null;
+
+    const stateBooking = location.state?.booking;
+    if (stateBooking && String(stateBooking.id) === String(bookingId)) {
+      bookingPreviewKeyRef.current = previewKey;
+      setBookingPreview({ booking: stateBooking, lead });
+      return;
+    }
+
+    bookingPreviewKeyRef.current = previewKey;
+    fetch(`${API_URL}/bookings/${bookingId}`)
+      .then(async (response) => {
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result?.message || "Unable to load booking");
+        setBookingPreview({ booking: result, lead: lead || result?.lead || null });
+      })
+      .catch((error) => {
+        console.error("Unable to load booking preview:", error);
+      });
+  }, [activeScreen, location.key, location.search, location.state, panel.leads]);
+
   const toggleLeadActionMenu = (event, lead) => {
     event.stopPropagation();
     const leadId = getLeadId(lead);
@@ -2481,8 +2601,16 @@ const SalesUserPanel = () => {
 
   const assignedTasks = panel.tasks || [];
   const currentCallLead = useMemo(() => {
-    return callQueue.find((lead) => String(getLeadId(lead)) === String(focusedCallLeadId)) || callQueue[0] || null;
-  }, [callQueue, focusedCallLeadId]);
+    if (focusedCallLeadId) {
+      const focusedLead =
+        panel.leads.find((lead) => String(getLeadId(lead)) === String(focusedCallLeadId)) ||
+        (String(getLeadId(location.state?.lead)) === String(focusedCallLeadId) ? location.state.lead : null);
+
+      if (focusedLead) return focusedLead;
+    }
+
+    return callQueue[0] || null;
+  }, [callQueue, focusedCallLeadId, location.state, panel.leads]);
   const currentCallLog = currentCallLead ? callLogsByLead[getLeadId(currentCallLead)] : null;
   const currentCallStatus = String(currentCallLog?.status || "").toLowerCase();
   const currentCallStatusLabel = currentCallStatus === "ringing" || currentCallStatus === "calling"
@@ -3887,7 +4015,7 @@ const SalesUserPanel = () => {
                         : "No leads available for this sales user yet."}
                   </div>
                 )}
-                {tableLeads.map((lead) => {
+                {tableLeads.map((lead, index) => {
                   const leadId = getLeadId(lead);
                   const latestDisposition = getLeadDisposition(lead);
                   const dispositionLabel =
@@ -3904,10 +4032,6 @@ const SalesUserPanel = () => {
                     className={`sales-row ${activeDispositionFilter ? "with-disposition" : ""}`}
                     key={leadId || lead.email}
                     onClick={() => {
-                      if (isBookedLead(lead)) {
-                        openBookingPreview(lead);
-                        return;
-                      }
                       openLeadDetails(lead);
                     }}
                   >
@@ -3942,7 +4066,8 @@ const SalesUserPanel = () => {
                         <MoreVertical size={16} />
                       </button>
                       {openActionLeadId === leadId && (
-                        <div className="sales-row-menu">
+                        <div className={`sales-row-menu ${index >= tableLeads.length - 2 ? "open-upwards" : ""}`}>
+
                           {getLeadPhoneOptions(lead).map((phone) => (
                             <button
                               type="button"
@@ -3959,9 +4084,11 @@ const SalesUserPanel = () => {
                           <button type="button" onClick={() => openLeadDetails(lead)}>
                             Preview
                           </button>
-                           <button type="button" onClick={() => openLeadPreview(lead, true)}>
-                            {isBookedLead(lead) ? "Preview Booking" : "Booked Lead"}
-                          </button>
+                          {!isBookedLead(lead) && (
+                            <button type="button" onClick={() => openLeadPreview(lead, true)}>
+                              Book Lead
+                            </button>
+                          )}
                         </div>
                       )}
                     </span>

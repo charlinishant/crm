@@ -14,7 +14,7 @@ const LeadTableToolbar = ({
   onExportAll,
   onAddLead,
   showImport = true,
-  showExport = true,
+  showExport = false,
   showExportAll = true,
   showAddLead = true,
   isRefreshing = false,

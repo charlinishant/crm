@@ -9,6 +9,7 @@ import {
   FaTimes,
   FaWhatsapp,
 } from "react-icons/fa";
+import { calculateBookingPricing, toSafeNumber } from "../utils/pricing";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
@@ -153,6 +154,15 @@ const compactCurrency = (value) => {
   }
   return confirmCurrency(amount);
 };
+const bookingNumber = (value) => {
+  const number = Number(String(value ?? "").replace(/[^\d.-]/g, ""));
+  return Number.isFinite(number) && number >= 0 ? number : 0;
+};
+const emptyCustomCharge = () => ({
+  id: `expense-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  name: "",
+  amount: "",
+});
 const escapeHtml = (value) =>
   String(value ?? "-")
     .replace(/&/g, "&amp;")
@@ -170,11 +180,11 @@ const getUserName = (user) =>
   user?.email ||
   `User #${user?.id}`;
 
-const sourceOptions = ["Direct", "Bulk Marketing", "Referral", "Channel Partner"];
+const sourceOptions = ["Walk-in", "Digital", "Channel Partner", "Meta"];
 
 const normalizeBookingSource = (value) => {
   const source = String(value || "").trim();
-  if (!source) return "Direct";
+  if (!source) return "Walk-in";
   if (source.toLowerCase() === "channel_partner") return "Channel Partner";
   return source;
 };
@@ -199,6 +209,16 @@ const matchesProjectTypeFilter = (unit, selectedType, project) => {
   if (unitType) return unitType === selected;
   return true;
 };
+
+const normalizeUnitPurpose = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/[_-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const isRehabUnit = (unit) =>
+  normalizeUnitPurpose(unit?.propertyPurpose || unit?.unitStream || unit?.floorPlanUnitStream).includes("rehab");
 
 const getImageSource = (value) => {
   if (!value) return "";
@@ -238,24 +258,35 @@ const flattenDatabaseUnits = (unitGroups = []) =>
       name: unit?.name || group?.name || `Unit ${index + 1}`,
       floor: unit?.floor || floorPlan?.name || group?.floor || "-",
       unitIndex: unit?.unitIndex,
-      carpet: floorPlan?.carpet ?? "-",
+      carpet: floorPlan?.carpet ?? directUnit?.carpet ?? "-",
       builtupArea: floorPlan?.builtupArea ?? "",
-      saleable: floorPlan?.saleable ?? "-",
+      saleable: floorPlan?.saleable ?? directUnit?.saleable ?? "-",
       rateBasis: floorPlan?.rateBasis || "On Carpet",
-      bedrooms: floorPlan?.bedrooms ?? "-",
-      bathrooms: floorPlan?.bathrooms ?? "-",
+      bedrooms: floorPlan?.bedrooms ?? directUnit?.bedrooms ?? "-",
+      bathrooms: floorPlan?.bathrooms ?? directUnit?.bathrooms ?? "-",
+      kitchen: floorPlan?.kitchenType ?? "-",
       baseRate: unit?.pricing?.baseRate ?? unit?.baseRate ?? group?.baseRate ?? "",
       basePrice: unit?.pricing?.finalPrice ?? unit?.finalPrice ?? unit?.basePrice ?? group?.basePrice ?? "",
-      floorRise: unit?.pricing?.floorRiseAmount ?? unit?.floorRiseAmount ?? unit?.floorRise ?? group?.floorRise ?? "",
+      floorRiseEnabled: unit?.pricing?.floorRiseEnabled ?? floorPlan?.floorRiseEnabled ?? false,
+      floorRise: unit?.pricing?.floorRiseCalculatedAmount ?? unit?.pricing?.floorRiseAmount ?? unit?.floorRiseAmount ?? unit?.floorRise ?? group?.floorRise ?? "",
       floorRiseRate: unit?.pricing?.floorRisePerSqft ?? unit?.floorRisePerSqft ?? floorPlan?.floorRisePerSqft ?? "",
-      floorRiseSteps: unit?.pricing?.floorRiseSteps ?? unit?.floorRiseSteps ?? "",
+      floorRiseSteps: unit?.pricing?.riseSteps ?? unit?.pricing?.floorRiseSteps ?? unit?.floorRiseSteps ?? "",
       riseFromFloor: unit?.pricing?.riseFromFloor ?? floorPlan?.baseFloorForFloorRise ?? "",
+      floorRiseCalculatedAmount: unit?.pricing?.floorRiseCalculatedAmount ?? unit?.pricing?.floorRiseAmount ?? "",
+      calculatedUnitPrice: unit?.pricing?.calculatedUnitPrice ?? unit?.pricing?.finalPrice ?? "",
       reraArea: unit?.pricing?.reraArea ?? unit?.reraArea ?? floorPlan?.carpet ?? "",
       pricing: unit?.pricing || null,
       guidelineValue: unit?.guidelineValue || group?.guidelineValue || unit?.guideline_value || group?.guideline_value || "",
       developmentInvoice: unit?.developmentInvoice || group?.developmentInvoice || unit?.development_invoice || group?.development_invoice || "",
       agreementValue: unit?.agreementValue || group?.agreementValue || unit?.agreement_value || group?.agreement_value || "",
       totalPrice: unit?.totalPrice || group?.totalPrice || unit?.total_price || group?.total_price || "",
+      propertyPurpose:
+        unit?.propertyPurpose ||
+        group?.propertyPurpose ||
+        directUnit?.propertyPurpose ||
+        floorPlan?.unitStream ||
+        "",
+      unitStream: floorPlan?.unitStream || group?.unitStream || "",
       legalDocumentationFee:
         unit?.legalDocumentationFee || group?.legalDocumentationFee || unit?.legal_documentation_fee || group?.legal_documentation_fee || "",
       electricityInfrastructureCharges:
@@ -290,7 +321,9 @@ const flattenDatabaseUnits = (unitGroups = []) =>
     }));
   });
 
-const normalizeUnitStatus = (status) => {
+const normalizeUnitStatus = (status, unit) => {
+  if (isRehabUnit(unit)) return "rehab";
+
   const value = String(status || "available").toLowerCase();
   if (["booked", "sold", "unavailable"].includes(value)) return "booked";
   if (["blocked", "block"].includes(value)) return "blocked";
@@ -314,10 +347,9 @@ const UserBookingForm = ({
   onClose,
   onSubmit,
   onPrevious,
-  onMarkInterested,
   onFieldChange,
 }) => {
-  const [interestedUnits, setInterestedUnits] = useState(new Set());
+  const [interestedUnits] = useState(new Set());
   const [filters, setFilters] = useState({
     unitType: "",
   });
@@ -326,6 +358,9 @@ const UserBookingForm = ({
   const [projectTowers, setProjectTowers] = useState([]);
   const [databaseUnitGroups, setDatabaseUnitGroups] = useState([]);
   const [channelPartners, setChannelPartners] = useState([]);
+  const [unitBookingDetails, setUnitBookingDetails] = useState(null);
+  const [isLoadingUnitDetails, setIsLoadingUnitDetails] = useState(false);
+  const [unitDetailsMessage, setUnitDetailsMessage] = useState("");
   const [isLoadingCatalog, setIsLoadingCatalog] = useState(false);
   const [isProjectMenuOpen, setIsProjectMenuOpen] = useState(false);
   const [projectSearch, setProjectSearch] = useState("");
@@ -425,7 +460,15 @@ const UserBookingForm = ({
 
         if (!isMounted) return;
 
-        setProjectTowers(Array.isArray(towerResult) ? towerResult : []);
+        setProjectTowers(
+          Array.isArray(towerResult)
+            ? towerResult
+            : Array.isArray(towerResult?.data)
+              ? towerResult.data
+              : Array.isArray(towerResult?.towers)
+                ? towerResult.towers
+                : []
+        );
         setDatabaseUnitGroups(Array.isArray(unitResult) ? unitResult : unitResult?.items || unitResult?.data || []);
       } catch (error) {
         console.error("Unable to load project towers and units:", error);
@@ -495,13 +538,89 @@ const UserBookingForm = ({
     towerOptions.find((tower) => String(tower.id) === String(selectedTowerId))?.name || "";
 
   const selectedUnit = useMemo(() => {
-    return (
+    const catalogUnit =
+      filteredCatalogUnits.find((unit) => String(unit.unitItemId || unit.id) === String(bookingForm.unitItemId)) ||
       filteredCatalogUnits.find((unit) => unit.name === bookingForm.unit) ||
-      filteredCatalogUnits.find((unit) => unit.status === "selected") ||
-      filteredCatalogUnits[0] ||
-      emptySelectedUnit
-    );
-  }, [bookingForm.unit, filteredCatalogUnits]);
+      emptySelectedUnit;
+
+    if (!unitBookingDetails) return catalogUnit;
+    return {
+      ...catalogUnit,
+      id: unitBookingDetails.unit?.unitItemId || catalogUnit.id,
+      unitItemId: unitBookingDetails.unit?.unitItemId || catalogUnit.unitItemId,
+      unitId: unitBookingDetails.unit?.id || catalogUnit.unitId,
+      name: unitBookingDetails.unit?.name || catalogUnit.name,
+      floor: unitBookingDetails.unit?.floorNumber ?? catalogUnit.floor,
+      status: unitBookingDetails.unit?.status || catalogUnit.status,
+      projectId: unitBookingDetails.project?.id || catalogUnit.projectId,
+      projectName: unitBookingDetails.project?.name || catalogUnit.projectName,
+      towerId: unitBookingDetails.tower?.id || catalogUnit.towerId,
+      towerName: unitBookingDetails.tower?.name || catalogUnit.towerName,
+      bedrooms: unitBookingDetails.floorPlan?.bedrooms ?? catalogUnit.bedrooms,
+      bathrooms: unitBookingDetails.floorPlan?.bathrooms ?? catalogUnit.bathrooms,
+      kitchen: unitBookingDetails.floorPlan?.kitchen ?? catalogUnit.kitchen,
+      carpet: unitBookingDetails.floorPlan?.reraArea ?? unitBookingDetails.floorPlan?.carpet ?? catalogUnit.carpet,
+      reraArea: unitBookingDetails.floorPlan?.reraArea ?? catalogUnit.reraArea,
+      saleable: unitBookingDetails.floorPlan?.saleableArea ?? catalogUnit.saleable,
+      rateBasis: unitBookingDetails.floorPlan?.rateBasis || catalogUnit.rateBasis,
+      baseRate: unitBookingDetails.pricing?.baseRate ?? catalogUnit.baseRate,
+      floorRiseEnabled: unitBookingDetails.pricing?.floorRiseEnabled ?? catalogUnit.floorRiseEnabled,
+      floorRiseRate: unitBookingDetails.pricing?.floorRiseRate ?? catalogUnit.floorRiseRate,
+      floorRiseSteps: unitBookingDetails.pricing?.riseSteps ?? catalogUnit.floorRiseSteps,
+      riseFromFloor: unitBookingDetails.pricing?.riseFromFloor ?? catalogUnit.riseFromFloor,
+      floorRiseCalculatedAmount: unitBookingDetails.pricing?.floorRiseAmount ?? catalogUnit.floorRiseCalculatedAmount,
+      effectiveRate: unitBookingDetails.pricing?.effectiveRate ?? catalogUnit.effectiveRate,
+    };
+  }, [bookingForm.unit, bookingForm.unitItemId, filteredCatalogUnits, unitBookingDetails]);
+
+  useEffect(() => {
+    const unitItemId = bookingForm.unitItemId;
+    if (!isOpen || !unitItemId) {
+      setUnitBookingDetails(null);
+      setUnitDetailsMessage("");
+      return undefined;
+    }
+
+    let isMounted = true;
+    setUnitBookingDetails(null);
+    setUnitDetailsMessage("");
+    setIsLoadingUnitDetails(true);
+
+    fetch(`${API_URL}/unit/${unitItemId}/booking-details`)
+      .then(async (response) => {
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result?.message || "Unit details could not be loaded.");
+        return result?.data;
+      })
+      .then((details) => {
+        if (!isMounted) return;
+        setUnitBookingDetails(details || null);
+        const baseRate = details?.pricing?.baseRate;
+        updateField("baseRate", baseRate ?? "");
+        updateField("closingBaseRate", bookingForm.closingBaseRate ?? baseRate ?? "");
+        updateField("closingRate", bookingForm.closingRate ?? bookingForm.closingBaseRate ?? baseRate ?? "");
+        updateField("carpetArea", details?.floorPlan?.reraArea ?? details?.floorPlan?.carpet ?? "");
+        updateField("reraArea", details?.floorPlan?.reraArea ?? "");
+        updateField("saleableArea", details?.floorPlan?.saleableArea ?? "");
+        updateField("floorRiseRate", details?.pricing?.floorRiseRate ?? 0);
+        updateField("floorRiseSteps", details?.pricing?.riseSteps ?? 0);
+        updateField("riseFromFloor", details?.pricing?.riseFromFloor ?? "");
+        updateField("floorRiseCalculatedAmount", details?.pricing?.floorRiseAmount ?? 0);
+        updateField("floorRiseEnabled", details?.pricing?.floorRiseEnabled ? "Yes" : "No");
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        setUnitDetailsMessage(error.message || "Unit details could not be loaded.");
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingUnitDetails(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, bookingForm.unitItemId]);
 
   useEffect(() => {
     if (!selectedTowerId) return;
@@ -537,7 +656,9 @@ const UserBookingForm = ({
   };
 
   const selectUnit = (unit) => {
-    if (["booked", "blocked", "refuge", "investor"].includes(normalizeUnitStatus(unit.status))) return;
+    if (["booked", "blocked", "refuge", "investor", "rehab"].includes(normalizeUnitStatus(unit.status, unit))) return;
+    setUnitBookingDetails(null);
+    setUnitDetailsMessage("");
     updateField("unit", unit.name);
     updateField("unitId", unit.unitId || unit.groupId || "");
     updateField("unitItemId", unit.unitItemId || unit.id || "");
@@ -545,14 +666,18 @@ const UserBookingForm = ({
     updateField("carpetArea", unit.carpet);
     updateField("builtupArea", unit.builtupArea || "");
     updateField("rateBasis", unit.rateBasis || "On Carpet");
-    const nextBaseRate = unit.baseRate || bookingForm.baseRate || "";
+    const nextBaseRate = unit.baseRate ?? "";
     updateField("baseRate", nextBaseRate);
-    updateField("closingBaseRate", unit.closingBaseRate || nextBaseRate || bookingForm.closingBaseRate || "");
+    updateField("closingBaseRate", nextBaseRate ?? "");
+    updateField("closingRate", nextBaseRate ?? "");
     updateField("floorRise", unit.floorRise || "");
+    updateField("floorRiseEnabled", unit.floorRiseEnabled ? "Yes" : "No");
     updateField("floorRiseRate", unit.floorRiseRate || "");
     updateField("floorRiseSteps", unit.floorRiseSteps ?? "");
     updateField("riseFromFloor", unit.riseFromFloor || "");
-    updateField("reraArea", unit.reraArea || unit.carpet || "");
+    updateField("floorRiseCalculatedAmount", unit.floorRiseCalculatedAmount || unit.floorRise || "");
+    updateField("calculatedUnitPrice", unit.calculatedUnitPrice || unit.basePrice || "");
+    updateField("reraArea", unit.reraArea ?? unit.carpet ?? "");
     const calculatedBasePrice =
       unit.basePrice ||
       unit.pricing?.finalPrice ||
@@ -566,33 +691,18 @@ const UserBookingForm = ({
       bookingForm.basePrice ||
       "";
     updateField("basePrice", calculatedBasePrice);
-    updateField("agreementValue", unit.agreementValue || calculatedBasePrice || bookingForm.agreementValue || "");
-    updateField("totalPrice", unit.totalPrice || unit.agreementValue || calculatedBasePrice || bookingForm.totalPrice || "");
+    updateField("agreementValue", "");
+    updateField("totalPrice", "");
   };
-
-  const markInterested = () => {
-    if (bookingForm.unit) {
-      setInterestedUnits((current) => new Set(current).add(bookingForm.unit));
-    }
-    onMarkInterested?.();
-  };
-
-  const submitLabel = isSavingBooking
-    ? "Saving..."
-    : isLoadingBookingProject
-      ? "Loading..."
-      : bookingStepIndex === 0
-        ? "Next"
-        : bookingStepIndex === 1
-          ? "Continue to Confirmation"
-          : "Confirm Booking";
 
   const isSubmitDisabled =
     isSavingBooking ||
     isLoadingBookingProject ||
+    isLoadingUnitDetails ||
+    Boolean(unitDetailsMessage) ||
     (bookingStepIndex === 0 && !bookingForm.projectDetails) ||
     (bookingStepIndex === 1 && !bookingForm.unit) ||
-    (bookingStepIndex === 2 && !bookingForm.customerName && !leadName);
+    (bookingStepIndex === 2 && (!bookingForm.customerName && !leadName));
 
   const allFloorGroups = useMemo(() => {
     const groups = new Map();
@@ -628,8 +738,8 @@ const UserBookingForm = ({
     selectedTowerName || selectedUnit.towerName,
     selectedUnit.name,
   ].filter(Boolean).join(" - ");
-  const baseRateValue = toNumber(bookingForm.baseRate, toNumber(selectedUnit.baseRate, 7750));
-  const closingBaseRateValue = firstNumber(bookingForm.closingBaseRate, selectedUnit.closingBaseRate, baseRateValue);
+  const baseRateValue = toSafeNumber(bookingForm.baseRate ?? selectedUnit.baseRate, 0);
+  const closingBaseRateValue = toSafeNumber(bookingForm.closingRate ?? bookingForm.closingBaseRate ?? selectedUnit.closingBaseRate ?? baseRateValue, baseRateValue);
   const saleableValue = toNumber(bookingForm.saleableArea, toNumber(selectedUnit.saleable, 0));
   const carpetValue = toNumber(bookingForm.carpetArea, toNumber(selectedUnit.carpet, 0));
   const builtupValue = toNumber(bookingForm.builtupArea, toNumber(selectedUnit.builtupArea, 0));
@@ -642,7 +752,7 @@ const UserBookingForm = ({
   const floorRiseValue = (reraAreaValue && floorRisePerSqftTotal)
     ? (reraAreaValue * floorRisePerSqftTotal)
     : firstNumber(bookingForm.floorRise, selectedUnit.floorRise, 0);
-  const effectiveRate = closingBaseRateValue + floorRisePerSqftTotal;
+  const effectiveRate = toSafeNumber(selectedUnit.effectiveRate, baseRateValue + floorRiseRateValue);
   const fallbackBasePriceValue = reraAreaValue ? (closingBaseRateValue * reraAreaValue) : calculateBasePriceForRateBasis({
     baseRate: closingBaseRateValue,
     rateBasis: rateBasisValue,
@@ -720,7 +830,6 @@ const UserBookingForm = ({
       agreementOriginalValue,
       basePriceValue,
       baseRateValue,
-      bookingForm.closingBaseRate,
       bookingForm.electricityInfrastructureCharges,
       bookingForm.khataRegistrationCharges,
       bookingForm.legalDocumentationFee,
@@ -732,7 +841,6 @@ const UserBookingForm = ({
       floorRiseRateValue,
       floorRiseStepsValue,
       guidelineValue,
-      selectedUnit.closingBaseRate,
       selectedUnit.electricityInfrastructureCharges,
       selectedUnit.khataRegistrationCharges,
       selectedUnit.legalDocumentationFee,
@@ -757,11 +865,11 @@ const UserBookingForm = ({
     agreementValue;
   const unitStatusCounts = filteredCatalogUnits.reduce(
     (counts, unit) => {
-      const status = normalizeUnitStatus(unit.status);
+      const status = normalizeUnitStatus(unit.status, unit);
       counts[status] = (counts[status] || 0) + 1;
       return counts;
     },
-    { all: filteredCatalogUnits.length, available: 0, booked: 0, blocked: 0, refuge: 0, investor: 0 }
+    { all: filteredCatalogUnits.length, available: 0, booked: 0, blocked: 0, refuge: 0, investor: 0, rehab: 0 }
   );
   const selectedProject = bookingProjects.find((project) => String(project.id) === selectedProjectId);
   const leadProjectDetails = isPlaceholderProjectName(bookingForm.projectDetails) ? "" : bookingForm.projectDetails;
@@ -815,6 +923,57 @@ const UserBookingForm = ({
     setEditableCostRows(nextRows);
     syncCostSheetFields(nextRows);
   };
+
+  const fallbackCustomCharges = useMemo(() => [emptyCustomCharge()], []);
+  const customCharges = Array.isArray(bookingForm.customOtherCharges) && bookingForm.customOtherCharges.length
+    ? bookingForm.customOtherCharges
+    : fallbackCustomCharges;
+  const updateCustomCharge = (index, field, value) => {
+    const nextRows = customCharges.map((row, rowIndex) =>
+      rowIndex === index ? { ...row, [field]: value } : row
+    );
+    updateField("customOtherCharges", nextRows);
+  };
+  const addCustomCharge = () => updateField("customOtherCharges", [...customCharges, emptyCustomCharge()]);
+  const removeCustomCharge = (index) =>
+    updateField("customOtherCharges", customCharges.filter((_, rowIndex) => rowIndex !== index));
+
+  const calculatedPricing = useMemo(() => calculateBookingPricing({
+    reraArea: reraAreaValue,
+    baseRate: baseRateValue,
+    closingRate: closingBaseRateValue,
+    parkingAmount: bookingForm.parkingCharges,
+    gstPercent: 5,
+    stampDutyPercent: 6,
+    legalCharges: bookingForm.legalDocumentationCharges,
+    registrationCharges: bookingForm.registrationAmount,
+    otherExpenses: customCharges,
+  }), [
+    baseRateValue,
+    bookingForm.legalDocumentationCharges,
+    bookingForm.parkingCharges,
+    bookingForm.registrationAmount,
+    closingBaseRateValue,
+    customCharges,
+    reraAreaValue,
+  ]);
+  const gstAmount = calculatedPricing.gstAmount;
+  const stampDutyAmount = calculatedPricing.stampDutyAmount;
+  const bookingAllInclusiveAmount = calculatedPricing.totalAllInclusiveCost;
+  const agreementTaxMultiplier = 1 + (calculatedPricing.gstPercent + calculatedPricing.stampDutyPercent) / 100;
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    if (bookingForm.agreementValue === "" || bookingForm.agreementValue === undefined || bookingForm.agreementValue === null) {
+      updateField("agreementValue", String(calculatedPricing.agreementValue));
+    }
+
+    if (String(bookingForm.totalPrice ?? "") !== String(calculatedPricing.totalAllInclusiveCost)) {
+      updateField("totalPrice", String(calculatedPricing.totalAllInclusiveCost));
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, calculatedPricing.agreementValue, calculatedPricing.totalAllInclusiveCost]);
 
   if (!isOpen) return null;
 
@@ -1003,6 +1162,7 @@ const UserBookingForm = ({
             ["blocked", "Blocked"],
             ["refuge", "Refuge"],
             ["investor", "Investor"],
+            ["rehab", "Rehab"],
           ].map(([key, label]) => (
             <span key={key}>
               <b>{unitStatusCounts[key] || 0}</b> {label}
@@ -1019,9 +1179,9 @@ const UserBookingForm = ({
               <div className="ubf-floor-label">Floor {floor}</div>
               <div className="ubf-units-line">
                 {units.map((unit) => {
-                  const status = normalizeUnitStatus(unit.status);
+                  const status = normalizeUnitStatus(unit.status, unit);
                   const tone = bookingForm.unit === unit.name ? "selected" : interestedUnits.has(unit.name) ? "interested" : status;
-                  const isLocked = ["booked", "blocked", "refuge", "investor"].includes(status);
+                  const isLocked = ["booked", "blocked", "refuge", "investor", "rehab"].includes(status);
                   return (
                     <button
                       type="button"
@@ -1029,7 +1189,7 @@ const UserBookingForm = ({
                       className={`ubf-unit-cell ${tone}`}
                       onClick={() => selectUnit(unit)}
                       disabled={isLocked}
-                      title={`Flat no: ${unit.name}`}
+                      title={`Flat no: ${unit.name}${isRehabUnit(unit) ? " - Rehab Unit" : ""}`}
                     >
                       {unit.image ? (
                         <img src={unit.image} alt="" />
@@ -1177,7 +1337,7 @@ const UserBookingForm = ({
         )}
       </span>
       {type === "select" ? (
-        <select value={bookingForm[name] || value || ""} onChange={(event) => updateField(name, event.target.value)}>
+        <select disabled={disabled} value={bookingForm[name] ?? value ?? ""} onChange={(event) => updateField(name, event.target.value)}>
           {options.map((option, index) => (
             <option key={`${option}-${index}`} value={option}>
               {option}
@@ -1188,25 +1348,78 @@ const UserBookingForm = ({
         <input
           disabled={disabled}
           placeholder={placeholder}
-          value={bookingForm[name] || value || ""}
+          value={bookingForm[name] ?? value ?? ""}
           onChange={(event) => updateField(name, event.target.value)}
         />
       )}
     </label>
   );
 
-  const renderPricingField = ({ label, name, value }) => (
+  const renderPricingField = ({ label, name, value, disabled = false }) => (
     <label className="ubf-confirm-fact ubf-price-edit" key={name}>
       <span>{label}</span>
       <input
         type="number"
         min="0"
         step="0.01"
+        disabled={disabled}
         value={bookingForm[name] ?? value ?? ""}
         onChange={(event) => updateField(name, event.target.value)}
         onWheel={(event) => event.currentTarget.blur()}
       />
       <small>{confirmCurrency(bookingForm[name] ?? value)}</small>
+    </label>
+  );
+
+  const updateAgreementDetailsField = (name, rawValue) => {
+    updateField(name, rawValue);
+
+    const nextReraArea = name === "reraArea" ? toSafeNumber(rawValue) : reraAreaValue;
+    const nextClosingRate = name === "closingRate" ? toSafeNumber(rawValue) : closingBaseRateValue;
+    const parkingAmount = calculatedPricing.parkingAmount;
+    const nonAgreementCharges = calculatedPricing.legalCharges + calculatedPricing.registrationCharges + calculatedPricing.otherExpenseTotal;
+    let nextAgreementValue = (nextReraArea * nextClosingRate) + parkingAmount;
+
+    if (name === "agreementValue") {
+      nextAgreementValue = toSafeNumber(rawValue);
+      if (nextReraArea) {
+        updateField("closingRate", Math.max((nextAgreementValue - parkingAmount) / nextReraArea, 0).toFixed(2));
+      }
+      updateField("totalPrice", ((nextAgreementValue * agreementTaxMultiplier) + nonAgreementCharges).toFixed(2));
+      return;
+    }
+
+    if (name === "totalPrice") {
+      const requestedTotal = toSafeNumber(rawValue);
+      nextAgreementValue = agreementTaxMultiplier
+        ? Math.max((requestedTotal - nonAgreementCharges) / agreementTaxMultiplier, 0)
+        : requestedTotal;
+
+      updateField("agreementValue", nextAgreementValue.toFixed(2));
+      if (nextReraArea) {
+        updateField("closingRate", Math.max((nextAgreementValue - parkingAmount) / nextReraArea, 0).toFixed(2));
+      }
+      return;
+    }
+
+    const nextTotalPrice = (nextAgreementValue * agreementTaxMultiplier) + nonAgreementCharges;
+    updateField("agreementValue", nextAgreementValue.toFixed(2));
+    updateField("totalPrice", nextTotalPrice.toFixed(2));
+  };
+
+  const renderAgreementField = ({ label, name, value, helper, disabled = false }) => (
+    <label className="ubf-confirm-fact ubf-price-edit ubf-agreement-field" key={name}>
+      <span>{label}</span>
+      <input
+        type="number"
+        min="0"
+        step="0.01"
+        disabled={disabled}
+        value={value ?? ""}
+        onChange={(event) => updateAgreementDetailsField(name, event.target.value)}
+        onWheel={(event) => event.currentTarget.blur()}
+      />
+      {helper && <small>{helper}</small>}
     </label>
   );
 
@@ -1217,6 +1430,213 @@ const UserBookingForm = ({
     </section>
   );
 
+  const displayText = (value) => {
+    if (value === undefined || value === null || value === "" || Number.isNaN(value)) return "-";
+    return String(value);
+  };
+  const formatStatus = (value) => {
+    const text = String(value || "").replace(/[_-]/g, " ").trim();
+    if (!text) return "-";
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  };
+  const renderFactGrid = (items, className = "ubf-confirm-unit-grid", children = null) => (
+    <div className={className}>
+      {items.map(([label, value]) => (
+        <div className="ubf-confirm-fact" key={label}>
+          <span>{label}</span>
+          <strong>{displayText(value)}</strong>
+        </div>
+      ))}
+      {children}
+    </div>
+  );
+
+  const renderBookingConfirmation = () => {
+    const bookingDate = bookingForm.bookingDate || new Date().toISOString().slice(0, 10);
+    const applicantName = bookingForm.bookingName || bookingForm.customerName || leadName || "";
+    const sourceValue = normalizeBookingSource(bookingForm.source);
+    const summaryReraArea = toSafeNumber(bookingForm.reraArea, reraAreaValue);
+    const summaryClosingRate = toSafeNumber(bookingForm.closingRate, calculatedPricing.closingRate);
+    const summaryParking = toSafeNumber(bookingForm.parkingCharges, calculatedPricing.parkingAmount);
+    const summaryFlatPrice = Number((summaryReraArea * summaryClosingRate).toFixed(2));
+    const summaryAgreement = toSafeNumber(bookingForm.agreementValue, summaryFlatPrice + summaryParking);
+    const summaryGst = Number((summaryAgreement * 5 / 100).toFixed(2));
+    const summaryStampAmount = Number((summaryAgreement * 6 / 100).toFixed(2));
+    const summaryLegalCharges = toSafeNumber(bookingForm.legalDocumentationCharges, calculatedPricing.legalCharges);
+    const summaryRegistrationCharges = toSafeNumber(bookingForm.registrationAmount, calculatedPricing.registrationCharges);
+    const summaryOtherExpenses = Number(customCharges.reduce((total, row) => total + toSafeNumber(row.amount, 0), 0).toFixed(2));
+    const summaryAllInclusive = Number((
+      summaryAgreement +
+      summaryGst +
+      summaryStampAmount +
+      summaryLegalCharges +
+      summaryRegistrationCharges +
+      summaryOtherExpenses
+    ).toFixed(2));
+
+    return (
+      <div className="ubf-step ubf-confirm-step">
+        <h4 className="ubf-confirm-title">Booking Confirmation</h4>
+        {isLoadingUnitDetails && <div className="ubf-alert">Loading selected unit details...</div>}
+        {unitDetailsMessage && <div className="ubf-alert">{unitDetailsMessage}</div>}
+
+        {renderConfirmSection(
+          "Unit Details",
+          <>
+            {renderFactGrid([
+              ["Name / Unit Number", selectedUnit.name],
+              ["Status", formatStatus(selectedUnit.status)],
+              ["Floor Number", selectedUnit.floor],
+              ["Project Name", selectedUnit.projectName || bookingForm.projectDetails],
+              ["Tower Name", selectedTowerName || selectedUnit.towerName],
+              ["Bedrooms", selectedUnit.bedrooms],
+              ["Bathrooms", selectedUnit.bathrooms],
+            ], "ubf-confirm-unit-grid", (
+              <div className="ubf-confirm-parking-field">
+                {renderPricingField({ label: "Parking", name: "parkingCharges", value: calculatedPricing.parkingAmount })}
+              </div>
+            ))}
+          </>
+        )}
+
+        {renderConfirmSection("Floor Rise Details", renderFactGrid([
+          ["Floor Rise", selectedUnit.floorRiseEnabled ? "Yes" : "No"],
+          ["Floor Rise Rate", confirmCurrency(selectedUnit.floorRiseEnabled ? floorRiseRateValue : 0)],
+          ["Rise Steps", selectedUnit.floorRiseEnabled ? floorRiseStepsValue : 0],
+          ["Floor Rise Amount", confirmCurrency(selectedUnit.floorRiseEnabled ? floorRiseValue : 0)],
+        ], "ubf-confirm-unit-grid compact"))}
+
+        {renderConfirmSection(
+          "Agreement Details",
+          <div className="ubf-confirm-form-grid ubf-agreement-details-grid">
+            {renderAgreementField({ label: "RERA Area", name: "reraArea", value: bookingForm.reraArea ?? reraAreaValue, helper: `${Number(reraAreaValue || 0).toLocaleString("en-IN")} Sq. Ft.` })}
+            {renderAgreementField({ label: "Closing Rate", name: "closingRate", value: bookingForm.closingRate ?? calculatedPricing.closingRate, helper: `Base rate: ${confirmCurrency(baseRateValue)}` })}
+            {renderAgreementField({ label: "Agreement Value", name: "agreementValue", value: bookingForm.agreementValue !== "" && bookingForm.agreementValue !== undefined ? bookingForm.agreementValue : calculatedPricing.agreementValue, helper: "(RERA Area * Closing Rate) + Parking" })}
+            {renderAgreementField({ label: "Total Price", name: "totalPrice", value: bookingForm.totalPrice !== "" && bookingForm.totalPrice !== undefined ? bookingForm.totalPrice : calculatedPricing.totalAllInclusiveCost, helper: "Agreement Value + 11% + Other Expenses" })}
+          </div>
+        )}
+
+        {renderConfirmSection(
+          "Booking Details",
+          <div className="ubf-booking-details-wrap">
+            <div className="ubf-confirm-form-grid ubf-booking-details-row">
+              {renderConfirmField({ label: "Booking Name *", name: "bookingName", value: applicantName })}
+              {renderConfirmField({ label: "Booking Date *", name: "bookingDate", value: bookingDate })}
+              <label className="ubf-confirm-field">
+                <span>Source *</span>
+                <select
+                  value={sourceValue}
+                  onChange={(event) => {
+                    const source = normalizeBookingSource(event.target.value);
+                    updateField("source", source);
+                    if (!isChannelPartnerSource(source)) {
+                      updateField("channelPartnerId", "");
+                      updateField("channelPartner", "");
+                      updateField("cpReraNumber", "");
+                    }
+                  }}
+                >
+                  {sourceOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </label>
+            </div>
+            {isChannelPartnerSource(sourceValue) && (
+              <div className="ubf-confirm-form-grid ubf-channel-partner-row">
+                <label className="ubf-confirm-field">
+                  <span>Channel Partner *</span>
+                  <select
+                    value={bookingForm.channelPartnerId || ""}
+                    onChange={(event) => {
+                      const selected = channelPartners.find((user) => String(user.id) === event.target.value);
+                      updateField("channelPartnerId", event.target.value);
+                      updateField("channelPartner", selected ? getUserName(selected) : "");
+                      updateField("cpReraNumber", selected?.reraNumber || selected?.cpReraNumber || selected?.rera || selected?.reraNo || "");
+                    }}
+                  >
+                    <option value="">Select Channel Partner</option>
+                    {channelPartners.map((user) => <option key={user.id} value={user.id}>{getUserName(user)}</option>)}
+                  </select>
+                </label>
+                {renderConfirmField({ label: "Channel Partner RERA ID *", name: "cpReraNumber", value: bookingForm.cpReraNumber })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {renderConfirmSection(
+          "Other Charges",
+          <div className="ubf-other-charges-section">
+            <div className="ubf-custom-charge-list">
+              {customCharges.map((row, index) => (
+                <div className={index === 0 ? "ubf-booking-summary-input-line" : "ubf-custom-charge-row"} key={row.id || `custom-charge-${index}`}>
+                  {index === 0 && (
+                    <>
+                      {renderConfirmField({ label: "Legal Charges", name: "legalDocumentationCharges", value: bookingForm.legalDocumentationCharges, placeholder: "0" })}
+                      {renderConfirmField({ label: "Registration Charges (INR)", name: "registrationAmount", value: bookingForm.registrationAmount, placeholder: "0" })}
+                    </>
+                  )}
+                  <label className="ubf-confirm-field">
+                    <span>Other Expenses</span>
+                    <input placeholder="Other Expenses" value={row.name || ""} onChange={(event) => updateCustomCharge(index, "name", event.target.value)} />
+                  </label>
+                  <input type="number" min="0" step="0.01" placeholder="Amount" value={row.amount ?? ""} onChange={(event) => updateCustomCharge(index, "amount", event.target.value)} />
+                  <button type="button" onClick={addCustomCharge}>+</button>
+                  <button type="button" onClick={() => removeCustomCharge(index)} disabled={customCharges.length === 1}>Delete</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {renderConfirmSection(
+          "Booking Summary",
+          <div className="ubf-booking-summary">
+            <div className="ubf-receipt-sheet">
+              <div className="ubf-receipt-row">
+                <span>Total Flat Price<small>RERA Area * Closing Rate</small></span>
+                <strong>{confirmCurrency(summaryFlatPrice)}</strong>
+              </div>
+              <div className="ubf-receipt-row">
+                <span>Total Agreement<small>(RERA Area * Closing Rate) + Parking</small></span>
+                <strong>{confirmCurrency(summaryAgreement)}</strong>
+              </div>
+              <div className="ubf-receipt-row">
+                <span>5% GST</span>
+                <strong>{confirmCurrency(summaryGst)}</strong>
+              </div>
+              <div className="ubf-receipt-row">
+                <span>6% Stamp Amount</span>
+                <strong>{confirmCurrency(summaryStampAmount)}</strong>
+              </div>
+              <div className="ubf-receipt-row">
+                <span>Legal Charges</span>
+                <strong>{confirmCurrency(summaryLegalCharges)}</strong>
+              </div>
+              <div className="ubf-receipt-row">
+                <span>Registration Charges (INR)</span>
+                <strong>{confirmCurrency(summaryRegistrationCharges)}</strong>
+              </div>
+              {customCharges
+                .filter((row) => row.name || toSafeNumber(row.amount, 0))
+                .map((row, index) => (
+                  <div className="ubf-receipt-row" key={row.id || `summary-expense-${index}`}>
+                    <span>{row.name || "Expense"}</span>
+                    <strong>{confirmCurrency(row.amount)}</strong>
+                  </div>
+                ))}
+            </div>
+            <div className="ubf-booking-summary-total">
+              <span>Total All Inclusive Cost Sheet</span>
+              <strong>{confirmCurrency(summaryAllInclusive)}</strong>
+            </div>
+          </div>
+        )}
+
+      </div>
+    );
+  };
+
+  // eslint-disable-next-line no-unused-vars
   const renderStepFour = () => {
     const bookingDate = bookingForm.bookingDate || new Date().toLocaleDateString("en-GB");
     const applicantName = bookingForm.customerName || leadName || "-";
@@ -1257,11 +1677,84 @@ const UserBookingForm = ({
             ))}
             {renderPricingField({ label: "Base Rate", name: "baseRate", value: baseRateValue })}
             {renderPricingField({ label: "Closing Base Rate", name: "closingBaseRate", value: closingBaseRateValue })}
-            {renderPricingField({ label: "Total Price", name: "totalPrice", value: allInclusiveValue })}
+            {renderPricingField({ label: "Total Price", name: "totalPrice", value: bookingAllInclusiveAmount })}
             {renderPricingField({ label: "Agreement Value", name: "agreementValue", value: agreementValue })}
             {renderConfirmField({ label: "Booking Name", name: "bookingName", value: applicantName })}
             {renderConfirmField({ label: "Booking Date", name: "bookingDate", value: bookingDate })}
           </div>
+        )}
+
+        {renderConfirmSection(
+          "Parking Details",
+          <div className="ubf-confirm-form-grid">
+            {renderConfirmField({
+              label: "Parking Required *",
+              name: "parkingRequired",
+              type: "select",
+              value: bookingForm.parkingRequired || "No",
+              options: ["No", "Yes"],
+            })}
+            {bookingForm.parkingRequired === "Yes" && (
+              <>
+                {renderConfirmField({ label: "Number of Car Parking Slots *", name: "carParkingSlots", value: bookingForm.carParkingSlots, placeholder: "0" })}
+                {renderConfirmField({
+                  label: "Parking Type *",
+                  name: "parkingType",
+                  type: "select",
+                  value: bookingForm.parkingType || "",
+                  options: ["", "Covered", "Open", "Stilt", "Basement", "Stack", "Mechanical"],
+                })}
+                {renderConfirmField({ label: "Parking Slot Number", name: "parkingSlotNumber", value: bookingForm.parkingSlotNumber })}
+                {renderConfirmField({ label: "Number of Two-Wheeler Slots", name: "twoWheelerSlots", value: bookingForm.twoWheelerSlots })}
+                {renderConfirmField({ label: "Basement/Storeroom Area", name: "basementStoreroomArea", value: bookingForm.basementStoreroomArea })}
+                {renderConfirmField({ label: "Parking Charges (INR)", name: "parkingCharges", value: bookingForm.parkingCharges || "0" })}
+              </>
+            )}
+          </div>
+        )}
+
+        {renderConfirmSection(
+          "Other Charges",
+          <>
+            <div className="ubf-confirm-form-grid">
+              {renderConfirmField({ label: "GST %", name: "gstPercent", value: bookingForm.gstPercent || "5" })}
+              {renderConfirmField({ label: "Stamp Duty %", name: "stampDutyPercent", value: bookingForm.stampDutyPercent || "6" })}
+              {renderConfirmField({ label: "Registration Charges (INR)", name: "registrationAmount", value: bookingForm.registrationAmount })}
+              {renderConfirmField({ label: "Legal Documentation Charges (INR)", name: "legalDocumentationCharges", value: bookingForm.legalDocumentationCharges })}
+              {renderConfirmField({ label: "Infrastructure/Development Charges (INR)", name: "infrastructureDevelopmentCharges", value: bookingForm.infrastructureDevelopmentCharges })}
+              {renderConfirmField({ label: "Society Formation Charges (INR)", name: "societyFormationCharges", value: bookingForm.societyFormationCharges })}
+              {renderConfirmField({ label: "Club Membership Charges (INR)", name: "clubMembershipCharges", value: bookingForm.clubMembershipCharges })}
+              {renderConfirmField({ label: "Maintenance Advance Months", name: "maintenanceAdvanceMonths", value: bookingForm.maintenanceAdvanceMonths })}
+              {renderConfirmField({ label: "Maintenance Rate / Sqft / Month", name: "maintenanceRatePerSqftPerMonth", value: bookingForm.maintenanceRatePerSqftPerMonth })}
+              {renderConfirmField({ label: "Sinking Fund/Corpus (INR)", name: "sinkingFundCorpus", value: bookingForm.sinkingFundCorpus })}
+              <div className="ubf-confirm-fact">
+                <span>Parking Charges</span>
+                <strong>{confirmCurrency(bookingNumber(bookingForm.parkingCharges))}</strong>
+              </div>
+              <div className="ubf-confirm-fact">
+                <span>All-Inclusive Amount</span>
+                <strong>{confirmCurrency(bookingAllInclusiveAmount)}</strong>
+              </div>
+            </div>
+            <div className="ubf-custom-charge-list">
+              {customCharges.map((row, index) => (
+                <div className="ubf-custom-charge-row" key={`custom-charge-${index}`}>
+                  <input placeholder="Charge Name" value={row.name || ""} onChange={(event) => updateCustomCharge(index, "name", event.target.value)} />
+                  <select value={row.chargeType || "Fixed"} onChange={(event) => updateCustomCharge(index, "chargeType", event.target.value)}>
+                    <option>Fixed</option>
+                    <option>Percentage</option>
+                  </select>
+                  <input placeholder={row.chargeType === "Percentage" ? "Percentage" : "Amount"} value={row.rate || row.amount || ""} onChange={(event) => updateCustomCharge(index, row.chargeType === "Percentage" ? "rate" : "amount", event.target.value)} />
+                  <select value={row.taxable || "No"} onChange={(event) => updateCustomCharge(index, "taxable", event.target.value)}>
+                    <option>No</option>
+                    <option>Yes</option>
+                  </select>
+                  <button type="button" onClick={() => removeCustomCharge(index)}>Remove Row</button>
+                </div>
+              ))}
+              <button type="button" className="ubf-add-row-button" onClick={addCustomCharge}>Add Row</button>
+            </div>
+          </>
         )}
 
         {renderConfirmSection(
@@ -1406,7 +1899,7 @@ const UserBookingForm = ({
     const towerName = selectedTowerName || selectedUnit.towerName || "-";
     const unitName = bookingForm.unit || selectedUnit.name || "-";
     const bookingDate = bookingForm.bookedOn || bookingForm.bookingDate || new Date().toLocaleDateString("en-IN");
-    const finalPrice = bookingForm.soldPrice || bookingForm.totalPrice || bookingForm.basePrice || allInclusiveValue || "";
+    const finalPrice = bookingAllInclusiveAmount;
     const rows = [
       ["Booking Reference", bookingReference],
       ["Customer", customerName],
@@ -1419,8 +1912,12 @@ const UserBookingForm = ({
       ["Carpet Area", bookingForm.carpetArea || selectedUnit.carpet || "-"],
       ["Base Rate", bookingForm.baseRate || selectedUnit.baseRate || "-"],
       ["Closing Base Rate", bookingForm.closingBaseRate || selectedUnit.closingBaseRate || bookingForm.baseRate || selectedUnit.baseRate || "-"],
-      ["Agreement Value", bookingForm.agreementValue ? confirmCurrency(bookingForm.agreementValue) : "-"],
-      ["Final Sold Price", finalPrice ? confirmCurrency(finalPrice) : "-"],
+      ["Agreement Value", confirmCurrency(calculatedPricing.agreementValue)],
+      ["Parking Charges", confirmCurrency(calculatedPricing.parkingAmount)],
+      ["GST", confirmCurrency(gstAmount)],
+      ["Stamp Duty", confirmCurrency(stampDutyAmount)],
+      ["All-Inclusive Amount", confirmCurrency(bookingAllInclusiveAmount)],
+      ["Final Sold Price", confirmCurrency(finalPrice)],
     ];
 
     return { bookingReference, customerName, projectName, towerName, unitName, bookingDate, finalPrice, rows };
@@ -1581,10 +2078,10 @@ const UserBookingForm = ({
       <div className="sales-sold-price-card">
         <span className="sales-sold-price-label">Final Sold Price</span>
         <strong className="sales-sold-price-value">
-          {confirmCurrency(bookingForm.soldPrice || bookingForm.totalPrice || allInclusiveValue)}
+          {confirmCurrency(bookingAllInclusiveAmount)}
         </strong>
         <small>
-          Agreement Value: {confirmCurrency(bookingForm.agreementValue || agreementValue)}
+          Agreement Value: {confirmCurrency(calculatedPricing.agreementValue)}
         </small>
       </div>
       <div className="ubf-success-actions">
@@ -1601,7 +2098,7 @@ const UserBookingForm = ({
   const stepContent = [
     renderStepOne,
     renderStepTwo,
-    renderStepFour,
+    renderBookingConfirmation,
   ][bookingStepIndex] || renderStepOne;
 
   return (
@@ -1616,14 +2113,20 @@ const UserBookingForm = ({
 
         {!bookingSuccess && (
           <div className="sales-booking-stepper" aria-label="Booking progress">
-            {["01 FILTER PROJECT", "02 SELECT UNIT", "03 BOOKING CONFIRMATION"].map((stepText, index) => {
+            {[
+              ["01", "FILTER PROJECT"],
+              ["02", "SELECT UNIT"],
+              ["03", "BOOKING CONFIRMATION"],
+            ].map(([stepNumber, stepText], index) => {
               const isComplete = index < bookingStepIndex;
               const isActive = index === bookingStepIndex;
               return (
                 <div className={`sales-booking-step${isComplete ? " is-complete" : ""}${isActive ? " is-active" : ""}`} key={stepText}>
-                  <div className="sales-booking-step-line" />
                   <div className="sales-booking-step-dot">{isComplete ? "✓" : index + 1}</div>
-                  <div className="sales-booking-step-label">{stepText}</div>
+                  <div className="sales-booking-step-label">
+                    <span>{stepNumber}</span>
+                    <strong>{stepText}</strong>
+                  </div>
                 </div>
               );
             })}
@@ -1643,12 +2146,11 @@ const UserBookingForm = ({
             <div className="sales-booking-footer-lead">
               Booking for <strong>{leadName}</strong>
             </div>
-            <div className="ubf-footer-actions" style={{ display: "flex", gap: "10px" }}>
+            <div className="ubf-footer-actions">
               {bookingStepIndex > 0 ? (
                 <button
                   type="button"
                   className="sales-btn secondary"
-                  style={{ padding: "8px 18px", borderRadius: "6px", fontWeight: "600" }}
                   onClick={onPrevious}
                 >
                   ← Previous
@@ -1657,7 +2159,6 @@ const UserBookingForm = ({
                 <button
                   type="button"
                   className="sales-btn secondary"
-                  style={{ padding: "8px 18px", borderRadius: "6px", fontWeight: "600" }}
                   onClick={onClose}
                 >
                   Cancel
@@ -1666,8 +2167,7 @@ const UserBookingForm = ({
               <button
                 type="submit"
                 className="sales-btn primary"
-                style={{ padding: "8px 22px", borderRadius: "6px", fontWeight: "600", backgroundColor: "#2563eb", color: "#fff", border: "none" }}
-                disabled={isSubmitDisabled}
+                disabled={isSubmitDisabled || (bookingStepIndex === 2 && (!reraAreaValue || !baseRateValue || !Number.isFinite(bookingAllInclusiveAmount)))}
               >
                 {bookingStepIndex === 0 ? "Next →" : bookingStepIndex === 1 ? "Next →" : "Confirm Booking"}
               </button>

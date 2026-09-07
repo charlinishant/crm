@@ -401,7 +401,7 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/addfloorplan' element={<AddFloorplan />} />
         <Route exact path='/addfloorplan/:id' element={<AddFloorplan />} />
         <Route exact path='/new-tower' element={<Newtower />} />
-        <Route exact path='/project-towers' element={<Projecttower />} />
+        <Route exact path='/project-towers' element={<PieChartPage />} />
         <Route exact path='/notification' element={<NotificationPage />} />
         <Route exact path='/pagination' element={<PaginationPage />} />
         <Route exact path='/payment-gateway' element={<PaymentGatewayPage />} />

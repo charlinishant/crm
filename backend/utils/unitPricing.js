@@ -42,26 +42,28 @@ const getFloorRiseSteps = ({ floorNumber, riseFromFloor, skippedFloors = [] }) =
   if (!Number.isFinite(floor) || !Number.isFinite(startFloor)) return 0
   if (floor <= startFloor) return 0
 
-  const skippedBeforeTarget = parseSkippedFloors(skippedFloors).filter((skipped) =>
-    skipped > startFloor && skipped < floor
-  ).length
-
-  return Math.max(0, Math.trunc(floor) - Math.trunc(startFloor) - skippedBeforeTarget)
+  return Math.max(0, Math.trunc(floor) - Math.trunc(startFloor))
 }
 
 const validateFloorRiseInputs = ({
+  floorRiseEnabled = true,
   baseRate,
   floorRisePerSqft,
   floorNumber,
   riseFromFloor,
   reraArea,
   skippedFloors = [],
+  applicableFloorFrom = null,
   applicableFloorTo = null,
 }) => {
   if (toNumberOrNull(baseRate) === null || Number(baseRate) < 0) return "Enter Base Rate."
-  if (toNumberOrNull(floorRisePerSqft) === null || Number(floorRisePerSqft) < 0) return "Enter Floor Rise / Sqft."
   if (toNumberOrNull(reraArea) === null || Number(reraArea) <= 0) return "RERA Area is required for floor-rise calculation."
+  if (!floorRiseEnabled) return null
+  if (toNumberOrNull(floorRisePerSqft) === null || Number(floorRisePerSqft) < 0) return "Enter Floor Rise / Sqft."
   if (!Number.isInteger(Number(riseFromFloor)) || Number(riseFromFloor) < 1) return "Select Base Floor for Floor Rise."
+  if (applicableFloorFrom !== null && Number(riseFromFloor) < Number(applicableFloorFrom)) {
+    return "Base Floor for Floor Rise cannot be before Applicable Floor From."
+  }
   if (applicableFloorTo !== null && Number(riseFromFloor) > Number(applicableFloorTo)) {
     return "Base Floor for Floor Rise cannot exceed Applicable Floor To."
   }
@@ -73,6 +75,7 @@ const validateFloorRiseInputs = ({
 }
 
 const calculateFloorRiseAmount = ({
+  floorRiseEnabled = true,
   baseRate,
   floorRisePerSqft,
   floorNumber,
@@ -83,22 +86,26 @@ const calculateFloorRiseAmount = ({
   const rate = toNumberOrNull(baseRate) ?? 0
   const riseRate = toNumberOrNull(floorRisePerSqft) ?? 0
   const area = toNumberOrNull(reraArea) ?? 0
+  const floorRiseFlag = floorRiseEnabled === true ? 1 : 0
   const floorRiseSteps = getFloorRiseSteps({ floorNumber, riseFromFloor, skippedFloors })
-  const floorRisePerSqftTotal = riseRate * floorRiseSteps
-  const effectiveRate = rate + floorRisePerSqftTotal
 
-  // Business rule: Floor Rise / Sqft * chargeable rise steps * RERA area.
   return {
+    floorRiseFlag,
     floorRiseSteps,
-    floorRisePerSqftTotal,
-    effectiveRate,
-    floorRiseAmount: roundMoney(riseRate * floorRiseSteps * area),
+    floorRisePerSqftTotal: riseRate * floorRiseSteps * floorRiseFlag,
+    effectiveRate: rate + (riseRate * floorRiseFlag),
+    floorRiseAmount: roundMoney(riseRate * floorRiseSteps * area * floorRiseFlag),
   }
 }
 
 const calculateUnitPrice = ({ floorPlan = {}, floorNumber }) => {
   const baseRate = toNumberOrNull(floorPlan.baseRate) ?? 0
   const floorRisePerSqft = toNumberOrNull(floorPlan.floorRisePerSqft) ?? 0
+  const legacyFloorRiseEnabled =
+    toNumberOrNull(floorPlan.floorRisePerSqft) !== null &&
+    toNumberOrNull(floorPlan.baseFloorForFloorRise) !== null
+  const floorRiseEnabled =
+    typeof floorPlan.floorRiseEnabled === "boolean" ? floorPlan.floorRiseEnabled : legacyFloorRiseEnabled
   const riseFromFloor =
     toNumberOrNull(floorPlan.baseFloorForFloorRise) ??
     toNumberOrNull(floorPlan.applicableFloorFrom) ??
@@ -106,18 +113,21 @@ const calculateUnitPrice = ({ floorPlan = {}, floorNumber }) => {
   const reraArea = getRateBasisArea(floorPlan, "On Carpet")
   const skippedFloors = parseSkippedFloors(floorPlan.skippedFloors)
   const validationMessage = validateFloorRiseInputs({
+    floorRiseEnabled,
     baseRate,
     floorRisePerSqft,
     floorNumber,
     riseFromFloor,
     reraArea,
     skippedFloors,
+    applicableFloorFrom: floorPlan.applicableFloorFrom,
     applicableFloorTo: floorPlan.applicableFloorTo,
   })
   const basePriceAtBaseFloor = reraArea ? roundMoney(baseRate * reraArea) : 0
   const floorRise = validationMessage
-    ? { floorRiseSteps: 0, floorRisePerSqftTotal: 0, effectiveRate: baseRate, floorRiseAmount: 0 }
+    ? { floorRiseFlag: floorRiseEnabled ? 1 : 0, floorRiseSteps: 0, floorRisePerSqftTotal: 0, effectiveRate: baseRate, floorRiseAmount: 0 }
     : calculateFloorRiseAmount({
+        floorRiseEnabled,
         baseRate,
         floorRisePerSqft,
         floorNumber,
@@ -126,7 +136,7 @@ const calculateUnitPrice = ({ floorPlan = {}, floorNumber }) => {
         skippedFloors,
       })
   const effectiveRate = floorRise.effectiveRate
-  const finalPrice = roundMoney(basePriceAtBaseFloor + floorRise.floorRiseAmount)
+  const finalPrice = roundMoney(basePriceAtBaseFloor + (floorRiseEnabled ? floorRise.floorRiseAmount : 0))
 
   return {
     baseRate,
@@ -134,11 +144,17 @@ const calculateUnitPrice = ({ floorPlan = {}, floorNumber }) => {
     reraArea: reraArea ?? 0,
     rateBasis: "On Carpet",
     basePriceAtBaseFloor,
+    floorRiseEnabled,
     floorRisePerSqft,
     riseFromFloor,
+    floorNumber: toNumberOrNull(floorNumber),
+    floorRiseFlag: floorRise.floorRiseFlag,
     floorRiseSteps: floorRise.floorRiseSteps,
+    riseSteps: floorRise.floorRiseSteps,
     floorRisePerSqftTotal: floorRise.floorRisePerSqftTotal,
     floorRiseAmount: floorRise.floorRiseAmount,
+    floorRiseCalculatedAmount: floorRise.floorRiseAmount,
+    calculatedUnitPrice: finalPrice,
     finalPrice,
     validationMessage,
   }

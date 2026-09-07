@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Plus, MoreVertical, Layers, Building, Trash2, Pencil, X } from 'lucide-react';
 
 const TOWERS_PER_PAGE = 6;
@@ -8,18 +8,34 @@ export default function Projecttower() {
   const normalizeList = (data) => {
     if (Array.isArray(data)) return data;
     if (Array.isArray(data?.data)) return data.data;
+    if (Array.isArray(data?.projects)) return data.projects;
+    if (Array.isArray(data?.towers)) return data.towers;
     if (Array.isArray(data?.value)) return data.value;
     return [];
   };
+  const getProjectId = (project) => project?.id ?? project?.projectId;
+  const getProjectName = (project) =>
+    project?.name || project?.projectName || project?.title || (project?.id ? `Project #${project.id}` : "Project");
+  const mapTower = (tower) => ({
+    id: tower.id,
+    name: tower.name || tower.towerName || "-",
+    project: tower.project?.name || tower.projectName || (typeof tower.project === "string" ? tower.project : "-"),
+    projectId: tower.projectId ?? tower.project?.id,
+    floorPlans: tower._count?.floors ?? tower.floorPlanCount ?? tower.floorPlans ?? 0,
+    totalFloors: tower.totalFloor ?? tower.totalFloors ?? 0,
+    source: "backend",
+  });
 
   const [towers, setTowers] = useState([]);
   const [projects, setProjects] = useState([]);
   const [name, setName] = useState('');
   const [projectId, setProjectId] = useState('');
   const [totalFloors, setTotalFloors] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [loadingTowers, setLoadingTowers] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [towerLoadError, setTowerLoadError] = useState('');
   const [message, setMessage] = useState('');
   const [editingTowerId, setEditingTowerId] = useState(null);
   const [activeMenuId, setActiveMenuId] = useState(null);
@@ -58,66 +74,65 @@ export default function Projecttower() {
     }
   }, [currentPage, totalPages]);
 
-  useEffect(() => {
-    const fetchOptions = async () => {
-      try {
-        setLoading(true);
-        setError('');
-        setMessage('');
-        const [projectResponse, towerResponse] = await Promise.all([
-          fetch(`${API_URL}/projects/list`),
-          fetch(`${API_URL}/tower?limit=100`),
-        ]);
+  const loadProjects = useCallback(async () => {
+    try {
+      setLoadingProjects(true);
+      setError('');
+      const response = await fetch(`${API_URL}/projects/list`);
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || "Unable to load projects");
 
-        if (!projectResponse.ok) throw new Error("Unable to load projects");
-        if (!towerResponse.ok) throw new Error("Unable to load towers");
-
-        const projectResult = await projectResponse.json();
-        const towerResult = await towerResponse.json();
-        const projectList = normalizeList(projectResult);
-        const towerList = normalizeList(towerResult);
-
-        setProjects(projectList);
-        const mapped = towerList.map((tower) => ({
-          id: tower.id,
-          name: tower.name,
-          project: tower.project?.name || (typeof tower.project === "string" ? tower.project : "-"),
-          projectId: tower.projectId ?? tower.project?.id,
-          floorPlans: tower._count?.floors ?? tower.floorPlans ?? 0,
-          totalFloors: tower.totalFloor ?? tower.totalFloors ?? 0,
-          source: "backend",
-        }));
-
-        setTowers(mapped);
-      } catch (error) {
-        console.error("Unable to load project towers:", error);
-        setError(error.message || "Unable to load project towers");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchOptions();
+      setProjects(normalizeList(result));
+    } catch (error) {
+      console.error(
+        "Project API failed:",
+        error?.response?.status,
+        error?.response?.data,
+        error?.message || error
+      );
+      setProjects([]);
+      setError(error.message || "Unable to load projects. Please try again.");
+    } finally {
+      setLoadingProjects(false);
+    }
   }, [API_URL]);
 
-  const fetchTowers = async () => {
-    const response = await fetch(`${API_URL}/tower?limit=100`);
-    if (!response.ok) throw new Error("Unable to refresh towers");
+  const fetchTowers = useCallback(async () => {
+    const response = await fetch(`${API_URL}/tower/list`);
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result?.message || "Unable to refresh towers");
 
-    const result = await response.json();
     const list = normalizeList(result);
-    const mapped = list.map((tower) => ({
-      id: tower.id,
-      name: tower.name,
-      project: tower.project?.name || (typeof tower.project === "string" ? tower.project : "-"),
-      projectId: tower.projectId ?? tower.project?.id,
-      floorPlans: tower._count?.floors ?? tower.floorPlans ?? 0,
-      totalFloors: tower.totalFloor ?? tower.totalFloors ?? 0,
-      source: "backend",
-    }));
+    const mapped = list.map(mapTower);
 
     setTowers(mapped);
-  };
+    setTowerLoadError('');
+  }, [API_URL]);
+
+  const loadTowers = useCallback(async () => {
+    try {
+      setLoadingTowers(true);
+      setTowerLoadError('');
+      await fetchTowers();
+    } catch (error) {
+      console.error(
+        "Tower API failed:",
+        error?.response?.status,
+        error?.response?.data,
+        error?.message || error
+      );
+      setTowers([]);
+      setTowerLoadError("Unable to load towers. Please try again.");
+    } finally {
+      setLoadingTowers(false);
+    }
+  }, [fetchTowers]);
+
+  useEffect(() => {
+    setMessage('');
+    loadProjects();
+    loadTowers();
+  }, [loadProjects, loadTowers]);
 
   const resetForm = () => {
     setName('');
@@ -145,8 +160,18 @@ export default function Projecttower() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const totalFloorCount = Number(totalFloors);
-    if (!name || !projectId || !Number.isInteger(totalFloorCount) || totalFloorCount < 1) {
-      setError("Tower Name, Project, and Total Floors are required.");
+    if (!projectId) {
+      setError("Please select a project.");
+      setMessage('');
+      return;
+    }
+    if (!name.trim()) {
+      setError("Tower name is required.");
+      setMessage('');
+      return;
+    }
+    if (!Number.isInteger(totalFloorCount) || totalFloorCount < 1) {
+      setError("Total floors must be greater than 0.");
       setMessage('');
       return;
     }
@@ -187,9 +212,9 @@ export default function Projecttower() {
       }
 
       const savedTower = {
-        id: isEditing ? editingTowerId : result.id || Date.now(),
+        id: result?.data?.id || (isEditing ? editingTowerId : result.id || Date.now()),
         name: name.trim(),
-        project: selectedProject?.name || "-",
+        project: selectedProject ? getProjectName(selectedProject) : "-",
         projectId: Number(projectId),
         floorPlans: 0,
         totalFloors: totalFloorCount,
@@ -263,7 +288,9 @@ export default function Projecttower() {
             <div>
               {/* <h2>Towers</h2> */}
               <span className="item-count">
-                {loading ? "Loading towers..." : `${filteredTowers.length} active projects and towers available.`}
+                {loadingTowers
+                  ? "Loading towers..."
+                  : `${projects.length} active projects | ${towers.length} towers available`}
               </span>
             </div>
             <div className="action-wrapper">
@@ -284,9 +311,12 @@ export default function Projecttower() {
             />
           </label>
           {error && <div className="tower-alert">{error}</div>}
+          {towerLoadError && <div className="tower-alert">{towerLoadError}</div>}
           {message && <div className="tower-alert success">{message}</div>}
-          {filteredTowers.length === 0 && !error && !message && (
-            <div className="tower-alert">{searchQuery ? "No matching towers found." : "No towers found."}</div>
+          {filteredTowers.length === 0 && !error && !towerLoadError && !loadingTowers && (
+            <div className="tower-alert">
+              {searchQuery ? "No matching towers found." : "No towers created yet. Create your first tower using the form."}
+            </div>
           )}
 
           <div className="tower-grid">
@@ -396,13 +426,13 @@ export default function Projecttower() {
               <select
                 value={projectId}
                 onChange={(e) => setProjectId(e.target.value)}
-                disabled={loading}
+                disabled={loadingProjects}
                 required
               >
-                <option value="">{loading ? "Loading projects..." : "Select Project"}</option>
+                <option value="">{loadingProjects ? "Loading projects..." : "Select Project"}</option>
                 {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
+                  <option key={getProjectId(project)} value={getProjectId(project)}>
+                    {getProjectName(project)}
                   </option>
                 ))}
               </select>
@@ -433,7 +463,7 @@ export default function Projecttower() {
             </div>
 
             <div className="form-footer">
-              <button type="submit" className="btn-primary" disabled={saving || loading}>
+              <button type="submit" className="btn-primary" disabled={saving || loadingProjects}>
                 {isEditing ? <Pencil size={16} /> : <Plus size={16} />}
                 {saving ? "Saving..." : isEditing ? "Update Tower" : "Save Tower"}
               </button>

@@ -41,31 +41,15 @@ const initialFormData = {
   flowerBedPocketTerrace: "",
   serviceSlabAcLedge: "",
   refugeAreaShare: "",
-  parkingRequired: "No",
-  carParkingSlots: "0",
-  parkingType: "",
-  twoWheelerSlots: "",
-  basementStoreroom: "",
   rateBasis: "On Carpet",
   baseRate: "",
   basePrice: "",
+  floorRiseEnabled: false,
   floorRisePerSqft: "",
   baseFloorForFloorRise: "",
   cornerPlcPercent: "",
   viewPlcPercent: "",
   facingPlcPercent: "",
-  clubMembership: "",
-  infrastructureDevelopmentCharges: "",
-  infrastructureDevelopmentChargeBasis: "Lump Sum",
-  legalDocumentation: "",
-  gstPercent: "5",
-  stampDutyPercent: "6",
-  registrationAmount: "",
-  parkingCharges: "",
-  advanceMaintenanceMonths: "",
-  maintenanceRatePerSqftPerMonth: "",
-  sinkingFundCorpus: "",
-  societyFormationCharges: "",
   floorPlanImages: [],
   brochurePageReference: "",
   walkthrough3dLink: "",
@@ -76,12 +60,45 @@ const initialFormData = {
 
 const typeOptions = ["Residential", "Commercial", "Retail", "Office", "Mixed-Use"];
 const categoryOptions = ["Flat", "Penthouse", "Duplex", "Row House", "Villa", "Studio", "Shop", "Showroom", "Office Unit"];
-const configurationLabelOptions = ["Studio", "1 BHK", "2 BHK", "3 BHK", "4 BHK", "5 BHK", "2 BHK, 3 BHK Jodi", "Shop", "Office"];
+const configurationLabelOptions = [
+  "Studio",
+  "1 RK",
+  "1 BHK",
+  "2 BHK",
+  "3 BHK",
+  "4 BHK",
+  "5 BHK",
+  "6 BHK",
+  "Penthouse",
+  "Duplex",
+  "Row House",
+  "Villa",
+  "2 BHK, 3 BHK Mix",
+  "Shop",
+  "Showroom",
+  "Office Unit",
+];
+const configurationPresets = {
+  "Studio": { type: "Residential", category: "Studio", bedrooms: "1", bathrooms: "1", balconies: "0", kitchenType: "1" },
+  "1 RK": { type: "Residential", category: "Studio", bedrooms: "1", bathrooms: "1", balconies: "0", kitchenType: "1" },
+  "1 BHK": { type: "Residential", category: "Flat", bedrooms: "1", bathrooms: "1", balconies: "1", kitchenType: "1" },
+  "2 BHK": { type: "Residential", category: "Flat", bedrooms: "2", bathrooms: "2", balconies: "2", kitchenType: "1" },
+  "3 BHK": { type: "Residential", category: "Flat", bedrooms: "3", bathrooms: "3", balconies: "2", kitchenType: "1" },
+  "4 BHK": { type: "Residential", category: "Flat", bedrooms: "4", bathrooms: "4", balconies: "3", kitchenType: "1" },
+  "5 BHK": { type: "Residential", category: "Flat", bedrooms: "5", bathrooms: "5", balconies: "3", kitchenType: "1" },
+  "6 BHK": { type: "Residential", category: "Flat", bedrooms: "6", bathrooms: "6", balconies: "4", kitchenType: "1" },
+  "Penthouse": { type: "Residential", category: "Penthouse", bedrooms: "4", bathrooms: "4", balconies: "3", kitchenType: "1" },
+  "Duplex": { type: "Residential", category: "Duplex", bedrooms: "3", bathrooms: "3", balconies: "2", kitchenType: "1" },
+  "Row House": { type: "Residential", category: "Row House", bedrooms: "3", bathrooms: "3", balconies: "2", kitchenType: "1" },
+  "Villa": { type: "Residential", category: "Villa", bedrooms: "4", bathrooms: "4", balconies: "3", kitchenType: "1" },
+  "2 BHK, 3 BHK Mix": { type: "Residential", category: "Flat", bedrooms: "2", bathrooms: "2", balconies: "2", kitchenType: "1" },
+  "Shop": { type: "Retail", category: "Shop", bedrooms: "", bathrooms: "", balconies: "", kitchenType: "" },
+  "Showroom": { type: "Retail", category: "Showroom", bedrooms: "", bathrooms: "", balconies: "", kitchenType: "" },
+  "Office Unit": { type: "Office", category: "Office Unit", bedrooms: "", bathrooms: "", balconies: "", kitchenType: "" },
+};
 const commercialTypes = new Set(["Commercial", "Retail", "Office"]);
 const commercialCategories = ["Shop", "Showroom", "Office Unit"];
 const residentialCategories = ["Flat", "Penthouse", "Duplex", "Row House", "Villa", "Studio"];
-const parkingRequiredOptions = ["No", "Parking Number 1", "Parking Number 2", "Parking Number 3"];
-const parkingTypeOptions = ["Surface", "Stack", "Mechanic"];
 const MAX_FLOOR_PLAN_FILE_BYTES = 25 * 1024 * 1024;
 const MAX_FLOOR_PLAN_UPLOAD_BYTES = 120 * 1024 * 1024;
 
@@ -113,6 +130,11 @@ const readApiErrorMessage = async (response, fallback) => {
 const statusOptions = ["Draft", "Published", "On Hold", "Sold Out", "Withdrawn"];
 const unitStreamOptions = ["Sale Unit", "Rehab Unit", "Investor"];
 const rateBasisOptions = ["On Carpet", "On Saleable", "On Built-up"];
+
+const normalizeConfigurationLabel = (value) => {
+  const label = String(value || "").trim();
+  return label === "2 BHK, 3 BHK Jodi" ? "2 BHK, 3 BHK Mix" : label;
+};
 
 const parseStoredSkippedFloors = (value) => {
   if (Array.isArray(value)) return value.join(", ");
@@ -235,7 +257,7 @@ const AddFloorplan = () => {
     project: plan.projectId ?? plan.project?.id ?? "",
     projectTower: plan.towerId ?? plan.tower?.id ?? "",
     floorPlanName: plan.name || "",
-    configurationLabel: plan.configurationLabel || "",
+    configurationLabel: normalizeConfigurationLabel(plan.configurationLabel),
     status: plan.status === "Active" ? "Published" : plan.status || "Draft",
     unitStream: unitStreamOptions.includes(plan.unitStream) ? plan.unitStream : "Sale Unit",
     possessionDate: formatDateForInput(plan.possessionDate),
@@ -268,34 +290,18 @@ const AddFloorplan = () => {
     flowerBedPocketTerrace: plan.flowerBedPocketTerrace ?? "",
     serviceSlabAcLedge: plan.serviceSlabAcLedge ?? "",
     refugeAreaShare: plan.refugeAreaShare ?? "",
-    parkingRequired:
-      plan.parkingRequired && plan.parkingRequired !== "No"
-        ? `Parking Number ${plan.carParkingSlots || 1}`
-        : "No",
-    carParkingSlots: plan.carParkingSlots ?? "0",
-    parkingType: plan.parkingType || "",
-    twoWheelerSlots: plan.twoWheelerSlots ?? "",
-    basementStoreroom: plan.basementStoreroom ?? "",
     rateBasis: plan.rateBasis || "On Carpet",
     baseRate: plan.baseRate ?? "",
     basePrice: plan.basePrice ?? "",
+    floorRiseEnabled:
+      typeof plan.floorRiseEnabled === "boolean"
+        ? plan.floorRiseEnabled
+        : Boolean(plan.floorRisePerSqft !== null && plan.floorRisePerSqft !== undefined && plan.baseFloorForFloorRise),
     floorRisePerSqft: plan.floorRisePerSqft ?? "",
     baseFloorForFloorRise: plan.baseFloorForFloorRise ?? "",
     cornerPlcPercent: plan.cornerPlcPercent ?? "",
     viewPlcPercent: plan.viewPlcPercent ?? "",
     facingPlcPercent: plan.facingPlcPercent ?? "",
-    clubMembership: plan.clubMembership ?? "",
-    infrastructureDevelopmentCharges: plan.infrastructureDevelopmentCharges ?? "",
-    infrastructureDevelopmentChargeBasis: plan.infrastructureDevelopmentChargeBasis || "Lump Sum",
-    legalDocumentation: plan.legalDocumentation ?? "",
-    gstPercent: plan.gstPercent ?? "5",
-    stampDutyPercent: plan.stampDutyPercent ?? "6",
-    registrationAmount: plan.registrationAmount ?? "",
-    parkingCharges: plan.parkingCharges ?? "",
-    advanceMaintenanceMonths: plan.advanceMaintenanceMonths ?? "",
-    maintenanceRatePerSqftPerMonth: plan.maintenanceRatePerSqftPerMonth ?? "",
-    sinkingFundCorpus: plan.sinkingFundCorpus ?? "",
-    societyFormationCharges: plan.societyFormationCharges ?? "",
     floorPlanImages: normalizeList(plan.floorPlanImages),
     brochurePageReference: plan.brochurePageReference || "",
     walkthrough3dLink: plan.walkthrough3dLink || "",
@@ -426,32 +432,7 @@ const AddFloorplan = () => {
     const carpet = toNumberOrNull(formData.carpetArea) || 0;
     const baseRate = toNumberOrNull(formData.baseRate) || 0;
     const saleable = carpet;
-    const rateArea =
-      formData.rateBasis === "On Saleable"
-        ? saleable
-        : formData.rateBasis === "On Built-up"
-          ? carpet
-          : carpet;
-    const basePrice = baseRate && rateArea ? baseRate * rateArea : 0;
-    const plcPercent =
-      (formData.cornerUnit ? toNumberOrNull(formData.cornerPlcPercent) || 0 : 0) +
-      (toNumberOrNull(formData.viewPlcPercent) || 0) +
-      (toNumberOrNull(formData.facingPlcPercent) || 0);
-    const plcAmount = basePrice * (plcPercent / 100);
-    const agreementValue =
-      basePrice +
-      plcAmount +
-      (toNumberOrNull(formData.infrastructureDevelopmentCharges) || 0) +
-      (toNumberOrNull(formData.legalDocumentation) || 0);
-    const registration = toNumberOrNull(formData.registrationAmount) || 0;
-    const gstAmount = agreementValue * ((toNumberOrNull(formData.gstPercent) || 0) / 100);
-    const stampDutyAmount = agreementValue * ((toNumberOrNull(formData.stampDutyPercent) || 0) / 100);
-    const taxes = gstAmount + stampDutyAmount + registration;
-    const allInclusive =
-      agreementValue +
-      taxes +
-      (toNumberOrNull(formData.parkingCharges) || 0) +
-      (toNumberOrNull(formData.societyFormationCharges) || 0);
+    const basePrice = baseRate && carpet ? baseRate * carpet : 0;
     const riseFromFloor = toNumberOrNull(formData.baseFloorForFloorRise) || toNumberOrNull(formData.applicableFloorFrom) || 1;
     const skippedFloors = skippedFloorValidation.error || floorRangeValidation ? [] : skippedFloorValidation.floors;
     const previewUnitNumbers = getGeneratedUnitNumbers({
@@ -466,6 +447,7 @@ const AddFloorplan = () => {
         .find((floor) => Number.isFinite(floor) && floor > riseFromFloor) ||
       riseFromFloor;
     const floorRisePreview = calculateFloorRiseAmount({
+      floorRiseEnabled: Boolean(formData.floorRiseEnabled),
       baseRate,
       floorRisePerSqft: toNumberOrNull(formData.floorRisePerSqft) || 0,
       floorNumber: previewFloor,
@@ -479,14 +461,12 @@ const AddFloorplan = () => {
       saleable: finiteNumber(Number(saleable.toFixed(2))),
       basePrice: finiteNumber(Number(basePrice.toFixed(2))),
       floorRiseRate: finiteNumber(toNumberOrNull(formData.floorRisePerSqft) || 0),
+      floorRiseEnabled: Boolean(formData.floorRiseEnabled),
       riseFromFloor,
       previewFloor,
       floorRiseSteps: floorRisePreview.floorRiseSteps,
       floorRiseAmount: floorRisePreview.floorRiseAmount,
-      previewUnitPrice: finiteNumber(Number((basePrice + floorRisePreview.floorRiseAmount).toFixed(2))),
-      gstAmount: finiteNumber(Number(gstAmount.toFixed(2))),
-      stampDutyAmount: finiteNumber(Number(stampDutyAmount.toFixed(2))),
-      allInclusive: finiteNumber(Number(allInclusive.toFixed(2))),
+      previewUnitPrice: floorRisePreview.calculatedUnitPrice,
     };
   }, [floorRangeValidation, formData, skippedFloorValidation.error, skippedFloorValidation.floors]);
 
@@ -564,11 +544,20 @@ const AddFloorplan = () => {
     }
 
     setFormData((prev) => {
+      const nextValue = name === "configurationLabel" ? normalizeConfigurationLabel(value) : value;
       const next = {
         ...prev,
-        [name]: type === "checkbox" ? checked : value,
+        [name]: type === "checkbox" ? checked : nextValue,
         ...(name === "project" ? { projectTower: "" } : {}),
       };
+
+      if (name === "configurationLabel") {
+        const preset = configurationPresets[nextValue];
+
+        if (preset) {
+          Object.assign(next, preset);
+        }
+      }
 
       if (name === "type") {
         const nextIsCommercial = commercialTypes.has(value);
@@ -590,12 +579,13 @@ const AddFloorplan = () => {
         }
       }
 
-      if (name === "parkingRequired" && value === "No") {
-        next.carParkingSlots = "0";
-        next.parkingType = "";
-        next.parkingCharges = "";
-      } else if (name === "parkingRequired") {
-        next.carParkingSlots = value.replace(/\D/g, "") || "1";
+      if (name === "floorRiseEnabled") {
+        const enabled = value === "Yes" || value === true;
+        next.floorRiseEnabled = enabled;
+        if (!enabled) {
+          next.floorRisePerSqft = "";
+          next.baseFloorForFloorRise = "";
+        }
       }
 
       return next;
@@ -628,11 +618,17 @@ const AddFloorplan = () => {
       return `Applicable Floor To cannot exceed this tower's Total Floors (${towerTotalFloors}).`;
     }
     if (skippedFloorValidation.error) return skippedFloorValidation.error;
+    if (formData.floorRiseEnabled) {
+      const floorRiseRate = toNumberOrNull(formData.floorRisePerSqft);
+      const baseFloor = toNumberOrNull(formData.baseFloorForFloorRise);
+      if (floorRiseRate === null || floorRiseRate < 0) return "Floor Rise / Sqft must be zero or more.";
+      if (!Number.isInteger(baseFloor)) return "Base Floor for Floor Rise is required.";
+      if (from !== null && baseFloor < from) return "Base Floor for Floor Rise cannot be before Applicable Floor From.";
+      if (to !== null && baseFloor > to) return "Base Floor for Floor Rise cannot exceed Applicable Floor To.";
+      if (skippedFloorValidation.floors.includes(baseFloor)) return "Base Floor for Floor Rise cannot be a skipped floor.";
+    }
     if (formData.projectTower && !generatedUnitNumbers.length) return "Unit numbers could not be generated. Check floor range and unit position.";
     if (carpet !== null && saleable !== null && carpet < 0) return "RERA Carpet Area cannot be negative";
-    if (formData.parkingRequired !== "No" && !formData.parkingType) return "Parking Type is required when parking is selected.";
-    if (Number(formData.gstPercent) > 18) return "GST % cannot exceed 18";
-    if (Number(formData.stampDutyPercent) > 10) return "Stamp Duty % cannot exceed 10";
     if (formData.status === "Published" && !formData.floorPlanImages.length) return "Floor Plan Image is required before publishing";
     return "";
   };
@@ -685,31 +681,15 @@ const AddFloorplan = () => {
       flowerBedPocketTerrace: toNumberOrNull(formData.flowerBedPocketTerrace),
       serviceSlabAcLedge: toNumberOrNull(formData.serviceSlabAcLedge),
       refugeAreaShare: toNumberOrNull(formData.refugeAreaShare),
-      parkingRequired: formData.parkingRequired === "No" ? "No" : "Yes",
-      carParkingSlots: toNumberOrNull(formData.carParkingSlots),
-      parkingType: formData.parkingType,
-      twoWheelerSlots: toNumberOrNull(formData.twoWheelerSlots),
-      basementStoreroom: toNumberOrNull(formData.basementStoreroom),
       rateBasis: formData.rateBasis,
       baseRate: toNumberOrNull(formData.baseRate),
       basePrice: computed.basePrice,
-      floorRisePerSqft: toNumberOrNull(formData.floorRisePerSqft),
-      baseFloorForFloorRise: toNumberOrNull(formData.baseFloorForFloorRise),
+      floorRiseEnabled: Boolean(formData.floorRiseEnabled),
+      floorRisePerSqft: formData.floorRiseEnabled ? toNumberOrNull(formData.floorRisePerSqft) : null,
+      baseFloorForFloorRise: formData.floorRiseEnabled ? toNumberOrNull(formData.baseFloorForFloorRise) : null,
       cornerPlcPercent: toNumberOrNull(formData.cornerPlcPercent),
       viewPlcPercent: toNumberOrNull(formData.viewPlcPercent),
       facingPlcPercent: toNumberOrNull(formData.facingPlcPercent),
-      clubMembership: toNumberOrNull(formData.clubMembership),
-      infrastructureDevelopmentCharges: toNumberOrNull(formData.infrastructureDevelopmentCharges),
-      infrastructureDevelopmentChargeBasis: formData.infrastructureDevelopmentChargeBasis,
-      legalDocumentation: toNumberOrNull(formData.legalDocumentation),
-      gstPercent: toNumberOrNull(formData.gstPercent),
-      stampDutyPercent: toNumberOrNull(formData.stampDutyPercent),
-      registrationAmount: toNumberOrNull(formData.registrationAmount),
-      parkingCharges: toNumberOrNull(formData.parkingCharges),
-      advanceMaintenanceMonths: toNumberOrNull(formData.advanceMaintenanceMonths),
-      maintenanceRatePerSqftPerMonth: toNumberOrNull(formData.maintenanceRatePerSqftPerMonth),
-      sinkingFundCorpus: toNumberOrNull(formData.sinkingFundCorpus),
-      societyFormationCharges: toNumberOrNull(formData.societyFormationCharges),
       floorPlanImages: formData.floorPlanImages.filter((item) => !(item instanceof File)),
       brochurePageReference: formData.brochurePageReference.trim(),
       walkthrough3dLink: formData.walkthrough3dLink.trim(),
@@ -866,36 +846,25 @@ const AddFloorplan = () => {
                 </div>
               </Section>
 
-              <Section title="Parking & Extras">
-                <div className="lead-grid">
-                  <SelectField label="PARKING REQUIRED *" name="parkingRequired" value={formData.parkingRequired} onChange={handleChange} required options={parkingRequiredOptions} />
-                  {formData.parkingRequired !== "No" && (
-                    <div className="floorplan-parking-line lead-full">
-                      <SelectField label="PARKING TYPE *" name="parkingType" value={formData.parkingType} onChange={handleChange} required options={parkingTypeOptions} />
-                      <InputField label="COST" name="parkingCharges" type="number" min="0" value={formData.parkingCharges} onChange={handleChange} />
-                    </div>
-                  )}
-                </div>
-              </Section>
-
               <Section title="Costing">
                 <div className="lead-grid">
                   <SelectField label="RATE BASIS *" name="rateBasis" value={formData.rateBasis} onChange={handleChange} required options={rateBasisOptions} />
                   <InputField label="BASE RATE *" name="baseRate" type="number" value={formData.baseRate} onChange={handleChange} required />
                   <InputField label="BASE PRICE AT BASE FLOOR" name="basePrice" type="number" value={computed.basePrice} onChange={() => {}} disabled />
-                  <InputField label="FLOOR RISE / SQFT" name="floorRisePerSqft" type="number" value={formData.floorRisePerSqft} onChange={handleChange} />
-                  <InputField label="BASE FLOOR FOR FLOOR RISE" name="baseFloorForFloorRise" type="number" value={formData.baseFloorForFloorRise} onChange={handleChange} />
-                </div>
-              </Section>
-
-              <Section title="Other Charges">
-                <div className="lead-grid">
-                  <InputField label="STAMP DUTY (%)" name="stampDutyPercent" type="number" value={formData.stampDutyPercent} onChange={handleChange} required />
-                  <InputField label="GST % *" name="gstPercent" type="number" value={formData.gstPercent} onChange={handleChange} required />
-                  <InputField label="REGISTRATION CHARGES (INR)" name="registrationAmount" type="number" value={formData.registrationAmount} onChange={handleChange} required />
-                  <InputField label="LEGAL CHARGES (INR)" name="legalDocumentation" type="number" value={formData.legalDocumentation} onChange={handleChange} />
-                  <InputField label="DEVELOPMENT CHARGES (INR)" name="infrastructureDevelopmentCharges" type="number" value={formData.infrastructureDevelopmentCharges} onChange={handleChange} />
-                  <InputField label="SOCIETY FORMATION CHARGES" name="societyFormationCharges" type="number" value={formData.societyFormationCharges} onChange={handleChange} />
+                  <SelectField
+                    label="FLOOR RISE *"
+                    name="floorRiseEnabled"
+                    value={formData.floorRiseEnabled ? "Yes" : "No"}
+                    onChange={handleChange}
+                    required
+                    options={["No", "Yes"]}
+                  />
+                  {formData.floorRiseEnabled && (
+                    <>
+                      <InputField label="FLOOR RISE / SQFT *" name="floorRisePerSqft" type="number" min="0" step="0.01" value={formData.floorRisePerSqft} onChange={handleChange} required />
+                      <InputField label="BASE FLOOR FOR FLOOR RISE *" name="baseFloorForFloorRise" type="number" min={formData.applicableFloorFrom || 1} max={formData.applicableFloorTo || undefined} value={formData.baseFloorForFloorRise} onChange={handleChange} required />
+                    </>
+                  )}
                 </div>
               </Section>
 
@@ -929,10 +898,18 @@ const AddFloorplan = () => {
                   <SummaryRow label="Carpet" value={`${computed.carpet || 0} ${areaSuffix(formData.measure)}`} />
                   <SummaryRow label="Saleable" value={`${computed.saleable || 0} ${areaSuffix(formData.measure)}`} />
                   <SummaryRow label="Base Price at Base Floor" value={formatMoney(computed.basePrice)} />
-                  <SummaryRow label="Floor Rise Rate" value={`${computed.floorRiseRate || 0} / ${areaSuffix(formData.measure)}`} />
-                  <SummaryRow label="Rise From Floor" value={`Floor ${computed.riseFromFloor || 1}`} />
-                  <SummaryRow label={`Floor ${computed.previewFloor || computed.riseFromFloor} Rise`} value={`${computed.floorRiseSteps || 0} steps / ${formatMoney(computed.floorRiseAmount)}`} />
-                  <SummaryRow label="All-Inclusive" value={formatMoney(computed.allInclusive)} highlight />
+                  <SummaryRow label="Floor Rise" value={computed.floorRiseEnabled ? "Yes" : "No"} />
+                  {!computed.floorRiseEnabled ? (
+                    <SummaryRow label="Floor Rise Amount" value={formatMoney(0)} highlight />
+                  ) : (
+                    <>
+                      <SummaryRow label="Floor Rise Rate" value={`${formatMoney(computed.floorRiseRate || 0)} / ${areaSuffix(formData.measure)}`} />
+                      <SummaryRow label="Rise From Floor" value={`Floor ${computed.riseFromFloor || 1}`} />
+                      <SummaryRow label="Selected/Preview Floor" value={`Floor ${computed.previewFloor || computed.riseFromFloor}`} />
+                      <SummaryRow label="Rise Steps" value={computed.floorRiseSteps || 0} />
+                      <SummaryRow label="Floor Rise Calculated Amount" value={formatMoney(computed.floorRiseAmount)} highlight />
+                    </>
+                  )}
                 </div>
               </aside>
             </div>
@@ -955,18 +932,17 @@ const AddFloorplan = () => {
                   <SummaryRow label="Carpet Area" value={`${computed.carpet || 0} ${areaSuffix(formData.measure)}`} />
                   <SummaryRow label="Saleable Area" value={`${computed.saleable || 0} ${areaSuffix(formData.measure)}`} />
                   <SummaryRow label="Base Price at Base Floor" value={formatMoney(computed.basePrice)} />
-                  <SummaryRow label="Floor Rise Rate" value={`${computed.floorRiseRate || 0} / ${areaSuffix(formData.measure)}`} />
-                  <SummaryRow label="Rise From Floor" value={`Floor ${computed.riseFromFloor || 1}`} />
-                  <SummaryRow label="Floor Rise Amount" value={formatMoney(computed.floorRiseAmount)} />
+                  <SummaryRow label="Floor Rise" value={computed.floorRiseEnabled ? "Yes" : "No"} />
+                  {computed.floorRiseEnabled && (
+                    <>
+                      <SummaryRow label="Floor Rise Rate" value={`${formatMoney(computed.floorRiseRate || 0)} / ${areaSuffix(formData.measure)}`} />
+                      <SummaryRow label="Rise From Floor" value={`Floor ${computed.riseFromFloor || 1}`} />
+                      <SummaryRow label="Selected/Preview Floor" value={`Floor ${computed.previewFloor || computed.riseFromFloor}`} />
+                      <SummaryRow label="Rise Steps" value={computed.floorRiseSteps || 0} />
+                    </>
+                  )}
+                  <SummaryRow label="Floor Rise Calculated Amount" value={formatMoney(computed.floorRiseAmount)} />
                   <SummaryRow label="Preview Unit Price" value={formatMoney(computed.previewUnitPrice)} />
-                  <SummaryRow label="Development Charges" value={formatMoney(formData.infrastructureDevelopmentCharges)} />
-                  <SummaryRow label="Legal Charges" value={formatMoney(formData.legalDocumentation)} />
-                  <SummaryRow label="Parking Charges" value={formatMoney(formData.parkingCharges)} />
-                  <SummaryRow label="Society Formation Charges" value={formatMoney(formData.societyFormationCharges)} />
-                  <SummaryRow label="GST" value={formatMoney(computed.gstAmount)} />
-                  <SummaryRow label="Stamp Duty" value={formatMoney(computed.stampDutyAmount)} />
-                  <SummaryRow label="Registration Charges" value={formatMoney(formData.registrationAmount)} />
-                  <SummaryRow label="All-Inclusive" value={formatMoney(computed.allInclusive)} highlight />
                 </div>
               </div>
             </div>

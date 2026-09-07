@@ -9,6 +9,7 @@ const {
   deleteUnitItem,
   listUnit,
   createUnit,
+  getUnitBookingDetails,
 } = require("../controllers/unit.controller")
 
 const router = Router()
@@ -16,6 +17,7 @@ const router = Router()
 router.post("/", createUnit)
 router.get("/list", listUnit)
 router.get("/", getUnit)
+router.get("/:unitItemId/booking-details", getUnitBookingDetails)
 router.post("/item/:id/hold", holdUnitItem)
 router.delete("/item/:id/hold", releaseUnitItemHold)
 router.patch("/item/:id", updateUnitItem)

@@ -854,14 +854,23 @@ img.sales-avatar {
   background: #ffffff;
   border: 1px solid var(--sales-line);
   border-radius: 8px;
-  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.14);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.16);
   display: grid;
-  min-width: 132px;
+  min-width: 140px;
   padding: 6px;
   position: absolute;
   right: 0;
   top: 34px;
-  z-index: 12;
+  z-index: 50;
+  white-space: nowrap;
+}
+
+.sales-row-menu.open-upwards,
+.sales-row:last-child .sales-row-menu,
+.sales-row:nth-last-child(2):not(:first-child) .sales-row-menu {
+  top: auto;
+  bottom: 34px;
+  box-shadow: 0 -10px 25px rgba(15, 23, 42, 0.16);
 }
 
 .sales-row-menu button {
@@ -6638,6 +6647,7 @@ img.sales-avatar {
 .ubf-legend .unavailable,
 .ubf-unit-cell.unavailable,
 .ubf-unit-cell.booked,
+.ubf-unit-cell.rehab,
 .ubf-unit-list-row.unavailable {
   background: #e65258;
   color: #ffffff;
@@ -6784,6 +6794,7 @@ img.sales-avatar {
 .ubf-unit-cell.blocked,
 .ubf-unit-cell.refuge,
 .ubf-unit-cell.investor,
+.ubf-unit-cell.rehab,
 .ubf-unit-cell.unavailable {
   cursor: not-allowed;
 }
@@ -6846,6 +6857,38 @@ img.sales-avatar {
   position: relative;
   width: 24px;
   z-index: 1;
+}
+
+.ubf-custom-charge-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.ubf-custom-charge-row {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(140px, 1fr) 140px 140px 110px auto;
+}
+
+.ubf-custom-charge-row input,
+.ubf-custom-charge-row select {
+  border: 1px solid #d6dee9;
+  border-radius: 8px;
+  color: var(--ubf-text);
+  min-height: 42px;
+  padding: 0 12px;
+}
+
+.ubf-custom-charge-row button,
+.ubf-add-row-button {
+  background: #ffffff;
+  border: 1px solid var(--ubf-purple);
+  border-radius: 8px;
+  color: var(--ubf-purple);
+  font-weight: 700;
+  min-height: 42px;
+  padding: 0 14px;
 }
 
 .ubf-filter-rail h6,
@@ -7477,6 +7520,14 @@ img.sales-avatar {
   padding: 18px 16px 30px;
 }
 
+.ubf-modal .ubf-confirm-unit-grid.compact {
+  min-height: 0;
+}
+
+.ubf-modal .ubf-confirm-parking-field {
+  width: min(100%, 240px);
+}
+
 .ubf-modal .ubf-confirm-fact {
   display: grid;
   gap: 5px;
@@ -7636,6 +7687,210 @@ img.sales-avatar {
   gap: 24px 28px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   padding: 26px 16px 30px;
+}
+
+.ubf-modal .ubf-agreement-details-grid {
+  align-items: start;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+}
+
+.ubf-modal .ubf-agreement-field small {
+  min-height: 16px;
+}
+
+.ubf-modal .ubf-booking-details-wrap {
+  display: grid;
+  gap: 24px;
+}
+
+.ubf-modal .ubf-booking-details-row {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding-bottom: 0;
+}
+
+.ubf-modal .ubf-channel-partner-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding-top: 0;
+}
+
+.ubf-price-summary-card {
+  display: grid;
+  gap: 10px;
+  padding: 18px 16px 22px;
+}
+
+.ubf-booking-summary {
+  display: grid;
+  gap: 16px;
+  padding: 18px 16px 30px;
+}
+
+.ubf-other-charges-section {
+  padding: 18px 16px 30px;
+}
+
+.ubf-receipt-sheet {
+  background: #ffffff;
+  border: 1px solid #d6dee9;
+  border-radius: 8px;
+  display: grid;
+  overflow: hidden;
+}
+
+.ubf-receipt-row {
+  align-items: center;
+  border-bottom: 1px dashed #d6dee9;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 12px 16px;
+}
+
+.ubf-receipt-row:last-child {
+  border-bottom: 0;
+}
+
+.ubf-receipt-row span {
+  color: #30435c;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ubf-receipt-row small {
+  color: #64748b;
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  margin-top: 3px;
+}
+
+.ubf-receipt-row strong {
+  color: #0f172a;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ubf-booking-summary-inputs {
+  grid-template-columns: repeat(2, minmax(170px, 1fr));
+  padding: 0;
+}
+
+.ubf-booking-summary .ubf-custom-charge-list {
+  margin-top: 0;
+}
+
+.ubf-booking-summary .ubf-custom-charge-row {
+  grid-template-columns: minmax(220px, 1fr) minmax(120px, 180px) auto auto;
+}
+
+.ubf-booking-summary-input-line {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(170px, 1fr) minmax(170px, 1fr) minmax(220px, 1.4fr) minmax(120px, 180px) auto auto;
+}
+
+.ubf-other-charges-section .ubf-booking-summary-input-line > input,
+.ubf-other-charges-section .ubf-custom-charge-row > input {
+  background: #ffffff;
+  border: 1px solid #cbd3df;
+  border-radius: 8px;
+  color: var(--sales-text, #0f172a);
+  font: inherit;
+  min-height: 44px;
+  outline: 0;
+  padding: 0 12px;
+  width: 100%;
+}
+
+.ubf-other-charges-section .ubf-booking-summary-input-line > input:focus,
+.ubf-other-charges-section .ubf-custom-charge-row > input:focus {
+  border-color: var(--sales-blue, #378add);
+  box-shadow: 0 0 0 3px rgba(55, 138, 221, 0.14);
+}
+
+.ubf-other-charges-section input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.ubf-other-charges-section input[type="number"]::-webkit-outer-spin-button,
+.ubf-other-charges-section input[type="number"]::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.ubf-other-charges-section .ubf-booking-summary-input-line > button,
+.ubf-other-charges-section .ubf-custom-charge-row > button {
+  align-items: center;
+  border-color: var(--sales-blue, #378add);
+  color: var(--sales-blue, #378add);
+  display: inline-flex;
+  justify-content: center;
+  min-height: 44px;
+}
+
+.ubf-booking-summary-total {
+  align-items: center;
+  background: var(--sales-blue-soft, #e6f1fb);
+  border: 1px solid var(--sales-line, #d6dee9);
+  border-radius: 8px;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  min-height: 56px;
+  padding: 14px 16px;
+}
+
+.ubf-booking-summary-total span {
+  color: #40516a;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.ubf-booking-summary-total strong {
+  color: #10203a;
+  font-size: 20px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.ubf-price-summary-card > div {
+  align-items: center;
+  border-bottom: 1px solid #eef2f7;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 30px;
+}
+
+.ubf-price-summary-card > div span {
+  color: #475569;
+  font-size: 13px;
+}
+
+.ubf-price-summary-card > div strong {
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.ubf-price-summary-card > div.total {
+  border-bottom: 0;
+  border-top: 1px solid #cbd5e1;
+  margin-top: 4px;
+  padding-top: 12px;
+}
+
+.ubf-price-summary-card > div.total span,
+.ubf-price-summary-card > div.total strong {
+  color: #1e40af;
+  font-size: 16px;
 }
 
 .ubf-modal .ubf-confirm-section.campaign .ubf-confirm-form-grid .ubf-confirm-field:nth-child(n + 3) {
@@ -7979,6 +8234,27 @@ img.sales-avatar {
 
   .ubf-confirm-section.campaign .ubf-confirm-form-grid .ubf-confirm-field:nth-child(n + 3) {
     grid-column: auto;
+  }
+
+  .ubf-modal .ubf-confirm-parking-field {
+    width: 100%;
+  }
+
+  .ubf-modal .ubf-booking-details-row,
+  .ubf-modal .ubf-channel-partner-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ubf-booking-summary .ubf-price-summary-card,
+  .ubf-booking-summary-inputs,
+  .ubf-booking-summary-input-line,
+  .ubf-booking-summary .ubf-custom-charge-row {
+    grid-template-columns: 1fr;
+  }
+
+  .ubf-booking-summary-total {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .ubf-quotes-table {
@@ -11494,6 +11770,7 @@ img.sales-avatar {
 
 /* Booking Module User Sales Design System Extensions (Reqs 41-87) */
 .sales-booking-stepper {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -11503,31 +11780,23 @@ img.sales-avatar {
   padding: 16px 24px 12px;
 }
 
+.sales-booking-stepper::before {
+  content: "";
+  position: absolute;
+  top: 30px;
+  left: calc(16.666% + 24px);
+  right: calc(16.666% + 24px);
+  height: 2px;
+  background: #2563eb;
+  z-index: 0;
+}
+
 .sales-booking-step {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
   flex: 1;
-}
-
-.sales-booking-step-line {
-  position: absolute;
-  top: 14px;
-  left: -50%;
-  width: 100%;
-  height: 2px;
-  background: #cbd5e1;
-  z-index: 0;
-}
-
-.sales-booking-step:first-child .sales-booking-step-line {
-  display: none;
-}
-
-.sales-booking-step.is-complete .sales-booking-step-line,
-.sales-booking-step.is-active .sales-booking-step-line {
-  background: #2563eb;
 }
 
 .sales-booking-step-dot {
@@ -11566,7 +11835,17 @@ img.sales-avatar {
   font-weight: 600;
   text-transform: uppercase;
   color: #64748b;
-  letter-spacing: 0.02em;
+  letter-spacing: 0;
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+  line-height: 1.25;
+  text-align: center;
+}
+
+.sales-booking-step-label span,
+.sales-booking-step-label strong {
+  font: inherit;
 }
 
 .sales-booking-step.is-active .sales-booking-step-label,
@@ -11687,6 +11966,25 @@ img.sales-avatar {
   box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.05);
 }
 
+.sales-sticky-booking-footer .ubf-footer-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.sales-sticky-booking-footer .sales-btn {
+  border-radius: 6px;
+  font-weight: 600;
+  min-height: 38px;
+  padding: 8px 18px;
+}
+
+.sales-sticky-booking-footer .sales-btn.primary {
+  background: #2563eb;
+  border: 1px solid #2563eb;
+  color: #ffffff;
+  padding-inline: 22px;
+}
+
 .sales-booking-footer-lead {
   font-size: 14px;
   color: #475569;
@@ -11700,17 +11998,17 @@ img.sales-avatar {
 
 /* Standardized Lead Table Toolbar System (Reference UI) */
 .lead-table-toolbar-container {
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 16px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+  box-shadow: none;
 }
 
 .lead-tb-left {

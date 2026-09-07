@@ -27,6 +27,7 @@ import {
   getLeadFollowupContext,
   markFollowupDone,
   rescheduleFollowup,
+  updateLeadStatus as updateSalesLeadStatus,
 } from "../services/followupApi";
 import {
   dedupeActivityNotifications,
@@ -40,6 +41,7 @@ const crmStatuses = [
   "Qualified",
   "In sourcing",
   "In closing",
+  "Nurture",
   "Booked",
   "Unqualified",
 ];
@@ -51,6 +53,7 @@ const backendStatusMap = {
   "In sourcing": "In_sourcing",
   "In closing": "In_closing",
   Booked: "Booked",
+  Nurture: "Nurture",
   Unqualified: "Unqualified",
   "Image pending": "Image_pending",
   "Image received": "Image_received",
@@ -421,8 +424,10 @@ const UserDetails = ({
   );
   const source = valueOf(lead, ["source", "channelPartner", "tags"], "-");
   const owner = getOwnerName(lead);
-  const currentStatus = selectedStatus || getCrmStatusFromLead(lead);
-  const isBookedStatusLocked = currentStatus === "Booked";
+  const persistedLeadStatus = getCrmStatusFromLead(lead);
+  const currentStatus = selectedStatus || persistedLeadStatus;
+  const isBookedStatusLocked = persistedLeadStatus === "Booked";
+  const isBookedSelectedBeforeBooking = !isBookedStatusLocked && selectedStatus === "Booked";
   const leadScoreNumber = getStatusScore(currentStatus);
   const createdDate = valueOf(lead, ["createdAt", "created_at", "received_on"], "");
   const isSalesContext =
@@ -527,7 +532,10 @@ const UserDetails = ({
   }, [leadId]);
 
   const fetchBookings = useCallback(async () => {
-    if (!leadId) return;
+    if (!leadId) {
+      setBookings([]);
+      return;
+    }
     try {
       const response = await fetch(`${API_URL}/bookings?leadId=${leadId}&limit=100`);
       if (!response.ok) return;
@@ -567,6 +575,10 @@ const UserDetails = ({
 
   const saveStatus = async (status) => {
     if (!leadId) return false;
+    if (status === "Booked") {
+      setStatusMessage("Use Book Unit to mark a lead as Booked after booking confirmation.");
+      return false;
+    }
     if (isBookedStatusLocked && status !== "Booked") {
       setStatusMessage("Booked lead status cannot be changed.");
       return false;
@@ -577,13 +589,7 @@ const UserDetails = ({
     const nextScore = getStatusScore(status);
 
     try {
-      const response = await fetch(`${API_URL}/leads/${leadId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: backendStatus, score: nextScore }),
-      });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result?.message || "Unable to update status");
+      const result = await updateSalesLeadStatus(leadId, { status: backendStatus, score: nextScore });
 
       const updatedLead = { ...lead, ...result, status, crmStatus: status, score: nextScore };
       setLead(updatedLead);
@@ -609,14 +615,8 @@ const UserDetails = ({
   };
 
   const handleStatusChange = (nextStatus) => {
-    const nextScore = getStatusScore(nextStatus);
     setSelectedStatus(nextStatus);
-    setLead((currentLead) => ({
-      ...currentLead,
-      crmStatus: nextStatus,
-      score: nextScore,
-      status: nextStatus,
-    }));
+    setStatusMessage("");
   };
 
   const reassignLead = async () => {
@@ -1005,6 +1005,27 @@ const UserDetails = ({
       return secondTime - firstTime;
     })[0];
   }, [bookings, lead?.bookings]);
+  const existingBooking = latestBooking?.id ? latestBooking : null;
+  const hasBookedStatusWithoutBooking = isBookedStatusLocked && !existingBooking;
+  const openBookingFlow = () => {
+    if (!leadId) return;
+    const params = new URLSearchParams();
+    params.set("leadId", leadId);
+    params.set("startBooking", "1");
+    params.set("returnTo", `${location.pathname}${location.search || ""}`);
+    navigate(`/user/sales/bookings?${params.toString()}`, {
+      state: { lead, startBooking: true, returnTo: `${location.pathname}${location.search || ""}` },
+    });
+  };
+  const openExistingBooking = () => {
+    if (!existingBooking?.id) return;
+    const params = new URLSearchParams();
+    params.set("bookingId", existingBooking.id);
+    if (leadId) params.set("leadId", leadId);
+    navigate(`/user/sales/bookings?${params.toString()}`, {
+      state: { lead, booking: existingBooking, returnTo: `${location.pathname}${location.search || ""}` },
+    });
+  };
   const bookingUnitFields = latestBooking
     ? [
         ["Name", valueOf(latestBooking, ["unit", "unitName", "name"], "-")],
@@ -1243,6 +1264,27 @@ const UserDetails = ({
 
         .crm-status-save {
           min-width: 92px;
+        }
+
+        .crm-status-readonly {
+          align-items: center;
+          background: var(--primary-50, #e4f1ff);
+          border: 1px solid var(--primary-100, #bfdcff);
+          border-radius: var(--rounded-6, 6px);
+          color: var(--primary-700, #486cea);
+          display: inline-flex;
+          font-size: 13px;
+          font-weight: 700;
+          min-height: 36px;
+          padding: 0 12px;
+          white-space: nowrap;
+        }
+
+        .crm-warning-inline {
+          color: #b45309;
+          font-size: 12px;
+          font-weight: 600;
+          line-height: 1.4;
         }
 
         .crm-more-wrap {
@@ -1690,7 +1732,6 @@ const UserDetails = ({
                 <h1>{leadName}</h1>
                 <p>#{leadId || "-"} | {primaryPhone || "No mobile number"} | {projectInterest}</p>
               </div>
-              <span className="crm-status-badge">{currentStatus}</span>
             </div>
 
             <div className="crm-header-grid">
@@ -1752,35 +1793,62 @@ const UserDetails = ({
               </a>
               <div className={isAdminContext ? "crm-admin-status-tools" : "crm-status-control"}>
                 <div className="crm-status-control">
-                  <label className="crm-status-field">
-                    <select
-                      className="crm-status-select"
-                      disabled={isSavingStatus || isBookedStatusLocked}
-                      value={stageStatusValue}
-                      onChange={(event) => handleStatusChange(event.target.value)}
-                    >
-                      {!stageStatusValue && (
-                        <option value="" disabled>
-                          Select status
-                        </option>
+                  {isBookedStatusLocked ? (
+                    <>
+                      <span className="crm-status-readonly">Booked</span>
+                      <button
+                        className="crm-small-btn primary crm-status-save"
+                        type="button"
+                        onClick={existingBooking ? openExistingBooking : openBookingFlow}
+                      >
+                        <FaLock /> {existingBooking ? "View Booking" : "Complete Booking"}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <label className="crm-status-field">
+                        <select
+                          className="crm-status-select"
+                          disabled={isSavingStatus}
+                          value={stageStatusValue}
+                          onChange={(event) => handleStatusChange(event.target.value)}
+                        >
+                          {!stageStatusValue && (
+                            <option value="" disabled>
+                              Select status
+                            </option>
+                          )}
+                          {statusOptions.map((status) => (
+                            <option key={status} value={status}>
+                              {status}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {isBookedSelectedBeforeBooking ? (
+                        <button
+                          className="crm-small-btn primary crm-status-save"
+                          type="button"
+                          onClick={openBookingFlow}
+                        >
+                          <FaLock /> Book Unit
+                        </button>
+                      ) : (
+                        <button
+                          className="crm-small-btn primary crm-status-save"
+                          disabled={isSavingStatus || !stageStatusValue || stageStatusValue === persistedLeadStatus}
+                          type="button"
+                          onClick={() => saveStatus(stageStatusValue)}
+                        >
+                          <FaSave /> {isSavingStatus ? "Saving..." : "Save"}
+                        </button>
                       )}
-                      {statusOptions.map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button
-                    className="crm-small-btn primary crm-status-save"
-                    disabled={isSavingStatus || !stageStatusValue || isBookedStatusLocked}
-                    type="button"
-                    onClick={() => saveStatus(stageStatusValue)}
-                  >
-                    <FaSave /> {isSavingStatus ? "Saving..." : "Save"}
-                  </button>
+                    </>
+                  )}
                 </div>
-                {isBookedStatusLocked && <div className="crm-muted">Booked lead status cannot be changed.</div>}
+                {hasBookedStatusWithoutBooking && (
+                  <div className="crm-warning-inline">This lead is marked Booked, but no booking record was found.</div>
+                )}
               </div>
               <div className="crm-more-wrap">
                 <button
@@ -1858,7 +1926,7 @@ const UserDetails = ({
               </div>
               <div className="crm-panel-body">
                 {[
-                  ["Status", currentStatus],
+                  ["Status", persistedLeadStatus],
                   ["Assigned To", owner],
                   ["Source", source],
                   ["Project", projectInterest],

@@ -156,6 +156,93 @@ const getFloorSortValue = (value) => {
   return Number.isNaN(number) ? Number.NEGATIVE_INFINITY : number
 }
 
+const normalizeBookingDetails = (unitItem) => {
+  const unit = unitItem?.unit || {}
+  const floorPlan = unit.floor || {}
+  const pricing = calculateUnitPrice({ floorPlan, floorNumber: unitItem?.floor })
+
+  return {
+    project: {
+      id: unit.project?.id ?? unit.projectId,
+      name: unit.project?.name || "",
+      type: unit.project?.projectType || "",
+    },
+    tower: {
+      id: unit.tower?.id ?? unit.towerId,
+      name: unit.tower?.name || "",
+    },
+    floorPlan: {
+      id: floorPlan.id,
+      name: floorPlan.name || floorPlan.configurationLabel || "",
+      type: floorPlan.type || "",
+      category: floorPlan.category || "",
+      bedrooms: floorPlan.bedrooms ?? unit.bedrooms,
+      bathrooms: floorPlan.bathrooms ?? unit.bathrooms,
+      kitchen: floorPlan.kitchenType || "",
+      reraArea: floorPlan.carpet ?? unit.carpet,
+      carpet: floorPlan.carpet ?? unit.carpet,
+      saleableArea: floorPlan.saleable ?? unit.saleable,
+      rateBasis: floorPlan.rateBasis || "On Carpet",
+      baseRate: floorPlan.baseRate,
+      floorRiseEnabled: pricing.floorRiseEnabled,
+      floorRisePerSqft: pricing.floorRisePerSqft,
+      baseFloorForFloorRise: pricing.riseFromFloor,
+    },
+    unit: {
+      id: unit.id,
+      unitItemId: unitItem.id,
+      name: unitItem.name,
+      floorNumber: unitItem.floor,
+      status: unitItem.status,
+    },
+    pricing: {
+      baseRate: pricing.baseRate,
+      floorRiseEnabled: pricing.floorRiseEnabled,
+      floorRiseRate: pricing.floorRiseEnabled ? pricing.floorRisePerSqft : 0,
+      riseFromFloor: pricing.floorRiseEnabled ? pricing.riseFromFloor : null,
+      riseSteps: pricing.floorRiseEnabled ? pricing.riseSteps : 0,
+      floorRiseAmount: pricing.floorRiseEnabled ? pricing.floorRiseAmount : 0,
+      effectiveRate: pricing.effectiveRate,
+      totalFlatPriceAtBaseRate: pricing.basePriceAtBaseFloor,
+      validationMessage: pricing.validationMessage,
+    },
+  }
+}
+
+exports.getUnitBookingDetails = async (req, res) => {
+  try {
+    const unitItemId = Number(req.params.unitItemId)
+    if (!unitItemId) return res.status(400).json({ success: false, message: "Unit item ID is required" })
+
+    const unitItem = await prisma.unitModel.findUnique({
+      where: { id: unitItemId },
+      include: {
+        unit: {
+          include: {
+            project: true,
+            tower: true,
+            floor: true,
+          },
+        },
+      },
+    })
+
+    if (!unitItem) return res.status(404).json({ success: false, message: "Selected unit was not found" })
+    if (
+      unitItem.unit?.floor &&
+      (Number(unitItem.unit.floor.projectId) !== Number(unitItem.unit.projectId) ||
+        Number(unitItem.unit.floor.towerId) !== Number(unitItem.unit.towerId))
+    ) {
+      return res.status(400).json({ success: false, message: "Selected unit hierarchy is invalid" })
+    }
+
+    return res.status(200).json({ success: true, data: normalizeBookingDetails(unitItem) })
+  } catch (error) {
+    console.log(error)
+    res.status(error.statusCode || 500).json({ success: false, message: error.message || "Something went wrong" })
+  }
+}
+
 exports.createUnit = async (req, res) => {
   try {
     const payload = req.body || {}
@@ -372,6 +459,7 @@ exports.getUnit = async (req, res) => {
               category: true,
               bedrooms: true,
               bathrooms: true,
+              kitchenType: true,
               measure: true,
               floorPlanImages: true,
               rateBasis: true,
@@ -380,6 +468,7 @@ exports.getUnit = async (req, res) => {
               saleable: true,
               baseRate: true,
               basePrice: true,
+              floorRiseEnabled: true,
               floorRisePerSqft: true,
               baseFloorForFloorRise: true,
               applicableFloorFrom: true,
@@ -475,10 +564,12 @@ exports.getUnit = async (req, res) => {
                   id:true,
                   name:true,
                   configurationLabel:true,
+                  unitStream:true,
                   type:true,
                   category:true,
                   bedrooms:true,
                   bathrooms:true,
+                  kitchenType:true,
                   measure:true,
                   floorPlanImages:true,
                   rateBasis:true,
@@ -487,6 +578,7 @@ exports.getUnit = async (req, res) => {
                   saleable:true,
                   baseRate:true,
                   basePrice:true,
+                  floorRiseEnabled:true,
                   floorRisePerSqft:true,
                   baseFloorForFloorRise:true,
                   applicableFloorFrom:true,

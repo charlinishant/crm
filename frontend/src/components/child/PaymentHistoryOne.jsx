@@ -827,7 +827,6 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
           }}
           onRefresh={fetchLeadData}
           onImport={() => navigate("/import-leads")}
-          onExport={() => downloadLeadsCsv(filteredLeadData, "filtered-leads.csv")}
           onExportAll={() => downloadLeadsCsv(leadData, "all-leads.csv")}
           onAddLead={() => {
             window.sessionStorage.removeItem("selectedLeadEdit");

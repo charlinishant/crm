@@ -333,6 +333,17 @@ exports.sendWelcomeEmail = async (req, res) => {
         error: error?.message || String(error),
       },
     })
-    res.status(404).json("Something went wrong")
+    res.status(500).json("Something went wrong")
+  }
+}
+
+exports.deleteEmailLog = async (req, res) => {
+  try {
+    const { id } = req.params
+    await prisma.$executeRawUnsafe(`DELETE FROM \`EmailLog\` WHERE \`id\` = ${Number(id)}`)
+    res.status(200).json({ message: "Email log deleted successfully" })
+  } catch (error) {
+    console.error("Failed to delete email log:", error)
+    res.status(500).json({ message: "Unable to delete email log" })
   }
 }

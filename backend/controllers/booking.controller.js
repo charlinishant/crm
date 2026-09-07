@@ -3,6 +3,7 @@ const { emitReportsUpdate } = require("../socket/socket")
 const { buildBookingDocumentContext, mergeTemplate } = require("./postSales.utils")
 const { UNIT_STATUS, normalizeUnitStatus, assertUnitStatusTransition } = require("../services/unitStatus.service")
 const { calculateUnitPrice } = require("../utils/unitPricing")
+const { calculateBookingPrice, normalizeOtherExpenses } = require("../utils/bookingPricing")
 
 const toNumberOrNull = (value) => {
   if (value === "" || value === null || value === undefined) return null
@@ -26,45 +27,118 @@ const toNonNegativeNumberOrNull = (value, label) => {
   return number
 }
 
+const toBoolean = (value) => value === true || value === "true" || value === "Yes" || value === "1" || value === 1
+
+const toNonNegativeIntOrNull = (value, label) => {
+  const number = toNonNegativeNumberOrNull(value, label)
+  if (number === null) return null
+  if (!Number.isInteger(number)) {
+    const error = new Error(`${label} must be a whole number`)
+    error.statusCode = 400
+    throw error
+  }
+  return number
+}
+
+const normalizeBookingCharges = (data = {}) => {
+  const agreementValue = toNumberOrZero(data.agreementValue)
+  const standardRows = [
+    ["GST", "GST", "Percentage", toNonNegativeNumberOrNull(data.gstPercent, "GST %"), agreementValue * (toNumberOrZero(data.gstPercent) / 100), true],
+    ["STAMP_DUTY", "Stamp Duty", "Percentage", toNonNegativeNumberOrNull(data.stampDutyPercent, "Stamp Duty %"), agreementValue * (toNumberOrZero(data.stampDutyPercent) / 100), false],
+    ["REGISTRATION", "Registration Charges", "Fixed", null, toNonNegativeNumberOrNull(data.registrationAmount, "Registration Charges") || 0, false],
+    ["LEGAL", "Legal Documentation Charges", "Fixed", null, toNonNegativeNumberOrNull(data.legalDocumentationCharges, "Legal Documentation Charges") || 0, false],
+    ["DEVELOPMENT", "Infrastructure/Development Charges", "Fixed", null, toNonNegativeNumberOrNull(data.infrastructureDevelopmentCharges, "Infrastructure/Development Charges") || 0, false],
+    ["SOCIETY", "Society Formation Charges", "Fixed", null, toNonNegativeNumberOrNull(data.societyFormationCharges, "Society Formation Charges") || 0, false],
+    ["CLUB", "Club Membership Charges", "Fixed", null, toNonNegativeNumberOrNull(data.clubMembershipCharges, "Club Membership Charges") || 0, false],
+    ["SINKING_FUND", "Sinking Fund/Corpus", "Fixed", null, toNonNegativeNumberOrNull(data.sinkingFundCorpus, "Sinking Fund/Corpus") || 0, false],
+    ["PARKING", "Parking Charges", "Fixed", null, toNonNegativeNumberOrNull(data.parkingAmount ?? data.parkingCharges, "Parking Charges") || 0, false],
+  ]
+
+  const customRows = (Array.isArray(data.customOtherCharges) ? data.customOtherCharges : [])
+    .filter((row) => row && String(row.name || "").trim())
+    .map((row) => {
+      const chargeType = row.chargeType === "Percentage" ? "Percentage" : "Fixed"
+      const rate = chargeType === "Percentage"
+        ? toNonNegativeNumberOrNull(row.rate, `${row.name} percentage`)
+        : null
+      const amount = chargeType === "Percentage"
+        ? agreementValue * ((rate || 0) / 100)
+        : toNonNegativeNumberOrNull(row.amount ?? row.rate, `${row.name} amount`) || 0
+
+      return {
+        code: "CUSTOM",
+        name: String(row.name).trim(),
+        chargeType,
+        rate,
+        amount,
+        taxable: toBoolean(row.taxable),
+      }
+    })
+
+  return standardRows
+    .map(([code, name, chargeType, rate, amount, taxable]) => ({ code, name, chargeType, rate, amount, taxable }))
+    .concat(customRows)
+}
+
 const buildBookingPriceSnapshot = (unitItem, data = {}) => {
   const unit = unitItem?.unit || {}
   const floor = unit.floor || {}
   const pricing = calculateUnitPrice({ floorPlan: floor, floorNumber: unitItem?.floor })
+  const bookingPricing = calculateBookingPrice({ unitItem, data })
   const rateBasis = pricing.rateBasis || data.rateBasis || floor.rateBasis || "On Carpet"
   const carpetArea = toNumberOrZero(unit.carpet ?? floor.carpet ?? data.carpetArea)
   const builtupArea = toNumberOrZero(floor.builtupArea ?? data.builtupArea)
   const saleableArea = toNumberOrZero(unit.saleable ?? floor.saleable ?? data.saleableArea)
   const masterBaseRate = pricing.baseRate || toNumberOrZero(unitItem?.baseRate ?? data.baseRate)
-  const baseRate = toNonNegativeNumberOrNull(data.baseRate, "Base Rate") ?? masterBaseRate
-  const closingBaseRate = toNonNegativeNumberOrNull(data.closingBaseRate, "Closing Base Rate") ?? baseRate
+  const baseRate = masterBaseRate
+  const closingBaseRate = toNonNegativeNumberOrNull(data.closingRate ?? data.closingBaseRate, "Closing Rate") ?? baseRate
   const priceArea = pricing.reraArea || carpetArea
-  const calculatedPrice = pricing.validationMessage ? toNumberOrNull(unitItem?.basePrice) ?? 0 : pricing.finalPrice
-  const fallbackTotalPrice = toNonNegativeNumberOrNull(data.basePrice, "Base Price") ?? calculatedPrice
-  const totalPrice = toNonNegativeNumberOrNull(data.totalPrice, "Total Price") ?? fallbackTotalPrice
-  const soldPrice = toNonNegativeNumberOrNull(data.soldPrice, "Sold Price") ?? totalPrice
-  const agreementValue = toNonNegativeNumberOrNull(data.agreementValue, "Agreement Value") ?? totalPrice
-  const basePrice = agreementValue
+  const totalPrice = bookingPricing.totalAllInclusiveCost
+  const soldPrice = bookingPricing.totalAllInclusiveCost
+  const agreementValue = bookingPricing.agreementValue
+  const basePrice = bookingPricing.totalFlatPrice
 
   return {
+    projectId: unit.projectId ?? null,
+    towerId: unit.towerId ?? null,
+    floorPlanId: unit.floorId ?? null,
     carpetArea,
     builtupArea,
     saleableArea,
     rateBasis,
     priceArea,
     baseRate,
+    closingRate: closingBaseRate,
     closingBaseRate,
+    totalFlatPrice: bookingPricing.totalFlatPrice,
     totalPrice,
     soldPrice,
     agreementValue,
     basePrice,
+    floorRiseEnabled: bookingPricing.floorRiseEnabled,
+    floorRisePerSqft: bookingPricing.floorRisePerSqft,
+    baseFloorForFloorRise: bookingPricing.baseFloorForFloorRise,
+    floorNumber: bookingPricing.floorNumber,
+    riseSteps: bookingPricing.riseSteps,
+    floorRiseCalculatedAmount: bookingPricing.floorRiseCalculatedAmount,
+    calculatedUnitPrice: bookingPricing.calculatedUnitPrice,
+    gstAmount: bookingPricing.gstAmount,
+    stampDutyAmount: bookingPricing.stampDutyAmount,
+    otherExpenseTotal: bookingPricing.otherExpenseTotal,
+    totalTaxes: bookingPricing.totalTaxes,
+    totalAllInclusiveCost: bookingPricing.totalAllInclusiveCost,
+    priceSnapshot: bookingPricing,
+    bookingPricing,
     pricing,
     priceFrozenAt: new Date(),
   }
 }
 
 const bookingInclude = {
-  costSheet: true,
-  paymentSchedule: true,
+  costSheet: { orderBy: [{ sortOrder: "asc" }, { id: "asc" }] },
+  paymentSchedule: { orderBy: [{ sortOrder: "asc" }, { id: "asc" }] },
+  bookingCharges: true,
+  bookingExpenses: { orderBy: [{ sortOrder: "asc" }, { id: "asc" }] },
   unit: {
     include: {
       project: true,
@@ -97,6 +171,14 @@ const FROZEN_PRICE_FIELDS = new Set([
   "totalPrice",
   "soldPrice",
   "agreementValue",
+  "floorRiseEnabled",
+  "floorRisePerSqft",
+  "baseFloorForFloorRise",
+  "floorNumber",
+  "riseSteps",
+  "floorRiseCalculatedAmount",
+  "calculatedUnitPrice",
+  "priceSnapshot",
 ])
 
 const isActiveBookingStage = (stage) => ACTIVE_BOOKING_STAGES.has(String(stage || "").toLowerCase())
@@ -111,7 +193,7 @@ exports.createBooking = async (req, res) => {
     if (idempotencyKey) {
       const existingBooking = await prisma.booking.findUnique({
         where: { idempotencyKey },
-        include: { costSheet: true, paymentSchedule: true, unitItem: true },
+        include: bookingInclude,
       })
 
       if (existingBooking) {
@@ -141,6 +223,9 @@ exports.createBooking = async (req, res) => {
             basePrice: true,
             unit: {
               select: {
+                projectId: true,
+                towerId: true,
+                floorId: true,
                 carpet: true,
                 saleable: true,
                 floor: {
@@ -151,6 +236,7 @@ exports.createBooking = async (req, res) => {
                     rateBasis: true,
                     baseRate: true,
                     basePrice: true,
+                    floorRiseEnabled: true,
                     floorRisePerSqft: true,
                     baseFloorForFloorRise: true,
                     applicableFloorFrom: true,
@@ -179,6 +265,9 @@ exports.createBooking = async (req, res) => {
             basePrice: true,
             unit: {
               select: {
+                projectId: true,
+                towerId: true,
+                floorId: true,
                 carpet: true,
                 saleable: true,
                 floor: {
@@ -189,6 +278,7 @@ exports.createBooking = async (req, res) => {
                     rateBasis: true,
                     baseRate: true,
                     basePrice: true,
+                    floorRiseEnabled: true,
                     floorRisePerSqft: true,
                     baseFloorForFloorRise: true,
                     applicableFloorFrom: true,
@@ -206,6 +296,18 @@ exports.createBooking = async (req, res) => {
         const conflict = new Error("Selected unit was not found")
         conflict.statusCode = 404
         throw conflict
+      }
+
+      const requestedProjectId = toNumberOrNull(data.projectId)
+      const requestedTowerId = toNumberOrNull(data.towerId)
+      if (
+        selectedUnitItem &&
+        ((requestedProjectId && Number(selectedUnitItem.unit?.projectId) !== requestedProjectId) ||
+          (requestedTowerId && Number(selectedUnitItem.unit?.towerId) !== requestedTowerId))
+      ) {
+        const hierarchyError = new Error("Selected unit must belong to the selected project and tower")
+        hierarchyError.statusCode = 400
+        throw hierarchyError
       }
 
       const selectedStatus = normalizeUnitStatus(selectedUnitItem?.status, UNIT_STATUS.Available)
@@ -251,14 +353,33 @@ exports.createBooking = async (req, res) => {
         pricingError.statusCode = 400
         throw pricingError
       }
+      if (selectedUnitItem && !(priceSnapshot.priceArea > 0)) {
+        const areaError = new Error("RERA Area must be greater than zero for booking")
+        areaError.statusCode = 400
+        throw areaError
+      }
+      if (toBoolean(data.parkingRequired) && (!toNumberOrNull(data.carParkingSlots) || !data.parkingType)) {
+        const parkingError = new Error("Parking Details are required when parking is selected")
+        parkingError.statusCode = 400
+        parkingError.validationErrors = {
+          carParkingSlots: !toNumberOrNull(data.carParkingSlots) ? "Number of Car Parking Slots is required" : undefined,
+          parkingType: !data.parkingType ? "Parking Type is required" : undefined,
+        }
+        throw parkingError
+      }
 
       let  bookingData =  {
           leadId: toNumberOrNull(data.leadId),
           unitCount: data.unitCount || null,
           customerName: data.customerName || null,
+          bookingName: data.bookingName || data.customerName || null,
           stage: data.stage || "Tentative",
           projectDetails: data.projectDetails || null,
+          projectId: priceSnapshot.projectId,
+          towerId: priceSnapshot.towerId,
+          floorPlanId: priceSnapshot.floorPlanId,
           bookedOn: data.bookedOn ? new Date(data.bookedOn) : null,
+          bookingDate: data.bookingDate ? new Date(data.bookingDate) : (data.bookedOn ? new Date(data.bookedOn) : null),
           carpetArea: priceSnapshot.carpetArea,
           builtupArea: priceSnapshot.builtupArea,
           saleableArea: priceSnapshot.saleableArea,
@@ -267,11 +388,50 @@ exports.createBooking = async (req, res) => {
           priceFrozenAt: priceSnapshot.priceFrozenAt,
           basePrice: priceSnapshot.basePrice,
           baseRate: priceSnapshot.baseRate,
+          closingRate: priceSnapshot.closingRate,
           closingBaseRate: priceSnapshot.closingBaseRate,
+          totalFlatPrice: priceSnapshot.totalFlatPrice,
           totalPrice: priceSnapshot.totalPrice,
           soldPrice: priceSnapshot.soldPrice,
           agreementValue: priceSnapshot.agreementValue,
+          floorRiseEnabled: priceSnapshot.floorRiseEnabled,
+          floorRisePerSqft: priceSnapshot.floorRisePerSqft,
+          baseFloorForFloorRise: priceSnapshot.baseFloorForFloorRise,
+          floorNumber: priceSnapshot.floorNumber,
+          riseSteps: priceSnapshot.riseSteps,
+          floorRiseCalculatedAmount: priceSnapshot.floorRiseCalculatedAmount,
+          calculatedUnitPrice: priceSnapshot.calculatedUnitPrice,
+          priceSnapshot: priceSnapshot.priceSnapshot,
+          parkingRequired: toBoolean(data.parkingRequired),
+          carParkingSlots: toBoolean(data.parkingRequired) ? toNonNegativeIntOrNull(data.carParkingSlots, "Number of Car Parking Slots") : null,
+          parkingType: toBoolean(data.parkingRequired) ? data.parkingType || null : null,
+          parkingSlotNumber: toBoolean(data.parkingRequired) ? data.parkingSlotNumber || null : null,
+          twoWheelerSlots: toBoolean(data.parkingRequired) ? toNonNegativeIntOrNull(data.twoWheelerSlots, "Number of Two-Wheeler Slots") : null,
+          basementStoreroomArea: toBoolean(data.parkingRequired) ? toNonNegativeNumberOrNull(data.basementStoreroomArea, "Basement/Storeroom Area") : null,
+          parkingCharges: priceSnapshot.bookingPricing.parkingAmount,
+          parkingAmount: priceSnapshot.bookingPricing.parkingAmount,
+          gstPercent: priceSnapshot.bookingPricing.gstPercent,
+          gstAmount: priceSnapshot.gstAmount,
+          stampDutyPercent: priceSnapshot.bookingPricing.stampDutyPercent,
+          stampDutyAmount: priceSnapshot.stampDutyAmount,
+          registrationAmount: priceSnapshot.bookingPricing.registrationCharges,
+          registrationCharges: priceSnapshot.bookingPricing.registrationCharges,
+          legalDocumentationCharges: priceSnapshot.bookingPricing.legalCharges,
+          legalCharges: priceSnapshot.bookingPricing.legalCharges,
+          otherExpenseTotal: priceSnapshot.otherExpenseTotal,
+          totalTaxes: priceSnapshot.totalTaxes,
+          totalAllInclusiveCost: priceSnapshot.totalAllInclusiveCost,
+          infrastructureDevelopmentCharges: toNonNegativeNumberOrNull(data.infrastructureDevelopmentCharges, "Infrastructure/Development Charges"),
+          societyFormationCharges: toNonNegativeNumberOrNull(data.societyFormationCharges, "Society Formation Charges"),
+          clubMembershipCharges: toNonNegativeNumberOrNull(data.clubMembershipCharges, "Club Membership Charges"),
+          maintenanceAdvanceMonths: toNonNegativeIntOrNull(data.maintenanceAdvanceMonths, "Maintenance Advance Months"),
+          maintenanceRatePerSqftPerMonth: toNonNegativeNumberOrNull(data.maintenanceRatePerSqftPerMonth, "Maintenance Rate / Sqft / Month"),
+          sinkingFundCorpus: toNonNegativeNumberOrNull(data.sinkingFundCorpus, "Sinking Fund/Corpus"),
+          customOtherCharges: Array.isArray(data.customOtherCharges) ? data.customOtherCharges : [],
           source: data.source || null,
+          channelPartnerId: toNumberOrNull(data.channelPartnerId),
+          channelPartnerName: data.channelPartnerName || data.channelPartner || null,
+          channelPartnerReraId: data.channelPartnerReraId || data.cpReraNumber || null,
           bookedBy: data.bookedBy || null,
           idempotencyKey,
         }
@@ -290,9 +450,23 @@ exports.createBooking = async (req, res) => {
       createdBookingId = booking.id
 
       if (bookingData.leadId) {
+        const existingLead = await tx.lead.findUnique({
+          where: { id: bookingData.leadId },
+          select: { status: true },
+        })
         await tx.lead.update({
           where: { id: bookingData.leadId },
           data: { status: "Booked" },
+        })
+        await tx.leadActivity.create({
+          data: {
+            leadId: bookingData.leadId,
+            userId: req.authUser?.id ? Number(req.authUser.id) : null,
+            type: "BOOKING_CONFIRMED",
+            message: `Booking #${booking.id} confirmed${bookingData.unitItemId ? ` for unit #${bookingData.unitItemId}` : ""}`,
+            oldStatus: existingLead?.status || null,
+            newStatus: "Booked",
+          },
         })
       }
 
@@ -322,42 +496,70 @@ exports.createBooking = async (req, res) => {
         }
       }
 
-      let costSheetData = Array.isArray(req.body.costSheet) ? req.body.costSheet : []
-      const firstCostSheet = costSheetData[0]
-
-      if (firstCostSheet) {
-        await tx.costSheet.create({
-          data: {
-            fieldName: firstCostSheet.fieldName,
-            orignalValue: toNumberOrNull(firstCostSheet.orignalValue),
-            costType: firstCostSheet.costType || "Discount",
-            inputField: toNumberOrNull(firstCostSheet.inputField),
-            newValue: Number(firstCostSheet.newValue) || 0,
+      const bookingCharges = normalizeBookingCharges({ ...data, agreementValue: priceSnapshot.agreementValue })
+      if (bookingCharges.length) {
+        await tx.bookingCharge.createMany({
+          data: bookingCharges.map((charge) => ({
+            ...charge,
             bookingId: booking.id,
-          },
+          })),
         })
       }
 
-      
-      let paymentScheduleData = Array.isArray(data.paymentSchedule) ? data.paymentSchedule : []
-      const firstPaymentSchedule = paymentScheduleData[0]
-
-      if (firstPaymentSchedule) {
-        await tx.paymentSchedule.create({
-          data: {
-            name: firstPaymentSchedule.name,
-            towerMilestone: firstPaymentSchedule.towerMilestone,
-            value: toNumberOrNull(firstPaymentSchedule.value),
-            amount: toNumberOrNull(firstPaymentSchedule.amount),
-            taxes: toNumberOrNull(firstPaymentSchedule.taxes),
-            tds: toNumberOrNull(firstPaymentSchedule.tds),
-            grandTotal: Number(firstPaymentSchedule.grandTotal) || 0,
+      const rawOtherExpenses = Array.isArray(data.otherExpenses) ? data.otherExpenses : (Array.isArray(data.customOtherCharges) ? data.customOtherCharges : [])
+      const missingExpenseName = rawOtherExpenses.some((row) => !String(row?.name || row?.expenseName || "").trim() && toNumberOrZero(row?.amount ?? row?.rate) > 0)
+      if (missingExpenseName) {
+        const expenseError = new Error("Expense name is required when amount is entered")
+        expenseError.statusCode = 400
+        throw expenseError
+      }
+      const otherExpenses = normalizeOtherExpenses(rawOtherExpenses)
+      if (otherExpenses.length) {
+        await tx.bookingExpense.createMany({
+          data: otherExpenses.map((row, index) => ({
             bookingId: booking.id,
-          },
+            name: row.name,
+            amount: row.amount,
+            sortOrder: row.sortOrder ?? index,
+          })),
         })
       }
-      
-      
+
+      const costSheetData = Array.isArray(req.body.costSheet) ? req.body.costSheet : []
+      const validCostSheetRows = costSheetData.filter((row) => row && row.fieldName)
+
+      if (validCostSheetRows.length) {
+        await tx.costSheet.createMany({
+          data: validCostSheetRows.map((row, index) => ({
+            fieldName: row.fieldName,
+            orignalValue: toNumberOrNull(row.orignalValue ?? row.originalValue),
+            costType: row.costType || "Discount",
+            inputField: toNumberOrNull(row.inputField),
+            newValue: Number(row.newValue) || 0,
+            sortOrder: row.sortOrder ?? index,
+            bookingId: booking.id,
+          })),
+        })
+      }
+
+      const paymentScheduleData = Array.isArray(data.paymentSchedule) ? data.paymentSchedule : []
+      const validPaymentScheduleRows = paymentScheduleData.filter((row) => row && row.name)
+
+      if (validPaymentScheduleRows.length) {
+        await tx.paymentSchedule.createMany({
+          data: validPaymentScheduleRows.map((row, index) => ({
+            name: row.name,
+            towerMilestone: row.towerMilestone,
+            value: toNumberOrNull(row.value),
+            amount: toNumberOrNull(row.amount),
+            taxes: toNumberOrNull(row.taxes),
+            tds: toNumberOrNull(row.tds),
+            grandTotal: Number(row.grandTotal) || 0,
+            sortOrder: row.sortOrder ?? index,
+            bookingId: booking.id,
+          })),
+        })
+      }
       
     })
 
@@ -383,7 +585,7 @@ exports.createBooking = async (req, res) => {
     ) {
       const existingBooking = await prisma.booking.findUnique({
         where: { idempotencyKey },
-        include: { costSheet: true, paymentSchedule: true, unitItem: true },
+        include: bookingInclude,
       })
       if (existingBooking) return res.status(200).json({ ...existingBooking, unit: data.unit || null, replayed: true })
     }
@@ -394,7 +596,11 @@ exports.createBooking = async (req, res) => {
     ) {
       return res.status(409).json({ message: "Selected unit is already booked or unavailable" })
     }
-    res.status(error.statusCode || 500).json({ message: error.message || "Something went wrong" })
+    res.status(error.statusCode || 500).json({
+      ...(error.validationErrors ? { success: false } : {}),
+      message: error.message || "Something went wrong",
+      ...(error.validationErrors ? { errors: error.validationErrors } : {}),
+    })
   }
 }
 
@@ -462,6 +668,24 @@ exports.updateBooking = async (req, res) => {
     if (data.totalPrice !== undefined) updateData.totalPrice = toNonNegativeNumberOrNull(data.totalPrice, "Total Price")
     if (data.soldPrice !== undefined) updateData.soldPrice = toNonNegativeNumberOrNull(data.soldPrice, "Sold Price")
     if (data.agreementValue !== undefined) updateData.agreementValue = toNonNegativeNumberOrNull(data.agreementValue, "Agreement Value")
+    if (data.parkingRequired !== undefined) updateData.parkingRequired = toBoolean(data.parkingRequired)
+    if (data.carParkingSlots !== undefined) updateData.carParkingSlots = toBoolean(data.parkingRequired ?? booking.parkingRequired) ? toNonNegativeIntOrNull(data.carParkingSlots, "Number of Car Parking Slots") : null
+    if (data.parkingType !== undefined) updateData.parkingType = toBoolean(data.parkingRequired ?? booking.parkingRequired) ? data.parkingType || null : null
+    if (data.parkingSlotNumber !== undefined) updateData.parkingSlotNumber = toBoolean(data.parkingRequired ?? booking.parkingRequired) ? data.parkingSlotNumber || null : null
+    if (data.twoWheelerSlots !== undefined) updateData.twoWheelerSlots = toBoolean(data.parkingRequired ?? booking.parkingRequired) ? toNonNegativeIntOrNull(data.twoWheelerSlots, "Number of Two-Wheeler Slots") : null
+    if (data.basementStoreroomArea !== undefined) updateData.basementStoreroomArea = toBoolean(data.parkingRequired ?? booking.parkingRequired) ? toNonNegativeNumberOrNull(data.basementStoreroomArea, "Basement/Storeroom Area") : null
+    if (data.parkingCharges !== undefined) updateData.parkingCharges = toBoolean(data.parkingRequired ?? booking.parkingRequired) ? toNonNegativeNumberOrNull(data.parkingCharges, "Parking Charges") || 0 : 0
+    if (data.gstPercent !== undefined) updateData.gstPercent = toNonNegativeNumberOrNull(data.gstPercent, "GST %")
+    if (data.stampDutyPercent !== undefined) updateData.stampDutyPercent = toNonNegativeNumberOrNull(data.stampDutyPercent, "Stamp Duty %")
+    if (data.registrationAmount !== undefined) updateData.registrationAmount = toNonNegativeNumberOrNull(data.registrationAmount, "Registration Charges")
+    if (data.legalDocumentationCharges !== undefined) updateData.legalDocumentationCharges = toNonNegativeNumberOrNull(data.legalDocumentationCharges, "Legal Documentation Charges")
+    if (data.infrastructureDevelopmentCharges !== undefined) updateData.infrastructureDevelopmentCharges = toNonNegativeNumberOrNull(data.infrastructureDevelopmentCharges, "Infrastructure/Development Charges")
+    if (data.societyFormationCharges !== undefined) updateData.societyFormationCharges = toNonNegativeNumberOrNull(data.societyFormationCharges, "Society Formation Charges")
+    if (data.clubMembershipCharges !== undefined) updateData.clubMembershipCharges = toNonNegativeNumberOrNull(data.clubMembershipCharges, "Club Membership Charges")
+    if (data.maintenanceAdvanceMonths !== undefined) updateData.maintenanceAdvanceMonths = toNonNegativeIntOrNull(data.maintenanceAdvanceMonths, "Maintenance Advance Months")
+    if (data.maintenanceRatePerSqftPerMonth !== undefined) updateData.maintenanceRatePerSqftPerMonth = toNonNegativeNumberOrNull(data.maintenanceRatePerSqftPerMonth, "Maintenance Rate / Sqft / Month")
+    if (data.sinkingFundCorpus !== undefined) updateData.sinkingFundCorpus = toNonNegativeNumberOrNull(data.sinkingFundCorpus, "Sinking Fund/Corpus")
+    if (data.customOtherCharges !== undefined) updateData.customOtherCharges = Array.isArray(data.customOtherCharges) ? data.customOtherCharges : []
     if (data.source !== undefined) updateData.source = data.source
     if (data.bookedBy !== undefined) updateData.bookedBy = data.bookedBy
     if (data.unitId !== undefined) updateData.unitId = toNumberOrNull(data.unitId)
@@ -469,14 +693,65 @@ exports.updateBooking = async (req, res) => {
       updateData.activeUnitItemId = isActiveBookingStage(data.stage) ? booking.unitItemId : null
     }
 
-    if (!Object.keys(updateData).length) {
+    const hasRowUpdates = Array.isArray(data.costSheet) || Array.isArray(data.paymentSchedule) || data.customOtherCharges !== undefined
+    if (!Object.keys(updateData).length && !hasRowUpdates) {
       return res.status(400).json({ message: "No booking fields provided" })
     }
 
-    const result = await prisma.booking.update({
-      where: { id },
-      data: updateData,
-      include: { costSheet: true, paymentSchedule: true },
+    const result = await prisma.$transaction(async (tx) => {
+      const updated = Object.keys(updateData).length
+        ? await tx.booking.update({ where: { id }, data: updateData })
+        : booking
+
+      if (Array.isArray(data.costSheet)) {
+        await tx.costSheet.deleteMany({ where: { bookingId: id } })
+        const rows = data.costSheet.filter((row) => row && row.fieldName)
+        if (rows.length) {
+          await tx.costSheet.createMany({
+            data: rows.map((row, index) => ({
+              fieldName: row.fieldName,
+              orignalValue: toNumberOrNull(row.orignalValue ?? row.originalValue),
+              costType: row.costType || "Discount",
+              inputField: toNumberOrNull(row.inputField),
+              newValue: Number(row.newValue) || 0,
+              sortOrder: row.sortOrder ?? index,
+              bookingId: id,
+            })),
+          })
+        }
+      }
+
+      if (Array.isArray(data.paymentSchedule)) {
+        await tx.paymentSchedule.deleteMany({ where: { bookingId: id } })
+        const rows = data.paymentSchedule.filter((row) => row && row.name)
+        if (rows.length) {
+          await tx.paymentSchedule.createMany({
+            data: rows.map((row, index) => ({
+              name: row.name,
+              towerMilestone: row.towerMilestone,
+              value: toNumberOrNull(row.value),
+              amount: toNumberOrNull(row.amount),
+              taxes: toNumberOrNull(row.taxes),
+              tds: toNumberOrNull(row.tds),
+              grandTotal: Number(row.grandTotal) || 0,
+              sortOrder: row.sortOrder ?? index,
+              bookingId: id,
+            })),
+          })
+        }
+      }
+
+      if (data.customOtherCharges !== undefined || Object.keys(updateData).some((field) => field.includes("Charges") || field.includes("Percent") || field === "parkingRequired")) {
+        await tx.bookingCharge.deleteMany({ where: { bookingId: id } })
+        const charges = normalizeBookingCharges({ ...updated, ...data, agreementValue: updated.agreementValue })
+        if (charges.length) {
+          await tx.bookingCharge.createMany({
+            data: charges.map((charge) => ({ ...charge, bookingId: id })),
+          })
+        }
+      }
+
+      return tx.booking.findUnique({ where: { id }, include: bookingInclude })
     })
 
     res.status(200).json(result)
