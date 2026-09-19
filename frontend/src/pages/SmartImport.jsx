@@ -467,7 +467,7 @@ const SmartImport = () => {
         >
           <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content border-0 shadow">
-              <div className="modal-header bg-danger text-white">
+              <div className="modal-header bg-primary text-white">
                 <h5 className="modal-title d-flex align-items-center gap-2">
                   <FaLock /> Confirm Permanent Source Tagging
                 </h5>
@@ -479,7 +479,7 @@ const SmartImport = () => {
               </div>
 
               <div className="modal-body p-4">
-                <div className="alert alert-warning d-flex align-items-start gap-2 mb-3">
+                <div className="alert alert-info d-flex align-items-start gap-2 mb-3">
                   <FaExclamationTriangle className="mt-1 flex-shrink-0" size={18} />
                   <div>
                     <strong>HARD LOCK WARNING:</strong> Once imported, each lead's source and Channel Partner attribution is{" "}
@@ -509,7 +509,7 @@ const SmartImport = () => {
                   )}
                 </div>
 
-                <div className="form-check p-3 bg-danger-subtle rounded border border-danger">
+                <div className="form-check p-3 bg-primary-subtle rounded border border-primary">
                   <input
                     className="form-check-input"
                     type="checkbox"
@@ -518,7 +518,7 @@ const SmartImport = () => {
                     onChange={(e) => setIsConfirmedLock(e.target.checked)}
                   />
                   <label
-                    className="form-check-label fw-bold text-danger"
+                    className="form-check-label fw-bold text-primary"
                     htmlFor="importPermanentLockConfirm"
                     style={{ fontSize: "13px" }}
                   >
@@ -537,7 +537,7 @@ const SmartImport = () => {
                 </button>
                 <button
                   type="button"
-                  className="btn btn-danger d-flex align-items-center gap-2"
+                  className="btn btn-primary d-flex align-items-center gap-2"
                   disabled={!isConfirmedLock}
                   onClick={handleConfirmAndUpload}
                 >

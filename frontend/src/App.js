@@ -1,5 +1,6 @@
 import "./styles/admin.css";
 import "./styles/user-sales.css";
+import "./styles/global-overrides.css";
 import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ADDLEAD from"./pages/Addlead"

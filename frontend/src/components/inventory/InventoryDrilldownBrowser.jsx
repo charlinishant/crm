@@ -715,28 +715,7 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
             )}
           </div>
 
-          {/* Status Counters Bar (Clickable to Filter) */}
-          <div className="inv-unit-counters-bar">
-            {[
-              ["all", "All", statusCounts.all],
-              ["available", "Available", statusCounts.available],
-              ["booked", "Booked", statusCounts.booked],
-              ["blocked", "Blocked", statusCounts.blocked],
-              ["refuge", "Refuge", statusCounts.refuge],
-              ["investor", "Investor", statusCounts.investor],
-              ["rehab", "Rehab", statusCounts.rehab],
-            ].map(([key, label, count]) => (
-              <button
-                key={key}
-                type="button"
-                className={`inv-counter-pill ${key} ${activeStatusFilter === key ? "active" : ""}`}
-                onClick={() => setActiveStatusFilter(key)}
-              >
-                <span className="inv-counter-badge">{count || 0}</span>
-                <span>{label}</span>
-              </button>
-            ))}
-          </div>
+
 
           {/* Floor-wise Unit Grid (Reusing Booking Layout) */}
           <div className="inv-grid-wrapper">

@@ -1,0 +1,108 @@
+/* ==========================================================================
+   GLOBAL OVERRIDES
+   ========================================================================== 
+   These styles override inconsistencies between admin.css and user-sales.css.
+   They enforce unified headers, button colors, and select-field alignments.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Headers (Consistent Font Sizes globally)
+   -------------------------------------------------------------------------- */
+h1, .h1 { font-size: 24px !important; font-weight: 600 !important; margin-bottom: 0.5rem !important; }
+h2, .h2 { font-size: 22px !important; font-weight: 600 !important; margin-bottom: 0.5rem !important; }
+h3, .h3 { font-size: 20px !important; font-weight: 600 !important; margin-bottom: 0.5rem !important; }
+h4, .h4 { font-size: 18px !important; font-weight: 600 !important; margin-bottom: 0.5rem !important; }
+h5, .h5 { font-size: 16px !important; font-weight: 600 !important; margin-bottom: 0.5rem !important; }
+h6, .h6 { font-size: 14px !important; font-weight: 600 !important; margin-bottom: 0.5rem !important; }
+
+/* --------------------------------------------------------------------------
+   2. Buttons (Consistent Background Colors)
+   -------------------------------------------------------------------------- */
+/* Standardize the primary buttons across Admin and User/Sales */
+.btn-primary, 
+button[type="submit"], 
+.btn-new-plan, 
+.btn-new-project, 
+.add-lead-btn,
+.crm-btn-primary {
+  background-color: #487fff !important;
+  border-color: #487fff !important;
+  color: #ffffff !important;
+  border-radius: 6px !important;
+  padding: 8px 16px !important;
+  font-weight: 500 !important;
+  transition: all 0.2s ease-in-out !important;
+}
+
+.btn-primary:hover, 
+button[type="submit"]:hover, 
+.btn-new-plan:hover, 
+.btn-new-project:hover, 
+.add-lead-btn:hover,
+.crm-btn-primary:hover {
+  background-color: #3b6bdf !important;
+  border-color: #3b6bdf !important;
+  color: #ffffff !important;
+}
+
+/* --------------------------------------------------------------------------
+   3. Select Fields (Consistent Alignment and Styling)
+   -------------------------------------------------------------------------- */
+select, 
+.form-select, 
+.custom-select, 
+select.form-control,
+.crm-select {
+  display: block !important;
+  width: 100% !important;
+  padding: 8px 12px !important;
+  padding-right: 30px !important; /* Space for the dropdown arrow */
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  line-height: 1.5 !important;
+  color: #334155 !important;
+  background-color: #ffffff !important;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  background-size: 12px 12px !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 6px !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  transition: border-color .15s ease-in-out, box-shadow .15s ease-in-out !important;
+  min-height: 38px !important;
+}
+
+select:focus, 
+.form-select:focus, 
+.custom-select:focus, 
+select.form-control:focus,
+.crm-select:focus {
+  border-color: #487fff !important;
+  outline: 0 !important;
+  box-shadow: 0 0 0 3px rgba(72, 127, 255, 0.25) !important;
+}
+
+/* Fix inline select fields alignment inside specific containers */
+.d-flex select,
+.d-flex .form-select,
+.unit-simple-filters select {
+  width: auto !important; /* Allow inline selects to size to content */
+  min-width: 150px !important;
+  display: inline-block !important;
+}
+
+/* --------------------------------------------------------------------------
+   4. Header / Navbar Overlap Fix (Ensure scrolling content hides under the header)
+   -------------------------------------------------------------------------- */
+.navbar-header,
+.dashboard-main-body > .navbar-header,
+.top-header {
+  background-color: #ffffff !important;
+  z-index: 1040 !important; /* Higher than page content/cards */
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06) !important;
+  position: sticky !important;
+  top: 0 !important;
+}
