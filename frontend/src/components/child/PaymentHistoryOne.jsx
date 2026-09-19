@@ -6,6 +6,7 @@ import BulkDeleteConfirmation from "../table/BulkDeleteConfirmation";
 import TableSelectionCheckbox from "../table/TableSelectionCheckbox";
 import { useTableSelection } from "../table/useTableSelection";
 import LeadTableToolbar from "../common/LeadTableToolbar";
+import { matchesLeadSearch } from "../../utils/leadSearch";
 
 const PaymentHistoryOne = ({ trashMode = false }) => {
   const [leadData, setLeadData] = useState([]);
@@ -90,7 +91,16 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
   }, [getUserName]);
 
   const getLastSource = useCallback((lead) => {
-    return lead.source || lead.channelPartner || lead.tags || "-";
+    if (lead.source) return lead.source;
+    if (lead.fundingSource) return lead.fundingSource;
+    if (lead.channelPartner) return lead.channelPartner;
+    if (typeof lead.tags === 'string') {
+      const match = lead.tags.match(/source:\s*([^|]+)/);
+      if (match && match[1]) return match[1].trim();
+      if (lead.tags.includes("Untagged")) return "Untagged";
+      return lead.tags.split('|')[0].trim();
+    }
+    return "-";
   }, []);
 
   const getStage = useCallback((lead) => {
@@ -143,9 +153,7 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
   }, [getLeadId, getLeadName, getLeadOwner, getLastSource, getStage, getRequirement, getTags]);
 
   const filteredLeadData = leadData.filter((lead) => {
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) return true;
-    return getSearchText(lead).includes(query);
+    return matchesLeadSearch(lead, searchQuery);
   });
   const totalPages = Math.max(1, Math.ceil(filteredLeadData.length / recordsPerPage));
   const activePage = Math.min(currentPage, totalPages);

@@ -46,6 +46,12 @@ export const rescheduleFollowup = (id, payload) =>
     body: JSON.stringify(payload),
   });
 
+export const snoozeFollowup = (id, minutes = 10) =>
+  request(`/api/sales/followups/${id}/snooze`, {
+    method: "POST",
+    body: JSON.stringify({ minutes }),
+  });
+
 export const updateFollowup = (id, payload) =>
   request(`/api/sales/followups/${id}`, {
     method: "PATCH",

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ADDLEAD from"./pages/Addlead"
 import LeadMergePage from "./pages/LeadMergePage";
+import UntaggedLeadsPage from "./pages/UntaggedLeadsPage";
 import DashboardResultsPage from "./pages/DashboardResultsPage";
 // import HomePageOne from "./pages/HomePageOne";
 import HomePageTwo from "./pages/HomePageTwo";
@@ -29,6 +30,7 @@ import CodeGeneratorNewPage from "./pages/CodeGeneratorNewPage";
 import CodeGeneratorPage from "./pages/CodeGeneratorPage";
 import ColorsPage from "./pages/BrokerageinvoicesPage";
 import ColumnChartPage from "./pages/ColumnChartPage";
+import PreviewInventoryPage from "./pages/PreviewInventoryPage";
 import CompanyPage from "./pages/CompanyPage";
 import CurrenciesPage from "./pages/CurrenciesPage";
 import DropdownPage from "./pages/DropdownPage";
@@ -151,7 +153,14 @@ const accessDeniedPath = "/access-denied";
 const adminHomePath = "/dashboard";
 const salesHomePath = "/user/sales";
 const adminRoles = new Set(["ADMIN", "SUPER_ADMIN", "MANAGER"]);
-const salesRoles = new Set(["SALES", "PRE_SALES", "POST_SALES"]);
+const salesRoles = new Set([
+  "SALES",
+  "PRE_SALES",
+  "POST_SALES",
+  "AGENT",
+  "AGENCY_USER",
+  "CHANNEL_PARTNER",
+]);
 const salesAllowedExactPaths = new Set([
   "/preview",
   "/user-preview",
@@ -159,6 +168,8 @@ const salesAllowedExactPaths = new Set([
   "/user-add-lead",
   "/user-attendance",
   "/my-call-logs",
+  "/tasks",
+  "/user/tasks",
 ]);
 const adminAllowedExactPaths = new Set([
   "/user-attendance",
@@ -210,7 +221,7 @@ const isSalesPathAllowed = (pathname) =>
 const isAdminPathAllowed = (pathname) =>
   adminAllowedExactPaths.has(pathname);
 
-const getRoleName = (user) => String(user?.role || "").trim().toUpperCase();
+const getRoleName = (user) => String(user?.role || user?.department || "").trim().toUpperCase();
 
 const getHomePathForRole = (role) => {
   if (salesRoles.has(role)) return salesHomePath;
@@ -233,7 +244,8 @@ const ProtectedAppRoutes = () => {
   const [sessionExpired, setSessionExpired] = useState(false);
   const token = localStorage.getItem("authToken");
   const authUser = getStoredAuthUser();
-  const role = getRoleName(authUser) || getRoleName(getTokenPayload(token));
+  const tokenPayload = getTokenPayload(token);
+  const role = getRoleName(authUser) || getRoleName(tokenPayload);
   const isSalesUser = salesRoles.has(role);
   const isAdminUser = adminRoles.has(role);
   const isAccessDeniedPath = location.pathname === accessDeniedPath;
@@ -329,6 +341,9 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/user/sales/details' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/site-visit' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/bookings' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/tasks' element={<SalesUserPanel />} />
+        <Route exact path='/tasks' element={<RedirectWithSearch to="/user/sales/tasks" />} />
+        <Route exact path='/user/tasks' element={<RedirectWithSearch to="/user/sales/tasks" />} />
         <Route exact path='/user/sales/add-lead' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/profile' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/notifications' element={<SalesUserPanel />} />
@@ -340,6 +355,9 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/index-5' element={<HomePageFive />} />
         <Route exact path='/index-6' element={<HomePageSix />} />
         <Route exact path='/index-7' element={<HomePageSeven />} />
+        <Route exact path='/preview-inventory' element={<PreviewInventoryPage />} />
+        <Route exact path='/inventory' element={<PreviewInventoryPage />} />
+        <Route exact path='/inventory-preview' element={<PreviewInventoryPage />} />
         <Route exact path='/projects' element={<ColumnChartPage />} />
         <Route exact path='/new-project' element={<NEWPROJECT />} />
         <Route exact path='/add-user' element={<AddUserPage />} />

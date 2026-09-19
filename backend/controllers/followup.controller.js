@@ -5,6 +5,7 @@ const {
   getLeadFollowUpContext,
   markFollowUpDone,
   rescheduleFollowUp,
+  snoozeFollowUp,
   updateFollowUp,
   updateLeadStatus,
 } = require("../services/followup.service")
@@ -22,10 +23,10 @@ exports.getSalesFollowUps = async (req, res) => {
     const paginated = req.query.page !== undefined || req.query.limit !== undefined
     const result = await getFollowUps(req.authUser, req.query.filter, {
       paginated,
-      page:req.query.page,
-      limit:req.query.limit,
+      page: req.query.page,
+      limit: req.query.limit,
     })
-    res.status(200).json(paginated ? result : { data:result })
+    res.status(200).json(paginated ? result : { data: result })
   } catch (error) {
     sendError(res, error)
   }
@@ -45,7 +46,7 @@ exports.markSalesFollowUpDone = async (req, res) => {
   try {
     const data = await markFollowUpDone(req.authUser, req.params.id, req.body)
     emitReportsUpdate("followup:updated")
-    res.status(200).json({ data, message: "Follow-up marked Done" })
+    res.status(200).json({ data, message: "Follow-up completed" })
   } catch (error) {
     sendError(res, error)
   }
@@ -56,6 +57,16 @@ exports.rescheduleSalesFollowUp = async (req, res) => {
     const data = await rescheduleFollowUp(req.authUser, req.params.id, req.body)
     emitReportsUpdate("followup:updated")
     res.status(200).json({ data, message: "Follow-up rescheduled" })
+  } catch (error) {
+    sendError(res, error)
+  }
+}
+
+exports.snoozeSalesFollowUp = async (req, res) => {
+  try {
+    const data = await snoozeFollowUp(req.authUser, req.params.id, req.body?.minutes || 10)
+    emitReportsUpdate("followup:updated")
+    res.status(200).json({ data, message: `Follow-up snoozed for ${req.body?.minutes || 10} minutes` })
   } catch (error) {
     sendError(res, error)
   }

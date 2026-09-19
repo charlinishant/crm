@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "check:db": "node scripts/check-local-db.js"
+    "check:db": "node scripts/check-local-db.js",
+    "setup:mcube-users": "node scripts/setup-sales-agents.js"
   },
   "author": "",
   "license": "ISC",

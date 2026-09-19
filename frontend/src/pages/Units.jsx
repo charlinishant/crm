@@ -2,6 +2,9 @@ import { Link } from "react-router-dom";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import MasterLayout from "../masterLayout/MasterLayout";
 import { FaEllipsisV } from "react-icons/fa";
+import TableSelectionCheckbox from "../components/table/TableSelectionCheckbox";
+import { useTableSelection } from "../components/table/useTableSelection";
+import BulkActionToolbar from "../components/table/BulkActionToolbar";
 
 const emptyEditForm = {
   name: "",
@@ -25,7 +28,7 @@ const UNIT_STATUS_OPTIONS = [
   "Investor",
 ];
 
-const FLOORS_PER_PAGE = 10;
+const UNITS_PER_PAGE = 10;
 
 const toNumberOrNull = (value) => {
   if (value === "" || value === null || value === undefined) return null;
@@ -96,7 +99,10 @@ const Units = () => {
   const [selectedUnit, setSelectedUnit] = useState(null);
   const [editForm, setEditForm] = useState(emptyEditForm);
   const [saving, setSaving] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
   const [projectFilter, setProjectFilter] = useState("");
   const [towerFilter, setTowerFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -194,17 +200,58 @@ const Units = () => {
     }
   }, [towerFilter, towerOptions]);
 
+  const statusCounts = useMemo(() => {
+    const counts = {
+      "All": data.length,
+      "Available": 0,
+      "Booked": 0,
+      "Blocked": 0,
+      "Refuge": 0,
+      "Investor": 0,
+      "Rehab": 0,
+    };
+    data.forEach((u) => {
+      const rawPurpose = String(u.propertyPurpose || "").toLowerCase();
+      let s = "Available";
+      if (rawPurpose.includes("rehab")) s = "Rehab";
+      else {
+        const val = String(u.status || "available").toLowerCase();
+        if (["booked", "sold", "unavailable", "registered", "possession_given", "held"].includes(val)) s = "Booked";
+        else if (["blocked", "block"].includes(val)) s = "Blocked";
+        else if (val === "refuge") s = "Refuge";
+        else if (val === "investor") s = "Investor";
+        else if (val === "cancelled") s = "Available";
+      }
+      if (counts[s] !== undefined) counts[s]++;
+    });
+    return counts;
+  }, [data]);
+
   const filteredData = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    const filteredByProjectAndTower = data.filter((unit) => {
+    const filteredByProjectAndTowerAndStatus = data.filter((unit) => {
       if (projectFilter && unit.project !== projectFilter) return false;
       if (towerFilter && unit.tower !== towerFilter) return false;
+      if (statusFilter !== "All") {
+        const rawPurpose = String(unit.propertyPurpose || "").toLowerCase();
+        let s = "Available";
+        if (rawPurpose.includes("rehab")) s = "Rehab";
+        else {
+          const val = String(unit.status || "available").toLowerCase();
+          if (["booked", "sold", "unavailable", "registered", "possession_given", "held"].includes(val)) s = "Booked";
+          else if (["blocked", "block"].includes(val)) s = "Blocked";
+          else if (val === "refuge") s = "Refuge";
+          else if (val === "investor") s = "Investor";
+          else if (val === "cancelled") s = "Available";
+        }
+        if (s !== statusFilter) return false;
+      }
       return true;
     });
 
-    if (!query) return filteredByProjectAndTower;
+    if (!query) return filteredByProjectAndTowerAndStatus;
 
-    return filteredByProjectAndTower.filter((unit) =>
+    return filteredByProjectAndTowerAndStatus.filter((unit) =>
       [
         unit.price,
         unit.unitIndex,
@@ -228,7 +275,7 @@ const Units = () => {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(query))
     );
-  }, [data, searchQuery, projectFilter, towerFilter]);
+  }, [data, searchQuery, projectFilter, towerFilter, statusFilter]);
   const floorGroups = useMemo(() => {
     const groups = new Map();
 
@@ -261,19 +308,15 @@ const Units = () => {
     }));
   }, [filteredData]);
 
-  const totalPages = Math.max(1, Math.ceil(floorGroups.length / FLOORS_PER_PAGE));
-  const paginatedFloorGroups = useMemo(() => {
-    const startIndex = (currentPage - 1) * FLOORS_PER_PAGE;
-    return floorGroups.slice(startIndex, startIndex + FLOORS_PER_PAGE);
-  }, [currentPage, floorGroups]);
-  const paginatedData = useMemo(
-    () => paginatedFloorGroups.flatMap((group) => group.units),
-    [paginatedFloorGroups]
-  );
   const orderedData = useMemo(
     () => floorGroups.flatMap((group) => group.units),
     [floorGroups]
   );
+  const totalPages = Math.max(1, Math.ceil(orderedData.length / UNITS_PER_PAGE));
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * UNITS_PER_PAGE;
+    return orderedData.slice(startIndex, startIndex + UNITS_PER_PAGE);
+  }, [currentPage, orderedData]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -285,10 +328,15 @@ const Units = () => {
     }
   }, [currentPage, totalPages]);
 
-  const displayedItemCount = filteredData.length;
-  const displayedFloorCount = floorGroups.length;
-  const pageStartFloor = displayedFloorCount === 0 ? 0 : (currentPage - 1) * FLOORS_PER_PAGE + 1;
-  const pageEndFloor = Math.min(currentPage * FLOORS_PER_PAGE, displayedFloorCount);
+  const displayedItemCount = orderedData.length;
+  const pageStartRow = displayedItemCount === 0 ? 0 : (currentPage - 1) * UNITS_PER_PAGE + 1;
+  const pageEndRow = Math.min(currentPage * UNITS_PER_PAGE, displayedItemCount);
+  const tableSelection = useTableSelection({
+    rows: paginatedData,
+    getRowId: (unit) => unit.id,
+    disabled: bulkDeleting,
+    pruneOnRowsChange: true,
+  });
 
   const closeModal = () => {
     if (saving) return;
@@ -373,14 +421,90 @@ const Units = () => {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (tableSelection.selectedCount === 0) return;
+
+    const confirmDelete = window.confirm(
+      `Delete ${tableSelection.selectedCount} selected unit(s)?`
+    );
+    if (!confirmDelete) return;
+
+    setBulkDeleting(true);
+    setStatusMessage("");
+    try {
+      const selectedIds = tableSelection.selectedIds.map(String);
+      const results = await Promise.all(
+        selectedIds.map(async (id) => {
+          const response = await fetch(`${API_URL}/unit/item/${id}`, { method: "DELETE" });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(result?.message || result || `Unable to delete unit ${id}`);
+          }
+          return { id, ok: true };
+        }).map((request) =>
+          request.catch((error) => ({
+            id: null,
+            ok: false,
+            message: error.message || "Delete failed",
+          }))
+        )
+      );
+      const deletedIds = results
+        .filter((result) => result.ok)
+        .map((result) => result.id);
+      const failedDeletes = results.filter((result) => !result.ok);
+
+      if (deletedIds.length > 0) {
+        setData((current) => current.filter((unit) => !deletedIds.includes(String(unit.id))));
+        tableSelection.removeSelectedIds(deletedIds);
+      }
+      setStatusMessage(
+        failedDeletes.length
+          ? `${deletedIds.length} unit(s) deleted. ${failedDeletes.length} unit(s) could not be deleted: ${failedDeletes[0].message}`
+          : "Selected units deleted successfully."
+      );
+      fetchUnits();
+    } catch (err) {
+      console.error(err);
+      setStatusMessage(err.message || "Failed to delete selected units.");
+      fetchUnits();
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   return (
     <MasterLayout>
       <div className="floor-dashboard">
 
         <div className="floor-card">
-          <div className="floor-header d-flex justify-content-between align-items-center">
-            <div className="item-count">
-              <span>{displayedItemCount} {displayedItemCount === 1 ? "item" : "items"}.</span>
+          <div className="floor-header d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div className="d-flex align-items-center gap-3 flex-wrap">
+              <div className="item-count m-0">
+                <span>{displayedItemCount} {displayedItemCount === 1 ? "item" : "items"}.</span>
+              </div>
+              <div className="inv-unit-counters-bar mb-0" style={{ padding: 0, background: "transparent", border: "none" }}>
+                {[
+                  ["All", "All", statusCounts["All"]],
+                  ["Available", "Available", statusCounts["Available"]],
+                  ["Booked", "Booked", statusCounts["Booked"]],
+                  ["Blocked", "Blocked", statusCounts["Blocked"]],
+                  ["Refuge", "Refuge", statusCounts["Refuge"]],
+                  ["Investor", "Investor", statusCounts["Investor"]],
+                  ["Rehab", "Rehab", statusCounts["Rehab"]],
+                ].map(([key, label, count]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    className={`inv-counter-pill ${key.toLowerCase()} ${statusFilter === key ? "active" : ""}`}
+                    onClick={() => setStatusFilter(key)}
+                    style={{ margin: 0, marginRight: "8px" }}
+                  >
+                    <span className="inv-counter-badge">{count || 0}</span>
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="action-wrapper">
@@ -391,6 +515,22 @@ const Units = () => {
           </div>
 
           <div className="table-responsive">
+            {statusMessage && (
+              <div className="booking-status-message">{statusMessage}</div>
+            )}
+            {tableSelection.selectedCount > 0 && (
+              <BulkActionToolbar
+                count={tableSelection.selectedCount}
+                entityLabel="units"
+                isDeleting={bulkDeleting}
+                onClear={() => {
+                  tableSelection.clearSelection();
+                  setStatusMessage("");
+                }}
+                onDelete={handleBulkDelete}
+                deleteLabel="Delete selected"
+              />
+            )}
             <label className="crm-table-search">
               <span aria-hidden="true">🔍</span>
               <input
@@ -434,6 +574,15 @@ const Units = () => {
             <table className="floor-table">
               <thead>
                 <tr>
+                  <th style={{ width: "48px", textAlign: "center", padding: "14px 12px" }}>
+                    <TableSelectionCheckbox
+                      checked={tableSelection.allVisibleSelected}
+                      indeterminate={tableSelection.isHeaderIndeterminate}
+                      label="Select visible units"
+                      onChange={tableSelection.toggleVisible}
+                      disabled={bulkDeleting || paginatedData.length === 0}
+                    />
+                  </th>
                   {[
                     "SR. NO.",
                     "UNIT NUMBER",
@@ -460,20 +609,28 @@ const Units = () => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="16" className="floor-empty">Loading units...</td>
+                    <td colSpan="17" className="floor-empty">Loading units...</td>
                   </tr>
                 ) : error ? (
                   <tr>
-                    <td colSpan="16" className="floor-empty text-danger">{error}</td>
+                    <td colSpan="17" className="floor-empty text-danger">{error}</td>
                   </tr>
                 ) : filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan="16" className="floor-empty">{searchQuery ? "No matching units found." : "No units found."}</td>
+                    <td colSpan="17" className="floor-empty">{searchQuery ? "No matching units found." : "No units found."}</td>
                   </tr>
                 ) : (
-                  paginatedData.map((item) => (
-                    <tr key={item.id}>
-                      <td className="fw-bold">{orderedData.findIndex((unit) => unit.id === item.id) + 1}</td>
+                  paginatedData.map((item, index) => (
+                    <tr key={item.id} className={tableSelection.isSelected(item.id) ? "selected" : ""}>
+                      <td style={{ textAlign: "center", padding: "14px 12px" }}>
+                        <TableSelectionCheckbox
+                          checked={tableSelection.isSelected(item.id)}
+                          label={`Select unit ${item.unitNumber}`}
+                          onChange={() => tableSelection.toggleRow(item.id)}
+                          disabled={bulkDeleting}
+                        />
+                      </td>
+                      <td className="fw-bold">{(currentPage - 1) * UNITS_PER_PAGE + index + 1}</td>
                       <td className="fw-bold">{item.unitNumber}</td>
                       <td>{item.floor}</td>
                       <td>{item.unitIndex}</td>
@@ -511,14 +668,13 @@ const Units = () => {
                 )}
               </tbody>
             </table>
-            {floorGroups.length > FLOORS_PER_PAGE && (
+            {orderedData.length > UNITS_PER_PAGE && (
               <TablePagination
                 currentPage={currentPage}
                 totalPages={totalPages}
-                pageStartFloor={pageStartFloor}
-                pageEndFloor={pageEndFloor}
-                floorCount={displayedFloorCount}
-                unitCount={displayedItemCount}
+                pageStartRow={pageStartRow}
+                pageEndRow={pageEndRow}
+                totalCount={displayedItemCount}
                 onPrevious={() => setCurrentPage((page) => Math.max(1, page - 1))}
                 onNext={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
               />
@@ -551,11 +707,10 @@ const Detail = ({ label, value }) => (
   </div>
 );
 
-const TablePagination = ({ currentPage, totalPages, pageStartFloor, pageEndFloor, floorCount, unitCount, onPrevious, onNext }) => (
+const TablePagination = ({ currentPage, totalPages, pageStartRow, pageEndRow, totalCount, onPrevious, onNext }) => (
   <div className="table-pagination">
     <span>
-      Showing floors <strong>{pageStartFloor}-{pageEndFloor}</strong> of <strong>{floorCount}</strong>
-      {" "}(<strong>{unitCount}</strong> units)
+      Showing <strong>{pageStartRow}-{pageEndRow}</strong> of <strong>{totalCount}</strong> units
     </span>
     <div className="table-pagination-actions">
       <button type="button" onClick={onPrevious} disabled={currentPage === 1}>

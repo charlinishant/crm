@@ -97,28 +97,38 @@ const CallHistory = ({ leadId = "", agentId = "", scope = "lead", refreshKey = 0
             <span>Disposition</span>
             <span>Recording</span>
           </div>
-          {calls.map((call) => (
-            <div className="call-history-row" key={call.id}>
-              <span>{formatCallDate(call.createdAt || call.startedAt)}</span>
-              <span>{call.phone}</span>
-              <span>{getAgentName(call.agent)}</span>
-              <span>{call.duration ? `${call.duration} sec` : "-"}</span>
-              <span>{call.status || "-"}</span>
-              <span>{call.disposition || "-"}</span>
-              <span>
-                {getRecordingUrl(call) ? (
-                  <span className="call-history-recording">
-                    <audio controls src={getRecordingUrl(call)}>
-                      <a href={getRecordingUrl(call)}>Recording</a>
-                    </audio>
-                    <a href={getRecordingUrl(call)} target="_blank" rel="noreferrer">Open</a>
-                  </span>
-                ) : (
-                  getRecordingLabel(call)
-                )}
-              </span>
-            </div>
-          ))}
+          {calls.map((call) => {
+            const hasRecording = Boolean(call.recordingUrl || call.recording);
+            const userRole = String(
+              (JSON.parse(localStorage.getItem("authUser") || "null"))?.role || ""
+            ).toUpperCase();
+            const isAdmin = ["ADMIN", "SUPER_ADMIN"].includes(userRole);
+
+            return (
+              <div className="call-history-row" key={call.id}>
+                <span>{formatCallDate(call.createdAt || call.startedAt)}</span>
+                <span>{call.phone}</span>
+                <span>{getAgentName(call.agent)}</span>
+                <span>{call.duration ? `${call.duration} sec` : "-"}</span>
+                <span>{call.status || "-"}</span>
+                <span>{call.disposition || "-"}</span>
+                <span>
+                  {isAdmin && getRecordingUrl(call) ? (
+                    <span className="call-history-recording">
+                      <audio controls src={getRecordingUrl(call)}>
+                        <a href={getRecordingUrl(call)}>Recording</a>
+                      </audio>
+                      <a href={getRecordingUrl(call)} target="_blank" rel="noreferrer">Open</a>
+                    </span>
+                  ) : hasRecording ? (
+                    <span className="call-log-recording-saved">Saved in CRM</span>
+                  ) : (
+                    getRecordingLabel(call)
+                  )}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

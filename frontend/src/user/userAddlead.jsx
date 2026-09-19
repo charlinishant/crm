@@ -73,7 +73,7 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
       timeZone:"",
       tags:"",
       interestedProjects:"",
-      teamId:"",
+      teamId: savedUserId || "",
       channelPartner:"",
       conductSiteVisit:"",
       conductSiteDate:null,
@@ -87,6 +87,7 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
       }],
       companyName:"",
       type:"MEETINGROOMS",
+      source:"",
       carpetArea:"",
       seats:0,
       tenure:0.0,
@@ -117,7 +118,7 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
       possessionMin:"",
       possessionMax:"",
       area:"",
-      fundingSouurce:"",
+      fundingSource:"",
       propertyType:"",
       configration:"",
       budget:"",
@@ -314,7 +315,9 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
 
     const payload = {
       ...formData,
-      teamId: savedUserId || formData.teamId,
+      teamId: Number(savedUserId || formData.teamId) || undefined,
+      fundingSource: formData.fundingSource || formData.source || "Direct Entry",
+      source: formData.source || formData.fundingSource || "Direct Entry",
       budgetMin: Number(formData.budgetMin) || 0,
       budgetMax: Number(formData.budgetMax) || 0,
       seats: Number(formData.seats) || 0,
@@ -534,21 +537,21 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                   </select>
                 </div>
 
-                {/* TEAMS */}
+                {/* ASSIGNED TO / SALES EXECUTIVE */}
                 <div className="lead-group lead-full">
-                  <label>TEAMS</label>
+                  <label>ASSIGNED TO (SALES EXECUTIVE)</label>
                   <select
                     name="teamId"
-                    value={savedUserId || formData.teamId}
+                    value={formData.teamId || savedUserId}
                     onChange={handleChange}
                     disabled={Boolean(savedUserId) || loadingUsers}
                   >
                     <option value="">
-                      {loadingUsers ? "Loading users..." : "Select user"}
+                      {loadingUsers ? "Loading users..." : "Select sales executive"}
                     </option>
-                    {savedUserId && (
+                    {savedUserId && !users.some((u) => String(u.id) === String(savedUserId)) && (
                       <option value={savedUserId}>
-                        {getUserName(savedUser)}{savedUser?.role ? ` (${savedUser.role})` : ""}
+                        {getUserName(savedUser)}{savedUser?.role ? ` (${savedUser.role})` : " (Sales)"}
                       </option>
                     )}
                     {users.map((user) => (
@@ -589,6 +592,11 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                 </div>
 
                 {/* SITE VISIT */}
+                {/* SOURCE */}
+                <div className="lead-group lead-full">
+                  <label>SOURCE</label>
+                  <input type="text" name="source" placeholder="Source" value={formData.source} onChange={handleChange} />
+                </div>
                 <div className="lead-group lead-full">
                   <label>SCHEDULE AND CONDUCT SITE VISIT FOR PROJECT</label>
                   <input type="text" placeholder="Select Project / Schedule Visit" />
@@ -910,10 +918,81 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
       <input type="text" name="area" placeholder="Area" onChange={handleChange} />
     </div>
 
-    {/* FUNDING SOURCE */}
-    <div className="lead-group lead-full">
-      <label>FUNDING SOURCE</label>
-      <input type="text" name="fundingSource" placeholder="Funding Source" onChange={handleChange} />
+    {/* LEAD SOURCE & CHANNEL PARTNER ATTRIBUTION */}
+    <div className="lead-group lead-full p-3 rounded" style={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" }}>
+      <label className="fw-bold mb-2" style={{ color: "#1e293b", fontSize: "14px" }}>
+        LEAD SOURCE ATTRIBUTION <span className="badge bg-warning text-dark ms-2" style={{ fontSize: "11px" }}>🔒 Locks permanently on save</span>
+      </label>
+      <div className="row g-2">
+        <div className="col-md-4">
+          <select
+            className="form-select"
+            name="fundingSource"
+            value={formData.fundingSource || ""}
+            onChange={(e) => {
+              const val = e.target.value;
+              setFormData((prev) => ({
+                ...prev,
+                fundingSource: val,
+                ...(val !== "Channel Partner" ? { channelPartner: "", channelPartnerReraId: "" } : {}),
+              }));
+            }}
+          >
+            <option value="">Select Source</option>
+            <option value="Channel Partner">Channel Partner</option>
+            <option value="Walk-in">Walk-in</option>
+            <option value="Website">Website</option>
+            <option value="Portal">Portal</option>
+            <option value="Reference">Reference</option>
+            <option value="Direct">Direct</option>
+          </select>
+        </div>
+
+        {formData.fundingSource === "Channel Partner" && (
+          <>
+            <div className="col-md-4">
+              <select
+                className="form-select"
+                value={formData.channelPartner || ""}
+                onChange={(e) => {
+                  const cpName = e.target.value;
+                  const cp = channelPartners.find(
+                    (u) =>
+                      [u.firstName, u.lastName].filter(Boolean).join(" ") === cpName ||
+                      u.username === cpName ||
+                      u.email === cpName
+                  );
+                  setFormData((prev) => ({
+                    ...prev,
+                    channelPartner: cpName,
+                    channelPartnerReraId: cp?.reraNumber || "",
+                  }));
+                }}
+              >
+                <option value="">Select Channel Partner</option>
+                {channelPartners.map((cp) => {
+                  const name = getUserName(cp);
+                  return (
+                    <option key={cp.id} value={name}>
+                      {name} {cp.reraNumber ? `(${cp.reraNumber})` : ""}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+            <div className="col-md-4">
+              <input
+                type="text"
+                className="form-control bg-light"
+                placeholder="CP RERA ID (Auto-filled)"
+                value={formData.channelPartnerReraId ? `RERA: ${formData.channelPartnerReraId}` : ""}
+                readOnly
+                style={{ cursor: "not-allowed", fontWeight: "600", color: "#334155" }}
+              />
+            </div>
+          </>
+        )}
+      </div>
     </div>
 
     {/* TRANSACTION TYPE */}

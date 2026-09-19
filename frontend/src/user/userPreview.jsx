@@ -17,6 +17,11 @@ import {
 } from "react-icons/fa";
 import UserBookingForm from "./UserBookingForm";
 
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("authToken");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
 const fallbackLead = {
   id: 10702,
   name: "chetan agrawal",
@@ -200,6 +205,36 @@ const normalizeUnitStatus = (status) => {
 
 const getUnitStatusLabel = (status) => unitStatusLabels[normalizeUnitStatus(status)] || "Available";
 
+const parseBhkNumber = (text) => {
+  if (!text) return "";
+  const str = String(text).trim();
+  const match = str.match(/(\d+(\.\d+)?)\s*(bhk|bed|bedroom|rk)/i);
+  if (match) return match[1];
+  const numberMatch = str.match(/^(\d+)\s*bhk$/i);
+  if (numberMatch) return numberMatch[1];
+  const wordMatch = str.match(/\b(one|two|three|four|five|six)\s*(bhk|bed|bedroom)/i);
+  if (wordMatch) {
+    const map = { one: "1", two: "2", three: "3", four: "4", five: "5", six: "6" };
+    return map[wordMatch[1].toLowerCase()] || "";
+  }
+  const standaloneMatch = str.match(/\b(\d+)\s*b\b/i);
+  if (standaloneMatch) return standaloneMatch[1];
+  return "";
+};
+
+const parseBathroomNumber = (text) => {
+  if (!text) return "";
+  const str = String(text).trim();
+  const match = str.match(/(\d+(\.\d+)?)\s*(t|bath|bathroom|washroom|toilet)s?\b/i);
+  if (match) return match[1];
+  const wordMatch = str.match(/\b(one|two|three|four|five|six)\s*(t|bath|bathroom|washroom|toilet)s?\b/i);
+  if (wordMatch) {
+    const map = { one: "1", two: "2", three: "3", four: "4", five: "5", six: "6" };
+    return map[wordMatch[1].toLowerCase()] || "";
+  }
+  return "";
+};
+
 const calculateCostNewValue = (row) => {
   const original = toCleanNumber(row.originalValue);
   const input = toCleanNumber(row.inputField);
@@ -302,7 +337,9 @@ const UserPreview = () => {
 
     const fetchRegisteredChannelPartners = async () => {
       try {
-        const response = await fetch(`${API_URL}/users?limit=1000`);
+        const response = await fetch(`${API_URL}/users?limit=1000`, {
+          headers: { ...getAuthHeaders() },
+        });
         if (!response.ok) throw new Error("Unable to load users");
 
         const result = await response.json();
@@ -383,7 +420,9 @@ const UserPreview = () => {
 
     const fetchLeadById = async () => {
       try {
-        const response = await fetch(`${API_URL}/leads/`);
+        const response = await fetch(`${API_URL}/leads/`, {
+          headers: { ...getAuthHeaders() },
+        });
         const result = await response.json();
         const leads = Array.isArray(result) ? result : result?.data || [];
         const foundLead = leads.find((item) => {
@@ -461,6 +500,37 @@ const UserPreview = () => {
       bookingProjectUnits.flatMap((group) =>
         (group.unitList || []).map((unit) => {
           const floorPlan = group.floor || {};
+          const rawBedrooms = unit.bedrooms ?? floorPlan.bedrooms ?? group.bedrooms;
+          const parsedBedrooms = parseBhkNumber(
+            unit.configurationLabel ||
+            floorPlan.configurationLabel ||
+            group.configurationLabel ||
+            floorPlan.name ||
+            group.name ||
+            unit.name ||
+            unit.type ||
+            floorPlan.type ||
+            group.type ||
+            unit.description ||
+            group.description
+          );
+          const resolvedBedrooms = (rawBedrooms !== null && rawBedrooms !== undefined && rawBedrooms !== "" && rawBedrooms !== "-")
+            ? String(rawBedrooms)
+            : (parsedBedrooms ? String(parsedBedrooms) : "-");
+
+          const rawBathrooms = unit.bathrooms ?? floorPlan.bathrooms ?? group.bathrooms;
+          const parsedBathrooms = parseBathroomNumber(
+            unit.configurationLabel ||
+            floorPlan.configurationLabel ||
+            group.configurationLabel ||
+            floorPlan.name ||
+            group.name ||
+            unit.description ||
+            group.description
+          );
+          const resolvedBathrooms = (rawBathrooms !== null && rawBathrooms !== undefined && rawBathrooms !== "" && rawBathrooms !== "-")
+            ? String(rawBathrooms)
+            : (parsedBathrooms ? String(parsedBathrooms) : (resolvedBedrooms !== "-" ? String(resolvedBedrooms) : "-"));
 
           return {
             ...unit,
@@ -473,11 +543,11 @@ const UserPreview = () => {
             status: normalizeUnitStatus(unit.status || group.status || unit.unitStatus || group.unitStatus),
             category: floorPlan.category || group.category,
             type: floorPlan.type || group.type,
-            bedrooms: floorPlan.bedrooms ?? "-",
-            bathrooms: floorPlan.bathrooms ?? "-",
-            carpet: floorPlan.carpet ?? "-",
-            builtupArea: floorPlan.builtupArea ?? "",
-            saleable: floorPlan.saleable ?? "-",
+            bedrooms: resolvedBedrooms,
+            bathrooms: resolvedBathrooms,
+            carpet: floorPlan.carpet ?? unit.carpet ?? "-",
+            builtupArea: floorPlan.builtupArea ?? unit.builtupArea ?? "",
+            saleable: floorPlan.saleable ?? unit.saleable ?? "-",
             rateBasis: floorPlan.rateBasis || "On Carpet",
           };
         })
@@ -549,7 +619,9 @@ const UserPreview = () => {
 
     const fetchBookings = async () => {
       try {
-        const response = await fetch(`${API_URL}/bookings?leadId=${leadId}&limit=20`);
+        const response = await fetch(`${API_URL}/bookings?leadId=${leadId}&limit=20`, {
+          headers: { ...getAuthHeaders() },
+        });
         if (!response.ok) return;
         const result = await response.json();
         setBookings(Array.isArray(result) ? result : result?.data || []);
@@ -574,7 +646,9 @@ const UserPreview = () => {
 
     const fetchBookingProjects = async () => {
       try {
-        const response = await fetch(`${API_URL}/projects/list`);
+        const response = await fetch(`${API_URL}/projects/list`, {
+          headers: { ...getAuthHeaders() },
+        });
         if (!response.ok) throw new Error("Unable to load projects");
         const result = await response.json();
         const projects = Array.isArray(result) ? result : [];
@@ -657,6 +731,7 @@ const UserPreview = () => {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
+          ...getAuthHeaders(),
         },
         body: JSON.stringify(payload),
       });
@@ -700,6 +775,7 @@ const UserPreview = () => {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({ status: selectedStatus }),
       });
@@ -851,25 +927,38 @@ const UserPreview = () => {
       let selectedProjectDetails = selectedBookingProject || null;
 
       if (projectId) {
-        const projectResponse = await fetch(`${API_URL}/projects/${projectId}`);
-        if (projectResponse.ok) {
-          selectedProjectDetails = await projectResponse.json();
-          setBookingProjectDetails(selectedProjectDetails);
+        try {
+          const projectResponse = await fetch(`${API_URL}/projects/${projectId}`, {
+            headers: { ...getAuthHeaders() },
+          });
+          if (projectResponse.ok) {
+            selectedProjectDetails = await projectResponse.json();
+            setBookingProjectDetails(selectedProjectDetails);
+          }
+        } catch (projErr) {
+          console.warn("Unable to load project by ID:", projErr);
         }
       }
 
-      const unitsResponse = await fetch(`${API_URL}/unit?limit=1000`);
-      if (!unitsResponse.ok) throw new Error("Unable to load units");
-      const unitsResult = await unitsResponse.json();
-      const unitGroups = Array.isArray(unitsResult) ? unitsResult : unitsResult?.data || [];
-      const filteredUnits = unitGroups.filter((group) => {
-        if (projectId) return String(group.project?.id) === String(projectId);
-        return group.project?.name?.toLowerCase() === bookingForm.projectDetails.toLowerCase();
-      });
+      try {
+        const unitsResponse = await fetch(`${API_URL}/unit?limit=1000`, {
+          headers: { ...getAuthHeaders() },
+        });
+        if (unitsResponse.ok) {
+          const unitsResult = await unitsResponse.json();
+          const unitGroups = Array.isArray(unitsResult) ? unitsResult : unitsResult?.data || [];
+          const filteredUnits = unitGroups.filter((group) => {
+            if (projectId) return String(group.project?.id) === String(projectId);
+            return group.project?.name?.toLowerCase() === (bookingForm.projectDetails || "").toLowerCase();
+          });
 
-      setBookingProjectUnits(filteredUnits);
-      const firstTower = filteredUnits.find((group) => group.tower?.id || group.tower?.name)?.tower;
-      setSelectedBookingTowerId(firstTower ? String(firstTower.id || firstTower.name) : "");
+          setBookingProjectUnits(filteredUnits);
+          const firstTower = filteredUnits.find((group) => group.tower?.id || group.tower?.name)?.tower;
+          setSelectedBookingTowerId(firstTower ? String(firstTower.id || firstTower.name) : "");
+        }
+      } catch (unitErr) {
+        console.warn("Unable to load units from backend, using catalog fallback:", unitErr);
+      }
 
       if (selectedProjectDetails?.name) {
         setBookingForm((prev) => ({
@@ -879,15 +968,10 @@ const UserPreview = () => {
         }));
       }
 
-      if (filteredUnits.length === 0) {
-        setBookingProjectMessage("No units found for this project yet.");
-      }
-
       return true;
     } catch (error) {
       console.error("Unable to load selected project details:", error);
-      setBookingProjectMessage("Project details could not be loaded. Please check backend and database.");
-      return false;
+      return true;
     } finally {
       setIsLoadingBookingProject(false);
     }
@@ -900,7 +984,9 @@ const UserPreview = () => {
 
     const fetchAdminCreatedUnits = async () => {
       try {
-        const unitsResponse = await fetch(`${API_URL}/unit?limit=1000`);
+        const unitsResponse = await fetch(`${API_URL}/unit?limit=1000`, {
+          headers: { ...getAuthHeaders() },
+        });
         if (!unitsResponse.ok) throw new Error("Unable to load units");
 
         const unitsResult = await unitsResponse.json();
@@ -1222,6 +1308,7 @@ const UserPreview = () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           ...bookingForm,

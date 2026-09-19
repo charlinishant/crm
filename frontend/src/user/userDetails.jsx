@@ -5,6 +5,7 @@ import {
   FaCalendarAlt,
   FaCheckCircle,
   FaClock,
+  FaCommentAlt,
   FaExchangeAlt,
   FaEdit,
   FaEllipsisV,
@@ -23,7 +24,6 @@ import {
   FaWhatsapp,
 } from "react-icons/fa";
 import {
-  createFollowup,
   getLeadFollowupContext,
   markFollowupDone,
   rescheduleFollowup,
@@ -236,6 +236,31 @@ const formatArea = (value) => {
   return formatted === "-" ? "-" : `${formatted} sq_ft`;
 };
 
+// Helper function to filter out metadata from tags
+const cleanTagsForDisplay = (tags) => {
+  if (!tags || typeof tags !== 'string') return tags;
+
+  // Split the tags by the separator used in buildLockedSourceTags
+  const parts = tags.split(' | ');
+
+  // Filter out metadata parts
+  const filteredParts = parts.filter(part => {
+    // Remove source metadata
+    if (part.startsWith('source:')) return false;
+    // Remove sourceLocked metadata
+    if (part === 'sourceLocked:true') return false;
+    // Remove taggedAt metadata
+    if (part.startsWith('taggedAt:')) return false;
+    // Remove taggedBy metadata
+    if (part.startsWith('taggedBy:')) return false;
+    // Keep everything else
+    return true;
+  });
+
+  // Join the remaining parts back together
+  return filteredParts.length > 0 ? filteredParts.join(' | ') : '';
+};
+
 const formatCompactMoney = (value) => {
   const amount = Number(String(value ?? "").replace(/[^\d.-]/g, ""));
   if (!Number.isFinite(amount) || amount <= 0) return "-";
@@ -249,6 +274,52 @@ const formatCompactMoney = (value) => {
 };
 
 const normalizeText = (value) => String(value || "").toLowerCase();
+
+const isActivityForTab = (activity, tab) => {
+  if (!activity) return false;
+  if (tab === "Activity") return true;
+
+  const type = normalizeText(activity.type || "");
+  const title = normalizeText(activity.title || "");
+  const desc = normalizeText(activity.description || "");
+
+  switch (tab) {
+    case "Notes":
+      return activity.type === "Notes" || type.includes("note") || title.includes("note");
+    case "Calls":
+      return (
+        activity.type === "Calls" ||
+        type.includes("call") ||
+        title.includes("call") ||
+        type.includes("mcube") ||
+        desc.includes("call")
+      );
+    case "Site Visits":
+      return activity.type === "Site Visits" || type.includes("visit") || title.includes("visit");
+    case "Follow-ups":
+      return activity.type === "Follow-ups" || type.includes("follow") || title.includes("follow");
+    case "Emails":
+      return activity.type === "Emails" || type.includes("email") || title.includes("email") || type.includes("mail");
+    case "SMS":
+      return activity.type === "SMS" || type.includes("sms") || title.includes("sms");
+    case "WhatsApp":
+      return activity.type === "WhatsApp" || type.includes("whatsapp") || title.includes("whatsapp");
+    case "History":
+      return (
+        activity.type === "History" ||
+        type.includes("status") ||
+        title.includes("status") ||
+        type.includes("created") ||
+        title.includes("created") ||
+        type.includes("booking") ||
+        title.includes("booking") ||
+        type.includes("stage") ||
+        type.includes("assign")
+      );
+    default:
+      return activity.type === tab;
+  }
+};
 
 const getCrmStatusFromLead = (lead) => {
   const rawStatus = String(valueOf(lead, ["crmStatus", "status", "lead_status", "stage"], "New"));
@@ -322,6 +393,7 @@ const publishSalesActivityNotification = ({
   meta,
   type,
   createdAt = new Date().toISOString(),
+  syncToServer = true,
 }) => {
   if (!leadId || !salesRoles.has(getCurrentUserRole())) return;
 
@@ -356,7 +428,7 @@ const publishSalesActivityNotification = ({
 
   saveActivityNotifications(notifications);
 
-  if (token) {
+  if (token && syncToServer) {
     fetch(`${API_URL}/lead-activities`, {
       method: "POST",
       headers: {
@@ -392,8 +464,23 @@ const UserDetails = ({
     [location.search]
   );
 
-  const [lead, setLead] = useState(location.state?.lead || getStoredLead() || fallbackLead);
+  const initialLead = useMemo(() => {
+    if (location.state?.lead && (!leadIdFromUrl || String(getLeadId(location.state.lead)) === String(leadIdFromUrl))) {
+      return location.state.lead;
+    }
+    const stored = getStoredLead();
+    if (stored && (!leadIdFromUrl || String(getLeadId(stored)) === String(leadIdFromUrl))) {
+      return stored;
+    }
+    if (leadIdFromUrl) {
+      return { id: Number(leadIdFromUrl) || leadIdFromUrl };
+    }
+    return fallbackLead;
+  }, [leadIdFromUrl, location.state]);
+
+  const [lead, setLead] = useState(initialLead);
   const [notes, setNotes] = useState([]);
+  const [backendActivities, setBackendActivities] = useState([]);
   const [calls, setCalls] = useState([]);
   const [visits, setVisits] = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -406,10 +493,27 @@ const UserDetails = ({
   const [isSavingStatus, setIsSavingStatus] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [followups, setFollowups] = useState([]);
-  const [followupDraft, setFollowupDraft] = useState("");
-  const [followupDate, setFollowupDate] = useState("");
+  const [emails, setEmails] = useState([]);
+  const [whatsappMessages, setWhatsappMessages] = useState([]);
+  const [activityPage, setActivityPage] = useState(1);
+  const ACTIVITY_PAGE_SIZE = 10;
 
-  const leadId = getLeadId(lead);
+  const leadId = leadIdFromUrl || getLeadId(lead);
+
+  useEffect(() => {
+    if (leadIdFromUrl && String(getLeadId(lead)) !== String(leadIdFromUrl)) {
+      setLead({ id: Number(leadIdFromUrl) || leadIdFromUrl });
+      setNotes([]);
+      setBackendActivities([]);
+      setCalls([]);
+      setVisits([]);
+      setBookings([]);
+      setFollowups([]);
+      setEmails([]);
+      setWhatsappMessages([]);
+      setSelectedStatus("New");
+    }
+  }, [leadIdFromUrl]);
   const leadName = getLeadName(lead);
   const primaryPhone =
     getContactValue(lead?.phones, ["phone", "number", "value"]) ||
@@ -436,6 +540,7 @@ const UserDetails = ({
   const detailsBackPath = isAdminContext ? "/leads" : "/user/sales";
   const statusOptions = crmStatuses;
   const stageStatusValue = statusOptions.includes(selectedStatus) ? selectedStatus : "";
+  const authHeaders = useMemo(() => token ? { Authorization: `Bearer ${token}` } : {}, [token]);
 
   const openSalesCallPage = () => {
     if (onOpenCallLead) {
@@ -459,6 +564,19 @@ const UserDetails = ({
     });
   };
 
+  const openSalesFollowupPage = () => {
+    if (isAdminContext) {
+      navigate(`/follow-up${leadId ? `?leadId=${leadId}` : ""}`, {
+        state: { lead },
+      });
+      return;
+    }
+
+    navigate(`/user/sales/followups${leadId ? `?leadId=${leadId}` : ""}`, {
+      state: { lead },
+    });
+  };
+
   const openSalesSiteVisitPage = (status = "") => {
     if (onScheduleVisitLead) {
       onScheduleVisitLead(lead, status);
@@ -478,7 +596,9 @@ const UserDetails = ({
     if (!nextLeadId) return;
 
     try {
-      const response = await fetch(`${API_URL}/leads/${nextLeadId}`);
+      const response = await fetch(`${API_URL}/leads/${nextLeadId}`, {
+        headers: authHeaders,
+      });
       if (!response.ok) return;
       const result = await response.json();
       setLead(result);
@@ -490,34 +610,71 @@ const UserDetails = ({
   }, [leadId, leadIdFromUrl]);
 
   const fetchNotes = useCallback(async () => {
-    if (!leadId) return;
+    if (!leadId) {
+      setNotes([]);
+      return;
+    }
     try {
-      const response = await fetch(`${API_URL}/lead-notes/${leadId}`);
+      const response = await fetch(`${API_URL}/lead-notes/${leadId}`, {
+        headers: authHeaders,
+      });
       if (!response.ok) return;
       const result = await response.json();
-      const rows = Array.isArray(result) ? result : [];
+      const rows = (Array.isArray(result) ? result : []).filter(
+        (note) => !note.leadId || String(note.leadId) === String(leadId)
+      );
       setNotes(rows);
     } catch (error) {
       console.error("Unable to load notes:", error);
     }
-  }, [leadId]);
+  }, [authHeaders, leadId]);
+
+  const fetchLeadActivities = useCallback(async () => {
+    if (!leadId || !token) {
+      setBackendActivities([]);
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/lead-activities?leadId=${encodeURIComponent(leadId)}&limit=100`, {
+        headers: authHeaders,
+      });
+      if (!response.ok) return;
+      const result = await response.json();
+      const rows = (Array.isArray(result) ? result : []).filter(
+        (activity) => String(activity.leadId) === String(leadId)
+      );
+      setBackendActivities(rows);
+    } catch (error) {
+      console.error("Unable to load lead activities:", error);
+    }
+  }, [authHeaders, leadId, token]);
 
   const fetchCalls = useCallback(async () => {
-    if (!leadId || !token) return;
+    if (!leadId || !token) {
+      setCalls([]);
+      return;
+    }
     try {
       const response = await fetch(`${API_URL}/calls/lead/${leadId}?limit=100`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!response.ok) return;
       const result = await response.json();
-      setCalls(Array.isArray(result?.data) ? result.data : []);
+      const rows = (Array.isArray(result?.data) ? result.data : []).filter(
+        (call) => !call.leadId || String(call.leadId) === String(leadId)
+      );
+      setCalls(rows);
     } catch (error) {
       console.error("Unable to load calls:", error);
     }
   }, [leadId, token]);
 
   const fetchVisits = useCallback(async () => {
-    if (!leadId) return;
+    if (!leadId) {
+      setVisits([]);
+      return;
+    }
     try {
       const response = await fetch(`${API_URL}/schedule-visits`);
       if (!response.ok) return;
@@ -540,26 +697,70 @@ const UserDetails = ({
       const response = await fetch(`${API_URL}/bookings?leadId=${leadId}&limit=100`);
       if (!response.ok) return;
       const result = await response.json();
-      setBookings(Array.isArray(result) ? result : result?.data || []);
+      const rows = (Array.isArray(result) ? result : result?.data || []).filter(
+        (booking) => !booking.leadId || String(booking.leadId) === String(leadId)
+      );
+      setBookings(rows);
     } catch (error) {
       console.error("Unable to load bookings:", error);
     }
   }, [leadId]);
 
   const fetchFollowups = useCallback(async () => {
-    if (!leadId || isAdminContext) {
+    if (!leadId) {
       setFollowups([]);
       return;
     }
 
     try {
       const result = await getLeadFollowupContext(leadId);
-      setFollowups((result?.followUps || []).map(normalizeApiFollowup));
+      const rows = (result?.followUps || [])
+        .filter((f) => (!f.leadId && !f.lead_id ? true : String(f.leadId || f.lead_id) === String(leadId)))
+        .map(normalizeApiFollowup);
+      setFollowups(rows);
     } catch (error) {
       console.error("Unable to load follow-ups:", error);
       setFollowups([]);
     }
-  }, [isAdminContext, leadId]);
+  }, [leadId]);
+
+  const fetchEmails = useCallback(async () => {
+    if (!leadId) {
+      setEmails([]);
+      return;
+    }
+    try {
+      const response = await fetch(`${API_URL}/api/email/logs`, { headers: authHeaders });
+      if (!response.ok) return;
+      const result = await response.json();
+      const logs = (Array.isArray(result?.data) ? result.data : []).filter(
+        (item) => String(item.leadId) === String(leadId)
+      );
+      setEmails(logs);
+    } catch (error) {
+      console.error("Unable to load emails:", error);
+    }
+  }, [authHeaders, leadId]);
+
+  const fetchWhatsapp = useCallback(async () => {
+    if (!leadId || !token) {
+      setWhatsappMessages([]);
+      return;
+    }
+    try {
+      const response = await fetch(`${API_URL}/api/whatsapp/lead/${leadId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) return;
+      const result = await response.json();
+      const rows = (Array.isArray(result?.data) ? result.data : Array.isArray(result) ? result : []).filter(
+        (wa) => !wa.leadId || String(wa.leadId) === String(leadId)
+      );
+      setWhatsappMessages(rows);
+    } catch (error) {
+      console.error("Unable to load WhatsApp messages:", error);
+    }
+  }, [leadId, token]);
 
   useEffect(() => {
     fetchLead();
@@ -567,11 +768,14 @@ const UserDetails = ({
 
   useEffect(() => {
     fetchNotes();
+    fetchLeadActivities();
     fetchCalls();
     fetchVisits();
     fetchBookings();
     fetchFollowups();
-  }, [fetchBookings, fetchCalls, fetchFollowups, fetchNotes, fetchVisits]);
+    fetchEmails();
+    fetchWhatsapp();
+  }, [fetchBookings, fetchCalls, fetchEmails, fetchFollowups, fetchLeadActivities, fetchNotes, fetchVisits, fetchWhatsapp]);
 
   const saveStatus = async (status) => {
     if (!leadId) return false;
@@ -657,7 +861,7 @@ const UserDetails = ({
       if (editingNoteId) {
         const response = await fetch(`${API_URL}/lead-notes/${editingNoteId}`, {
           method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          headers: { ...authHeaders, "Content-Type": "application/json" },
           body: JSON.stringify({ note: text }),
         });
         if (!response.ok) throw new Error("Unable to update note");
@@ -672,7 +876,7 @@ const UserDetails = ({
       } else {
         const response = await fetch(`${API_URL}/lead-notes`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { ...authHeaders, "Content-Type": "application/json" },
           body: JSON.stringify({
             leadId: Number(leadId),
             note: text,
@@ -682,6 +886,7 @@ const UserDetails = ({
         if (!response.ok) throw new Error("Unable to save note");
         const saved = await response.json();
         setNotes((current) => [{ ...saved, pinned: false }, ...current]);
+        fetchLeadActivities();
         publishSalesActivityNotification({
           id: `${leadId}-note-${saved.id || Date.now()}`,
           leadId,
@@ -691,6 +896,7 @@ const UserDetails = ({
           meta: `Done by ${getCurrentUserName()}`,
           type: "Notes",
           createdAt: saved.createdAt || new Date().toISOString(),
+          syncToServer: false,
         });
       }
 
@@ -713,7 +919,10 @@ const UserDetails = ({
 
   const deleteNote = async (note) => {
     if (!window.confirm("Delete this note from this page?")) return;
-    const response = await fetch(`${API_URL}/lead-notes/${note.id}`, { method: "DELETE" });
+    const response = await fetch(`${API_URL}/lead-notes/${note.id}`, {
+      method: "DELETE",
+      headers: authHeaders,
+    });
     if (response.ok) setNotes((current) => current.filter((item) => String(item.id) !== String(note.id)));
   };
 
@@ -721,42 +930,12 @@ const UserDetails = ({
     const pinned = !note.pinned;
     const response = await fetch(`${API_URL}/lead-notes/${note.id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { ...authHeaders, "Content-Type": "application/json" },
       body: JSON.stringify({ pinned }),
     });
     if (response.ok) {
       const saved = await response.json();
       setNotes((current) => current.map((item) => (String(item.id) === String(note.id) ? saved : item)));
-    }
-  };
-
-  const scheduleFollowup = async () => {
-    if (!followupDraft.trim() || !followupDate || !leadId) return;
-    const [followUpDate, followUpTime = "09:00"] = followupDate.split("T");
-
-    try {
-      const savedFollowup = await createFollowup({
-        leadId,
-        type: "Call",
-        followUpDate,
-        followUpTime,
-        priority: "Medium",
-        notes: followupDraft.trim(),
-      });
-      setFollowupDraft("");
-      setFollowupDate("");
-      publishSalesActivityNotification({
-        id: `${leadId}-followup-${savedFollowup?.id || savedFollowup?.followUp?.id || Date.now()}`,
-        leadId,
-        leadName,
-        title: "Follow-up Scheduled",
-        description: followupDraft.trim(),
-        meta: `Done by ${getCurrentUserName()} for ${formatDateTime(followupDate)}`,
-        type: "Follow-ups",
-      });
-      fetchFollowups();
-    } catch (error) {
-      alert(error.message || "Unable to schedule follow-up");
     }
   };
 
@@ -837,18 +1016,111 @@ const UserDetails = ({
       source: item,
     }));
 
-    const bookingActivities = bookings.map((booking) => ({
-      id: `booking-${booking.id}`,
-      type: "History",
-      icon: <FaCheckCircle />,
-      title: "Booking Created",
-      description: displayValue(booking.projectDetails || booking.customerName, "Booking"),
-      meta: `${formatMoney(booking.basePrice)} ${booking.stage || ""}`.trim(),
-      createdAt: booking.bookedOn || booking.createdAt,
-      source: booking,
+    const noteTexts = new Set(notes.map((note) => normalizeText(note.note)));
+    const apiActivities = backendActivities
+      .filter((activity) => {
+        if (activity.leadId && String(activity.leadId) !== String(leadId)) return false;
+        if (activity.type === "Note Added" && noteTexts.has(normalizeText(activity.description || activity.message))) return false;
+        return true;
+      })
+      .map((activity) => {
+        const rawType = normalizeText(activity.type || "");
+        const rawTitle = normalizeText(activity.title || "");
+        const rawMsg = normalizeText(activity.description || activity.message || "");
+        let tabType = "History";
+        let icon = <FaHistory />;
+
+        if (rawType.includes("note") || rawTitle.includes("note")) {
+          tabType = "Notes";
+          icon = <FaRegStickyNote />;
+        } else if (rawType.includes("call") || rawTitle.includes("call") || rawType.includes("mcube") || rawMsg.includes("call")) {
+          tabType = "Calls";
+          icon = <FaPhoneAlt />;
+        } else if (rawType.includes("visit") || rawTitle.includes("visit")) {
+          tabType = "Site Visits";
+          icon = <FaMapMarkerAlt />;
+        } else if (rawType.includes("follow") || rawTitle.includes("follow")) {
+          tabType = "Follow-ups";
+          icon = <FaClock />;
+        } else if (rawType.includes("email") || rawTitle.includes("email") || rawType.includes("mail")) {
+          tabType = "Emails";
+          icon = <FaEnvelope />;
+        } else if (rawType.includes("sms") || rawTitle.includes("sms")) {
+          tabType = "SMS";
+          icon = <FaCommentAlt />;
+        } else if (rawType.includes("whatsapp") || rawTitle.includes("whatsapp")) {
+          tabType = "WhatsApp";
+          icon = <FaWhatsapp />;
+        }
+
+        return {
+          id: `backend-${activity.id}`,
+          type: tabType,
+          icon,
+          title: activity.title || activity.type || "Activity",
+          description: activity.description || activity.message || "",
+          meta: activity.meta || `Done by ${activity.actorName || "Sales User"}`,
+          createdAt: activity.createdAt,
+          source: activity,
+        };
+      });
+
+    const emailList = [...emails, ...(lead?.emailLogs || lead?.emails || [])]
+      .filter((email) => !email.leadId || String(email.leadId) === String(leadId));
+    const emailActivities = emailList.map((email, idx) => ({
+      id: `email-${email.id || idx}`,
+      type: "Emails",
+      icon: <FaEnvelope />,
+      title: email.subject || "Email Sent",
+      description: email.body || email.message || `Sent to ${email.to || primaryEmail || lead?.email || "-"}`,
+      meta: email.status || (email.success ? "Sent successfully" : "Email"),
+      createdAt: email.createdAt || email.sentAt,
+      source: email,
     }));
 
-    const statusActivity = {
+    const smsActivities = (lead?.smsLogs || lead?.sms || [])
+      .filter((sms) => !sms.leadId || String(sms.leadId) === String(leadId))
+      .map((sms, idx) => ({
+        id: `sms-${sms.id || idx}`,
+        type: "SMS",
+        icon: <FaCommentAlt />,
+        title: sms.title || "SMS Sent",
+        description: sms.text || sms.message || `Sent to ${primaryPhone || "-"}`,
+        meta: sms.status || "SMS",
+        createdAt: sms.sentAt || sms.createdAt,
+        source: sms,
+      }));
+
+    const waList = [...whatsappMessages, ...(lead?.whatsappLogs || lead?.whatsappMessages || [])]
+      .filter((wa) => !wa.leadId || String(wa.leadId) === String(leadId));
+    const whatsappActivities = waList.map((wa, idx) => ({
+      id: `wa-${wa.id || idx}`,
+      type: "WhatsApp",
+      icon: <FaWhatsapp />,
+      title: wa.title || "WhatsApp Message",
+      description: wa.body || wa.message || wa.text || `Message to ${wa.to || primaryPhone || "-"}`,
+      meta: wa.status || (wa.sent ? "Delivered" : "WhatsApp"),
+      createdAt: wa.createdAt || wa.sentAt,
+      source: wa,
+    }));
+
+    const bookingActivities = bookings
+      .filter((booking) => !booking.leadId || String(booking.leadId) === String(leadId))
+      .map((booking) => ({
+        id: `booking-${booking.id}`,
+        type: "History",
+        icon: <FaCheckCircle />,
+        title: "Booking Created",
+        description: displayValue(booking.projectDetails || booking.customerName, "Booking"),
+        meta: `${formatMoney(booking.basePrice)} ${booking.stage || ""}`.trim(),
+        createdAt: booking.bookedOn || booking.createdAt,
+        source: booking,
+      }));
+
+    const hasStatusInBackend = apiActivities.some(
+      (a) => normalizeText(a.type).includes("status") || normalizeText(a.title).includes("status")
+    );
+    const statusActivity = hasStatusInBackend ? null : {
       id: `status-${leadId}`,
       type: "History",
       icon: <FaHistory />,
@@ -859,7 +1131,10 @@ const UserDetails = ({
       source: lead,
     };
 
-    const createdActivity = {
+    const hasCreatedInBackend = apiActivities.some(
+      (a) => normalizeText(a.type).includes("created") || normalizeText(a.title).includes("created")
+    );
+    const createdActivity = hasCreatedInBackend ? null : {
       id: `created-${leadId}`,
       type: "History",
       icon: <FaPlus />,
@@ -870,107 +1145,109 @@ const UserDetails = ({
       source: lead,
     };
 
-    return [
+    const sortedActivities = [
       ...noteActivities,
       ...callActivities,
       ...visitActivities,
       ...followupActivities,
+      ...apiActivities,
+      ...emailActivities,
+      ...smsActivities,
+      ...whatsappActivities,
       ...bookingActivities,
-      statusActivity,
-      createdActivity,
+      ...(statusActivity ? [statusActivity] : []),
+      ...(createdActivity ? [createdActivity] : []),
     ].sort((first, second) => {
       const firstTime = toDate(first.createdAt)?.getTime() || 0;
       const secondTime = toDate(second.createdAt)?.getTime() || 0;
       return secondTime - firstTime;
     });
+
+    const seen = new Set();
+    return sortedActivities.filter((activity) => {
+      const key = [
+        activity.type,
+        normalizeText(activity.title),
+        normalizeText(activity.description),
+        toDate(activity.createdAt)?.getTime() || "",
+      ].join("|");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }, [
+    backendActivities,
     bookings,
     calls,
     createdDate,
     currentStatus,
+    emails,
     followups,
     lead,
     leadId,
     leadName,
     notes,
+    primaryEmail,
     primaryPhone,
     projectInterest,
     source,
     visits,
+    whatsappMessages,
   ]);
 
   const filteredActivities = useMemo(() => {
     if (activeTab === "Activity") return activities;
-    if (activeTab === "Emails" || activeTab === "SMS" || activeTab === "WhatsApp") return [];
-    return activities.filter((activity) => activity.type === activeTab);
+    return activities.filter((activity) => isActivityForTab(activity, activeTab));
   }, [activeTab, activities]);
 
+  const tabCounts = useMemo(() => {
+    return tabs.reduce((acc, tab) => {
+      acc[tab] = tab === "Activity" ? activities.length : activities.filter((a) => isActivityForTab(a, tab)).length;
+      return acc;
+    }, {});
+  }, [activities]);
+
   useEffect(() => {
-    if (!leadId || activities.length === 0 || !salesRoles.has(getCurrentUserRole())) return;
+    setActivityPage(1);
+  }, [activeTab, leadId]);
 
-    const actorName = getCurrentUserName();
-    const leadNotifications = activities
-      .map((activity) => ({
-        id: `${leadId}-${activity.id}`,
-        leadId,
-        leadName,
-        title: activity.title,
-        description: activity.description,
-        meta: `Done by ${actorName}${activity.meta ? ` | ${activity.meta}` : ""}`,
-        type: activity.type,
-        actorName,
-        actorRole: getCurrentUserRole(),
-        createdAt: activity.createdAt || new Date().toISOString(),
-      }));
-    if (leadNotifications.length === 0) return;
-    const leadNotificationIds = new Set(leadNotifications.map((item) => item.id));
-    const storedNotifications = getStoredActivityNotifications();
-    const leadNotificationDedupeKeys = new Set(leadNotifications.map(getActivityNotificationDedupeKey));
-    const storedNotificationIds = new Set(storedNotifications.map((item) => item.id));
-    const storedNotificationDedupeKeys = new Set(storedNotifications.map(getActivityNotificationDedupeKey));
-    const newLeadNotifications = leadNotifications.filter(
-      (item) => !storedNotificationIds.has(item.id) && !storedNotificationDedupeKeys.has(getActivityNotificationDedupeKey(item))
-    );
-    const existingNotifications = storedNotifications.filter(
-      (item) => !leadNotificationIds.has(item.id) && !leadNotificationDedupeKeys.has(getActivityNotificationDedupeKey(item))
-    );
-    const nextNotifications = dedupeActivityNotifications([...leadNotifications, ...existingNotifications])
-      .sort((first, second) => {
-        const firstTime = toDate(first.createdAt)?.getTime() || 0;
-        const secondTime = toDate(second.createdAt)?.getTime() || 0;
-        return secondTime - firstTime;
-      })
-      .slice(0, 100);
+  const totalActivityPages = Math.max(1, Math.ceil(filteredActivities.length / ACTIVITY_PAGE_SIZE));
+  const currentActivityPage = Math.min(activityPage, totalActivityPages);
 
-    saveActivityNotifications(nextNotifications);
-    if (token && newLeadNotifications.length > 0) {
-      newLeadNotifications.forEach((notification) => {
-        fetch(`${API_URL}/lead-activities`, {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            leadId: Number(notification.leadId),
-            type: notification.title || notification.type || "Activity",
-            title: notification.title,
-            description: notification.description,
-            message: notification.description,
-          }),
-        }).catch((error) => {
-          console.error("Unable to sync admin notification:", error);
-        });
-      });
-    }
-  }, [activities, leadId, leadName, token]);
+  const paginatedActivities = useMemo(() => {
+    const startIndex = (currentActivityPage - 1) * ACTIVITY_PAGE_SIZE;
+    return filteredActivities.slice(startIndex, startIndex + ACTIVITY_PAGE_SIZE);
+  }, [filteredActivities, currentActivityPage]);
 
   const groupedActivities = useMemo(() => {
-    return filteredActivities.reduce((groups, activity) => {
+    return paginatedActivities.reduce((groups, activity) => {
       const day = getActivityDay(activity.createdAt);
       return { ...groups, [day]: [...(groups[day] || []), activity] };
     }, {});
-  }, [filteredActivities]);
+  }, [paginatedActivities]);
+
+  const getActivityPageNumbers = (current, total) => {
+    if (total <= 7) {
+      return Array.from({ length: total }, (_, i) => i + 1);
+    }
+    const pages = [1];
+    let start = Math.max(2, current - 1);
+    let end = Math.min(total - 1, current + 1);
+
+    if (current <= 3) {
+      start = 2;
+      end = 4;
+    } else if (current >= total - 2) {
+      start = total - 3;
+      end = total - 1;
+    }
+
+    if (start > 2) pages.push("...");
+    for (let i = start; i <= end; i++) pages.push(i);
+    if (end < total - 1) pages.push("...");
+    pages.push(total);
+    return pages;
+  };
 
   const overview = useMemo(() => {
     const connectedCalls = calls.filter((call) =>
@@ -1543,6 +1820,24 @@ const UserDetails = ({
           color: var(--neutral-800, #1f2937);
         }
 
+        .crm-tab-badge {
+          background: var(--neutral-100, #f3f4f6);
+          border-radius: 999px;
+          color: var(--neutral-600, #4b5563);
+          display: inline-flex;
+          font-size: 11px;
+          font-weight: 700;
+          line-height: 1;
+          margin-left: 6px;
+          padding: 3px 6px;
+          vertical-align: middle;
+        }
+
+        .crm-tabs button.active .crm-tab-badge {
+          background: #e0e7ff;
+          color: #487fff;
+        }
+
         .crm-tabs button.active::after {
           background: var(--primary-600, #487fff);
           bottom: 0;
@@ -1557,6 +1852,74 @@ const UserDetails = ({
           display: grid;
           gap: 20px;
           padding: 16px;
+        }
+
+        .crm-pagination {
+          align-items: center;
+          border-top: 1px solid var(--neutral-200, #ebecef);
+          color: var(--neutral-600, #4b5563);
+          display: flex;
+          flex-wrap: wrap;
+          font-size: 13px;
+          gap: 12px;
+          justify-content: space-between;
+          padding: 12px 16px;
+        }
+
+        .crm-pagination-info {
+          color: var(--neutral-500, #6b7280);
+          font-size: 12px;
+        }
+
+        .crm-pagination-actions {
+          align-items: center;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
+        }
+
+        .crm-pagination-btn {
+          align-items: center;
+          background: #ffffff;
+          border: 1px solid var(--neutral-200, #ebecef);
+          border-radius: 6px;
+          color: var(--neutral-700, #374151);
+          cursor: pointer;
+          display: inline-flex;
+          font-size: 12px;
+          font-weight: 500;
+          height: 30px;
+          justify-content: center;
+          min-width: 30px;
+          padding: 0 10px;
+          transition: all 0.15s ease;
+        }
+
+        .crm-pagination-btn:hover:not(:disabled) {
+          background: var(--neutral-50, #f9fafb);
+          border-color: var(--primary-500, #487fff);
+          color: var(--primary-600, #487fff);
+        }
+
+        .crm-pagination-btn.active {
+          background: var(--primary-600, #487fff);
+          border-color: var(--primary-600, #487fff);
+          color: #ffffff;
+          font-weight: 700;
+        }
+
+        .crm-pagination-btn:disabled {
+          cursor: not-allowed;
+          opacity: 0.45;
+        }
+
+        .crm-pagination-ellipsis {
+          color: var(--neutral-400, #9ca3af);
+          display: inline-flex;
+          font-size: 12px;
+          justify-content: center;
+          min-width: 20px;
+          user-select: none;
         }
 
         .crm-day {
@@ -1771,12 +2134,26 @@ const UserDetails = ({
                   </button>
                 </>
               )}
-              <button className="crm-action-btn" type="button" onClick={() => setActiveTab("Notes")}>
+              <button
+                className="crm-action-btn"
+                type="button"
+                onClick={() => {
+                  setActiveTab("Activity");
+                  setTimeout(() => {
+                    noteInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    noteInputRef.current?.focus();
+                  }, 50);
+                }}
+              >
                 <FaRegStickyNote /> Add Note
               </button>
               {!isAdminContext && (
                 <>
-                  <button className="crm-action-btn" type="button" onClick={() => setActiveTab("Follow-ups")}>
+                  <button
+                    className="crm-action-btn"
+                    type="button"
+                    onClick={openSalesFollowupPage}
+                  >
                     <FaClock /> Schedule Follow-up
                   </button>
                   <button
@@ -1784,7 +2161,7 @@ const UserDetails = ({
                     type="button"
                     onClick={() => openSalesSiteVisitPage()}
                   >
-                    <FaCalendarAlt /> Site Visit
+                    <FaCalendarAlt /> Schedule Site Visit
                   </button>
                 </>
               )}
@@ -1935,7 +2312,7 @@ const UserDetails = ({
                   ["Location", valueOf(lead, ["locationPreferences", "city"], "-")],
                   ["Property Type", valueOf(lead, ["propertyType", "type"], "-")],
                   ["Funding Source", valueOf(lead, ["fundingSource"], "-")],
-                  ["Tags", valueOf(lead, ["tags"], "-")],
+                  ["Tags", cleanTagsForDisplay(valueOf(lead, ["tags"], "-"))],
                 ].map(([label, value]) => (
                   <div className="crm-info-row" key={label}>
                     <div className="crm-label">{label}</div>
@@ -1946,108 +2323,55 @@ const UserDetails = ({
             </aside>
 
             <section className="crm-workspace">
-              {(activeTab === "Notes" || activeTab === "Activity") && (
-                <div className="crm-panel">
-                  <div className="crm-panel-head">
-                    <h2>{editingNoteId ? "Edit Note" : "Add Note"}</h2>
-                    {editingNoteId && (
-                      <button
-                        className="crm-small-btn"
-                        type="button"
-                        onClick={() => {
-                          setEditingNoteId(null);
-                          setNoteDraft("");
-                        }}
-                      >
-                        <FaTimes /> Cancel
-                      </button>
-                    )}
-                  </div>
-                  <div className="crm-panel-body">
-                    <div className="crm-note-box">
-                      <textarea
-                        ref={noteInputRef}
-                        value={noteDraft}
-                        onChange={(event) => setNoteDraft(event.target.value)}
-                        placeholder="Add note for lead. Use @name to mention a user."
-                      />
-                      <div className="crm-form-actions">
-                        <button className="crm-small-btn primary crm-note-save" disabled={isSavingNote} type="button" onClick={saveNote}>
-                          <FaSave /> {isSavingNote ? "Saving..." : "Save Note"}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+              <div className="crm-panel">
+                <div className="crm-panel-head">
+                  <h2>{editingNoteId ? "Edit Note" : "Add Note"}</h2>
+                  {editingNoteId && (
+                    <button
+                      className="crm-small-btn"
+                      type="button"
+                      onClick={() => {
+                        setEditingNoteId(null);
+                        setNoteDraft("");
+                      }}
+                    >
+                      <FaTimes /> Cancel
+                    </button>
+                  )}
                 </div>
-              )}
-
-              {activeTab === "Follow-ups" && (
-                <div className="crm-panel">
-                  <div className="crm-panel-head">
-                    <h2>Schedule Follow-up</h2>
-                  </div>
-                  <div className="crm-panel-body">
-                    <div className="crm-followup-form">
-                      <input
-                        value={followupDraft}
-                        onChange={(event) => setFollowupDraft(event.target.value)}
-                        placeholder="Follow-up purpose"
-                      />
-                      <input
-                        type="datetime-local"
-                        value={followupDate}
-                        onChange={(event) => setFollowupDate(event.target.value)}
-                      />
-                      <button className="crm-small-btn primary" type="button" onClick={scheduleFollowup}>
-                        <FaCalendarAlt /> Schedule Follow-up
+                <div className="crm-panel-body">
+                  <div className="crm-note-box">
+                    <textarea
+                      ref={noteInputRef}
+                      value={noteDraft}
+                      onChange={(event) => setNoteDraft(event.target.value)}
+                      placeholder="Add note for lead. Use @name to mention a user."
+                    />
+                    <div className="crm-form-actions">
+                      <button className="crm-small-btn primary crm-note-save" disabled={isSavingNote} type="button" onClick={saveNote}>
+                        <FaSave /> {isSavingNote ? "Saving..." : "Save Note"}
                       </button>
                     </div>
                   </div>
                 </div>
-              )}
-
-              {activeTab === "Site Visits" && (
-                <div className="crm-panel">
-                  <div className="crm-panel-head">
-                    <h2>Site Visit</h2>
-                  </div>
-                  <div className="crm-panel-body">
-                    <div className="crm-visit-link-panel">
-                      <p>Open the Site Visits page to create, conduct, or update this lead visit.</p>
-                      <button
-                        className="crm-small-btn primary crm-note-save"
-                        type="button"
-                        onClick={() => {
-                          if (isAdminContext) {
-                            const params = new URLSearchParams();
-                            if (leadId) params.set("leadId", leadId);
-                            navigate(`/SiteVists${params.toString() ? `?${params.toString()}` : ""}`, {
-                              state: { lead },
-                            });
-                            return;
-                          }
-                          openSalesSiteVisitPage();
-                        }}
-                      >
-                        <FaMapMarkerAlt /> Open Site Visit
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+              </div>
 
               <div className="crm-panel">
                 <div className="crm-tabs">
-                  {tabs.map((tab) => (
-                    <button
-                      className={activeTab === tab ? "active" : ""}
-                      key={tab}
-                      type="button"
-                      onClick={() => setActiveTab(tab)}
-                    >
-                      {tab}
-                    </button>
-                  ))}
+                  {tabs.map((tab) => {
+                    const count = tabCounts[tab] ?? 0;
+                    return (
+                      <button
+                        className={activeTab === tab ? "active" : ""}
+                        key={tab}
+                        type="button"
+                        onClick={() => setActiveTab(tab)}
+                      >
+                        {tab}
+                        {count > 0 && <span className="crm-tab-badge">{count}</span>}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 <div className="crm-timeline">
@@ -2067,7 +2391,7 @@ const UserDetails = ({
                                 </div>
                                 <p>{activity.description}</p>
                               </div>
-                              {activity.type === "Notes" && (
+                              {activity.type === "Notes" && activity.source && activity.source.note && (
                                 <div className="crm-note-actions">
                                   <button className="crm-small-btn" type="button" onClick={() => togglePinNote(activity.source)}>
                                     <FaStar /> {activity.source.pinned ? "Unpin" : "Pin"}
@@ -2077,6 +2401,18 @@ const UserDetails = ({
                                   </button>
                                   <button className="crm-small-btn danger" type="button" onClick={() => deleteNote(activity.source)}>
                                     <FaTrash /> Delete
+                                  </button>
+                                </div>
+                              )}
+                              {activity.type === "Follow-ups" && activity.source && activity.source.dueAt && (
+                                <div className="crm-note-actions">
+                                  {activity.source.status !== "Completed" && activity.source.status !== "Done" && (
+                                    <button className="crm-small-btn" type="button" onClick={() => updateFollowupStatus(activity.source, "Done")}>
+                                      <FaCheckCircle /> Mark Done
+                                    </button>
+                                  )}
+                                  <button className="crm-small-btn" type="button" onClick={() => updateFollowupStatus(activity.source, "Rescheduled")}>
+                                    <FaClock /> Reschedule
                                   </button>
                                 </div>
                               )}
@@ -2090,6 +2426,50 @@ const UserDetails = ({
                     ))
                   )}
                 </div>
+
+                {filteredActivities.length > ACTIVITY_PAGE_SIZE && (
+                  <div className="crm-pagination">
+                    <div className="crm-pagination-info">
+                      Showing <strong>{(currentActivityPage - 1) * ACTIVITY_PAGE_SIZE + 1}</strong> to{" "}
+                      <strong>{Math.min(currentActivityPage * ACTIVITY_PAGE_SIZE, filteredActivities.length)}</strong> of{" "}
+                      <strong>{filteredActivities.length}</strong> records
+                    </div>
+                    <div className="crm-pagination-actions">
+                      <button
+                        className="crm-pagination-btn"
+                        type="button"
+                        disabled={currentActivityPage === 1}
+                        onClick={() => setActivityPage((prev) => Math.max(1, prev - 1))}
+                      >
+                        Previous
+                      </button>
+                      {getActivityPageNumbers(currentActivityPage, totalActivityPages).map((item, idx) =>
+                        item === "..." ? (
+                          <span key={`ellipsis-${idx}`} className="crm-pagination-ellipsis">
+                            ...
+                          </span>
+                        ) : (
+                          <button
+                            key={item}
+                            className={`crm-pagination-btn ${item === currentActivityPage ? "active" : ""}`}
+                            type="button"
+                            onClick={() => setActivityPage(item)}
+                          >
+                            {item}
+                          </button>
+                        )
+                      )}
+                      <button
+                        className="crm-pagination-btn"
+                        type="button"
+                        disabled={currentActivityPage >= totalActivityPages}
+                        onClick={() => setActivityPage((prev) => Math.min(totalActivityPages, prev + 1))}
+                      >
+                        Next
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
           </div>

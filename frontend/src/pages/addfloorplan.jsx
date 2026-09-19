@@ -823,7 +823,6 @@ const AddFloorplan = () => {
                     helperText="Units will not be generated for these floors."
                     error={skippedFloorValidation.error}
                   />
-                  <GeneratedUnitsField units={generatedUnitNumbers} error={floorRangeValidation} />
                   <InputField
                     label="TOTAL UNITS OF THIS PLAN"
                     name="totalUnitsOfPlan"
@@ -832,6 +831,7 @@ const AddFloorplan = () => {
                     onChange={() => {}}
                     disabled
                   />
+                  <GeneratedUnitsField units={generatedUnitNumbers} error={floorRangeValidation} />
                 </div>
               </Section>
 

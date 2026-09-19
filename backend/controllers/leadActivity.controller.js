@@ -58,14 +58,30 @@ exports.getLeadActivities = async (req, res) => {
   try {
     const limit = Math.min(Number(req.query.limit) || 50, 100);
     const leadId = req.query.leadId ? Number(req.query.leadId) : null;
+    const authUser = req.authUser;
+    const authUserId = authUser?.id ? Number(authUser.id) : null;
+    const role = String(authUser?.role || "").toUpperCase();
+    const isAdmin = ["ADMIN", "SUPER_ADMIN", "MANAGER"].includes(role);
+
+    let where = {};
+    if (leadId) {
+      // Shared timeline: all activities for this lead are visible to assigned callers & admin
+      where.leadId = leadId;
+    } else if (!isAdmin && authUserId) {
+      // General activity stream: callers see activities on leads assigned to them or created by them
+      where.OR = [
+        { userId: authUserId },
+        { lead: { teamId: authUserId } },
+      ];
+    }
 
     const activities = await prisma.leadActivity.findMany({
-      where: leadId ? { leadId } : undefined,
+      where,
       orderBy: { createdAt: "desc" },
       take: limit,
       include: {
         lead: {
-          select: { id: true, firstName: true, lastName: true, companyName: true },
+          select: { id: true, firstName: true, lastName: true, companyName: true, teamId: true },
         },
         user: {
           select: { id: true, firstName: true, lastName: true, username: true, email: true, role: true },

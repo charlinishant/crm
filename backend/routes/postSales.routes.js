@@ -13,22 +13,23 @@ const {
   getCustomerLedger,
   getReports,
 } = require("../controllers/postSales.controller");
-const authenticate = require("../middleware/auth.middleware");
+const { requireRoles } = require("../middleware/auth.middleware");
 
 const router = Router();
+const postSalesAuth = requireRoles(["ADMIN", "SUPER_ADMIN", "MANAGER", "POST_SALES"]);
 
-router.get("/dashboard-stats", authenticate, getDashboardStats);
-router.get("/bookings", authenticate, getBookings);
-router.get("/bookings/:id", authenticate, getBookingDetails);
-router.post("/bookings/:id/documents", authenticate, generateDocument);
-router.post("/documents/audit-log", authenticate, logDocumentAction);
-router.get("/bookings/:id/audit-logs", authenticate, getBookingAuditLogs);
+router.get("/dashboard-stats", postSalesAuth, getDashboardStats);
+router.get("/bookings", postSalesAuth, getBookings);
+router.get("/bookings/:id", postSalesAuth, getBookingDetails);
+router.post("/bookings/:id/documents", postSalesAuth, generateDocument);
+router.post("/documents/audit-log", postSalesAuth, logDocumentAction);
+router.get("/bookings/:id/audit-logs", postSalesAuth, getBookingAuditLogs);
 
 // New functional routes
-router.get("/payment-plans", authenticate, getPaymentPlans);
-router.get("/demands", authenticate, getDemands);
-router.get("/collections", authenticate, getCollections);
-router.get("/ledger", authenticate, getCustomerLedger);
-router.get("/reports", authenticate, getReports);
+router.get("/payment-plans", postSalesAuth, getPaymentPlans);
+router.get("/demands", postSalesAuth, getDemands);
+router.get("/collections", postSalesAuth, getCollections);
+router.get("/ledger", postSalesAuth, getCustomerLedger);
+router.get("/reports", postSalesAuth, getReports);
 
 module.exports = router;

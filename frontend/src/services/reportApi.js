@@ -39,11 +39,16 @@ export const reportApi = {
   getSiteVisits: (filters) => request("/api/admin/reports/site-visits", filters),
   getBookings: (filters) => request("/api/admin/reports/bookings", filters),
   getRecentActivities: (filters) => request("/api/admin/reports/recent-activities", filters),
+  getDrilldownLeads: (filters) => request("/api/admin/reports/drilldown-leads", filters),
+  getTelephonySummary: (filters) => request("/api/admin/reports/telephony-summary", filters),
+  getCallStatus: (filters) => request("/api/admin/reports/call-status", filters),
+  getCallHourly: (filters) => request("/api/admin/reports/call-hourly", filters),
+  getCallDaily: (filters) => request("/api/admin/reports/call-daily", filters),
+  getDidBreakup: (filters) => request("/api/admin/reports/did-breakup", filters),
+  getAgentCallPerformance: (filters) => request("/api/admin/reports/agent-call-performance", filters),
+  getCallLogs: (filters) => request("/api/admin/reports/call-logs", filters),
   getProjects: () => request("/projects/list"),
-  getUsers: async () => {
-    const result = await request("/users", { limit: 1000 });
-    return Array.isArray(result) ? result : result?.data || [];
-  },
+  getUsers: () => request("/api/admin/reports/sales-users"),
 };
 
 export const fetchAllReports = async (filters) => {
@@ -57,16 +62,30 @@ export const fetchAllReports = async (filters) => {
     siteVisits,
     bookings,
     recentActivities,
+    telephonySummary,
+    callStatus,
+    callHourly,
+    callDaily,
+    didBreakup,
+    agentCallPerformance,
+    callLogs,
   ] = await Promise.all([
-    reportApi.getSummary(filters),
-    reportApi.getLeadStatus(filters),
-    reportApi.getMonthlyLeads(filters),
-    reportApi.getSalesPerformance(filters),
-    reportApi.getFollowups(filters),
-    reportApi.getLeadSources(filters),
-    reportApi.getSiteVisits(filters),
-    reportApi.getBookings(filters),
-    reportApi.getRecentActivities(filters),
+    reportApi.getSummary(filters).catch(() => ({})),
+    reportApi.getLeadStatus(filters).catch(() => []),
+    reportApi.getMonthlyLeads(filters).catch(() => []),
+    reportApi.getSalesPerformance(filters).catch(() => []),
+    reportApi.getFollowups(filters).catch(() => []),
+    reportApi.getLeadSources(filters).catch(() => []),
+    reportApi.getSiteVisits(filters).catch(() => []),
+    reportApi.getBookings(filters).catch(() => []),
+    reportApi.getRecentActivities(filters).catch(() => []),
+    reportApi.getTelephonySummary(filters).catch(() => ({})),
+    reportApi.getCallStatus(filters).catch(() => []),
+    reportApi.getCallHourly(filters).catch(() => []),
+    reportApi.getCallDaily(filters).catch(() => []),
+    reportApi.getDidBreakup(filters).catch(() => []),
+    reportApi.getAgentCallPerformance(filters).catch(() => []),
+    reportApi.getCallLogs(filters).catch(() => []),
   ]);
 
   return {
@@ -79,6 +98,13 @@ export const fetchAllReports = async (filters) => {
     siteVisits,
     bookings,
     recentActivities,
+    telephonySummary,
+    callStatus,
+    callHourly,
+    callDaily,
+    didBreakup,
+    agentCallPerformance,
+    callLogs,
   };
 };
 

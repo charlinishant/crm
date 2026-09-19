@@ -1,12 +1,13 @@
 import React from "react";
 
 const filters = [
-  { key: "callbacks", label: "Callbacks due" },
+  { key: "all", label: "All" },
   { key: "today", label: "Today" },
   { key: "upcoming", label: "Upcoming" },
-  { key: "missed", label: "Missed" },
+  { key: "due", label: "Due Soon" },
+  { key: "overdue", label: "Overdue" },
   { key: "completed", label: "Completed" },
-  { key: "all", label: "All" },
+  { key: "cancelled", label: "Cancelled" },
 ];
 
 const FollowupFilters = ({ activeFilter, counts = {}, onChange }) => (

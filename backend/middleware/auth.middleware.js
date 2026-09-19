@@ -36,5 +36,28 @@ const optionalAuthenticate = (req, res, next) => {
   next()
 }
 
+const requireAdmin = (req, res, next) => {
+  authenticate(req, res, () => {
+    const role = String(req?.authUser?.role || "").trim().toUpperCase()
+    if (role === "ADMIN" || role === "SUPER_ADMIN" || role === "MANAGER") {
+      return next()
+    }
+    return res.status(403).json({ message: "Access denied. Admin privileges required." })
+  })
+}
+
+const requireRoles = (allowedRoles = []) => (req, res, next) => {
+  authenticate(req, res, () => {
+    const role = String(req?.authUser?.role || "").trim().toUpperCase()
+    const normalized = allowedRoles.map((r) => String(r).trim().toUpperCase())
+    if (normalized.includes(role)) {
+      return next()
+    }
+    return res.status(403).json({ message: "Access denied. Insufficient permissions." })
+  })
+}
+
 module.exports = authenticate
 module.exports.optionalAuthenticate = optionalAuthenticate
+module.exports.requireAdmin = requireAdmin
+module.exports.requireRoles = requireRoles

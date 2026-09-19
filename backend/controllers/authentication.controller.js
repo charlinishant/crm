@@ -128,23 +128,41 @@ exports.register = async (req, res)=>{
 
     }
     catch(err){
-        console.log(err);
-        
-        res.status(500).json("Something went wrong");
+        console.error("Register error:", err);
+        if(err.code === "P2002"){
+            return res.status(409).json({ message: "User already exists with this email, username, or phone" });
+        }
+        res.status(500).json({ message: err.message || "Something went wrong" });
     }
 }
 
 exports.login = async (req, res)=>{
     try{
-        const {email, password} = req.body
-        const normalizedEmail = String(email || "").trim().toLowerCase()
+        const {email, username, password} = req.body
 
-        if(!normalizedEmail || !password){
-            return res.status(400).json({"message":"Email and password are required"})
+        // Determine login identifier - can be either email or username
+        let loginIdentifier = null
+        let user = null
+
+        // Use email if provided, otherwise use username
+        if (email) {
+            loginIdentifier = String(email || "").trim()
+        } else if (username) {
+            loginIdentifier = String(username || "").trim()
         }
 
-        const user = await prisma.user.findUnique({
-            where: { email: normalizedEmail }
+        if(!loginIdentifier || !password){
+            return res.status(400).json({"message":"Email or username and password are required"})
+        }
+
+        // Try to find user by email first
+        user = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { email: loginIdentifier.toLowerCase() },
+                    { username: loginIdentifier }
+                ]
+            }
         })
 
         if (!user) {
@@ -159,7 +177,7 @@ exports.login = async (req, res)=>{
         const isMatch = isBcryptPassword
             ? await bcrypt.compare(password,  user.password)
             : password === user.password
-        
+
         if(!isMatch){
             return res.status(404).json({"message":"Invalid password"})
         }

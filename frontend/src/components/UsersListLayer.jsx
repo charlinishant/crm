@@ -113,6 +113,11 @@ const UsersListLayer = () => {
     return () => window.removeEventListener("click", closeMenu);
   }, []);
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("authToken");
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   const updateUserStatus = async (user, nextStatus) => {
     setSavingStatusId(user.id);
     setStatusMessage("");
@@ -122,6 +127,7 @@ const UsersListLayer = () => {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({ isActive: nextStatus }),
       });
@@ -152,6 +158,9 @@ const UsersListLayer = () => {
     try {
       const response = await fetch(`${API_URL}/users/${user.id}`, {
         method: "DELETE",
+        headers: {
+          ...getAuthHeaders(),
+        },
       });
       const result = await response.json().catch(() => "");
       if (!response.ok) throw new Error(result?.message || result || "Unable to delete user");
@@ -272,7 +281,9 @@ const UsersListLayer = () => {
             </thead>
             <tbody>
               {filteredUsers.length > 0 ? (
-                paginatedUsers.map((user) => (
+                paginatedUsers.map((user, index) => {
+                  const isNearBottom = index >= Math.max(1, paginatedUsers.length - 3) || (paginatedUsers.length <= 2 && index === paginatedUsers.length - 1);
+                  return (
                   <tr key={user.id}>
                     <td>
                       <button
@@ -317,7 +328,7 @@ const UsersListLayer = () => {
                           ⋮
                         </button>
                         {openActionUserId === user.id && (
-                          <div className="admin-user-action-menu" onClick={(event) => event.stopPropagation()}>
+                          <div className={`admin-user-action-menu ${isNearBottom ? "open-upwards" : ""}`} onClick={(event) => event.stopPropagation()}>
                             <button type="button" onClick={() => {
                               setSelectedUser(user);
                               setOpenActionUserId(null);
@@ -335,7 +346,8 @@ const UsersListLayer = () => {
                       </div>
                     </td>
                   </tr>
-                ))
+                  );
+                })
               ) : (
                 <tr>
                   <td colSpan="6">

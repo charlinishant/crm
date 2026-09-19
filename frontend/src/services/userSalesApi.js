@@ -13,7 +13,12 @@ const request = async (path, options = {}) => {
     },
   });
   const result = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(result?.message || "Unable to complete request");
+  if (!response.ok || result?.success === false) {
+    const error = new Error(result?.message || "Unable to complete request");
+    error.status = response.status;
+    error.result = result;
+    throw error;
+  }
   return result;
 };
 
@@ -33,3 +38,21 @@ export const markNotificationRead = (id) =>
 
 export const markAllNotificationsRead = () =>
   request("/notification/read-all", { method:"PATCH" });
+
+export const getMcubeWidget = () =>
+  request("/api/calls/browser-phone/widget");
+
+export const getMyMcubeAgent = () =>
+  request("/api/calls/mcube/agent/me");
+
+export const initiateMcubeClickToCall = ({ leadId, phone, dialedPhone, phoneLabel, requestId }) =>
+  request("/api/calls/mcube/click-to-call", {
+    method:"POST",
+    body:JSON.stringify({
+      leadId,
+      phone,
+      dialedPhone: dialedPhone || phone,
+      phoneLabel,
+      requestId,
+    }),
+  });

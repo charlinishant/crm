@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FaEllipsisV, FaPlus } from "react-icons/fa";
+import { FaEllipsisV, FaPlus, FaBuilding, FaThLarge } from "react-icons/fa";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 const ROWS_PER_PAGE = 10;
@@ -189,7 +189,12 @@ const ColumnChartLayer = () => {
 
       <div className="project-wrapper">
         <div className="project-topbar">
-          <span className="project-count">{projectStats.count} items</span>
+          <div className="d-flex align-items-center gap-3">
+            <span className="project-count">{projectStats.count} items</span>
+            <div className="btn-group" role="group">
+
+            </div>
+          </div>
 
           <div className="project-topbar-actions">
             <button className="btn-new-project" onClick={() => navigate("/new-project")}>

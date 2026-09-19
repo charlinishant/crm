@@ -1,5 +1,11 @@
 const prisma = require("../lib/prisma");
 
+const getUserName = (user) =>
+  [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+  user?.username ||
+  user?.email ||
+  "";
+
 exports.createLeadNote = async (req, res) => {
   try {
     const { leadId, note, owner } = req.body;
@@ -8,12 +14,36 @@ exports.createLeadNote = async (req, res) => {
       return res.status(400).json({ message: "leadId and note are required" });
     }
 
-    const result = await prisma.leadNote.create({
-      data: {
-        leadId: Number(leadId),
-        note: note.trim(),
-        owner: owner || null,
-      },
+    const normalizedLeadId = Number(leadId);
+    const noteText = note.trim();
+    const authUserId = req.authUser?.id ? Number(req.authUser.id) : null;
+    const authUser = authUserId
+      ? await prisma.user.findUnique({
+        where: { id: authUserId },
+        select: { id: true, firstName: true, lastName: true, username: true, email: true },
+      })
+      : null;
+    const noteOwner = owner || getUserName(authUser) || null;
+
+    const result = await prisma.$transaction(async (tx) => {
+      const savedNote = await tx.leadNote.create({
+        data: {
+          leadId: normalizedLeadId,
+          note: noteText,
+          owner: noteOwner,
+        },
+      });
+
+      await tx.leadActivity.create({
+        data: {
+          leadId: normalizedLeadId,
+          userId: authUser?.id || null,
+          type: "Note Added",
+          message: noteText,
+        },
+      });
+
+      return savedNote;
     });
 
     res.status(201).json(result);

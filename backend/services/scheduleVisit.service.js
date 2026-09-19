@@ -65,29 +65,46 @@ const getVisitPayloadFromLeadUpdate = (leadId, source = {}) => {
 
   return {
     leadId: Number(leadId),
-    project: toNullableString(source.siteVisitProject || source.conductSiteVisit),
+    project: toNullableString(source.siteVisitProject || source.conductSiteVisit || source.project),
     status,
     meetingPoint: toNullableString(source.siteVisitLocation || source.meetingPoint),
-    salesExecutive: toNullableString(source.siteVisitExecutive),
-    note: toNullableString(source.siteVisitNote),
-    initiatedBy: toNullableString(source.siteVisitInitiatedBy),
-    scheduledOn: toNullableDate(source.conductSiteDate || source.siteVisitDate),
-    conductedOn: status === "Visit Done" ? toNullableDate(source.siteVisitConductedOn || new Date()) : null,
-    conductedBy: status === "Visit Done" ? toNullableString(source.siteVisitExecutive) : null,
+    salesExecutive: toNullableString(source.siteVisitExecutive || source.salesExecutive),
+    note: toNullableString(source.siteVisitNote || source.note),
+    initiatedBy: toNullableString(source.siteVisitInitiatedBy || source.initiatedBy),
+    scheduledOn: toNullableDate(source.conductSiteDate || source.siteVisitDate || source.scheduledOn),
+    conductedOn: status === "Visit Done" ? toNullableDate(source.siteVisitConductedOn || source.conductedOn || new Date()) : null,
+    conductedBy: status === "Visit Done" ? toNullableString(source.siteVisitExecutive || source.conductedBy || source.salesExecutive) : null,
   }
 }
 
 const upsertScheduleVisit = async (payload) => {
   if (!payload?.leadId) return null
 
+  // Prevent unassigned visits by auto-assigning to lead owner / team or initiator
+  let salesExecutive = payload.salesExecutive
+  if (!salesExecutive) {
+    const lead = await prisma.lead.findUnique({
+      where: { id: Number(payload.leadId) },
+      include: { team: true },
+    })
+    if (lead?.team) {
+      salesExecutive = [lead.team.firstName, lead.team.lastName].filter(Boolean).join(" ") || lead.team.username || lead.team.email
+    } else if (payload.initiatedBy) {
+      salesExecutive = payload.initiatedBy
+    }
+  }
+
   const visit = await prisma.scheduleVisit.upsert({
     where: { leadId: Number(payload.leadId) },
-    create: payload,
+    create: {
+      ...payload,
+      salesExecutive,
+    },
     update: {
       project: payload.project,
       status: payload.status,
       meetingPoint: payload.meetingPoint,
-      salesExecutive: payload.salesExecutive,
+      salesExecutive,
       note: payload.note,
       initiatedBy: payload.initiatedBy,
       scheduledOn: payload.scheduledOn,

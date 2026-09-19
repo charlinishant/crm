@@ -4,8 +4,10 @@ const prisma = require("../lib/prisma")
 const { startProviderCall } = require("../services/callProvider.service")
 const { handleCallbackFollowUpSaved } = require("../services/callbackReminder.service")
 const mcubeVoice = require("../services/mcubeVoice.service")
+const mcubeAgentService = require("../services/mcubeAgent.service")
 const { connectedUser, getIO } = require("../socket")
 const { normalizePhoneNumber } = require("../utils/phone")
+const { maskCallLogData, maskPhoneNumber } = require("../utils/phoneMask")
 
 const allowedDispositions = new Set([
   "Qualified",
@@ -96,9 +98,9 @@ const findLeadByPhone = async (phone) => {
   const target = last10(phone)
   if (!target) return null
   const leads = await prisma.lead.findMany({
-    where:{ is_delete:false },
-    select:{ id:true, phones:true, teamId:true },
-    orderBy:{ id:"desc" },
+    where: { is_delete: false },
+    select: { id: true, phones: true, teamId: true },
+    orderBy: { id: "desc" },
   })
   return leads.find((lead) => getAllLeadPhones(lead).some((item) => matchesPhone(item, target))) || null
 }
@@ -107,27 +109,27 @@ const findLeadMatchesByPhone = async (phone, agentId = null) => {
   const target = last10(phone)
   if (!target) return []
   const leads = await prisma.lead.findMany({
-    where:{
-      is_delete:false,
-      ...(agentId ? { teamId:agentId } : {}),
+    where: {
+      is_delete: false,
+      ...(agentId ? { teamId: agentId } : {}),
     },
-    select:{
-      id:true,
-      firstName:true,
-      lastName:true,
-      companyName:true,
-      teamId:true,
-      phones:true,
-      status:true,
-      channelPartner:true,
-      tags:true,
-      interestedProjects:true,
-      propertyType:true,
-      budget:true,
-      budgetMin:true,
-      budgetMax:true,
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      companyName: true,
+      teamId: true,
+      phones: true,
+      status: true,
+      channelPartner: true,
+      tags: true,
+      interestedProjects: true,
+      propertyType: true,
+      budget: true,
+      budgetMin: true,
+      budgetMax: true,
     },
-    orderBy:{ id:"desc" },
+    orderBy: { id: "desc" },
   })
   return leads.filter((lead) => getAllLeadPhones(lead).some((item) => matchesPhone(item, target)))
 }
@@ -142,7 +144,7 @@ const findUserByPhone = async (phone) => {
   const target = last10(phone)
   if (!target) return null
   const users = await prisma.user.findMany({
-    select:{ id:true, phone:true, secondaryPhone:true },
+    select: { id: true, phone: true, secondaryPhone: true },
   })
   return users.find((user) => matchesPhone(user.phone, target) || matchesPhone(user.secondaryPhone, target)) || null
 }
@@ -151,8 +153,8 @@ const findUserByEmail = async (email) => {
   const normalizedEmail = String(email || "").trim().toLowerCase()
   if (!normalizedEmail) return null
   return prisma.user.findFirst({
-    where:{ email:normalizedEmail, isActive:true },
-    select:{ id:true, email:true, phone:true, secondaryPhone:true, firstName:true, lastName:true, username:true },
+    where: { email: normalizedEmail, isActive: true },
+    select: { id: true, email: true, phone: true, secondaryPhone: true, firstName: true, lastName: true, username: true },
   })
 }
 
@@ -162,8 +164,8 @@ const findUserByMcubeAgentId = async (agentProviderId) => {
   const mappedUserId = toNumberOrNull(getMappedConfigValue(process.env.MCUBE_AGENT_ID_MAP, [providerId]))
   if (!mappedUserId) return null
   return prisma.user.findUnique({
-    where:{ id:mappedUserId },
-    select:{ id:true, email:true, phone:true, secondaryPhone:true, firstName:true, lastName:true, username:true },
+    where: { id: mappedUserId },
+    select: { id: true, email: true, phone: true, secondaryPhone: true, firstName: true, lastName: true, username: true },
   })
 }
 
@@ -179,23 +181,33 @@ const getLeadName = (lead) =>
   (lead?.id ? `Lead #${lead.id}` : "")
 
 const defaultMcubeAgentEmailsByPhone = {
-  "9356532881":"huzaifp2003@gmail.com",
-  "7249766173":"morenishant118@gmail.com",
+  "7249766173": "trushant.swamigroup@gmail.com",
+  "9822100261": "shivaniswamideveloper@gmail.com",
+  "9822100315": "prasadpatilswamipmc@gmail.com",
+}
+
+const defaultMcubeAgentExtensionsByEmail = {
+  "trushant.swamigroup@gmail.com": "260",
+  "shivaniswamideveloper@gmail.com": "261",
+  "prasadpatilswamipmc@gmail.com": "315",
 }
 
 const defaultMcubeAgentExtensionsByPhone = {
-  "9356532881":"315",
-  "7249766173":"260",
+  "7249766173": "260",
+  "9822100261": "261",
+  "9822100315": "315",
 }
 
 const defaultMcubeAgentModesByPhone = {
-  "9356532881":"softphone",
-  "7249766173":"hardphone",
+  "7249766173": "softphone",
+  "9822100261": "softphone",
+  "9822100315": "softphone",
 }
 
 const defaultMcubeAgentModesByEmail = {
-  "huzaifp2003@gmail.com":"softphone",
-  "morenishant118@gmail.com":"hardphone",
+  "trushant.swamigroup@gmail.com": "softphone",
+  "shivaniswamideveloper@gmail.com": "softphone",
+  "prasadpatilswamipmc@gmail.com": "softphone",
 }
 
 const getMcubeAgentEmailMap = () => {
@@ -256,8 +268,11 @@ const parseMappedConfig = (raw) => {
 }
 
 const getMcubeAgentEmail = (agent, authUser) => {
+  const email = String(agent?.email || authUser?.email || "").trim().toLowerCase()
+  if (defaultMcubeAgentModesByEmail[email]) return email
+
   const useCrmEmailOnly = String(process.env.MCUBE_USE_CRM_USER_EMAIL || "").trim().toLowerCase() === "true"
-  if (useCrmEmailOnly) return String(agent?.email || authUser?.email || "").trim().toLowerCase()
+  if (useCrmEmailOnly) return email
 
   const emailMap = {
     ...defaultMcubeAgentEmailsByPhone,
@@ -271,10 +286,13 @@ const getMcubeAgentEmail = (agent, authUser) => {
   ].map(cleanPhone).filter(Boolean)
 
   const mappedEmail = phones.map((phone) => emailMap[phone]).find(Boolean)
-  return String(mappedEmail || agent?.email || authUser?.email || "").trim().toLowerCase()
+  return String(mappedEmail || email || "").trim().toLowerCase()
 }
 
 const getMcubeAgentExtension = (agent, authUser) => {
+  const email = String(agent?.email || authUser?.email || "").trim().toLowerCase()
+  if (defaultMcubeAgentExtensionsByEmail[email]) return defaultMcubeAgentExtensionsByEmail[email]
+
   const phones = [
     agent?.phone,
     agent?.secondaryPhone,
@@ -284,7 +302,7 @@ const getMcubeAgentExtension = (agent, authUser) => {
   const emails = [
     agent?.email,
     authUser?.email,
-  ].map((email) => String(email || "").trim().toLowerCase()).filter(Boolean)
+  ].map((item) => String(item || "").trim().toLowerCase()).filter(Boolean)
 
   const mappedExtension = phones.map((phone) => defaultMcubeAgentExtensionsByPhone[phone]).find(Boolean)
   return String(
@@ -339,13 +357,23 @@ const getMcubeAgentMode = (agent, authUser) => {
 const getMcubeClickToCallAgentNumber = ({ agentMode, agentPhone, agentExtension }) =>
   agentMode === "softphone" && agentExtension ? agentExtension : agentPhone
 
+const sendMcubeMappingError = (res, error) => {
+  if (error?.code !== "MCUBE_AGENT_NOT_MAPPED") return false
+  res.status(error.statusCode || 400).json({
+    success: false,
+    code: "MCUBE_AGENT_NOT_MAPPED",
+    message: "Your CRM account is not mapped to an MCube agent.",
+  })
+  return true
+}
+
 const findUserByMcubeExtension = async (extension, agentLogin = "") => {
   const normalizedExtension = String(extension || "").replace(/\D/g, "")
   const login = String(agentLogin || "").trim().toLowerCase()
   if (!normalizedExtension && !login) return null
 
   const users = await prisma.user.findMany({
-    select:{ id:true, email:true, phone:true, secondaryPhone:true },
+    select: { id: true, email: true, phone: true, secondaryPhone: true },
   })
   const extensionMap = {
     ...defaultMcubeAgentExtensionsByPhone,
@@ -369,42 +397,42 @@ const findAvailableInboundAgent = async () => {
   const configuredEmail = String(process.env.MCUBE_INBOUND_AGENT_EMAIL || "").trim().toLowerCase()
   const configuredPhone = cleanPhone(process.env.MCUBE_INBOUND_AGENT_PHONE || process.env.MCUBE_DEFAULT_AGENT_NUMBER)
   const configuredAgent =
-    (configuredAgentId ? await prisma.user.findUnique({ where:{ id:configuredAgentId } }) : null) ||
+    (configuredAgentId ? await prisma.user.findUnique({ where: { id: configuredAgentId } }) : null) ||
     await findUserByEmail(configuredEmail) ||
     await findUserByPhone(configuredPhone)
   if (configuredAgent) return configuredAgent
 
   const attendance = await prisma.userAttendance.findFirst({
-    where:{
-      logoutAt:null,
-      status:{ in:["Available", "On Call"] },
-      user:{
-        isActive:true,
-        role:{ in:["SALES", "PRE_SALES", "MANAGER"] },
+    where: {
+      logoutAt: null,
+      status: { in: ["Available", "On Call"] },
+      user: {
+        isActive: true,
+        role: { in: ["SALES", "PRE_SALES", "MANAGER"] },
       },
     },
-    include:{
-      user:{
-        select:{ id:true, email:true, phone:true, secondaryPhone:true, firstName:true, lastName:true, username:true },
+    include: {
+      user: {
+        select: { id: true, email: true, phone: true, secondaryPhone: true, firstName: true, lastName: true, username: true },
       },
     },
-    orderBy:{ updatedAt:"desc" },
+    orderBy: { updatedAt: "desc" },
   })
   return attendance?.user || null
 }
 
 const isAdminUser = (req) =>
-  ["ADMIN", "MANAGER", "SUPER_ADMIN"].includes(String(req.authUser?.role || "").toUpperCase())
+  ["ADMIN", "SUPER_ADMIN"].includes(String(req.authUser?.role || "").toUpperCase())
 
 const getSalesCallAccessWhere = (userId) => ({
-  OR:[
-    { agentId:userId },
-    { lead:{ teamId:userId } },
+  OR: [
+    { agentId: userId },
+    { lead: { teamId: userId } },
     {
-      direction:"inbound",
-      agentId:null,
-      leadId:null,
-      provider:{ in:["mcube", "mcube-webphone"] },
+      direction: "inbound",
+      agentId: null,
+      leadId: null,
+      provider: { in: ["mcube", "mcube-webphone"] },
     },
   ],
 })
@@ -424,31 +452,31 @@ const canAccessCallLog = (req, callLog) =>
 const normalizeCallStatus = (value) => {
   const status = String(value || "initiated").toLowerCase().replace(/[_\s]+/g, "-")
   const aliases = {
-    answer:"connected",
-    answered:"connected",
-    connected:"connected",
-    calling:"initiating",
-    queued:"initiated",
-    ringing:"ringing",
-    "in-progress":"connected",
-    disconnected:"completed",
-    disconnect:"completed",
-    hangup:"completed",
-    "hang-up":"completed",
-    complete:"completed",
-    completed:"completed",
-    busy:"busy",
-    "no-answer":"no-answer",
-    "no-answered":"no-answer",
-    no_answer:"no-answer",
-    noanswer:"no-answer",
-    missed:"missed",
-    reject:"rejected",
-    rejected:"failed",
-    failed:"failed",
-    cancel:"canceled",
-    canceled:"canceled",
-    cancelled:"canceled",
+    answer: "connected",
+    answered: "connected",
+    connected: "connected",
+    calling: "initiating",
+    queued: "initiated",
+    ringing: "ringing",
+    "in-progress": "connected",
+    disconnected: "completed",
+    disconnect: "completed",
+    hangup: "completed",
+    "hang-up": "completed",
+    complete: "completed",
+    completed: "completed",
+    busy: "busy",
+    "no-answer": "no-answer",
+    "no-answered": "no-answer",
+    no_answer: "no-answer",
+    noanswer: "no-answer",
+    missed: "missed",
+    reject: "rejected",
+    rejected: "failed",
+    failed: "failed",
+    cancel: "canceled",
+    canceled: "canceled",
+    cancelled: "canceled",
   }
   return aliases[status] || status
 }
@@ -457,16 +485,16 @@ const normalizeCallDirection = (value, fallbackDirection = "outbound") => {
   if ((value === undefined || value === null || value === "") && fallbackDirection === "") return ""
   const direction = String(value || fallbackDirection || "outbound").trim().toLowerCase().replace(/[_\s]+/g, "-")
   const aliases = {
-    in:"inbound",
-    incoming:"inbound",
-    inbound:"inbound",
-    received:"inbound",
-    receive:"inbound",
-    out:"outbound",
-    outgoing:"outbound",
-    outbound:"outbound",
-    dialout:"outbound",
-    "click-to-call":"outbound",
+    in: "inbound",
+    incoming: "inbound",
+    inbound: "inbound",
+    received: "inbound",
+    receive: "inbound",
+    out: "outbound",
+    outgoing: "outbound",
+    outbound: "outbound",
+    dialout: "outbound",
+    "click-to-call": "outbound",
   }
   return aliases[direction] || fallbackDirection
 }
@@ -557,20 +585,20 @@ const recordingPayloadKeys = [
 const getRecordingValue = (req) => getMcubePayloadValue(req, recordingPayloadKeys)
 
 const callStatusPriority = {
-  initiating:1,
-  initiated:1,
-  queued:1,
-  calling:2,
-  ringing:2,
-  connected:3,
-  "in-progress":3,
-  completed:4,
-  "no-answer":4,
-  missed:4,
-  busy:4,
-  rejected:4,
-  failed:4,
-  canceled:4,
+  initiating: 1,
+  initiated: 1,
+  queued: 1,
+  calling: 2,
+  ringing: 2,
+  connected: 3,
+  "in-progress": 3,
+  completed: 4,
+  "no-answer": 4,
+  missed: 4,
+  busy: 4,
+  rejected: 4,
+  failed: 4,
+  canceled: 4,
 }
 
 const isFinalCallStatus = (status) => terminalCallStatuses.has(normalizeCallStatus(status))
@@ -578,30 +606,30 @@ const isFinalCallStatus = (status) => terminalCallStatuses.has(normalizeCallStat
 const callInclude = {
   lead: {
     select: {
-      id:true,
-      firstName:true,
-      lastName:true,
-      companyName:true,
-      teamId:true,
-      phones:true,
-      status:true,
-      channelPartner:true,
-      tags:true,
-      interestedProjects:true,
-      propertyType:true,
-      budget:true,
-      budgetMin:true,
-      budgetMax:true,
+      id: true,
+      firstName: true,
+      lastName: true,
+      companyName: true,
+      teamId: true,
+      phones: true,
+      status: true,
+      channelPartner: true,
+      tags: true,
+      interestedProjects: true,
+      propertyType: true,
+      budget: true,
+      budgetMin: true,
+      budgetMax: true,
     },
   },
   agent: {
     select: {
-      id:true,
-      username:true,
-      firstName:true,
-      lastName:true,
-      email:true,
-      phone:true,
+      id: true,
+      username: true,
+      firstName: true,
+      lastName: true,
+      email: true,
+      phone: true,
     },
   },
 }
@@ -622,13 +650,13 @@ const buildWhereFromQuery = (query) => {
     const phoneQuery = cleanPhone(query.callerNumber).slice(-10) || String(query.callerNumber)
     where.OR = [
       ...(where.OR || []),
-      { leadPhone:{ contains:phoneQuery } },
-      { phone:{ contains:phoneQuery } },
+      { leadPhone: { contains: phoneQuery } },
+      { phone: { contains: phoneQuery } },
     ]
   }
-  if (query.agentExtension) where.agentExtension = { contains:String(query.agentExtension).replace(/\D/g, "") }
-  if (query.campaign) where.OR = [...(where.OR || []), { campaignName:{ contains:String(query.campaign) } }, { queueName:{ contains:String(query.campaign) } }]
-  if (query.recordingAvailable === "true") where.recordingUrl = { not:null }
+  if (query.agentExtension) where.agentExtension = { contains: String(query.agentExtension).replace(/\D/g, "") }
+  if (query.campaign) where.OR = [...(where.OR || []), { campaignName: { contains: String(query.campaign) } }, { queueName: { contains: String(query.campaign) } }]
+  if (query.recordingAvailable === "true") where.recordingUrl = { not: null }
   if (query.recordingAvailable === "false") where.recordingUrl = null
   if (query.from || query.to) {
     where.createdAt = {}
@@ -718,37 +746,37 @@ const hydrateCallLogFromPayload = (callLog) => {
 
   return {
     ...callLog,
-    phone:callLog.phone || displayNumber || "-",
-    leadPhone:callLog.leadPhone || displayNumber || null,
-    callerNumber:callLog.callerNumber || (String(callLog.direction || "").toLowerCase() === "inbound" ? displayNumber || null : callLog.callerNumber),
-    customerNumber:callLog.customerNumber || displayNumber || null,
-    agentPhone:agentPhone || null,
-    agentNumber:callLog.agentNumber || agentPhone || null,
-    virtualNumber:virtualNumber || null,
-    campaignName:callLog.campaignName || String(getPayloadValue(payload, ["groupname", "groupName", "campaignName", "campaign"]) || "").trim() || null,
-    queueName:callLog.queueName || String(getPayloadValue(payload, ["queue", "queueName", "queue_id", "skill"]) || "").trim() || null,
-    providerAgentName:callLog.providerAgentName || String(getPayloadValue(payload, ["agentname", "agentName", "executiveName", "emp_name"]) || "").trim() || null,
-    providerStatus:providerStatus || null,
-    status:status || callLog.status,
+    phone: callLog.phone || displayNumber || "-",
+    leadPhone: callLog.leadPhone || displayNumber || null,
+    callerNumber: callLog.callerNumber || (String(callLog.direction || "").toLowerCase() === "inbound" ? displayNumber || null : callLog.callerNumber),
+    customerNumber: callLog.customerNumber || displayNumber || null,
+    agentPhone: agentPhone || null,
+    agentNumber: callLog.agentNumber || agentPhone || null,
+    virtualNumber: virtualNumber || null,
+    campaignName: callLog.campaignName || String(getPayloadValue(payload, ["groupname", "groupName", "campaignName", "campaign"]) || "").trim() || null,
+    queueName: callLog.queueName || String(getPayloadValue(payload, ["queue", "queueName", "queue_id", "skill"]) || "").trim() || null,
+    providerAgentName: callLog.providerAgentName || String(getPayloadValue(payload, ["agentname", "agentName", "executiveName", "emp_name"]) || "").trim() || null,
+    providerStatus: providerStatus || null,
+    status: status || callLog.status,
     duration,
-    disconnectedBy:callLog.disconnectedBy || String(getPayloadValue(payload, ["disconnectedby", "disconnectedBy", "hangupBy", "hangup_by"]) || "").trim() || null,
-    startedAt:callLog.startedAt || toDateOrNull(getPayloadValue(payload, ["starttime", "startTime", "StartTime", "callstarttime"])),
-    endedAt:callLog.endedAt || toDateOrNull(getPayloadValue(payload, ["endtime", "endTime", "EndTime", "callendtime"])),
+    disconnectedBy: callLog.disconnectedBy || String(getPayloadValue(payload, ["disconnectedby", "disconnectedBy", "hangupBy", "hangup_by"]) || "").trim() || null,
+    startedAt: callLog.startedAt || toDateOrNull(getPayloadValue(payload, ["starttime", "startTime", "StartTime", "callstarttime"])),
+    endedAt: callLog.endedAt || toDateOrNull(getPayloadValue(payload, ["endtime", "endTime", "EndTime", "callendtime"])),
   }
 }
 
 const hydrateCallLogRecording = (callLog) => {
   const recoveredRecordingUrl = callLog.recordingUrl || getRecordingUrlFromPayload(callLog.rawPayload)
   return recoveredRecordingUrl && recoveredRecordingUrl !== callLog.recordingUrl
-    ? { ...callLog, recordingUrl:recoveredRecordingUrl }
+    ? { ...callLog, recordingUrl: recoveredRecordingUrl }
     : callLog
 }
 
 const backfillRecoveredRecordings = async (callLogs) => {
   const updates = callLogs
     .map((callLog) => ({
-      id:callLog.id,
-      recordingUrl:!callLog.recordingUrl ? getRecordingUrlFromPayload(callLog.rawPayload) : "",
+      id: callLog.id,
+      recordingUrl: !callLog.recordingUrl ? getRecordingUrlFromPayload(callLog.rawPayload) : "",
     }))
     .filter((item) => item.recordingUrl)
 
@@ -756,8 +784,8 @@ const backfillRecoveredRecordings = async (callLogs) => {
 
   await Promise.all(updates.map((item) =>
     prisma.callLog.updateMany({
-      where:{ id:item.id, recordingUrl:null },
-      data:{ recordingUrl:item.recordingUrl },
+      where: { id: item.id, recordingUrl: null },
+      data: { recordingUrl: item.recordingUrl },
     })
   ))
 }
@@ -771,17 +799,24 @@ const listCalls = async (req, res, where) => {
     prisma.callLog.findMany({
       where,
       skip,
-      take:limit,
-      include:callInclude,
-      orderBy:{ createdAt:"desc" },
+      take: limit,
+      include: callInclude,
+      orderBy: { createdAt: "desc" },
     }),
   ])
   await backfillRecoveredRecordings(data)
+  const isAdmin = isAdminUser(req)
   res.status(200).json({
     page,
     limit,
     totalItems,
-    data:data.map((callLog) => hydrateCallLogFromPayload(hydrateCallLogRecording(callLog))),
+    data: data.map((callLog) => {
+      const hydrated = hydrateCallLogFromPayload(hydrateCallLogRecording(callLog))
+      if (!isAdmin && hydrated.recordingUrl) {
+        hydrated.recordingUrl = "available" // non-admins see that it's saved/recorded, but do not receive the raw audio URL
+      }
+      return isAdmin ? hydrated : maskCallLogData(hydrated, false)
+    }),
   })
 }
 
@@ -791,112 +826,132 @@ exports.startCall = async (req, res) => {
     const leadId = toNumberOrNull(req.body.leadId)
     const authUserId = toNumberOrNull(req.authUser?.id)
     const requestedAgentId = toNumberOrNull(req.body.agentId)
-    const agentId = isAdminUser(req) ? requestedAgentId || authUserId : authUserId
-    const leadPhone = cleanPhone(req.body.leadPhone || req.body.phone)
-    const requestedAgentPhone = cleanPhone(req.body.agentPhone)
-
-    if (!leadId) return res.status(400).json({ message:"leadId is required" })
-    if (!agentId) return res.status(400).json({ message:"agentId is required" })
-    if (!leadPhone || leadPhone.length < 10) {
-      return res.status(400).json({ message:"Valid leadPhone is required" })
-    }
+    if (!leadId) return res.status(400).json({ message: "leadId is required" })
+    if (!agentId) return res.status(400).json({ message: "agentId is required" })
 
     const [lead, agent] = await Promise.all([
-      prisma.lead.findUnique({ where:{ id:leadId } }),
-      prisma.user.findUnique({ where:{ id:agentId } }),
+      prisma.lead.findUnique({ where: { id: leadId } }),
+      prisma.user.findUnique({ where: { id: agentId } }),
     ])
-    if (!lead) return res.status(404).json({ message:"Lead not found" })
-    if (!agent) return res.status(404).json({ message:"Agent not found" })
+    if (!lead) return res.status(404).json({ message: "Lead not found" })
+    if (!agent) return res.status(404).json({ message: "Agent not found" })
     if (!isAdminUser(req) && lead.teamId && lead.teamId !== agentId) {
-      return res.status(403).json({ message:"You can call only your assigned leads" })
+      return res.status(403).json({ message: "You can call only your assigned leads" })
     }
 
-    const agentPhone = requestedAgentPhone || cleanPhone(agent.phone || agent.secondaryPhone || process.env.MCUBE_DEFAULT_AGENT_NUMBER)
+    const rawRequestedPhone = String(req.body.dialedPhone || req.body.leadPhone || req.body.phone || "").trim()
+    const isMasked = /x/i.test(rawRequestedPhone) || rawRequestedPhone.includes("*")
+    const primaryPhone = getLeadPhone(lead)
+    const allowedPhones = getAllLeadPhones(lead)
+    const requestedPhone = cleanPhone(rawRequestedPhone)
+
+    let leadPhone = primaryPhone
+    if (!rawRequestedPhone || isMasked) {
+      leadPhone = primaryPhone
+    } else if (requestedPhone && allowedPhones.some((p) => matchesPhone(p, requestedPhone))) {
+      leadPhone = allowedPhones.find((p) => matchesPhone(p, requestedPhone)) || requestedPhone
+    } else if (requestedPhone && requestedPhone.length >= 10 && allowedPhones.length > 0 && !allowedPhones.some((p) => matchesPhone(p, requestedPhone))) {
+      return res.status(400).json({ message: "Selected phone number does not belong to this lead." })
+    } else {
+      leadPhone = primaryPhone
+    }
+
+    if (!leadPhone || leadPhone.length < 10) {
+      return res.status(400).json({ message: "Valid leadPhone is required" })
+    }
+
+    const resolved = await mcubeAgentService.requireMcubeAgentForCrmUser(agent)
+    const agentPhone = cleanPhone(resolved.agentPhone)
+    const agentExtension = String(resolved.agentExtension || "").trim()
     if (!agentPhone || agentPhone.length < 10) {
-      return res.status(400).json({ message:"Sales user phone is required before starting call" })
+      return res.status(400).json({ message: "MCUBE calling number is not configured for this user." })
     }
     if (isSamePhone(agentPhone, leadPhone)) {
       return res.status(400).json({
-        message:"Agent and lead phone numbers must be different. Enter your own phone as the agent number.",
+        message: "Agent and lead phone numbers must be different. Enter your own phone as the agent number.",
       })
     }
 
     const activeCall = await prisma.callLog.findFirst({
-      where:{
+      where: {
         leadId,
         agentId,
-        provider:"mcube",
-        status:{ in:activeCallStatuses },
-        createdAt:{ gte:new Date(Date.now() - 10 * 60 * 1000) },
+        provider: "mcube",
+        status: { in: activeCallStatuses },
+        createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) },
       },
-      include:callInclude,
-      orderBy:{ createdAt:"desc" },
+      include: callInclude,
+      orderBy: { createdAt: "desc" },
     })
 
     if (activeCall) {
       return res.status(409).json({
-        message:"A call is already active for this lead. Please wait for it to disconnect, then dispose the call.",
-        callLog:activeCall,
+        message: "A call is already active for this lead. Please wait for it to disconnect, then dispose the call.",
+        callLog: activeCall,
       })
     }
 
     pendingCallLog = await prisma.callLog.create({
-      data:{
+      data: {
         leadId,
         agentId,
-        phone:leadPhone,
+        phone: leadPhone,
         leadPhone,
         agentPhone,
-        provider:"mcube",
-        status:"initiated",
-        notes:"MCube outbound",
-        startedAt:new Date(),
+        agentExtension: agentExtension || null,
+        provider: "mcube",
+        status: "initiated",
+        notes: "MCube outbound",
+        startedAt: new Date(),
       },
     })
 
     const providerResult = await startProviderCall({
       lead,
       agent,
-      phone:leadPhone,
+      phone: leadPhone,
       agentPhone,
-      callLogId:pendingCallLog.id,
+      agentExtension,
+      callLogId: pendingCallLog.id,
     })
     await prisma.callLog.update({
-      where:{ id:pendingCallLog.id },
-      data:{
-        callId:providerResult.providerCallId,
-        providerCallId:providerResult.providerCallId,
-        provider:providerResult.provider,
+      where: { id: pendingCallLog.id },
+      data: {
+        callId: providerResult.providerCallId,
+        providerCallId: providerResult.providerCallId,
+        provider: providerResult.provider,
       },
     })
     // Do not overwrite a newer status if the provider callback arrived before
     // its connect API response was persisted.
     await prisma.callLog.updateMany({
-      where:{ id:pendingCallLog.id, status:"initiated" },
-      data:{ status:normalizeCallStatus(providerResult.status || "initiated") },
+      where: { id: pendingCallLog.id, status: "initiated" },
+      data: { status: normalizeCallStatus(providerResult.status || "initiated") },
     })
     const callLog = await prisma.callLog.findUnique({
-      where:{ id:pendingCallLog.id },
-      include:callInclude,
+      where: { id: pendingCallLog.id },
+      include: callInclude,
     })
 
+    const isAdmin = isAdminUser(req)
     res.status(201).json({
-      message:providerResult.message || "Call initiated. The provider will call the agent first.",
-      callLog,
-      provider:providerResult.provider,
-      providerCallId:providerResult.providerCallId,
+      message: providerResult.message || "Call initiated. The provider will call the agent first.",
+      callLog: isAdmin ? callLog : maskCallLogData(callLog, false),
+      provider: providerResult.provider,
+      providerCallId: providerResult.providerCallId,
     })
   } catch (error) {
     console.error("Start call error:", error.message)
     if (pendingCallLog?.id) {
       await prisma.callLog.update({
-        where:{ id:pendingCallLog.id },
-        data:{ status:"failed", notes:error.message, endedAt:new Date() },
+        where: { id: pendingCallLog.id },
+        data: { status: "failed", notes: error.message, endedAt: new Date() },
       }).catch(() => null)
     }
+    if (sendMcubeMappingError(res, error)) return
     res.status(error.statusCode || 500).json({
-      message:error.message || "Unable to start call",
-      callLogId:pendingCallLog?.id || null,
+      message: error.message || "Unable to start call",
+      callLogId: pendingCallLog?.id || null,
     })
   }
 }
@@ -906,66 +961,82 @@ exports.startBrowserPhone = async (req, res) => {
     const leadId = toNumberOrNull(req.body.leadId)
     const authUserId = toNumberOrNull(req.authUser?.id)
     const requestedAgentId = toNumberOrNull(req.body.agentId)
-    const agentId = isAdminUser(req) ? requestedAgentId || authUserId : authUserId
-    const leadPhone = cleanPhone(req.body.leadPhone || req.body.phone)
-
-    if (!leadId) return res.status(400).json({ message:"leadId is required" })
-    if (!agentId) return res.status(400).json({ message:"agentId is required" })
-    if (!leadPhone || leadPhone.length < 10) {
-      return res.status(400).json({ message:"Valid leadPhone is required" })
-    }
+    if (!leadId) return res.status(400).json({ message: "leadId is required" })
+    if (!agentId) return res.status(400).json({ message: "agentId is required" })
 
     const [lead, agent] = await Promise.all([
-      prisma.lead.findUnique({ where:{ id:leadId } }),
-      prisma.user.findUnique({ where:{ id:agentId } }),
+      prisma.lead.findUnique({ where: { id: leadId } }),
+      prisma.user.findUnique({ where: { id: agentId } }),
     ])
-    if (!lead) return res.status(404).json({ message:"Lead not found" })
-    if (!agent) return res.status(404).json({ message:"Agent not found" })
+    if (!lead) return res.status(404).json({ message: "Lead not found" })
+    if (!agent) return res.status(404).json({ message: "Agent not found" })
     if (!isAdminUser(req) && lead.teamId && lead.teamId !== agentId) {
-      return res.status(403).json({ message:"You can call only your assigned leads" })
+      return res.status(403).json({ message: "You can call only your assigned leads" })
     }
 
-    const agentPhone = cleanPhone(req.body.agentPhone || agent.phone || agent.secondaryPhone || process.env.MCUBE_DEFAULT_AGENT_NUMBER)
+    const rawRequestedPhone = String(req.body.dialedPhone || req.body.leadPhone || req.body.phone || "").trim()
+    const isMasked = /x/i.test(rawRequestedPhone) || rawRequestedPhone.includes("*")
+    const primaryPhone = getLeadPhone(lead)
+    const allowedPhones = getAllLeadPhones(lead)
+    const requestedPhone = cleanPhone(rawRequestedPhone)
+
+    let leadPhone = primaryPhone
+    if (!rawRequestedPhone || isMasked) {
+      leadPhone = primaryPhone
+    } else if (requestedPhone && allowedPhones.some((p) => matchesPhone(p, requestedPhone))) {
+      leadPhone = allowedPhones.find((p) => matchesPhone(p, requestedPhone)) || requestedPhone
+    } else if (requestedPhone && requestedPhone.length >= 10 && allowedPhones.length > 0 && !allowedPhones.some((p) => matchesPhone(p, requestedPhone))) {
+      return res.status(400).json({ message: "Selected phone number does not belong to this lead." })
+    } else {
+      leadPhone = primaryPhone
+    }
+
+    if (!leadPhone || leadPhone.length < 10) {
+      return res.status(400).json({ message: "Valid leadPhone is required" })
+    }
+
+    const resolved = await mcubeAgentService.requireMcubeAgentForCrmUser(agent)
+    const agentPhone = cleanPhone(resolved.agentPhone)
     const crmAgentEmail = String(agent.email || req.authUser?.email || "").trim().toLowerCase()
-    const agentEmail = getMcubeAgentEmail(agent, req.authUser)
-    const agentExtension = String(req.body.agentExtension || getMcubeAgentExtension(agent, req.authUser)).trim()
-    const agentMode = getMcubeAgentMode(agent, req.authUser)
+    const agentEmail = resolved.mcubeEmail
+    const agentExtension = String(resolved.agentExtension || "").trim()
+    const agentMode = resolved.agentCallingMode || "softphone"
     const clickToCallAgentNumber = getMcubeClickToCallAgentNumber({ agentMode, agentPhone, agentExtension })
     if (!agentEmail) {
-      return res.status(400).json({ message:"Sales user email is required for MCube browser phone login" })
+      return res.status(400).json({ message: "Sales user email is required for MCube browser phone login" })
     }
     if (!clickToCallAgentNumber) {
-      return res.status(400).json({ message:"MCube agent number or extension is required before starting call" })
+      return res.status(400).json({ message: "MCube agent number or extension is required before starting call" })
     }
 
     await prisma.callLog.updateMany({
-      where:{
+      where: {
         leadId,
         agentId,
-        provider:"mcube-webphone",
-        status:{ in:activeCallStatuses },
-        createdAt:{ gte:new Date(Date.now() - 10 * 60 * 1000) },
+        provider: "mcube-webphone",
+        status: { in: activeCallStatuses },
+        createdAt: { gte: new Date(Date.now() - 10 * 60 * 1000) },
       },
-      data:{
-        status:"canceled",
-        endedAt:new Date(),
-        notes:"MCube outbound - canceled automatically before a new browser call was started.",
+      data: {
+        status: "canceled",
+        endedAt: new Date(),
+        notes: "MCube outbound - canceled automatically before a new browser call was started.",
       },
     })
 
     let callLog = await prisma.callLog.create({
-      data:{
+      data: {
         leadId,
         agentId,
-        phone:leadPhone,
+        phone: leadPhone,
         leadPhone,
-        agentPhone:agentPhone || null,
-        provider:"mcube-webphone",
-        status:"initiated",
-        notes:"MCube outbound",
-        startedAt:new Date(),
+        agentPhone: agentPhone || null,
+        provider: "mcube-webphone",
+        status: "initiated",
+        notes: "MCube outbound",
+        startedAt: new Date(),
       },
-      include:callInclude,
+      include: callInclude,
     })
 
     const widgetUrls = mcubeVoice.buildBrowserPhoneUrl({
@@ -973,74 +1044,47 @@ exports.startBrowserPhone = async (req, res) => {
       agentExtension,
       agentPhone,
       leadPhone,
-      callLogId:callLog.id,
+      callLogId: callLog.id,
       leadId,
       agentId,
-      agentName:getUserName(agent),
-      leadName:getLeadName(lead),
+      agentName: getUserName(agent),
+      leadName: getLeadName(lead),
     })
 
-    let providerResult = null
-    let providerWarning = ""
-
-    try {
-      providerResult = await mcubeVoice.connectTwoNumbers({
-        agentExtension,
-        agentPhone:clickToCallAgentNumber,
-        leadPhone,
-        callLogId:callLog.id,
-        leadId,
-      })
-      await prisma.callLog.update({
-        where:{ id:callLog.id },
-        data:{
-          callId:providerResult.providerCallId,
-          providerCallId:providerResult.providerCallId,
-          provider:providerResult.provider,
-        },
-      })
-      await prisma.callLog.updateMany({
-        where:{ id:callLog.id, status:"initiated" },
-        data:{ status:normalizeCallStatus(providerResult.status || "initiated") },
-      })
-    } catch (providerError) {
-      providerWarning = providerError.message || "MCube click2call request was not accepted."
-      await prisma.callLog.update({
-        where:{ id:callLog.id },
-        data:{
-          callId:`mcube-widget-${callLog.id}`,
-          providerCallId:`mcube-widget-${callLog.id}`,
-          notes:`MCube outbound - widget opened. Click2call API warning: ${providerWarning}`,
-        },
-      })
-    }
+    await prisma.callLog.update({
+      where: { id: callLog.id },
+      data: {
+        callId: `mcube-widget-${callLog.id}`,
+        providerCallId: `mcube-widget-${callLog.id}`,
+        notes: "MCube outbound - widget opened",
+      },
+    })
 
     callLog = await prisma.callLog.findUnique({
-      where:{ id:callLog.id },
-      include:callInclude,
+      where: { id: callLog.id },
+      include: callInclude,
     })
 
+    const isAdmin = isAdminUser(req)
     res.status(201).json({
-      message:providerWarning
-        ? "MCube widget opened for this lead. Use the browser softphone to place the outbound call."
-        : providerResult.message || "Browser phone ready. MCube outbound call sent to the selected lead.",
-      callLog,
-      launchUrl:widgetUrls.authUrl,
-      widgetUrl:widgetUrls.phoneUrl,
-      providerWarning,
-      crmUsername:crmAgentEmail,
-      mcubeUsername:agentEmail,
+      message: "MCube widget opened for this lead. Use Click2Call to connect the call.",
+      callLog: isAdmin ? callLog : maskCallLogData(callLog, false),
+      launchUrl: widgetUrls.authUrl,
+      widgetUrl: widgetUrls.phoneUrl,
+      crmUsername: crmAgentEmail,
+      mcubeUsername: agentEmail,
       agentExtension,
-      agentCallingMode:agentMode,
+      agentCallingMode: agentMode,
       agentPhone,
       clickToCallAgentNumber,
-      leadPhone,
-      provider:"mcube-webphone",
+      leadPhone: isAdmin ? leadPhone : maskPhoneNumber(leadPhone),
+      provider: "mcube-webphone",
     })
   } catch (error) {
     console.error("Start browser phone error:", error.message)
+    if (sendMcubeMappingError(res, error)) return
     res.status(error.statusCode || 500).json({
-      message:error.message || "Unable to start browser phone",
+      message: error.message || "Unable to start browser phone",
     })
   }
 }
@@ -1053,48 +1097,64 @@ exports.clickToCallLead = async (req, res) => {
     const agentId = toNumberOrNull(req.authUser?.id)
     const requestId = String(req.body.requestId || `${Date.now()}-${Math.random()}`).trim()
 
-    if (!leadId) return res.status(400).json({ message:"leadId is required" })
-    if (!agentId) return res.status(401).json({ message:"Authentication is required" })
-    if (!requestId) return res.status(400).json({ message:"requestId is required" })
+    if (!leadId) return res.status(400).json({ message: "leadId is required" })
+    if (!agentId) return res.status(401).json({ message: "Authentication is required" })
+    if (!requestId) return res.status(400).json({ message: "requestId is required" })
 
     const [lead, agent] = await Promise.all([
-      prisma.lead.findUnique({ where:{ id:leadId } }),
-      prisma.user.findUnique({ where:{ id:agentId } }),
+      prisma.lead.findUnique({ where: { id: leadId } }),
+      prisma.user.findUnique({ where: { id: agentId } }),
     ])
-    if (!lead) return res.status(404).json({ message:"Lead not found" })
-    if (!agent) return res.status(404).json({ message:"Agent not found" })
+    if (!lead) return res.status(404).json({ message: "Lead not found" })
+    if (!agent) return res.status(404).json({ message: "Agent not found" })
     if (!isAdminUser(req) && lead.teamId && lead.teamId !== agentId) {
-      return res.status(403).json({ message:"You can call only your assigned leads" })
+      return res.status(403).json({ message: "You can call only your assigned leads" })
     }
 
+    const rawRequestedPhone = String(req.body.dialedPhone || req.body.phone || req.body.leadPhone || "").trim()
+    const isMasked = /x/i.test(rawRequestedPhone) || rawRequestedPhone.includes("*")
     const primaryLeadPhone = getLeadPhone(lead)
-    const requestedDialPhone = cleanPhone(req.body.dialedPhone || req.body.phone || req.body.leadPhone)
     const allowedLeadPhones = getAllLeadPhones(lead)
-    const leadPhone = requestedDialPhone && allowedLeadPhones.some((phone) => matchesPhone(phone, requestedDialPhone))
-      ? requestedDialPhone
-      : primaryLeadPhone
-    if (!leadPhone || leadPhone.length < 10) {
-      return res.status(400).json({ message:"Customer phone number is unavailable." })
-    }
-    if (requestedDialPhone && !allowedLeadPhones.some((phone) => matchesPhone(phone, requestedDialPhone))) {
-      return res.status(400).json({ message:"Selected phone number does not belong to this lead." })
+    const requestedDialPhone = cleanPhone(rawRequestedPhone)
+
+    let leadPhone = primaryLeadPhone
+    if (!rawRequestedPhone || isMasked) {
+      leadPhone = primaryLeadPhone
+    } else if (requestedDialPhone && allowedLeadPhones.some((phone) => matchesPhone(phone, requestedDialPhone))) {
+      leadPhone = allowedLeadPhones.find((phone) => matchesPhone(phone, requestedDialPhone)) || requestedDialPhone
+    } else if (requestedDialPhone && requestedDialPhone.length >= 10 && allowedLeadPhones.length > 0 && !allowedLeadPhones.some((phone) => matchesPhone(phone, requestedDialPhone))) {
+      return res.status(400).json({ message: "Selected phone number does not belong to this lead." })
+    } else {
+      leadPhone = primaryLeadPhone
     }
 
-    const agentPhone = getMcubeAgentNumber(agent, req.authUser)
-    const agentExtension = getMcubeAgentExtension(agent, req.authUser)
-    const agentMode = getMcubeAgentMode(agent, req.authUser)
+    if (!leadPhone || leadPhone.length < 10) {
+      return res.status(400).json({ message: "Customer phone number is unavailable." })
+    }
+
+    const resolved = await mcubeAgentService.requireMcubeAgentForCrmUser(agent)
+    const agentPhone = cleanPhone(resolved.agentPhone)
+    const agentExtension = String(resolved.agentExtension || "").trim()
+    const agentMode = resolved.agentCallingMode || "softphone"
     if (!agentPhone) {
-      return res.status(400).json({ message:"MCUBE calling number is not configured for this user." })
+      return res.status(400).json({ message: "MCUBE calling number is not configured for this user." })
+    }
+
+    // Check if agent and lead phone numbers are different
+    if (isSamePhone(agentPhone, leadPhone)) {
+      return res.status(400).json({
+        message: "Agent and lead phone numbers must be different. Enter your own phone as the agent number.",
+      })
     }
 
     const activeCall = await prisma.callLog.findFirst({
-      where:{
+      where: {
         agentId,
-        provider:{ in:["mcube", "mcube-webphone"] },
-        status:{ in:activeCallStatuses },
+        provider: { in: ["mcube", "mcube-webphone"] },
+        status: { in: activeCallStatuses },
       },
-      include:callInclude,
-      orderBy:{ createdAt:"desc" },
+      include: callInclude,
+      orderBy: { createdAt: "desc" },
     })
 
     if (activeCall) {
@@ -1104,111 +1164,111 @@ exports.clickToCallLead = async (req, res) => {
 
       if (liveCallStatuses.has(activeStatus) && activeAgeMs < 30 * 60 * 1000) {
         return res.status(409).json({
-          success:false,
-          message:"Another call is currently active. Please complete it before starting a new call.",
-          callLog:activeCall,
+          success: false,
+          message: "Another call is currently active. Please complete it before starting a new call.",
+          callLog: activeCall,
         })
       }
 
       if (!liveCallStatuses.has(activeStatus) && activeAgeMs > MCUBE_STALE_ACTIVE_CALL_MS) {
         await prisma.callLog.update({
-          where:{ id:activeCall.id },
-          data:{
-            status:"canceled",
-            endedAt:new Date(),
-            notes:activeCall.notes || "MCube outbound call was canceled after becoming stale.",
+          where: { id: activeCall.id },
+          data: {
+            status: "canceled",
+            endedAt: new Date(),
+            notes: activeCall.notes || "MCube outbound call was canceled after becoming stale.",
           },
         }).catch(() => null)
       } else {
         return res.status(409).json({
-          success:false,
-          message:"Another call is currently active. Please wait before starting a new call.",
-          callLog:activeCall,
+          success: false,
+          message: "Another call is currently active. Please wait before starting a new call.",
+          callLog: activeCall,
         })
       }
     }
 
     callLog = await prisma.callLog.create({
-      data:{
+      data: {
         leadId,
         agentId,
-        phone:leadPhone,
-        leadPhone:primaryLeadPhone || leadPhone,
-        agentPhone:agentPhone || null,
-        provider:"mcube",
-        status:"initiating",
-        notes:`MCube outbound click2call request ${requestId}${!isSamePhone(primaryLeadPhone, leadPhone) ? " (alternate number)" : ""}`,
-        startedAt:new Date(),
+        phone: leadPhone,
+        leadPhone: primaryLeadPhone || leadPhone,
+        agentPhone: agentPhone || null,
+        provider: "mcube",
+        status: "initiating",
+        notes: `MCube outbound click2call request ${requestId}${!isSamePhone(primaryLeadPhone, leadPhone) ? " (alternate number)" : ""}`,
+        startedAt: new Date(),
       },
-      include:callInclude,
+      include: callInclude,
     })
 
     const providerResult = await mcubeVoice.connectTwoNumbers({
       agentExtension,
       agentPhone,
       leadPhone,
-      callLogId:callLog.id,
+      callLogId: callLog.id,
       leadId,
       requestId,
     })
 
     callLog = await prisma.callLog.update({
-      where:{ id:callLog.id },
-      data:{
-        callId:providerResult.providerCallId,
-        providerCallId:providerResult.providerCallId,
-        status:normalizeCallStatus(providerResult.status || "initiated"),
+      where: { id: callLog.id },
+      data: {
+        callId: providerResult.providerCallId,
+        providerCallId: providerResult.providerCallId,
+        status: normalizeCallStatus(providerResult.status || "initiated"),
       },
-      include:callInclude,
+      include: callInclude,
     })
 
     console.info("MCube click2call initiated", {
-      userId:agentId,
+      userId: agentId,
       leadId,
-      callLogId:callLog.id,
-      providerCallId:providerResult.providerCallId,
-      providerStatus:providerResult.status,
+      callLogId: callLog.id,
+      providerCallId: providerResult.providerCallId,
+      providerStatus: providerResult.status,
       agentMode,
-      durationMs:Date.now() - startedAtMs,
+      durationMs: Date.now() - startedAtMs,
     })
 
+    const isAdmin = isAdminUser(req)
     res.status(201).json({
-      success:true,
-      message:"Call initiated successfully",
-      data:{
-        callLogId:callLog.id,
-        providerCallId:callLog.providerCallId || callLog.callId || "",
+      success: true,
+      message: "Call initiated successfully",
+      data: {
+        callLogId: callLog.id,
+        providerCallId: callLog.providerCallId || callLog.callId || "",
         leadId,
-        status:String(callLog.status || "initiated").toUpperCase(),
+        status: String(callLog.status || "initiated").toUpperCase(),
         requestId,
       },
-      callLog,
+      callLog: isAdmin ? callLog : maskCallLogData(callLog, false),
     })
   } catch (error) {
     console.error("MCube click2call error:", {
-      callLogId:callLog?.id || null,
-      message:error.message,
-      statusCode:error.statusCode || 500,
-      durationMs:Date.now() - startedAtMs,
+      callLogId: callLog?.id || null,
+      message: error.message,
+      statusCode: error.statusCode || 500,
+      durationMs: Date.now() - startedAtMs,
     })
     if (callLog?.id) {
       await prisma.callLog.update({
-        where:{ id:callLog.id },
-        data:{
-          status:"failed",
-          endedAt:new Date(),
-          notes:`MCube outbound click2call failed: ${error.message || "Provider error"}`,
+        where: { id: callLog.id },
+        data: {
+          status: "failed",
+          endedAt: new Date(),
+          notes: `MCube outbound click2call failed: ${error.message || "Provider error"}`,
         },
       }).catch(() => null)
     }
+    if (sendMcubeMappingError(res, error)) return
     res.status(error.statusCode || 500).json({
-      success:false,
-      message:error.statusCode && error.statusCode < 500
-        ? error.message
-        : "MCUBE could not initiate the call. Please try again.",
-      data:{
-        callLogId:callLog?.id || null,
-        status:"FAILED",
+      success: false,
+      message: error.message || "MCUBE could not initiate the call. Please try again.",
+      data: {
+        callLogId: callLog?.id || null,
+        status: "FAILED",
       },
     })
   }
@@ -1217,31 +1277,120 @@ exports.clickToCallLead = async (req, res) => {
 exports.getBrowserPhoneWidget = async (req, res) => {
   try {
     const authUserId = toNumberOrNull(req.authUser?.id)
-    const agent = authUserId ? await prisma.user.findUnique({ where:{ id:authUserId } }) : null
-    if (!agent) return res.status(404).json({ message:"Agent not found" })
+    const agent = authUserId ? await prisma.user.findUnique({ where: { id: authUserId } }) : null
+    if (!agent) return res.status(404).json({ message: "Agent not found" })
 
-    const agentPhone = cleanPhone(agent.phone || agent.secondaryPhone || process.env.MCUBE_DEFAULT_AGENT_NUMBER)
-    const agentEmail = getMcubeAgentEmail(agent, req.authUser)
-    const agentExtension = getMcubeAgentExtension(agent, req.authUser)
-    const agentMode = getMcubeAgentMode(agent, req.authUser)
+    const resolved = await mcubeAgentService.resolveMcubeAgentForCrmUser(agent)
+    if (!resolved) return res.status(400).json({ message: "Unable to resolve MCube agent configuration." })
+    const agentPhone = cleanPhone(resolved.agentPhone)
+    const agentEmail = resolved.mcubeEmail || agent.email
+    if (!agentEmail) return res.status(400).json({ message: "Agent email is required for MCube softphone." })
+    const agentExtension = resolved.agentExtension || ""
+    const agentMode = resolved.agentCallingMode || "softphone"
     const widgetUrls = mcubeVoice.buildBrowserPhoneUrl({
       agentEmail,
       agentExtension,
       agentPhone,
-      agentId:agent.id,
-      agentName:getUserName(agent),
+      agentId: agent.id,
+      agentName: getUserName(agent),
     })
 
     res.status(200).json({
-      widgetUrl:widgetUrls.authUrl,
-      mcubeUsername:agentEmail,
+      success: true,
+      widgetUrl: widgetUrls.authUrl,
+      mcubeUsername: agentEmail,
+      mcubeEmail: agentEmail,
+      crmEmail: agent.email,
       agentExtension,
       agentPhone,
-      agentCallingMode:agentMode,
+      agentCallingMode: agentMode,
+      mcubeAgent: {
+        mcubeEmail: agentEmail,
+        mcubeAgentId: resolved.mcubeAgentId || "",
+        extension: agentExtension,
+        agentPhone,
+        isActive: true,
+      },
+      mcubeStatus: resolved.mcubeStatus || "NONE",
     })
   } catch (error) {
     console.error("MCube widget login error:", error.message)
-    res.status(error.statusCode || 500).json({ message:error.message || "Unable to load MCube widget" })
+    if (sendMcubeMappingError(res, error)) return
+    res.status(error.statusCode || 500).json({ message: error.message || "Unable to load MCube widget" })
+  }
+}
+
+exports.getMyMcubeAgentMapping = async (req, res) => {
+  try {
+    const authUserId = toNumberOrNull(req.authUser?.id)
+    const agent = authUserId ? await prisma.user.findUnique({ where: { id: authUserId } }) : null
+    if (!agent) return res.status(404).json({ success: false, message: "Agent not found" })
+
+    const resolved = await mcubeAgentService.resolveMcubeAgentForCrmUser(agent)
+    res.status(200).json({
+      success: true,
+      mapped: Boolean(resolved.mapped),
+      crmUser: {
+        id: agent.id,
+        email: agent.email,
+      },
+      mcubeAgent: resolved.mapped ? {
+        mcubeEmail: resolved.mcubeEmail || agent.email,
+        mcubeAgentId: resolved.mcubeAgentId || "",
+        extension: resolved.agentExtension || "",
+        agentPhone: resolved.agentPhone || "",
+        callingMode: resolved.agentCallingMode || "softphone",
+        isActive: true,
+      } : null,
+      mcubeStatus: resolved.mcubeStatus || "NONE",
+    })
+  } catch (error) {
+    console.error("Get MCube agent mapping error:", error.message)
+    res.status(500).json({ success: false, message: error.message || "Unable to get MCube agent mapping" })
+  }
+}
+
+exports.listMcubeAgentMappingsAdmin = async (req, res) => {
+  try {
+    if (!isAdminUser(req)) return res.status(403).json({ message: "Admin access required" })
+    const mappings = await mcubeAgentService.listMcubeAgentMappings()
+    res.status(200).json({ success: true, mappings })
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message })
+  }
+}
+
+exports.saveMcubeAgentMappingAdmin = async (req, res) => {
+  try {
+    if (!isAdminUser(req)) return res.status(403).json({ message: "Admin access required" })
+    const { userId, mcubeEmail, mcubeAgentId, extension, agentPhone, callingMode, isActive } = req.body
+    if (!userId || !mcubeEmail) {
+      return res.status(400).json({ message: "userId and mcubeEmail are required" })
+    }
+    const mapping = await mcubeAgentService.upsertMcubeAgentMapping({
+      userId,
+      mcubeEmail,
+      mcubeAgentId,
+      extension,
+      agentPhone,
+      callingMode,
+      isActive,
+    })
+    res.status(200).json({ success: true, message: "MCube agent mapping saved", mapping })
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message })
+  }
+}
+
+exports.deleteMcubeAgentMappingAdmin = async (req, res) => {
+  try {
+    if (!isAdminUser(req)) return res.status(403).json({ message: "Admin access required" })
+    const userId = toNumberOrNull(req.params.userId)
+    if (!userId) return res.status(400).json({ message: "userId is required" })
+    await mcubeAgentService.deleteMcubeAgentMapping(userId)
+    res.status(200).json({ success: true, message: "MCube agent mapping deleted" })
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message })
   }
 }
 
@@ -1269,44 +1418,44 @@ exports.disposeCall = async (req, res) => {
     const callStatus = normalizeCallStatus(req.body.callStatus || req.body.status || "completed")
 
     if (!allowedDispositions.has(disposition)) {
-      return res.status(400).json({ message:"Invalid disposition" })
+      return res.status(400).json({ message: "Invalid disposition" })
     }
     if (["Callback Later", "Follow-up Required"].includes(disposition) && !nextFollowUpAt) {
-      return res.status(400).json({ message:"Next follow-up date and time are required" })
+      return res.status(400).json({ message: "Next follow-up date and time are required" })
     }
     if (disposition === "Site Visit Scheduled" && !visitDateTime) {
-      return res.status(400).json({ message:"Visit date and time are required" })
+      return res.status(400).json({ message: "Visit date and time are required" })
     }
 
     if (interestedProjectId) {
       const project = await prisma.project.findUnique({
-        where:{ id:interestedProjectId },
-        select:{ id:true, name:true },
+        where: { id: interestedProjectId },
+        select: { id: true, name: true },
       })
-      if (!project) return res.status(400).json({ message:"Selected interested project is invalid" })
+      if (!project) return res.status(400).json({ message: "Selected interested project is invalid" })
       interestedProject = project.name
     }
 
     let existingCall = null
     if (callLogId) {
       existingCall = await prisma.callLog.findUnique({
-        where:{ id:callLogId },
-        include:{ lead:true, agent:true },
+        where: { id: callLogId },
+        include: { lead: true, agent: true },
       })
     } else {
       const authUserId = toNumberOrNull(req.authUser?.id)
       const requestedAgentId = toNumberOrNull(req.body.agentId)
       const agentId = isAdminUser(req) ? requestedAgentId || authUserId : authUserId
-      if (!agentId) return res.status(400).json({ message:"agentId is required" })
+      if (!agentId) return res.status(400).json({ message: "agentId is required" })
 
       const [lead, agent] = await Promise.all([
-        leadId ? prisma.lead.findUnique({ where:{ id:leadId } }) : Promise.resolve(null),
-        prisma.user.findUnique({ where:{ id:agentId } }),
+        leadId ? prisma.lead.findUnique({ where: { id: leadId } }) : Promise.resolve(null),
+        prisma.user.findUnique({ where: { id: agentId } }),
       ])
-      if (leadId && !lead) return res.status(404).json({ message:"Lead not found" })
-      if (!agent) return res.status(404).json({ message:"Agent not found" })
+      if (leadId && !lead) return res.status(404).json({ message: "Lead not found" })
+      if (!agent) return res.status(404).json({ message: "Agent not found" })
       if (!isAdminUser(req) && lead?.teamId && lead.teamId !== agentId) {
-        return res.status(403).json({ message:"You can dispose only your assigned leads" })
+        return res.status(403).json({ message: "You can dispose only your assigned leads" })
       }
 
       const isInboundCall = String(req.body.direction || "").toLowerCase() === "inbound"
@@ -1317,41 +1466,41 @@ exports.disposeCall = async (req, res) => {
       if (!callLeadId && isInboundCall) {
         const matchedLead = callPhone === "-" ? null : await findLeadByPhone(callPhone)
         callLead = matchedLead || await prisma.lead.create({
-          data:{
-            firstName:"Unknown",
-            lastName:"Caller",
-            phones:callPhone === "-" ? [] : [{ type:"Mobile", value:callPhone, primary:true }],
-            status:"New",
-            teamId:agentId,
-            seats:0,
-            tenure:0,
-            industry:"",
-            is_delete:false,
-            is_active:true,
+          data: {
+            firstName: "Unknown",
+            lastName: "Caller",
+            phones: callPhone === "-" ? [] : [{ type: "Mobile", value: callPhone, primary: true }],
+            status: "New",
+            teamId: agentId,
+            seats: 0,
+            tenure: 0,
+            industry: "",
+            is_delete: false,
+            is_active: true,
           },
         })
         callLeadId = callLead.id
       }
 
       existingCall = await prisma.callLog.create({
-        data:{
-          leadId:callLeadId,
+        data: {
+          leadId: callLeadId,
           agentId,
-          phone:callPhone,
-          leadPhone:callPhone === "-" ? null : callPhone,
-          agentPhone:cleanPhone(req.body.agentPhone || agent.phone || agent.secondaryPhone) || null,
-          status:callStatus,
-          notes:isInboundCall ? "Manual inbound disposition" : null,
-          startedAt:new Date(),
-          endedAt:terminalCallStatuses.has(callStatus) ? new Date() : null,
+          phone: callPhone,
+          leadPhone: callPhone === "-" ? null : callPhone,
+          agentPhone: cleanPhone(req.body.agentPhone || agent.phone || agent.secondaryPhone) || null,
+          status: callStatus,
+          notes: isInboundCall ? "Manual inbound disposition" : null,
+          startedAt: new Date(),
+          endedAt: terminalCallStatuses.has(callStatus) ? new Date() : null,
         },
-        include:{ lead:true, agent:true },
+        include: { lead: true, agent: true },
       })
       callLogId = existingCall.id
     }
-    if (!existingCall) return res.status(404).json({ message:"Call log not found" })
+    if (!existingCall) return res.status(404).json({ message: "Call log not found" })
     if (!isAdminUser(req) && existingCall.agentId !== toNumberOrNull(req.authUser?.id)) {
-      return res.status(403).json({ message:"You can dispose only your own calls" })
+      return res.status(403).json({ message: "You can dispose only your own calls" })
     }
 
     if (String(existingCall.direction || req.body.direction || "").toLowerCase() === "inbound" && !existingCall.leadId) {
@@ -1373,14 +1522,14 @@ exports.disposeCall = async (req, res) => {
       )
       if (canLinkMatchedLead) {
         existingCall = await prisma.callLog.update({
-          where:{ id:existingCall.id },
-          data:{
-            leadId:matchedLead.id,
-            leadPhone:inboundPhone || existingCall.leadPhone,
-            phone:inboundPhone || existingCall.phone,
-            direction:"inbound",
+          where: { id: existingCall.id },
+          data: {
+            leadId: matchedLead.id,
+            leadPhone: inboundPhone || existingCall.leadPhone,
+            phone: inboundPhone || existingCall.phone,
+            direction: "inbound",
           },
-          include:{ lead:true, agent:true },
+          include: { lead: true, agent: true },
         })
       }
     }
@@ -1390,9 +1539,9 @@ exports.disposeCall = async (req, res) => {
     const result = await prisma.$transaction(async (tx) => {
       const nextLeadStatus = getDispositionLeadStatus(disposition)
       const callLog = await tx.callLog.update({
-        where:{ id:callLogId },
-        data:{
-          status:callStatus,
+        where: { id: callLogId },
+        data: {
+          status: callStatus,
           disposition,
           notes,
           nextFollowUpAt,
@@ -1400,16 +1549,17 @@ exports.disposeCall = async (req, res) => {
           interestedProject,
           budget,
           visitDateTime,
-          endedAt:terminalCallStatuses.has(callStatus) ? existingCall.endedAt || new Date() : existingCall.endedAt,
+          endedAt: terminalCallStatuses.has(callStatus) ? existingCall.endedAt || new Date() : existingCall.endedAt,
         },
-        include:callInclude,
+        include: callInclude,
       })
 
-      if (existingCall.leadId && existingCall.lead) {
+      if (existingCall.leadId) {
         const leadUpdate = {
-          status:nextLeadStatus,
-          interestedProjects:interestedProject || existingCall.lead.interestedProjects,
-          budget:budget || existingCall.lead.budget,
+          status: nextLeadStatus,
+          interestedProjects: interestedProject || existingCall.lead?.interestedProjects,
+          budget: budget || existingCall.lead?.budget,
+          callAttemptCount: { increment: 1 },
         }
         if (nextLeadStatus === "Unqualified") {
           leadUpdate.unqualifiedReason = disposition
@@ -1425,57 +1575,57 @@ exports.disposeCall = async (req, res) => {
           leadUpdate.siteVisitDate = visitDateTime
           leadUpdate.siteVisitNote = notes
         }
-        await tx.lead.update({ where:{ id:existingCall.leadId }, data:leadUpdate })
+        await tx.lead.update({ where: { id: existingCall.leadId }, data: leadUpdate })
       }
 
       if (existingCall.leadId && ["Callback Later", "Follow-up Required"].includes(disposition)) {
         callbackFollowUp = await tx.followUp.create({
-          data:{
-            leadId:existingCall.leadId,
-            salesUserId:Number(existingCall.agentId || req.authUser.id),
-            type:disposition === "Callback Later" ? "Callback" : "Call",
-            followUpDate:nextFollowUpAt,
-            followUpTime:buildFollowUpTime(nextFollowUpAt),
-            priority:"Medium",
-            notes:notes || (disposition === "Callback Later" ? "Callback later scheduled from call disposition." : null),
-            status:"Pending",
+          data: {
+            leadId: existingCall.leadId,
+            salesUserId: Number(existingCall.agentId || req.authUser.id),
+            type: disposition === "Callback Later" ? "Callback" : "Call",
+            followUpDate: nextFollowUpAt,
+            followUpTime: buildFollowUpTime(nextFollowUpAt),
+            priority: "Medium",
+            notes: notes || (disposition === "Callback Later" ? "Callback later scheduled from call disposition." : null),
+            status: "Pending",
           },
-          include:{ lead:true },
+          include: { lead: true },
         })
       }
 
       if (existingCall.leadId && existingCall.lead && disposition === "Site Visit Scheduled") {
         await tx.scheduleVisit.upsert({
-          where:{ leadId:existingCall.leadId },
-          create:{
-            leadId:existingCall.leadId,
-            project:interestedProject || existingCall.lead.interestedProjects,
-            status:"Scheduled",
-            salesExecutive:getUserName(existingCall.agent),
-            note:notes,
-            initiatedBy:getUserName(existingCall.agent),
-            scheduledOn:visitDateTime,
+          where: { leadId: existingCall.leadId },
+          create: {
+            leadId: existingCall.leadId,
+            project: interestedProject || existingCall.lead.interestedProjects,
+            status: "Scheduled",
+            salesExecutive: getUserName(existingCall.agent),
+            note: notes,
+            initiatedBy: getUserName(existingCall.agent),
+            scheduledOn: visitDateTime,
           },
-          update:{
-            project:interestedProject || existingCall.lead.interestedProjects,
-            status:"Scheduled",
-            salesExecutive:getUserName(existingCall.agent),
-            note:notes,
-            initiatedBy:getUserName(existingCall.agent),
-            scheduledOn:visitDateTime,
+          update: {
+            project: interestedProject || existingCall.lead.interestedProjects,
+            status: "Scheduled",
+            salesExecutive: getUserName(existingCall.agent),
+            note: notes,
+            initiatedBy: getUserName(existingCall.agent),
+            scheduledOn: visitDateTime,
           },
         })
       }
 
       if (existingCall.leadId && existingCall.lead) {
         await tx.leadActivity.create({
-          data:{
-            leadId:existingCall.leadId,
-            userId:existingCall.agentId,
-            type:"CALL_DISPOSITION",
-            message:`Call disposed as ${disposition}${notes ? `: ${notes}` : ""}`,
-            oldStatus:String(existingCall.lead.status || "New"),
-            newStatus:nextLeadStatus,
+          data: {
+            leadId: existingCall.leadId,
+            userId: existingCall.agentId,
+            type: "CALL_DISPOSITION",
+            message: `Call disposed as ${disposition}${notes ? `: ${notes}` : ""}`,
+            oldStatus: String(existingCall.lead.status || "New"),
+            newStatus: nextLeadStatus,
           },
         })
       }
@@ -1489,42 +1639,42 @@ exports.disposeCall = async (req, res) => {
       if (mcubeCallId) {
         try {
           mcubeDisposition = await mcubeVoice.submitInboundDisposition({
-            callId:mcubeCallId,
+            callId: mcubeCallId,
             disposition,
             notes,
-            phone:result.callerNumber || result.leadPhone || result.phone || req.body.callerNumber || req.body.phone || "",
-            leadName:result.lead ? getLeadName(result.lead) : "",
-            callLogId:result.id,
+            phone: result.callerNumber || result.leadPhone || result.phone || req.body.callerNumber || req.body.phone || "",
+            leadName: result.lead ? getLeadName(result.lead) : "",
+            callLogId: result.id,
           })
         } catch (mcubeError) {
           console.error("MCube inbound disposition sync error:", {
-            callLogId:result.id,
-            message:mcubeError.message,
-            statusCode:mcubeError.statusCode || 500,
+            callLogId: result.id,
+            message: mcubeError.message,
+            statusCode: mcubeError.statusCode || 500,
           })
           mcubeDisposition = {
-            success:false,
-            message:mcubeError.message || "MCube inbound disposition sync failed",
+            success: false,
+            message: mcubeError.message || "MCube inbound disposition sync failed",
           }
         }
       } else {
         mcubeDisposition = {
-          success:false,
-          message:"MCube callid is unavailable for this inbound call.",
+          success: false,
+          message: "MCube callid is unavailable for this inbound call.",
         }
       }
     }
 
     res.status(200).json({
-      message:mcubeDisposition?.success === false
+      message: mcubeDisposition?.success === false
         ? "Call disposition saved in CRM. MCube disposition sync failed."
         : "Call disposition saved",
-      callLog:result,
+      callLog: result,
       ...(isInboundDisposition ? { mcubeDisposition } : {}),
     })
   } catch (error) {
     console.error("Dispose call error:", error)
-    res.status(500).json({ message:error.message || "Unable to save call disposition" })
+    res.status(500).json({ message: error.message || "Unable to save call disposition" })
   }
 }
 
@@ -1536,28 +1686,29 @@ exports.updateDisposition = async (req, res) => {
 exports.getCallStatus = async (req, res) => {
   try {
     const id = toNumberOrNull(req.params.id)
-    const callLog = await prisma.callLog.findUnique({ where:{ id }, include:callInclude })
-    if (!callLog) return res.status(404).json({ message:"Call log not found" })
+    const callLog = await prisma.callLog.findUnique({ where: { id }, include: callInclude })
+    if (!callLog) return res.status(404).json({ message: "Call log not found" })
     if (!canAccessCallLog(req, callLog)) {
-      return res.status(403).json({ message:"Access denied" })
+      return res.status(403).json({ message: "Access denied" })
     }
-    res.status(200).json({ callLog })
+    const isAdmin = isAdminUser(req)
+    res.status(200).json({ callLog: isAdmin ? callLog : maskCallLogData(callLog, false) })
   } catch (error) {
-    res.status(500).json({ message:"Unable to load call status" })
+    res.status(500).json({ message: "Unable to load call status" })
   }
 }
 
 exports.getLeadCalls = async (req, res) => {
   try {
     const leadId = toNumberOrNull(req.params.leadId)
-    if (!leadId) return res.status(400).json({ message:"leadId is required" })
+    if (!leadId) return res.status(400).json({ message: "leadId is required" })
     const where = { leadId }
     if (!isAdminUser(req)) {
       where.AND = [getSalesCallAccessWhere(toNumberOrNull(req.authUser?.id))]
     }
     await listCalls(req, res, where)
   } catch (error) {
-    res.status(500).json({ message:"Unable to load lead calls" })
+    res.status(500).json({ message: "Unable to load lead calls" })
   }
 }
 
@@ -1565,94 +1716,114 @@ exports.getAgentCalls = async (req, res) => {
   try {
     const requestedAgentId = toNumberOrNull(req.params.agentId)
     const agentId = isAdminUser(req) ? requestedAgentId : toNumberOrNull(req.authUser?.id)
-    if (!agentId) return res.status(400).json({ message:"agentId is required" })
+    if (!agentId) return res.status(400).json({ message: "agentId is required" })
     await listCalls(req, res, { ...buildWhereFromQuery(req.query), agentId })
   } catch (error) {
-    res.status(500).json({ message:"Unable to load agent calls" })
+    res.status(500).json({ message: "Unable to load agent calls" })
   }
 }
 
 exports.getMyCalls = async (req, res) => {
   try {
     const userId = toNumberOrNull(req.authUser?.id)
-    if (!userId) return res.status(400).json({ message:"User is required" })
+    if (!userId) return res.status(400).json({ message: "User is required" })
     const queryWhere = buildWhereFromQuery(req.query)
     await listCalls(req, res, {
-      AND:[
+      AND: [
         queryWhere,
         getSalesCallAccessWhere(userId),
       ],
     })
   } catch (error) {
-    res.status(500).json({ message:"Unable to load your call logs" })
+    res.status(500).json({ message: "Unable to load your call logs" })
   }
 }
 
 exports.getInboundCalls = async (req, res) => {
   try {
     const userId = toNumberOrNull(req.authUser?.id)
-    if (!userId) return res.status(400).json({ message:"User is required" })
-    const queryWhere = buildWhereFromQuery({ ...req.query, direction:"inbound" })
+    if (!userId) return res.status(400).json({ message: "User is required" })
+    const queryWhere = buildWhereFromQuery({ ...req.query, direction: "inbound" })
     await listCalls(req, res, {
-      AND:[
+      AND: [
         queryWhere,
         isAdminUser(req) ? {} : getSalesCallAccessWhere(userId),
       ],
     })
   } catch (error) {
-    res.status(500).json({ message:"Unable to load inbound calls" })
+    res.status(500).json({ message: "Unable to load inbound calls" })
   }
 }
 
 exports.getActiveInboundCall = async (req, res) => {
   try {
     const userId = toNumberOrNull(req.authUser?.id)
-    if (!userId) return res.status(400).json({ message:"User is required" })
+    if (!userId) return res.status(400).json({ message: "User is required" })
     const callLog = await prisma.callLog.findFirst({
-      where:{
-        direction:"inbound",
-        status:{ in:activeCallStatuses },
+      where: {
+        direction: "inbound",
+        status: { in: activeCallStatuses },
         ...(isAdminUser(req) ? {} : getSalesCallAccessWhere(userId)),
       },
-      include:callInclude,
-      orderBy:{ startedAt:"desc" },
+      include: callInclude,
+      orderBy: { startedAt: "desc" },
     })
-    res.status(200).json({ callLog })
+    const isAdmin = isAdminUser(req)
+    res.status(200).json({ callLog: isAdmin ? callLog : maskCallLogData(callLog, false) })
   } catch (error) {
-    res.status(500).json({ message:"Unable to load active inbound call" })
+    res.status(500).json({ message: "Unable to load active inbound call" })
   }
 }
 
 exports.getCallDetail = async (req, res) => {
   try {
     const id = toNumberOrNull(req.params.id)
-    if (!id) return res.status(400).json({ message:"Call id is required" })
-    const callLog = await prisma.callLog.findUnique({ where:{ id }, include:callInclude })
-    if (!callLog) return res.status(404).json({ message:"Call log not found" })
-    if (!canAccessCallLog(req, callLog)) return res.status(403).json({ message:"Access denied" })
-    const safeCallLog = isAdminUser(req) ? callLog : { ...callLog, rawPayload:undefined }
-    res.status(200).json({ callLog:safeCallLog })
+    if (!id) return res.status(400).json({ message: "Call id is required" })
+    const callLog = await prisma.callLog.findUnique({ where: { id }, include: callInclude })
+    if (!callLog) return res.status(404).json({ message: "Call log not found" })
+    if (!canAccessCallLog(req, callLog)) return res.status(403).json({ message: "Access denied" })
+    const isAdmin = isAdminUser(req)
+    const safeCallLog = isAdmin ? callLog : maskCallLogData({ ...callLog, rawPayload: undefined }, false)
+    res.status(200).json({ callLog: safeCallLog })
   } catch (error) {
-    res.status(500).json({ message:"Unable to load call detail" })
+    res.status(500).json({ message: "Unable to load call detail" })
   }
 }
 
 exports.deleteCallLog = async (req, res) => {
   try {
+    if (!isAdminUser(req)) {
+      return res.status(403).json({ message: "Access denied. Only administrators can delete call logs and recordings." })
+    }
+
     const id = toNumberOrNull(req.params.id)
-    if (!id) return res.status(400).json({ message:"Call id is required" })
+    if (!id) return res.status(400).json({ message: "Call id is required" })
 
     const callLog = await prisma.callLog.findUnique({
-      where:{ id },
-      include:{ lead:{ select:{ teamId:true } } },
+      where: { id },
+      include: { lead: { select: { id: true, teamId: true, firstName: true, lastName: true } } },
     })
-    if (!callLog) return res.status(404).json({ message:"Call log not found" })
-    if (!canAccessCallLog(req, callLog)) return res.status(403).json({ message:"Access denied" })
+    if (!callLog) return res.status(404).json({ message: "Call log not found" })
 
-    await prisma.callLog.delete({ where:{ id } })
-    res.status(200).json({ message:"Call log deleted", id, leadId:callLog.leadId || null })
+    await prisma.callLog.delete({ where: { id } })
+
+    const adminName = getUserName(req.authUser) || "Admin"
+    if (callLog.leadId) {
+      await prisma.leadActivity.create({
+        data: {
+          leadId: callLog.leadId,
+          userId: toNumberOrNull(req.authUser?.id),
+          type: "CALL_LOG_DELETED",
+          message: `Call log #${id} (${callLog.direction || "call"}, duration: ${callLog.duration || 0}s${callLog.recordingUrl ? ", recording deleted" : ""}) was deleted by ${adminName}.`,
+          oldStatus: "Deleted",
+          newStatus: "Deleted",
+        },
+      }).catch((logError) => console.error("Error logging call log deletion:", logError))
+    }
+
+    res.status(200).json({ message: "Call log deleted", id, leadId: callLog.leadId || null })
   } catch (error) {
-    res.status(500).json({ message:error.message || "Unable to delete call log" })
+    res.status(500).json({ message: error.message || "Unable to delete call log" })
   }
 }
 
@@ -1698,10 +1869,14 @@ const normalizeBulkCallLogIds = (value) => {
 
 exports.deleteBulkCallLogs = async (req, res) => {
   try {
+    if (!isAdminUser(req)) {
+      return res.status(403).json({ message: "Access denied. Only administrators can delete call logs and recordings." })
+    }
+
     const ids = normalizeBulkCallLogIds(req.body?.ids)
     const callLogs = await prisma.callLog.findMany({
-      where:{ id:{ in:ids } },
-      include:{ lead:{ select:{ teamId:true } } },
+      where: { id: { in: ids } },
+      include: { lead: { select: { id: true, teamId: true, firstName: true, lastName: true } } },
     })
     const callLogById = new Map(callLogs.map((callLog) => [callLog.id, callLog]))
     const deletedIds = []
@@ -1710,25 +1885,38 @@ exports.deleteBulkCallLogs = async (req, res) => {
     ids.forEach((id) => {
       const callLog = callLogById.get(id)
       if (!callLog) {
-        failures.push({ id, reason:"Call log not found" })
-        return
-      }
-      if (!canAccessCallLog(req, callLog)) {
-        failures.push({ id, reason:"Access denied" })
+        failures.push({ id, reason: "Call log not found" })
         return
       }
       deletedIds.push(id)
     })
 
     if (deletedIds.length > 0) {
-      await prisma.callLog.deleteMany({ where:{ id:{ in:deletedIds } } })
+      await prisma.callLog.deleteMany({ where: { id: { in: deletedIds } } })
+
+      const adminName = getUserName(req.authUser) || "Admin"
+      for (const id of deletedIds) {
+        const callLog = callLogById.get(id)
+        if (callLog?.leadId) {
+          await prisma.leadActivity.create({
+            data: {
+              leadId: callLog.leadId,
+              userId: toNumberOrNull(req.authUser?.id),
+              type: "CALL_LOG_DELETED",
+              message: `Call log #${id} (${callLog.direction || "call"}) was deleted by ${adminName} via bulk delete.`,
+              oldStatus: "Deleted",
+              newStatus: "Deleted",
+            },
+          }).catch((logError) => console.error("Error logging bulk call log deletion:", logError))
+        }
+      }
     }
 
     const payload = {
-      message:failures.length > 0 ? "Bulk delete completed with skipped records" : "Call logs deleted",
-      requested:ids.length,
-      deleted:deletedIds.length,
-      failed:failures.length,
+      message: failures.length > 0 ? "Bulk delete completed with skipped records" : "Call logs deleted",
+      requested: ids.length,
+      deleted: deletedIds.length,
+      failed: failures.length,
       deletedIds,
       failures,
     }
@@ -1736,8 +1924,8 @@ exports.deleteBulkCallLogs = async (req, res) => {
     res.status(status).json(payload)
   } catch (error) {
     res.status(error.statusCode || 500).json({
-      message:error.message || "Unable to delete selected call logs",
-      invalidIds:error.invalidIds || undefined,
+      message: error.message || "Unable to delete selected call logs",
+      invalidIds: error.invalidIds || undefined,
     })
   }
 }
@@ -1746,62 +1934,62 @@ exports.linkCallLead = async (req, res) => {
   try {
     const id = toNumberOrNull(req.params.id)
     const leadId = toNumberOrNull(req.body.leadId)
-    if (!id || !leadId) return res.status(400).json({ message:"Call id and leadId are required" })
+    if (!id || !leadId) return res.status(400).json({ message: "Call id and leadId are required" })
 
     const [callLog, lead] = await Promise.all([
-      prisma.callLog.findUnique({ where:{ id }, include:callInclude }),
+      prisma.callLog.findUnique({ where: { id }, include: callInclude }),
       prisma.lead.findUnique({
-        where:{ id:leadId },
-        select:{
-          id:true,
-          firstName:true,
-          lastName:true,
-          companyName:true,
-          teamId:true,
-          phones:true,
-          status:true,
-          channelPartner:true,
-          tags:true,
-          interestedProjects:true,
-          propertyType:true,
+        where: { id: leadId },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          companyName: true,
+          teamId: true,
+          phones: true,
+          status: true,
+          channelPartner: true,
+          tags: true,
+          interestedProjects: true,
+          propertyType: true,
         },
       }),
     ])
-    if (!callLog) return res.status(404).json({ message:"Call log not found" })
-    if (!lead) return res.status(404).json({ message:"Lead not found" })
-    if (!canAccessCallLog(req, callLog) && !isAdminUser(req)) return res.status(403).json({ message:"Access denied" })
+    if (!callLog) return res.status(404).json({ message: "Call log not found" })
+    if (!lead) return res.status(404).json({ message: "Lead not found" })
+    if (!canAccessCallLog(req, callLog) && !isAdminUser(req)) return res.status(403).json({ message: "Access denied" })
     if (!isAdminUser(req) && lead.teamId !== toNumberOrNull(req.authUser?.id)) {
-      return res.status(403).json({ message:"You can link calls only to your assigned leads" })
+      return res.status(403).json({ message: "You can link calls only to your assigned leads" })
     }
 
     const updated = await prisma.callLog.update({
-      where:{ id },
-      data:{
+      where: { id },
+      data: {
         leadId,
-        agentId:callLog.agentId || lead.teamId || null,
-        notes:callLog.notes || "MCube inbound - linked to lead",
+        agentId: callLog.agentId || lead.teamId || null,
+        notes: callLog.notes || "MCube inbound - linked to lead",
       },
-      include:callInclude,
+      include: callInclude,
     })
     if (updated.direction === "inbound") {
       emitInboundCallEvent(updated, {
-        customerPhone:updated.callerNumber || updated.customerNumber || updated.leadPhone,
-        providerCallId:updated.providerCallId,
-        status:updated.status,
+        customerPhone: updated.callerNumber || updated.customerNumber || updated.leadPhone,
+        providerCallId: updated.providerCallId,
+        status: updated.status,
       }, true)
     }
-    res.status(200).json({ message:"Call linked to lead", callLog:updated })
+    res.status(200).json({ message: "Call linked to lead", callLog: updated })
   } catch (error) {
-    res.status(500).json({ message:error.message || "Unable to link call to lead" })
+    res.status(500).json({ message: error.message || "Unable to link call to lead" })
   }
 }
 
 exports.getAdminCalls = async (req, res) => {
   try {
-    if (!isAdminUser(req)) return res.status(403).json({ message:"Admin access required" })
+    if (!isAdminUser(req)) return res.status(403).json({ message: "Admin access required" })
     await listCalls(req, res, buildWhereFromQuery(req.query))
   } catch (error) {
-    res.status(500).json({ message:"Unable to load call logs" })
+    res.status(500).json({ message: "Unable to load call logs" })
   }
 }
 
@@ -1858,11 +2046,14 @@ const verifyMcubeWebhook = (req) => {
     req.headers["x-mcube-token"] ||
     req.headers["x-webhook-token"] ||
     req.headers["x-mcube-secret"] ||
+    req.headers["http_authorization"] ||
     req.query.token ||
     req.query.secret ||
     req.body.token ||
     req.body.secret ||
-    req.body.secretkey
+    req.body.secretkey ||
+    req.body.HTTP_AUTHORIZATION ||
+    req.body.http_authorization
   return String(supplied || "").trim() === expected
 }
 
@@ -1903,7 +2094,7 @@ const getMcubeCallLookup = (req) => {
   const callLogId = toNumberOrNull(getMcubePayloadValue(req, ["callLogId", "callLogID", "call_log_id", "crmCallLogId", "crmCallLogID", "crm_call_log_id"]))
     || toNumberOrNull(getMcubePayloadValue(req, ["refid", "refId", "ref_id", "reference", "referenceId", "reference_id"]))
     || toNumberOrNull(getMcubePayloadValue(req, ["refurl", "refUrl"]))
-  return { providerCallId:providerCallId ? String(providerCallId) : "", callLogId }
+  return { providerCallId: providerCallId ? String(providerCallId) : "", callLogId }
 }
 
 const normalizeRecordingUrl = (value) => {
@@ -1952,9 +2143,9 @@ const getLocalRecordingPath = (recordingUrl) => {
 
 const getSafeWebhookPayload = (req) => {
   const payload = getWebhookPayload(req)
-  ;["token", "secret", "secretkey", "apikey", "apiKey", "authorization", "password"].forEach((key) => {
-    if (payload[key] !== undefined) payload[key] = "[redacted]"
-  })
+    ;["token", "secret", "secretkey", "apikey", "apiKey", "authorization", "HTTP_AUTHORIZATION", "http_authorization", "password"].forEach((key) => {
+      if (payload[key] !== undefined) payload[key] = "[redacted]"
+    })
   return payload
 }
 
@@ -2120,7 +2311,12 @@ const getMcubeWebhookData = async (req, fallbackDirection = "outbound") => {
     "callduration",
     "talktime",
     "billsec",
-    "answeredtime",
+    "callDuration",
+    "call_duration",
+    "conversationDuration",
+    "conversation_duration",
+    "talkTime",
+    "talk_time",
   ])
   const duration = toDurationSeconds(durationValue)
   const answerDelayValue = getMcubePayloadValue(req, [
@@ -2140,9 +2336,10 @@ const getMcubeWebhookData = async (req, fallbackDirection = "outbound") => {
   const { providerCallId, callLogId } = getMcubeCallLookup(req)
   const disconnectedBy = String(getMcubePayloadValue(req, ["disconnectedby", "disconnectedBy", "hangupBy", "hangup_by"]) || "").trim()
   const failureReason = String(getMcubePayloadValue(req, ["failureReason", "failurereason", "reason", "error"]) || "").trim()
-  const calculatedDuration = duration || (startedAt && endedAtFromProvider
+  const elapsedDuration = startedAt && endedAtFromProvider
     ? Math.max(0, Math.floor((endedAtFromProvider.getTime() - startedAt.getTime()) / 1000))
-    : null)
+    : null
+  const calculatedDuration = elapsedDuration !== null ? elapsedDuration : duration
 
   return {
     agentExtension,
@@ -2156,15 +2353,15 @@ const getMcubeWebhookData = async (req, fallbackDirection = "outbound") => {
     disconnectedBy,
     customerPhone,
     direction,
-    duration:calculatedDuration,
+    duration: calculatedDuration,
     endedAtFromProvider,
     failureReason,
     providerCallId,
     providerAgentName,
-    providerStatus:String(rawStatus || "").trim(),
-    recordingUrl:normalizeRecordingUrl(recordingUrl),
+    providerStatus: String(rawStatus || "").trim(),
+    recordingUrl: normalizeRecordingUrl(recordingUrl),
     queueId,
-    rawPayload:getSafeWebhookPayload(req),
+    rawPayload: getSafeWebhookPayload(req),
     startedAt,
     status,
     virtualNumber,
@@ -2174,11 +2371,11 @@ const getMcubeWebhookData = async (req, fallbackDirection = "outbound") => {
 const findMcubeCallLog = async ({ providerCallId, callLogId }) => {
   if (!providerCallId && !callLogId) return null
   return prisma.callLog.findFirst({
-    where:{
-      provider:{ in:["mcube", "mcube-webphone"] },
-      OR:[
-        ...(providerCallId ? [{ providerCallId }, { callId:providerCallId }] : []),
-        ...(callLogId ? [{ id:callLogId }] : []),
+    where: {
+      provider: { in: ["mcube", "mcube-webphone"] },
+      OR: [
+        ...(providerCallId ? [{ providerCallId }, { callId: providerCallId }] : []),
+        ...(callLogId ? [{ id: callLogId }] : []),
       ],
     },
   })
@@ -2187,14 +2384,14 @@ const findMcubeCallLog = async ({ providerCallId, callLogId }) => {
 const findRecentBrowserPhoneCallLog = async ({ customerPhone, agentPhone, direction }) => {
   if (direction && direction !== "outbound") return null
   const candidates = await prisma.callLog.findMany({
-    where:{
-      provider:"mcube-webphone",
-      direction:"outbound",
-      status:{ in:activeCallStatuses },
-      createdAt:{ gte:new Date(Date.now() - 30 * 60 * 1000) },
+    where: {
+      provider: "mcube-webphone",
+      direction: "outbound",
+      status: { in: activeCallStatuses },
+      createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) },
     },
-    orderBy:{ createdAt:"desc" },
-    take:25,
+    orderBy: { createdAt: "desc" },
+    take: 25,
   })
 
   return candidates.find((call) =>
@@ -2206,13 +2403,13 @@ const findRecentBrowserPhoneCallLog = async ({ customerPhone, agentPhone, direct
 const findRecentMcubeCallLogByPhones = async ({ customerPhone, agentPhone, direction }) => {
   if (!customerPhone) return null
   const candidates = await prisma.callLog.findMany({
-    where:{
-      provider:{ in:["mcube", "mcube-webphone"] },
+    where: {
+      provider: { in: ["mcube", "mcube-webphone"] },
       ...(direction ? { direction } : {}),
-      createdAt:{ gte:new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
     },
-    orderBy:{ createdAt:"desc" },
-    take:100,
+    orderBy: { createdAt: "desc" },
+    take: 100,
   })
 
   return candidates.find((call) =>
@@ -2225,14 +2422,14 @@ const findRecentMcubeRecordingTarget = async (data) => {
   if (!data.recordingUrl) return null
   const matchWindowDays = Math.max(1, Number(process.env.MCUBE_RECORDING_MATCH_WINDOW_DAYS) || 30)
   const candidates = await prisma.callLog.findMany({
-    where:{
-      provider:{ in:["mcube", "mcube-webphone"] },
-      recordingUrl:null,
-      ...(data.direction ? { direction:data.direction } : {}),
-      createdAt:{ gte:new Date(Date.now() - matchWindowDays * 24 * 60 * 60 * 1000) },
+    where: {
+      provider: { in: ["mcube", "mcube-webphone"] },
+      recordingUrl: null,
+      ...(data.direction ? { direction: data.direction } : {}),
+      createdAt: { gte: new Date(Date.now() - matchWindowDays * 24 * 60 * 60 * 1000) },
     },
-    orderBy:{ createdAt:"desc" },
-    take:200,
+    orderBy: { createdAt: "desc" },
+    take: 200,
   })
 
   return candidates.find((call) => {
@@ -2250,15 +2447,11 @@ const findRecentMcubeRecordingTarget = async (data) => {
 }
 
 const resolveMcubeAgent = async (data) => {
-  const explicitAgent =
-    await findUserByMcubeAgentId(data.agentProviderId) ||
-    await findUserByMcubeExtension(data.agentExtension, data.agentLogin) ||
-    await findUserByPhone(data.agentPhone)
-
-  if (explicitAgent) return explicitAgent
-  if (data.direction !== "inbound") return null
-  if (!data.agentProviderId && !data.agentExtension && !data.agentLogin && !data.agentPhone && isFinalCallStatus(data.status)) return null
-  return findAvailableInboundAgent()
+  const resolved = await mcubeAgentService.resolveCrmUserFromMcubeWebhook(
+    data,
+    data.direction === "inbound" && !isFinalCallStatus(data.status) ? findAvailableInboundAgent : null
+  )
+  return resolved?.user || null
 }
 
 const shouldUpdateProviderCallId = (existingCall, providerCallId) => {
@@ -2273,7 +2466,7 @@ const getWebhookStatusUpdate = (existingCall, nextStatus) => {
   if (!normalizedNext) return {}
   if (terminalCallStatuses.has(currentStatus) && !terminalCallStatuses.has(normalizedNext)) return {}
   if ((callStatusPriority[currentStatus] || 0) > (callStatusPriority[normalizedNext] || 0)) return {}
-  return { status:normalizedNext }
+  return { status: normalizedNext }
 }
 
 const getWebhookCommonUpdate = (existingCall, data, notes, agent = null, lead = null) => {
@@ -2282,39 +2475,39 @@ const getWebhookCommonUpdate = (existingCall, data, notes, agent = null, lead = 
   const nextDirection = existingCall?.direction || data.direction
   const nextAgentId = agent?.id || lead?.teamId || null
   return {
-    ...(lead?.id && !existingCall?.leadId ? { leadId:lead.id } : {}),
-    ...(nextAgentId && !existingCall?.agentId ? { agentId:nextAgentId } : {}),
+    ...(lead?.id && !existingCall?.leadId ? { leadId: lead.id } : {}),
+    ...(nextAgentId && !existingCall?.agentId ? { agentId: nextAgentId } : {}),
     ...(shouldUpdateProviderCallId(existingCall, data.providerCallId) ? {
-      providerCallId:data.providerCallId,
-      callId:data.providerCallId,
+      providerCallId: data.providerCallId,
+      callId: data.providerCallId,
     } : {}),
     ...getWebhookStatusUpdate(existingCall, data.status),
-    direction:nextDirection,
-    providerStatus:data.providerStatus || null,
+    direction: nextDirection,
+    providerStatus: data.providerStatus || null,
     ...(data.customerPhone ? {
-      phone:data.customerPhone || "-",
-      leadPhone:data.customerPhone || null,
-      callerNumber:nextDirection === "inbound" ? data.customerPhone : existingCall?.callerNumber || null,
+      phone: data.customerPhone || "-",
+      leadPhone: data.customerPhone || null,
+      callerNumber: nextDirection === "inbound" ? data.customerPhone : existingCall?.callerNumber || null,
     } : {}),
     ...(data.agentPhone ? {
-      agentPhone:data.agentPhone,
-      agentNumber:data.agentPhone,
+      agentPhone: data.agentPhone,
+      agentNumber: data.agentPhone,
     } : {}),
-    ...(data.agentExtension ? { agentExtension:data.agentExtension } : {}),
-    ...(data.virtualNumber ? { virtualNumber:data.virtualNumber } : {}),
-    ...(data.campaignId ? { campaignName:data.campaignId } : {}),
-    ...(data.queueId ? { queueName:data.queueId } : {}),
-    ...(data.providerAgentName ? { providerAgentName:data.providerAgentName } : {}),
-    ...(data.duration !== null ? { duration:data.duration } : {}),
-    ...(data.recordingUrl ? { recordingUrl:String(data.recordingUrl) } : {}),
-    ...(data.startedAt ? { startedAt:data.startedAt } : {}),
-    ...(answeredAt && !existingCall?.answeredAt ? { answeredAt, connectedAt:answeredAt } : {}),
-    ...(data.answerDelay !== null && data.answerDelay !== undefined ? { answerDelay:data.answerDelay } : {}),
+    ...(data.agentExtension ? { agentExtension: data.agentExtension } : {}),
+    ...(data.virtualNumber ? { virtualNumber: data.virtualNumber } : {}),
+    ...(data.campaignId ? { campaignName: data.campaignId } : {}),
+    ...(data.queueId ? { queueName: data.queueId } : {}),
+    ...(data.providerAgentName ? { providerAgentName: data.providerAgentName } : {}),
+    ...(data.duration !== null ? { duration: data.duration } : {}),
+    ...(data.recordingUrl ? { recordingUrl: String(data.recordingUrl) } : {}),
+    ...(data.startedAt ? { startedAt: data.startedAt } : {}),
+    ...(answeredAt && !existingCall?.answeredAt ? { answeredAt, connectedAt: answeredAt } : {}),
+    ...(data.answerDelay !== null && data.answerDelay !== undefined ? { answerDelay: data.answerDelay } : {}),
     ...(endedAt ? { endedAt } : {}),
-    ...(data.disconnectedBy ? { disconnectedBy:data.disconnectedBy } : {}),
-    ...(data.failureReason ? { failureReason:data.failureReason } : {}),
-    rawPayload:data.rawPayload,
-    notes:existingCall?.notes || notes,
+    ...(data.disconnectedBy ? { disconnectedBy: data.disconnectedBy } : {}),
+    ...(data.failureReason ? { failureReason: data.failureReason } : {}),
+    rawPayload: data.rawPayload,
+    notes: existingCall?.notes || notes,
   }
 }
 
@@ -2329,51 +2522,64 @@ const getInboundSocketEvent = (status) => {
 
 const emitInboundCallEvent = (callLog, data, matched = true) => {
   const userId = callLog?.agentId || callLog?.lead?.teamId
-  if (!userId) return
   const hasRecording = Boolean(callLog?.recordingUrl || data.recordingUrl)
 
   const payload = {
-    id:callLog?.id || null,
-    callLogId:callLog?.id || null,
-    provider:"mcube",
-    providerCallId:callLog?.providerCallId || callLog?.callId || data.providerCallId || "",
-    direction:"inbound",
-    status:callLog?.status || data.status,
-    providerStatus:callLog?.providerStatus || data.providerStatus || "",
-    callerNumber:callLog?.callerNumber || data.customerPhone || callLog?.leadPhone || callLog?.phone || "",
-    customerNumber:callLog?.customerNumber || data.customerPhone || callLog?.leadPhone || callLog?.phone || "",
-    virtualNumber:callLog?.virtualNumber || data.virtualNumber || "",
-    agentNumber:callLog?.agentNumber || data.agentPhone || callLog?.agentPhone || "",
-    agentExtension:callLog?.agentExtension || data.agentExtension || "",
-    agentName:getUserName(callLog?.agent) || data.providerAgentName || "",
-    campaignId:callLog?.campaignName || data.campaignId || "",
-    queueId:callLog?.queueName || data.queueId || "",
-    startedAt:callLog?.startedAt || data.startedAt || new Date(),
-    answeredAt:callLog?.answeredAt || data.answeredAt || null,
-    connectedAt:callLog?.connectedAt || callLog?.answeredAt || data.answeredAt || null,
-    endedAt:callLog?.endedAt || null,
-    duration:callLog?.duration || data.duration || 0,
-    recordingUrl:hasRecording ? "available" : "",
-    recordingStatus:hasRecording ? "available" : isFinalCallStatus(callLog?.status || data.status) ? "pending" : "pending",
-    disconnectedBy:callLog?.disconnectedBy || data.disconnectedBy || "",
-    disposition:callLog?.disposition || "",
+    id: callLog?.id || null,
+    callLogId: callLog?.id || null,
+    provider: "mcube",
+    providerCallId: callLog?.providerCallId || callLog?.callId || data.providerCallId || "",
+    direction: "inbound",
+    status: callLog?.status || data.status,
+    providerStatus: callLog?.providerStatus || data.providerStatus || "",
+    callerNumber: callLog?.callerNumber || data.customerPhone || callLog?.leadPhone || callLog?.phone || "",
+    customerNumber: callLog?.customerNumber || data.customerPhone || callLog?.leadPhone || callLog?.phone || "",
+    virtualNumber: callLog?.virtualNumber || data.virtualNumber || "",
+    agentNumber: callLog?.agentNumber || data.agentPhone || callLog?.agentPhone || "",
+    agentExtension: callLog?.agentExtension || data.agentExtension || "",
+    agentName: getUserName(callLog?.agent) || data.providerAgentName || "",
+    campaignId: callLog?.campaignName || data.campaignId || "",
+    queueId: callLog?.queueName || data.queueId || "",
+    startedAt: callLog?.startedAt || data.startedAt || new Date(),
+    answeredAt: callLog?.answeredAt || data.answeredAt || null,
+    connectedAt: callLog?.connectedAt || callLog?.answeredAt || data.answeredAt || null,
+    endedAt: callLog?.endedAt || null,
+    duration: callLog?.duration || data.duration || 0,
+    recordingUrl: hasRecording ? "available" : "",
+    recordingStatus: hasRecording ? "available" : isFinalCallStatus(callLog?.status || data.status) ? "pending" : "pending",
+    disconnectedBy: callLog?.disconnectedBy || data.disconnectedBy || "",
+    disposition: callLog?.disposition || "",
     matched,
-    lead:callLog?.lead ? {
-      id:callLog.lead.id,
-      firstName:callLog.lead.firstName,
-      lastName:callLog.lead.lastName,
-      companyName:callLog.lead.companyName,
-      status:callLog.lead.status,
-      source:callLog.lead.channelPartner || callLog.lead.tags || "",
-      project:callLog.lead.interestedProjects || callLog.lead.propertyType || "",
+    lead: callLog?.lead ? {
+      id: callLog.lead.id,
+      firstName: callLog.lead.firstName,
+      lastName: callLog.lead.lastName,
+      companyName: callLog.lead.companyName,
+      status: callLog.lead.status,
+      source: callLog.lead.channelPartner || callLog.lead.tags || "",
+      project: callLog.lead.interestedProjects || callLog.lead.propertyType || "",
     } : null,
   }
 
   try {
-    const socketId = connectedUser.get(String(userId)) || connectedUser.get(Number(userId))
+    const io = getIO()
     const eventName = hasRecording ? "mcube:inbound:recording-ready" : getInboundSocketEvent(payload.status)
-    if (socketId) getIO().to(socketId).emit(eventName, payload)
-    getIO().to(`user:${userId}`).emit(eventName, payload)
+    const eventsToEmit = [eventName, "inbound:call", "inbound-call"]
+
+    if (userId) {
+      const socketId = connectedUser.get(String(userId)) || connectedUser.get(Number(userId))
+      eventsToEmit.forEach((evt) => {
+        if (socketId) io.to(socketId).emit(evt, payload)
+        io.to(`user:${userId}`).emit(evt, payload)
+        io.to(String(userId)).emit(evt, payload)
+        io.emit(`${evt}-${userId}`, payload)
+      })
+    } else {
+      // Unassigned inbound call: broadcast to all connected agents
+      eventsToEmit.forEach((evt) => {
+        io.emit(evt, payload)
+      })
+    }
   } catch (error) {
     console.error("Unable to emit MCube inbound event:", error.message)
   }
@@ -2398,7 +2604,7 @@ const saveMcubeWebhookCall = async (req, fallbackDirection, options = {}) => {
     throw error
   }
   const exactCall = await findMcubeCallLog(data)
-  const lookupData = options.matchAnyDirection ? { ...data, direction:null } : data
+  const lookupData = options.matchAnyDirection ? { ...data, direction: null } : data
   const shouldCreateNewCall = Boolean(options.createNewCall && !exactCall)
   const recordingTarget = !exactCall && !shouldCreateNewCall && data.recordingUrl
     ? await findRecentMcubeRecordingTarget(lookupData)
@@ -2425,54 +2631,54 @@ const saveMcubeWebhookCall = async (req, fallbackDirection, options = {}) => {
 
   if (existingCall) {
     const callLog = await prisma.callLog.update({
-      where:{ id:existingCall.id },
-      data:getWebhookCommonUpdate(existingCall, data, notes, agent, lead),
-      include:callInclude,
+      where: { id: existingCall.id },
+      data: getWebhookCommonUpdate(existingCall, data, notes, agent, lead),
+      include: callInclude,
     })
     if (data.direction === "inbound") emitInboundCallEvent(callLog, data, Boolean(callLog.leadId))
-    return { callLog, matched:Boolean(callLog.leadId), message:"MCube call log updated" }
+    return { callLog, matched: Boolean(callLog.leadId), message: "MCube call log updated" }
   }
 
   const callLog = await prisma.callLog.create({
-    data:{
-      leadId:lead?.id || null,
-      agentId:agent?.id || lead?.teamId || null,
-      phone:data.customerPhone || "-",
-      leadPhone:data.customerPhone || null,
-      agentPhone:data.agentPhone || null,
-      direction:data.direction,
-      callerNumber:data.direction === "inbound" ? data.customerPhone || null : null,
-      agentNumber:data.agentPhone || null,
-      agentExtension:data.agentExtension || null,
-      virtualNumber:data.virtualNumber || null,
-      campaignName:data.campaignId || null,
-      queueName:data.queueId || null,
-      providerAgentName:data.providerAgentName || null,
-      provider:"mcube",
-      callId:data.providerCallId || null,
-      providerCallId:data.providerCallId || null,
-      providerStatus:data.providerStatus || null,
-      status:data.status,
-      duration:data.duration,
-      recordingUrl:data.recordingUrl ? String(data.recordingUrl) : null,
-      answeredAt:data.answeredAt || null,
-      answerDelay:data.answerDelay,
-      connectedAt:data.answeredAt || (data.status === "connected" ? new Date() : null),
-      disconnectedBy:data.disconnectedBy || null,
-      failureReason:data.failureReason || null,
-      rawPayload:data.rawPayload,
+    data: {
+      leadId: lead?.id || null,
+      agentId: agent?.id || lead?.teamId || null,
+      phone: data.customerPhone || "-",
+      leadPhone: data.customerPhone || null,
+      agentPhone: data.agentPhone || null,
+      direction: data.direction,
+      callerNumber: data.direction === "inbound" ? data.customerPhone || null : null,
+      agentNumber: data.agentPhone || null,
+      agentExtension: data.agentExtension || null,
+      virtualNumber: data.virtualNumber || null,
+      campaignName: data.campaignId || null,
+      queueName: data.queueId || null,
+      providerAgentName: data.providerAgentName || null,
+      provider: "mcube",
+      callId: data.providerCallId || null,
+      providerCallId: data.providerCallId || null,
+      providerStatus: data.providerStatus || null,
+      status: data.status,
+      duration: data.duration,
+      recordingUrl: data.recordingUrl ? String(data.recordingUrl) : null,
+      answeredAt: data.answeredAt || null,
+      answerDelay: data.answerDelay,
+      connectedAt: data.answeredAt || (data.status === "connected" ? new Date() : null),
+      disconnectedBy: data.disconnectedBy || null,
+      failureReason: data.failureReason || null,
+      rawPayload: data.rawPayload,
       notes,
-      startedAt:data.startedAt || new Date(),
-      endedAt:endedAt || null,
+      startedAt: data.startedAt || new Date(),
+      endedAt: endedAt || null,
     },
-    include:callInclude,
+    include: callInclude,
   })
   if (data.direction === "inbound") emitInboundCallEvent(callLog, data, Boolean(lead))
   return {
     callLog,
-    matched:Boolean(lead),
-    multipleMatches:leadMatches.length > 1,
-    message:lead
+    matched: Boolean(lead),
+    multipleMatches: leadMatches.length > 1,
+    message: lead
       ? "MCube call log created"
       : leadMatches.length > 1
         ? "MCube webhook accepted, multiple matching leads found."
@@ -2536,29 +2742,41 @@ const mcubeSignalPayloadKeys = [
 const hasIncomingMcubePayload = (req) =>
   Boolean(firstWebhookValue(getWebhookPayload(req), mcubeSignalPayloadKeys))
 
+const sendMcubeWebhookSuccess = (res, result, msg) =>
+  res.status(200).json({
+    status: "succ",
+    success: true,
+    msg,
+    message: result?.message || msg,
+    ...result,
+  })
+
 exports.mcubeInbound = async (req, res) => {
   try {
     if (!hasIncomingMcubePayload(req)) {
       return res.status(200).json({
-        message:"MCube inbound callback is ready",
-        requiredFields:["callid", "callto", "clicktocalldid", "dialstatus", "recordingUrl"],
+        status: "succ",
+        success: true,
+        msg: "MCube inbound callback is ready",
+        message: "MCube inbound callback is ready",
+        requiredFields: ["callid", "callto", "clicktocalldid", "dialstatus", "filename"],
       })
     }
-    const result = await saveMcubeWebhookCall(req, "inbound", { createNewCall:true, matchAnyDirection:true })
-    res.status(200).json(result)
+    const result = await saveMcubeWebhookCall(req, "inbound", { createNewCall: true, matchAnyDirection: true })
+    sendMcubeWebhookSuccess(res, result, "MCube inbound webhook processed")
   } catch (error) {
     console.error("MCube inbound webhook error:", error)
-    res.status(error.statusCode || 500).json({ message:error.message || "Unable to process MCube inbound call" })
+    res.status(error.statusCode || 500).json({ message: error.message || "Unable to process MCube inbound call" })
   }
 }
 
 exports.mcubeWebhook = async (req, res) => {
   try {
     const result = await saveMcubeWebhookCall(req, "outbound")
-    res.status(200).json(result)
+    sendMcubeWebhookSuccess(res, result, "MCube call status webhook processed")
   } catch (error) {
     console.error("MCube status webhook error:", error)
-    res.status(error.statusCode || 500).json({ message:error.message || "Unable to process MCube call status" })
+    res.status(error.statusCode || 500).json({ message: error.message || "Unable to process MCube call status" })
   }
 }
 
@@ -2568,40 +2786,44 @@ exports.mcubeRecordingWebhook = async (req, res) => {
     const explicitDirection = normalizeCallDirection(rawDirection, "")
     const fallbackDirection = explicitDirection === "outbound" ? "outbound" : "inbound"
     const result = await saveMcubeWebhookCall(req, fallbackDirection, {
-      matchAnyDirection:!["inbound", "outbound"].includes(explicitDirection),
-      requireRecording:true,
+      matchAnyDirection: !["inbound", "outbound"].includes(explicitDirection),
+      requireRecording: true,
     })
-    res.status(200).json(result)
+    sendMcubeWebhookSuccess(res, result, "MCube recording webhook processed")
   } catch (error) {
     console.error("MCube recording webhook error:", error)
-    res.status(error.statusCode || 500).json({ message:error.message || "Unable to process MCube recording" })
+    res.status(error.statusCode || 500).json({ message: error.message || "Unable to process MCube recording" })
   }
 }
 
 exports.getRecording = async (req, res) => {
   try {
+    if (!isAdminUser(req)) {
+      return res.status(403).json({ message: "Access denied. Call recordings are restricted to administrators." })
+    }
+
     const id = toNumberOrNull(req.params.id)
     const callLog = await prisma.callLog.findUnique({
-      where:{ id },
-      include:{ lead:{ select:{ teamId:true } } },
+      where: { id },
+      include: { lead: { select: { teamId: true } } },
     })
-    if (!callLog) return res.status(404).json({ message:"Call log not found" })
+    if (!callLog) return res.status(404).json({ message: "Call log not found" })
     if (!canAccessCallLog(req, callLog)) {
-      return res.status(403).json({ message:"Access denied" })
+      return res.status(403).json({ message: "Access denied" })
     }
     const rawRecordingUrl = callLog.recordingUrl || getRecordingUrlFromPayload(callLog.rawPayload)
     const recordingUrl = normalizeRecordingUrl(rawRecordingUrl)
-    if (!recordingUrl) return res.status(404).json({ message:"Recording is not available" })
+    if (!recordingUrl) return res.status(404).json({ message: "Recording is not available" })
     if (recordingUrl !== callLog.recordingUrl) {
       await prisma.callLog.updateMany({
-        where:{ id:callLog.id },
-        data:{ recordingUrl },
+        where: { id: callLog.id },
+        data: { recordingUrl },
       })
     }
 
     const localRecordingPath = getLocalRecordingPath(recordingUrl)
     if (localRecordingPath) {
-      if (!fs.existsSync(localRecordingPath)) return res.status(404).json({ message:"Recording file is missing" })
+      if (!fs.existsSync(localRecordingPath)) return res.status(404).json({ message: "Recording file is missing" })
       const ext = path.extname(localRecordingPath).toLowerCase()
       const contentType = ext === ".wav"
         ? "audio/wav"
@@ -2629,14 +2851,14 @@ exports.getRecording = async (req, res) => {
     recording.data.pipe(res)
   } catch (error) {
     console.error("Load recording error:", error.message)
-    if (!res.headersSent) res.status(error.response?.status || 502).json({ message:"Unable to load recording" })
+    if (!res.headersSent) res.status(error.response?.status || 502).json({ message: "Unable to load recording" })
   }
 }
 
 exports.getAnalytics = async (req, res) => {
   try {
-    if (!isAdminUser(req)) return res.status(403).json({ message:"Admin access required" })
-    const calls = await prisma.callLog.findMany({ where:buildWhereFromQuery(req.query) })
+    if (!isAdminUser(req)) return res.status(403).json({ message: "Admin access required" })
+    const calls = await prisma.callLog.findMany({ where: buildWhereFromQuery(req.query) })
     const totalCalls = calls.length
     const answeredCalls = calls.filter((call) => ["completed", "connected"].includes(call.status)).length
     const missedCalls = calls.filter((call) => ["no-answer", "failed", "busy"].includes(call.status)).length
@@ -2645,68 +2867,68 @@ exports.getAnalytics = async (req, res) => {
       totalCalls,
       answeredCalls,
       missedCalls,
-      averageDuration:totalCalls ? Math.round(durationTotal / totalCalls) : 0,
-      qualifiedLeads:calls.filter((call) => call.disposition === "Qualified").length,
+      averageDuration: totalCalls ? Math.round(durationTotal / totalCalls) : 0,
+      qualifiedLeads: calls.filter((call) => call.disposition === "Qualified").length,
     })
   } catch (error) {
-    res.status(500).json({ message:"Unable to load analytics" })
+    res.status(500).json({ message: "Unable to load analytics" })
   }
 }
 
 exports.answerInboundCall = async (req, res) => {
   try {
     const callLogId = toNumberOrNull(req.params.id || req.body.callLogId || req.body.id)
-    if (!callLogId) return res.status(400).json({ message:"callLogId is required" })
+    if (!callLogId) return res.status(400).json({ message: "callLogId is required" })
 
     const callLog = await prisma.callLog.findUnique({
-      where:{ id:callLogId },
-      include:callInclude,
+      where: { id: callLogId },
+      include: callInclude,
     })
-    if (!callLog) return res.status(404).json({ message:"Call log not found" })
+    if (!callLog) return res.status(404).json({ message: "Call log not found" })
 
     const updated = await prisma.callLog.update({
-      where:{ id:callLogId },
-      data:{
-        status:"connected",
-        answeredAt:callLog.answeredAt || new Date(),
-        connectedAt:callLog.connectedAt || new Date(),
+      where: { id: callLogId },
+      data: {
+        status: "connected",
+        answeredAt: callLog.answeredAt || new Date(),
+        connectedAt: callLog.connectedAt || new Date(),
       },
-      include:callInclude,
+      include: callInclude,
     })
 
-    emitInboundCallEvent(updated, { status:"connected", answeredAt:updated.answeredAt }, true)
-    res.status(200).json({ message:"Inbound call answered", callLog:updated })
+    emitInboundCallEvent(updated, { status: "connected", answeredAt: updated.answeredAt }, true)
+    res.status(200).json({ message: "Inbound call answered", callLog: updated })
   } catch (error) {
     console.error("Answer inbound call error:", error)
-    res.status(500).json({ message:"Unable to answer inbound call" })
+    res.status(500).json({ message: "Unable to answer inbound call" })
   }
 }
 
 exports.rejectInboundCall = async (req, res) => {
   try {
     const callLogId = toNumberOrNull(req.params.id || req.body.callLogId || req.body.id)
-    if (!callLogId) return res.status(400).json({ message:"callLogId is required" })
+    if (!callLogId) return res.status(400).json({ message: "callLogId is required" })
 
     const callLog = await prisma.callLog.findUnique({
-      where:{ id:callLogId },
-      include:callInclude,
+      where: { id: callLogId },
+      include: callInclude,
     })
-    if (!callLog) return res.status(404).json({ message:"Call log not found" })
+    if (!callLog) return res.status(404).json({ message: "Call log not found" })
 
     const updated = await prisma.callLog.update({
-      where:{ id:callLogId },
-      data:{
-        status:"rejected",
-        endedAt:new Date(),
-        disconnectedBy:"agent",
+      where: { id: callLogId },
+      data: {
+        status: "rejected",
+        endedAt: new Date(),
+        disconnectedBy: "agent",
       },
-      include:callInclude,
+      include: callInclude,
     })
 
-    emitInboundCallEvent(updated, { status:"rejected", endedAt:updated.endedAt }, true)
-    res.status(200).json({ message:"Inbound call rejected", callLog:updated })
+    emitInboundCallEvent(updated, { status: "rejected", endedAt: updated.endedAt }, true)
+    res.status(200).json({ message: "Inbound call rejected", callLog: updated })
   } catch (error) {
     console.error("Reject inbound call error:", error)
-    res.status(500).json({ message:"Unable to reject inbound call" })
+    res.status(500).json({ message: "Unable to reject inbound call" })
   }
 }

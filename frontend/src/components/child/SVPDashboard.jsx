@@ -8,6 +8,17 @@ const getLeadName = (lead) => {
   return lead?.name || lead?.full_name || lead?.customer_name || fullName || "-";
 };
 
+const getLeadPhone = (lead) => {
+  const phones = lead?.phones;
+  if (Array.isArray(phones)) {
+    const phone = phones.find(Boolean);
+    if (!phone) return "-";
+    return typeof phone === "object" ? phone.value || phone.phone || phone.number || "-" : phone;
+  }
+  if (phones && typeof phones === "object") return phones.value || phones.phone || phones.number || "-";
+  return lead?.phone || lead?.mobile || lead?.leadPhone || lead?.primaryPhone || "-";
+};
+
 const getDisplayValue = (value, fallback = "-") => {
   if (value === undefined || value === null || value === "") return fallback;
   if (typeof value === "string" || typeof value === "number") return value;
@@ -230,6 +241,7 @@ const SVPDashboard = () => {
     const headers = [
       "Lead ID",
       "Lead Name",
+      "Lead Phone",
       "Project",
       "Status",
       "Scheduled Date",
@@ -246,6 +258,7 @@ const SVPDashboard = () => {
       return [
         leadId ? `#${leadId}` : "-",
         getLeadName(lead),
+        getLeadPhone(lead),
         visit.project,
         visit.status,
         formatVisitDate(visit.scheduledOn),

@@ -2,10 +2,12 @@ const prisma = require("../lib/prisma")
 const {
   clearCallbackReminderTimers,
   handleCallbackFollowUpSaved,
+  snoozeFollowUp: snoozeReminder,
+  getScheduledAt,
 } = require("./callbackReminder.service")
 
 const terminalLeadStatuses = new Set(["Booked", "Unqualified"])
-const followUpStatuses = new Set(["Pending", "Done", "Missed", "Rescheduled", "Cancelled"])
+const followUpStatuses = new Set(["Pending", "Scheduled", "Done", "Completed", "Missed", "Overdue", "Rescheduled", "Cancelled"])
 const followUpTypes = new Set(["Call", "Callback", "WhatsApp", "Email", "Visit", "Other"])
 const priorities = new Set(["Low", "Medium", "High"])
 
@@ -19,6 +21,7 @@ const leadStatusMap = {
   "Visit Scheduled": "Qualified",
   Booked: "Booked",
   Unqualified: "Unqualified",
+  Nurture: "Nurture",
 }
 
 const salesLeadStatusTransitions = {
@@ -76,7 +79,7 @@ const getDateRange = (filter) => {
     return { gte: endToday }
   }
 
-  if (filter === "missed") {
+  if (filter === "missed" || filter === "overdue") {
     return { lt: now }
   }
 
@@ -120,15 +123,6 @@ const addActivity = (tx, { leadId, userId, type, message, oldStatus, newStatus }
     },
   })
 
-const cancelPendingFollowUps = (tx, leadId) =>
-  tx.followUp.updateMany({
-    where: {
-      leadId: Number(leadId),
-      status: "Pending",
-    },
-    data: { status: "Cancelled" },
-  })
-
 const getFollowUpWhere = (user, id) => {
   const isAdmin = String(user?.role || "").toUpperCase() === "ADMIN"
   return {
@@ -138,36 +132,75 @@ const getFollowUpWhere = (user, id) => {
 }
 
 const serializeFollowUp = (followUp) => {
-  const scheduledAt = combineDateAndTime(followUp.followUpDate, followUp.followUpTime)
-  const isMissed = followUp.status === "Pending" && scheduledAt && scheduledAt.getTime() < Date.now()
+  const scheduledAt = getScheduledAt(followUp)
+  const isOverdue =
+    (followUp.status === "Pending" || followUp.status === "Scheduled") &&
+    scheduledAt &&
+    scheduledAt.getTime() < Date.now()
+
   const lead = followUp.lead || {}
+
+  let effectiveStatus = followUp.status
+  if (effectiveStatus === "Done" || effectiveStatus === "Completed") {
+    effectiveStatus = "Completed"
+  } else if (effectiveStatus === "Pending" || effectiveStatus === "Scheduled") {
+    if (isOverdue) {
+      effectiveStatus = "Overdue"
+    } else {
+      const msUntilDue = scheduledAt ? scheduledAt.getTime() - Date.now() : Infinity
+      if (msUntilDue > 0 && msUntilDue <= 30 * 60 * 1000) {
+        effectiveStatus = "Due Soon"
+      }
+    }
+  }
+
+  const reminderAt = scheduledAt ? new Date(scheduledAt.getTime() - 10 * 60 * 1000) : null
 
   return {
     ...followUp,
-    effectiveStatus: isMissed ? "Missed" : followUp.status,
+    title: `${followUp.type || "Call"} Follow-up`,
+    effectiveStatus,
     leadName: getLeadDisplayName(lead),
     phone: getContactValue(lead.phones),
     leadStatus: lead.status || "New",
+    scheduledAt: scheduledAt ? scheduledAt.toISOString() : null,
+    reminderAt: reminderAt ? reminderAt.toISOString() : null,
+    reminderOffsetMinutes: 10,
+    cancellationReason: followUp.status === "Cancelled" ? followUp.notes : null,
   }
 }
 
 const buildFollowUpWhere = (user, filter = "all") => {
-  const normalizedFilter = String(filter || "all").toLowerCase()
   const isAdmin = String(user?.role || "").toUpperCase() === "ADMIN"
-  const where = isAdmin ? {} : { salesUserId: Number(user.id) }
-  const dateRange = getDateRange(normalizedFilter)
+  const where = {
+    ...(isAdmin ? {} : { salesUserId: Number(user.id) }),
+  }
 
-  if (normalizedFilter === "callbacks") {
+  const normalizedFilter = String(filter).toLowerCase()
+
+  if (normalizedFilter === "today") {
+    where.status = { in: ["Pending", "Scheduled"] }
+    const range = getDateRange("today")
+    if (range) where.followUpDate = range
+  } else if (normalizedFilter === "upcoming") {
+    where.status = { in: ["Pending", "Scheduled"] }
+    const range = getDateRange("upcoming")
+    if (range) where.followUpDate = range
+  } else if (normalizedFilter === "overdue" || normalizedFilter === "missed") {
+    where.status = { in: ["Pending", "Scheduled"] }
+    where.followUpDate = { lt: new Date() }
+  } else if (normalizedFilter === "due" || normalizedFilter === "due soon" || normalizedFilter === "duesoon") {
+    where.status = { in: ["Pending", "Scheduled"] }
+    const now = new Date()
+    const thirtyMin = new Date(now.getTime() + 30 * 60 * 1000)
+    where.followUpDate = { gte: now, lte: thirtyMin }
+  } else if (normalizedFilter === "completed" || normalizedFilter === "done") {
+    where.status = { in: ["Done", "Completed"] }
+  } else if (normalizedFilter === "cancelled") {
+    where.status = "Cancelled"
+  } else if (normalizedFilter === "callbacks") {
     where.type = "Callback"
-    where.status = "Pending"
-  } else if (normalizedFilter === "completed") {
-    where.status = "Done"
-  } else if (normalizedFilter === "missed") {
-    where.status = "Pending"
-    where.followUpDate = dateRange
-  } else if (normalizedFilter === "today" || normalizedFilter === "upcoming") {
-    where.status = { notIn: ["Done", "Cancelled"] }
-    where.followUpDate = dateRange
+    where.status = { in: ["Pending", "Scheduled"] }
   }
 
   return where
@@ -175,43 +208,62 @@ const buildFollowUpWhere = (user, filter = "all") => {
 
 const getFollowUps = async (user, filter = "all", options = {}) => {
   const where = buildFollowUpWhere(user, filter)
-  const page = Math.max(1, parseInt(options.page) || 1)
-  const limit = Math.min(50, Math.max(1, parseInt(options.limit) || 10))
-  const usePagination = options.paginated === true
+  const page = Math.max(1, Number(options.page) || 1)
+  const limit = Math.max(1, Number(options.limit) || 20)
+  const skip = (page - 1) * limit
+  const usePagination = options.page !== undefined || options.limit !== undefined
 
   const [totalItems, rows] = await Promise.all([
-    usePagination ? prisma.followUp.count({ where }) : Promise.resolve(0),
+    prisma.followUp.count({ where }),
     prisma.followUp.findMany({
-    where,
-    ...(usePagination ? { skip:(page - 1) * limit, take:limit } : {}),
-    orderBy: [{ followUpDate: "asc" }, { followUpTime: "asc" }],
-    include: {
-      lead: true,
-      salesUser: {
-        select: { id: true, username: true, email: true, firstName: true, lastName: true },
-      },
-    },
+      where,
+      include: { lead: true },
+      orderBy: [{ followUpDate: "asc" }, { followUpTime: "asc" }],
+      ...(usePagination ? { skip, take: limit } : {}),
     }),
   ])
 
   const data = rows.map(serializeFollowUp)
   return usePagination
-    ? { data, page, limit, totalItems, totalPages:Math.ceil(totalItems / limit) }
+    ? {
+        data,
+        totalItems,
+        totalPages: Math.max(1, Math.ceil(totalItems / limit)),
+        page,
+        limit,
+      }
     : data
 }
 
 const createFollowUp = async (user, body) => {
   const leadId = Number(body.leadId)
-  const type = body.type
+  const type = body.type || "Call"
   const priority = body.priority || "Medium"
-  const status = body.status || "Pending"
+  const status = body.status === "Scheduled" ? "Scheduled" : "Pending"
   const followUpDate = combineDateAndTime(body.followUpDate, body.followUpTime)
 
   if (!leadId) throw Object.assign(new Error("Lead is required"), { statusCode: 400 })
   if (!followUpTypes.has(type)) throw Object.assign(new Error("Follow-up type is required"), { statusCode: 400 })
   if (!followUpDate) throw Object.assign(new Error("Follow-up date and time are required"), { statusCode: 400 })
   if (!priorities.has(priority)) throw Object.assign(new Error("Priority is invalid"), { statusCode: 400 })
-  if (!followUpStatuses.has(status)) throw Object.assign(new Error("Follow-up status is invalid"), { statusCode: 400 })
+
+  const timeString = String(body.followUpTime || "").slice(0, 5)
+
+  // 1. Exact accidental duplicate submit prevention within short window (5 seconds)
+  const recentDuplicate = await prisma.followUp.findFirst({
+    where: {
+      leadId,
+      salesUserId: Number(user.id),
+      type,
+      followUpTime: timeString,
+      createdAt: { gte: new Date(Date.now() - 5000) },
+    },
+    include: { lead: true },
+  })
+
+  if (recentDuplicate) {
+    return serializeFollowUp(recentDuplicate)
+  }
 
   const savedFollowUp = await prisma.$transaction(async (tx) => {
     const lead = await getScopedLead(leadId, user, tx)
@@ -233,7 +285,7 @@ const createFollowUp = async (user, body) => {
         salesUserId: Number(user.id),
         type,
         followUpDate,
-        followUpTime: String(body.followUpTime || "").slice(0, 5),
+        followUpTime: timeString,
         priority,
         notes: body.notes || null,
         status,
@@ -245,7 +297,7 @@ const createFollowUp = async (user, body) => {
       leadId: lead.id,
       userId: user.id,
       type: "FOLLOW_UP_CREATED",
-      message: `${type} follow-up created for ${followUp.followUpTime}`,
+      message: `${type} follow-up scheduled for ${timeString}`,
       oldStatus: lead.status,
       newStatus: nextLeadStatus,
     })
@@ -266,13 +318,17 @@ const markFollowUpDone = async (user, id, body = {}) => {
 
     if (!followUp) throw Object.assign(new Error("Follow-up not found"), { statusCode: 404 })
     if (followUp.status === "Cancelled") {
-      throw Object.assign(new Error("Cannot mark cancelled follow-up as Done"), { statusCode: 400 })
+      throw Object.assign(new Error("Cannot mark cancelled follow-up as Completed"), { statusCode: 400 })
     }
     clearCallbackReminderTimers(followUp.id)
 
     const updated = await tx.followUp.update({
       where: { id: followUp.id },
-      data: { status: "Done", completedAt: new Date() },
+      data: {
+        status: "Completed",
+        completedAt: new Date(),
+        notes: body.note ? `${followUp.notes ? `${followUp.notes} | ` : ""}${body.note}` : followUp.notes,
+      },
       include: { lead: true },
     })
 
@@ -295,13 +351,16 @@ const markFollowUpDone = async (user, id, body = {}) => {
 
     let serializedNext = null
     if (body.nextAction === "create-next-follow-up" && body.nextFollowUp) {
+      const nextDate = combineDateAndTime(body.nextFollowUp.followUpDate, body.nextFollowUp.followUpTime)
+      const nextTime = String(body.nextFollowUp.followUpTime || "").slice(0, 5)
+
       const nextFollowUp = await tx.followUp.create({
         data: {
           leadId: followUp.leadId,
           salesUserId: Number(user.id),
           type: body.nextFollowUp.type || followUp.type,
-          followUpDate: combineDateAndTime(body.nextFollowUp.followUpDate, body.nextFollowUp.followUpTime),
-          followUpTime: String(body.nextFollowUp.followUpTime || "").slice(0, 5),
+          followUpDate: nextDate,
+          followUpTime: nextTime,
           priority: body.nextFollowUp.priority || "Medium",
           notes: body.nextFollowUp.notes || null,
           status: "Pending",
@@ -327,7 +386,9 @@ const rescheduleFollowUp = async (user, id, body) => {
     })
 
     if (!current) throw Object.assign(new Error("Follow-up not found"), { statusCode: 404 })
-    if (current.status === "Done") throw Object.assign(new Error("Cannot reschedule completed follow-up"), { statusCode: 400 })
+    if (current.status === "Done" || current.status === "Completed") {
+      throw Object.assign(new Error("Cannot reschedule completed follow-up"), { statusCode: 400 })
+    }
     clearCallbackReminderTimers(current.id)
 
     await tx.followUp.update({
@@ -354,7 +415,7 @@ const rescheduleFollowUp = async (user, id, body) => {
       leadId: current.leadId,
       userId: user.id,
       type: "FOLLOW_UP_RESCHEDULED",
-      message: body.notes || `${current.type} follow-up rescheduled`,
+      message: body.notes || `${current.type} follow-up rescheduled for ${next.followUpTime}`,
       oldStatus: current.lead.status,
       newStatus: current.lead.status,
     })
@@ -378,9 +439,9 @@ const updateFollowUp = async (user, id, body = {}) => {
   }
   if (body.notes !== undefined) data.notes = body.notes || null
   if (body.followUpDate !== undefined || body.followUpTime !== undefined) {
-    const current = await prisma.followUp.findFirst({ where:getFollowUpWhere(user, id) })
+    const current = await prisma.followUp.findFirst({ where: getFollowUpWhere(user, id) })
     if (!current) throw Object.assign(new Error("Follow-up not found"), { statusCode: 404 })
-    if (current.status === "Done" || current.status === "Cancelled") {
+    if (current.status === "Done" || current.status === "Completed" || current.status === "Cancelled") {
       throw Object.assign(new Error("Cannot edit completed or cancelled follow-up"), { statusCode: 400 })
     }
     const followUpDate = combineDateAndTime(body.followUpDate || current.followUpDate, body.followUpTime || current.followUpTime)
@@ -392,26 +453,26 @@ const updateFollowUp = async (user, id, body = {}) => {
 
   const updated = await prisma.$transaction(async (tx) => {
     const followUp = await tx.followUp.findFirst({
-      where:getFollowUpWhere(user, id),
-      include:{ lead:true },
+      where: getFollowUpWhere(user, id),
+      include: { lead: true },
     })
     if (!followUp) throw Object.assign(new Error("Follow-up not found"), { statusCode: 404 })
-    if (followUp.status === "Done" || followUp.status === "Cancelled") {
+    if (followUp.status === "Done" || followUp.status === "Completed" || followUp.status === "Cancelled") {
       throw Object.assign(new Error("Cannot edit completed or cancelled follow-up"), { statusCode: 400 })
     }
     clearCallbackReminderTimers(followUp.id)
     const saved = await tx.followUp.update({
-      where:{ id:followUp.id },
+      where: { id: followUp.id },
       data,
-      include:{ lead:true },
+      include: { lead: true },
     })
     await addActivity(tx, {
-      leadId:followUp.leadId,
-      userId:user.id,
-      type:"FOLLOW_UP_UPDATED",
-      message:"Follow-up updated",
-      oldStatus:followUp.lead.status,
-      newStatus:followUp.lead.status,
+      leadId: followUp.leadId,
+      userId: user.id,
+      type: "FOLLOW_UP_UPDATED",
+      message: "Follow-up updated",
+      oldStatus: followUp.lead.status,
+      newStatus: followUp.lead.status,
     })
     return serializeFollowUp(saved)
   })
@@ -430,9 +491,14 @@ const cancelFollowUp = async (user, id, body = {}) => {
     if (!followUp) throw Object.assign(new Error("Follow-up not found"), { statusCode: 404 })
     clearCallbackReminderTimers(followUp.id)
 
+    const reason = body.reason || body.note || body.cancellationReason || "Cancelled by user"
+
     const updated = await tx.followUp.update({
       where: { id: followUp.id },
-      data: { status: "Cancelled" },
+      data: {
+        status: "Cancelled",
+        notes: reason,
+      },
       include: { lead: true },
     })
 
@@ -440,7 +506,7 @@ const cancelFollowUp = async (user, id, body = {}) => {
       leadId: followUp.leadId,
       userId: user.id,
       type: "FOLLOW_UP_CANCELLED",
-      message: body.note || `${followUp.type} follow-up cancelled`,
+      message: reason,
       oldStatus: followUp.lead.status,
       newStatus: followUp.lead.status,
     })
@@ -490,10 +556,6 @@ const updateLeadStatus = async (user, leadId, body, tx = prisma) => {
     data,
   })
 
-  if (normalizedStatus === "Booked" || normalizedStatus === "Unqualified") {
-    await cancelPendingFollowUps(tx, lead.id)
-  }
-
   await addActivity(tx, {
     leadId: lead.id,
     userId: user.id,
@@ -535,6 +597,7 @@ module.exports = {
   getLeadFollowUpContext,
   markFollowUpDone,
   rescheduleFollowUp,
+  snoozeFollowUp: snoozeReminder,
   updateFollowUp,
   updateLeadStatus,
 }

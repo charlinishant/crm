@@ -34,6 +34,8 @@ model Project {
   createdAt          DateTime           @default(now())
   integratedPortals  String             @default("")
   active             Boolean            @default(true)
+  elevationPhoto     String?            @db.Text
+  image              String?            @db.Text
   tower              Tower[]            @relation("Project")
   floor              FloorPlan[]        @relation("Project")
   unit               Unit[]             @relation("Project")
@@ -54,15 +56,19 @@ model ProjectSalesUser {
 }
 
 model Tower {
-  id             Int             @id @default(autoincrement())
-  name           String
-  projectId      Int
-  project        Project         @relation("Project", fields: [projectId], references: [id], onDelete: Restrict)
-  totalFloor     Int?            @default(0)
-  reraTowerId    String?
-  floors         FloorPlan[]     @relation("Tower")
-  units          Unit[]          @relation("Tower")
-  floorPlanSlots FloorPlanSlot[]
+  id                       Int             @id @default(autoincrement())
+  name                     String
+  projectId                Int
+  project                  Project         @relation("Project", fields: [projectId], references: [id], onDelete: Restrict)
+  totalFloor               Int?            @default(0)
+  reraTowerId              String?
+  floorNumberingConvention String?
+  wingCode                 String?
+  elevationPhoto           String?         @db.Text
+  image                    String?         @db.Text
+  floors                   FloorPlan[]     @relation("Tower")
+  units                    Unit[]          @relation("Tower")
+  floorPlanSlots           FloorPlanSlot[]
 }
 
 model FloorPlan {
@@ -70,8 +76,8 @@ model FloorPlan {
   name               String
   projectId          Int
   project            Project   @relation("Project", fields: [projectId], references: [id], onDelete: Restrict)
-  towerId            Int
-  tower              Tower     @relation("Tower", fields: [towerId], references: [id], onDelete: Restrict)
+  towerId            Int?
+  tower              Tower?    @relation("Tower", fields: [towerId], references: [id], onDelete: Restrict)
   configurationLabel String?
   status             String?   @default("Active")
   unitStream         String?   @default("Sale Unit")
@@ -212,8 +218,8 @@ model Unit {
   unitList  UnitModel[]
   projectId Int
   project   Project     @relation("Project", fields: [projectId], references: [id], onDelete: Restrict)
-  towerId   Int
-  tower     Tower       @relation("Tower", fields: [towerId], references: [id], onDelete: Restrict)
+  towerId   Int?
+  tower     Tower?      @relation("Tower", fields: [towerId], references: [id], onDelete: Restrict)
   floorId   Int
   floor     FloorPlan   @relation("Floor", fields: [floorId], references: [id], onDelete: Restrict)
   type      String?
@@ -265,6 +271,7 @@ model User {
   linkedUrl    String?
   description  String?
   profilePhoto String? @db.LongText
+  reraNumber   String?
 
   // Professional details
   role       Role?
@@ -286,6 +293,7 @@ model User {
   notifications    Notification[]     @relation("UserId")
   salesProjects    ProjectSalesUser[]
   whatsAppMessages WhatsAppMessage[]
+  mcubeAgent       McubeAgent?
   // Other settings
   pushNotification Boolean?           @default(false)
   gpsTracking      Boolean?           @default(false)
@@ -890,4 +898,23 @@ model Notification {
   createdAt   DateTime @default(now())
   userId      Int
   user        User     @relation("UserId", fields: [userId], references: [id])
+}
+
+model McubeAgent {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mcubeAgentId String?  @unique
+  mcubeEmail   String   @unique
+  extension    String?  @unique
+  agentPhone   String?
+  callingMode  String   @default("softphone")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([userId])
+  @@index([mcubeEmail])
+  @@index([mcubeAgentId])
+  @@index([extension])
 }

@@ -1,4 +1,5 @@
 const prisma = require("../lib/prisma")
+const { isAdminUser, maskLeadData } = require("../utils/phoneMask")
 
 const leadStatuses = ["New", "Qualified", "Nurture", "In_sourcing", "In_closing", "Booked", "Unqualified"]
 const visitStatuses = ["Scheduled", "Confirmed", "Visit Done", "Visit Missed", "Cancelled", "Rescheduled"]
@@ -64,13 +65,36 @@ const getLeadWhere = async (filters = {}) => {
   const andFilters = []
 
   if (projectFilter) andFilters.push(projectFilter)
+  const dateRange = getDateRange(filters, "createdAt")
+  if (dateRange.createdAt) {
+    const activeLeadIds = await prisma.leadActivity.findMany({
+      where: {
+        type: { in: ["LEAD_CREATED", "LEAD_ASSIGNED"] },
+        ...dateRange,
+      },
+      select: { leadId: true },
+    }).then((list) => list.map((a) => a.leadId).filter(Boolean))
+    andFilters.push({ id: { in: activeLeadIds.length ? activeLeadIds : [-1] } })
+  }
+
   if (filters.leadSource) {
-    andFilters.push({
-      OR: [
-        { channelPartner: { contains: filters.leadSource } },
-        { fundingSource: { contains: filters.leadSource } },
-      ],
-    })
+    if (filters.leadSource === "Unknown" || filters.leadSource === "Untagged") {
+      andFilters.push({
+        AND: [
+          { OR: [{ channelPartner: null }, { channelPartner: "" }, { channelPartner: "Untagged" }] },
+          { OR: [{ fundingSource: null }, { fundingSource: "" }, { fundingSource: "Untagged" }] },
+        ],
+      })
+    } else {
+      andFilters.push({
+        OR: [
+          { channelPartner: filters.leadSource },
+          { fundingSource: filters.leadSource },
+          { channelPartner: { contains: filters.leadSource } },
+          { fundingSource: { contains: filters.leadSource } },
+        ],
+      })
+    }
   }
 
   return {
@@ -191,7 +215,12 @@ const getMonthlyLeads = async (filters = {}) => {
 const getSalesPerformance = async (filters = {}) => {
   const userWhere = {
     ...(filters.salesUserId ? { id: Number(filters.salesUserId) } : {}),
-    OR: [{ role: "SALES" }, { department: "SALES" }],
+    OR: [
+      { role: "SALES" },
+      { department: "SALES" },
+      { role: "PRE_SALES" },
+      { department: "PRE_SALES" },
+    ],
   }
   const users = await prisma.user.findMany({
     where: userWhere,
@@ -199,6 +228,7 @@ const getSalesPerformance = async (filters = {}) => {
     select: { id: true, firstName: true, lastName: true, username: true, email: true },
   })
   const baseFilters = { ...filters, salesUserId: undefined }
+
 
   return Promise.all(users.map(async (user) => {
     const userFilters = { ...baseFilters, salesUserId: user.id }
@@ -307,14 +337,302 @@ const getRecentActivities = async (filters = {}) => {
   }))
 }
 
+const getDrilldownLeads = async (filters = {}, req = null) => {
+  const segmentType = String(filters.segmentType || "").toLowerCase()
+  const metric = String(filters.metric || "").toLowerCase()
+  const salesUserId = filters.salesUserId ? Number(filters.salesUserId) : undefined
+  const sourceName = filters.source || filters.leadSource || undefined
+  const statusName = filters.status || filters.leadStatus || undefined
+
+  let baseWhere = await getLeadWhere({
+    ...filters,
+    leadSource: segmentType === "source" ? undefined : filters.leadSource,
+    leadStatus: segmentType === "status" ? undefined : filters.leadStatus,
+  })
+
+  let finalWhere = { ...baseWhere }
+  let title = "Leads Drilldown"
+
+  if (segmentType === "source" || sourceName) {
+    const src = sourceName || filters.source
+    title = `Lead Source: ${src}`
+    if (src === "Unknown" || src === "Untagged") {
+      finalWhere.AND = [
+        ...(finalWhere.AND || []),
+        {
+          AND: [
+            { OR: [{ channelPartner: null }, { channelPartner: "" }, { channelPartner: "Untagged" }] },
+            { OR: [{ fundingSource: null }, { fundingSource: "" }, { fundingSource: "Untagged" }] },
+          ],
+        },
+      ]
+    } else {
+      finalWhere.AND = [
+        ...(finalWhere.AND || []),
+        {
+          OR: [
+            { channelPartner: src },
+            { fundingSource: src },
+            { channelPartner: { contains: src } },
+            { fundingSource: { contains: src } },
+          ],
+        },
+      ]
+    }
+  } else if (segmentType === "salesperformance" || metric) {
+    const targetUserId = salesUserId || (filters.userId ? Number(filters.userId) : undefined)
+    let agentName = "Sales User"
+    if (targetUserId) {
+      const u = await prisma.user.findUnique({
+        where: { id: targetUserId },
+        select: { firstName: true, lastName: true, username: true },
+      })
+      if (u) agentName = [u.firstName, u.lastName].filter(Boolean).join(" ") || u.username
+    }
+
+    if (metric === "assigned" || metric === "assignedleads") {
+      title = `Assigned Leads — ${agentName}`
+      if (targetUserId) finalWhere.teamId = targetUserId
+    } else if (metric === "qualified" || metric === "qualifiedleads") {
+      title = `Qualified Leads — ${agentName}`
+      if (targetUserId) finalWhere.teamId = targetUserId
+      finalWhere.status = "Qualified"
+    } else if (metric === "bookings" || metric === "booked") {
+      title = `Bookings — ${agentName}`
+      if (targetUserId) finalWhere.teamId = targetUserId
+      const bookingLeadIds = await prisma.booking.findMany({
+        where: {
+          ...getDateRange(filters, "createdAt"),
+        },
+        select: { leadId: true },
+      }).then((bList) => bList.map((b) => b.leadId).filter(Boolean))
+
+      finalWhere.OR = [
+        { status: "Booked" },
+        { id: { in: bookingLeadIds.length ? bookingLeadIds : [-1] } },
+      ]
+    } else if (metric === "followupsdone") {
+      title = `Follow-ups Done — ${agentName}`
+      const followUpLeadIds = await prisma.followUp.findMany({
+        where: {
+          salesUserId: targetUserId,
+          status: "Done",
+          ...getDateRange(filters, "createdAt"),
+        },
+        select: { leadId: true },
+      }).then((fList) => fList.map((f) => f.leadId).filter(Boolean))
+      finalWhere.id = { in: followUpLeadIds.length ? followUpLeadIds : [-1] }
+    } else if (metric === "missedfollowups") {
+      title = `Missed Follow-ups — ${agentName}`
+      const followUpLeadIds = await prisma.followUp.findMany({
+        where: {
+          salesUserId: targetUserId,
+          status: "Missed",
+          ...getDateRange(filters, "createdAt"),
+        },
+        select: { leadId: true },
+      }).then((fList) => fList.map((f) => f.leadId).filter(Boolean))
+      finalWhere.id = { in: followUpLeadIds.length ? followUpLeadIds : [-1] }
+    } else if (metric === "sitevisits") {
+      title = `Site Visits — ${agentName}`
+      const visitLeadIds = await prisma.scheduleVisit.findMany({
+        where: {
+          ...(targetUserId ? { OR: [{ salesExecutiveId: targetUserId }, { assignedToId: targetUserId }] } : {}),
+          ...getDateRange(filters, "scheduledOn"),
+        },
+        select: { leadId: true },
+      }).then((vList) => vList.map((v) => v.leadId).filter(Boolean))
+      finalWhere.id = { in: visitLeadIds.length ? visitLeadIds : [-1] }
+    }
+  } else if (segmentType === "status" || statusName) {
+    const st = statusName || filters.status
+    title = `Lead Status: ${st}`
+    finalWhere.status = st
+  } else if (segmentType === "sitevisits" || segmentType === "site_visits") {
+    const visitStatus = filters.visitStatus || filters.status
+    title = `Site Visits: ${visitStatus || "All"}`
+    const visitWhere = {
+      ...(visitStatus ? { status: visitStatus } : {}),
+      ...getDateRange(filters, "scheduledOn"),
+    }
+    const visitLeadIds = await prisma.scheduleVisit.findMany({
+      where: visitWhere,
+      select: { leadId: true },
+    }).then((vList) => vList.map((v) => v.leadId).filter(Boolean))
+    finalWhere.id = { in: visitLeadIds.length ? visitLeadIds : [-1] }
+  } else if (segmentType === "followups" || segmentType === "followup") {
+    const followupStatus = filters.followupStatus || filters.status
+    title = `Follow-ups: ${followupStatus || "All"}`
+    const followWhere = {
+      ...(followupStatus ? { status: followupStatus } : {}),
+      ...getDateRange(filters, "createdAt"),
+    }
+    const followLeadIds = await prisma.followUp.findMany({
+      where: followWhere,
+      select: { leadId: true },
+    }).then((fList) => fList.map((f) => f.leadId).filter(Boolean))
+    finalWhere.id = { in: followLeadIds.length ? followLeadIds : [-1] }
+  } else if (segmentType === "bookings") {
+    title = "Booked Leads"
+    const bookingWhere = await getBookingWhere(filters)
+    const bookingLeadIds = await prisma.booking.findMany({
+      where: bookingWhere,
+      select: { leadId: true },
+    }).then((bList) => bList.map((b) => b.leadId).filter(Boolean))
+    finalWhere.OR = [
+      { status: "Booked" },
+      { id: { in: bookingLeadIds.length ? bookingLeadIds : [-1] } },
+    ]
+  }
+
+  const leads = await prisma.lead.findMany({
+    where: finalWhere,
+    orderBy: { id: "desc" },
+    take: 500,
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      companyName: true,
+      phones: true,
+      status: true,
+      tags: true,
+      fundingSource: true,
+      channelPartner: true,
+      interestedProjects: true,
+      siteVisitProject: true,
+      budget: true,
+      teamId: true,
+      team: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          username: true,
+          email: true,
+        },
+      },
+      activities: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: {
+          createdAt: true,
+        },
+      },
+      callLogs: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          disposition: true,
+          status: true,
+          duration: true,
+          createdAt: true,
+        },
+      },
+      bookings: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          stage: true,
+          totalPrice: true,
+          bookedOn: true,
+          createdAt: true,
+        },
+      },
+      scheduleVisits: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: {
+          id: true,
+          status: true,
+          scheduledOn: true,
+          createdAt: true,
+        },
+      },
+    },
+  })
+
+  const isAdmin = req ? isAdminUser(req) : false
+  const safeLeads = leads.map((l) => {
+    const masked = maskLeadData(l, isAdmin)
+    const latestCall = l.callLogs?.[0] || null
+    const latestBooking = l.bookings?.[0] || null
+    const latestVisit = l.scheduleVisits?.[0] || null
+    const latestActivity = l.activities?.[0] || null
+
+    let primaryPhone = "-"
+    if (Array.isArray(masked.phones) && masked.phones.length > 0) {
+      primaryPhone = typeof masked.phones[0] === "object" ? (masked.phones[0].value || masked.phones[0].phone || masked.phones[0].number || "-") : masked.phones[0]
+    } else if (typeof masked.phones === "string") {
+      primaryPhone = masked.phones
+    }
+
+    const receivedDate = latestActivity?.createdAt || latestVisit?.createdAt || latestCall?.createdAt || latestBooking?.createdAt || null
+
+    return {
+      ...masked,
+      phone: primaryPhone,
+      createdAt: receivedDate,
+      latestCallDisposition: latestCall?.disposition || latestCall?.status || null,
+      latestCallDate: latestCall?.createdAt || null,
+      bookingStage: latestBooking?.stage || null,
+      visitStatus: latestVisit?.status || null,
+    }
+  })
+
+  return {
+    title,
+    count: safeLeads.length,
+    leads: safeLeads,
+    filters: {
+      salesUserId: filters.salesUserId || null,
+      projectId: filters.projectId || null,
+      fromDate: filters.fromDate || null,
+      toDate: filters.toDate || null,
+      segmentType: filters.segmentType || null,
+      metric: filters.metric || null,
+      source: sourceName || null,
+      status: statusName || null,
+    },
+  }
+}
+
+const getSalesUsers = async () => {
+  return prisma.user.findMany({
+    where: {
+      isActive: true,
+      OR: [
+        { role: "SALES" },
+        { department: "SALES" },
+        { role: "PRE_SALES" },
+        { department: "PRE_SALES" },
+      ],
+    },
+    orderBy: [{ firstName: "asc" }, { username: "asc" }],
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      username: true,
+      email: true,
+      role: true,
+      department: true,
+    },
+  })
+}
+
 module.exports = {
   getBookings,
+  getDrilldownLeads,
   getFollowups,
   getLeadSources,
   getLeadStatus,
   getMonthlyLeads,
   getRecentActivities,
   getSalesPerformance,
+  getSalesUsers,
   getSiteVisits,
   getSummary,
 }

@@ -156,10 +156,68 @@ const getFloorSortValue = (value) => {
   return Number.isNaN(number) ? Number.NEGATIVE_INFINITY : number
 }
 
+const parseBhkNumber = (text) => {
+  if (!text) return null
+  const str = String(text).trim()
+  const match = str.match(/(\d+(\.\d+)?)\s*(bhk|bed|bedroom|rk)/i)
+  if (match) return Number(match[1])
+  const numberMatch = str.match(/^(\d+)\s*bhk$/i)
+  if (numberMatch) return Number(numberMatch[1])
+  const wordMatch = str.match(/\b(one|two|three|four|five|six)\s*(bhk|bed|bedroom)/i)
+  if (wordMatch) {
+    const map = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 }
+    return map[wordMatch[1].toLowerCase()] || null
+  }
+  const standaloneMatch = str.match(/\b(\d+)\s*b\b/i)
+  if (standaloneMatch) return Number(standaloneMatch[1])
+  return null
+}
+
+const parseBathroomNumber = (text) => {
+  if (!text) return null
+  const str = String(text).trim()
+  const match = str.match(/(\d+(\.\d+)?)\s*(t|bath|bathroom|washroom|toilet)s?\b/i)
+  if (match) return Number(match[1])
+  const wordMatch = str.match(/\b(one|two|three|four|five|six)\s*(t|bath|bathroom|washroom|toilet)s?\b/i)
+  if (wordMatch) {
+    const map = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 }
+    return map[wordMatch[1].toLowerCase()] || null
+  }
+  return null
+}
+
 const normalizeBookingDetails = (unitItem) => {
   const unit = unitItem?.unit || {}
   const floorPlan = unit.floor || {}
   const pricing = calculateUnitPrice({ floorPlan, floorNumber: unitItem?.floor })
+
+  const rawBedrooms = floorPlan.bedrooms ?? unit.bedrooms
+  const parsedBedrooms = parseBhkNumber(
+    floorPlan.configurationLabel ||
+    floorPlan.name ||
+    floorPlan.type ||
+    unit.type ||
+    unit.category ||
+    unit.description ||
+    unitItem.name ||
+    unitItem.propertyPurpose
+  )
+  const resolvedBedrooms = (rawBedrooms !== null && rawBedrooms !== undefined && rawBedrooms !== "")
+    ? Number(rawBedrooms)
+    : (parsedBedrooms ?? null)
+
+  const rawBathrooms = floorPlan.bathrooms ?? unit.bathrooms
+  const parsedBathrooms = parseBathroomNumber(
+    floorPlan.configurationLabel ||
+    floorPlan.name ||
+    floorPlan.type ||
+    unit.description ||
+    unit.type ||
+    unit.category
+  )
+  const resolvedBathrooms = (rawBathrooms !== null && rawBathrooms !== undefined && rawBathrooms !== "")
+    ? Number(rawBathrooms)
+    : (parsedBathrooms ?? (resolvedBedrooms ? Math.max(1, Math.min(resolvedBedrooms, 3)) : null))
 
   return {
     project: {
@@ -176,13 +234,15 @@ const normalizeBookingDetails = (unitItem) => {
       name: floorPlan.name || floorPlan.configurationLabel || "",
       type: floorPlan.type || "",
       category: floorPlan.category || "",
-      bedrooms: floorPlan.bedrooms ?? unit.bedrooms,
-      bathrooms: floorPlan.bathrooms ?? unit.bathrooms,
+      configurationLabel: floorPlan.configurationLabel || (resolvedBedrooms ? `${resolvedBedrooms} BHK` : ""),
+      bedrooms: resolvedBedrooms,
+      bathrooms: resolvedBathrooms,
       kitchen: floorPlan.kitchenType || "",
       reraArea: floorPlan.carpet ?? unit.carpet,
       carpet: floorPlan.carpet ?? unit.carpet,
       saleableArea: floorPlan.saleable ?? unit.saleable,
       rateBasis: floorPlan.rateBasis || "On Carpet",
+      floorPlanImages: floorPlan.floorPlanImages,
       baseRate: floorPlan.baseRate,
       floorRiseEnabled: pricing.floorRiseEnabled,
       floorRisePerSqft: pricing.floorRisePerSqft,
@@ -194,6 +254,8 @@ const normalizeBookingDetails = (unitItem) => {
       name: unitItem.name,
       floorNumber: unitItem.floor,
       status: unitItem.status,
+      bedrooms: resolvedBedrooms,
+      bathrooms: resolvedBathrooms,
     },
     pricing: {
       baseRate: pricing.baseRate,
@@ -211,35 +273,159 @@ const normalizeBookingDetails = (unitItem) => {
 
 exports.getUnitBookingDetails = async (req, res) => {
   try {
-    const unitItemId = Number(req.params.unitItemId)
-    if (!unitItemId) return res.status(400).json({ success: false, message: "Unit item ID is required" })
+    const rawId = req.params.unitItemId
+    const unitItemId = Number(rawId)
+    const projectId = req.query.projectId ? Number(req.query.projectId) : undefined
+    const towerId = req.query.towerId ? Number(req.query.towerId) : undefined
+    const unitName = req.query.unit || req.query.name || (typeof rawId === "string" ? rawId : undefined)
 
-    const unitItem = await prisma.unitModel.findUnique({
-      where: { id: unitItemId },
-      include: {
-        unit: {
-          include: {
-            project: true,
-            tower: true,
-            floor: true,
+    if (!rawId && !unitName) return res.status(400).json({ success: false, message: "Unit item ID is required" })
+
+    let unitItem = null
+
+    if (Number.isInteger(unitItemId) && unitItemId > 0) {
+      unitItem = await prisma.unitModel.findFirst({
+        where: {
+          id: unitItemId,
+          ...(projectId ? { unit: { projectId } } : {}),
+          ...(towerId ? { unit: { towerId } } : {}),
+        },
+        include: {
+          unit: {
+            include: {
+              project: true,
+              tower: true,
+              floor: true,
+            },
           },
         },
-      },
-    })
+      })
 
-    if (!unitItem) return res.status(404).json({ success: false, message: "Selected unit was not found" })
-    if (
-      unitItem.unit?.floor &&
-      (Number(unitItem.unit.floor.projectId) !== Number(unitItem.unit.projectId) ||
-        Number(unitItem.unit.floor.towerId) !== Number(unitItem.unit.towerId))
-    ) {
-      return res.status(400).json({ success: false, message: "Selected unit hierarchy is invalid" })
+      if (!unitItem) {
+        unitItem = await prisma.unitModel.findUnique({
+          where: { id: unitItemId },
+          include: {
+            unit: {
+              include: {
+                project: true,
+                tower: true,
+                floor: true,
+              },
+            },
+          },
+        })
+      }
+
+      if (!unitItem) {
+        unitItem = await prisma.unitModel.findFirst({
+          where: {
+            unitId: unitItemId,
+            ...(projectId ? { unit: { projectId } } : {}),
+            ...(towerId ? { unit: { towerId } } : {}),
+          },
+          include: {
+            unit: {
+              include: {
+                project: true,
+                tower: true,
+                floor: true,
+              },
+            },
+          },
+        })
+      }
+    }
+
+    if (!unitItem && unitName) {
+      unitItem = await prisma.unitModel.findFirst({
+        where: {
+          name: String(unitName),
+          ...(projectId ? { unit: { projectId } } : {}),
+          ...(towerId ? { unit: { towerId } } : {}),
+        },
+        include: {
+          unit: {
+            include: {
+              project: true,
+              tower: true,
+              floor: true,
+            },
+          },
+        },
+      })
+    }
+
+    if (!unitItem && rawId) {
+      unitItem = await prisma.unitModel.findFirst({
+        where: {
+          name: String(rawId),
+        },
+        include: {
+          unit: {
+            include: {
+              project: true,
+              tower: true,
+              floor: true,
+            },
+          },
+        },
+      })
+    }
+
+    if (!unitItem) {
+      const directUnit = Number.isInteger(unitItemId) && unitItemId > 0
+        ? await prisma.unit.findUnique({
+            where: { id: unitItemId },
+            include: { project: true, tower: true, floor: true, unitList: true },
+          })
+        : null
+
+      if (directUnit) {
+        const matchingChild = directUnit.unitList?.find((child) => (unitName && child.name === unitName) || child.id === unitItemId) || directUnit.unitList?.[0]
+        return res.status(200).json({
+          success: true,
+          data: normalizeBookingDetails({
+            id: matchingChild?.id || directUnit.id,
+            name: matchingChild?.name || directUnit.floor?.name || `Unit ${directUnit.id}`,
+            floor: matchingChild?.floor ?? directUnit.floor?.applicableFloorFrom ?? 1,
+            status: matchingChild?.status || "Available",
+            unit: directUnit,
+          }),
+        })
+      }
+
+      const directUnitByName = unitName
+        ? await prisma.unit.findFirst({
+            where: {
+              ...(projectId ? { projectId } : {}),
+              ...(towerId ? { towerId } : {}),
+              unitList: { some: { name: String(unitName) } },
+            },
+            include: { project: true, tower: true, floor: true, unitList: true },
+          })
+        : null
+
+      if (directUnitByName) {
+        const matchingChild = directUnitByName.unitList?.find((child) => child.name === unitName) || directUnitByName.unitList?.[0]
+        return res.status(200).json({
+          success: true,
+          data: normalizeBookingDetails({
+            id: matchingChild?.id || directUnitByName.id,
+            name: matchingChild?.name || directUnitByName.floor?.name || `Unit ${directUnitByName.id}`,
+            floor: matchingChild?.floor ?? directUnitByName.floor?.applicableFloorFrom ?? 1,
+            status: matchingChild?.status || "Available",
+            unit: directUnitByName,
+          }),
+        })
+      }
+
+      return res.status(404).json({ success: false, message: "Selected unit was not found" })
     }
 
     return res.status(200).json({ success: true, data: normalizeBookingDetails(unitItem) })
   } catch (error) {
-    console.log(error)
-    res.status(error.statusCode || 500).json({ success: false, message: error.message || "Something went wrong" })
+    console.error("getUnitBookingDetails error:", error)
+    res.status(500).json({ success: false, message: error.message || "Something went wrong" })
   }
 }
 
@@ -497,27 +683,28 @@ exports.getUnit = async (req, res) => {
       }
     } else {
       let unitItemConditions = {}
+      const andClauses = []
+
       if (req.query.projectId) {
-        unitItemConditions.unit = {
-          ...(unitItemConditions.unit || {}),
-          floor: {
-            is: {
-              ...((unitItemConditions.unit || {}).floor?.is || {}),
-              projectId: parseInt(req.query.projectId),
-            },
-          },
-        }
+        const pId = parseInt(req.query.projectId)
+        andClauses.push({
+          OR: [
+            { unit: { projectId: pId } },
+            { unit: { floor: { is: { projectId: pId } } } },
+          ],
+        })
       }
       if (req.query.towerId) {
-        unitItemConditions.unit = {
-          ...(unitItemConditions.unit || {}),
-          floor: {
-            is: {
-              ...((unitItemConditions.unit || {}).floor?.is || {}),
-              towerId: parseInt(req.query.towerId),
-            },
-          },
-        }
+        const tId = parseInt(req.query.towerId)
+        andClauses.push({
+          OR: [
+            { unit: { towerId: tId } },
+            { unit: { floor: { is: { towerId: tId } } } },
+          ],
+        })
+      }
+      if (andClauses.length > 0) {
+        unitItemConditions.AND = andClauses
       }
       const page = parseInt(req.query.page) || 1
       const limit = parseInt(req.query.limit) || 10
@@ -546,6 +733,14 @@ exports.getUnit = async (req, res) => {
               floorId:true,
               towerId:true,
               description:true,
+              type:true,
+              category:true,
+              bedrooms:true,
+              bathrooms:true,
+              measure:true,
+              carpet:true,
+              saleable:true,
+              loading:true,
               project:{
                 select:{
                   id:true,
@@ -606,8 +801,38 @@ exports.getUnit = async (req, res) => {
       })
       const pricedUnitItems = unitItems.map((item) => {
         const pricing = calculateUnitPrice({ floorPlan: item.unit?.floor, floorNumber: item.floor })
+        const rawBedrooms = item.unit?.floor?.bedrooms ?? item.unit?.bedrooms
+        const parsedBedrooms = parseBhkNumber(
+          item.unit?.floor?.configurationLabel ||
+          item.unit?.floor?.name ||
+          item.unit?.floor?.type ||
+          item.unit?.type ||
+          item.unit?.category ||
+          item.unit?.description ||
+          item.name ||
+          item.propertyPurpose
+        )
+        const bedrooms = (rawBedrooms !== null && rawBedrooms !== undefined && rawBedrooms !== "")
+          ? Number(rawBedrooms)
+          : (parsedBedrooms ?? null)
+
+        const rawBathrooms = item.unit?.floor?.bathrooms ?? item.unit?.bathrooms
+        const parsedBathrooms = parseBathroomNumber(
+          item.unit?.floor?.configurationLabel ||
+          item.unit?.floor?.name ||
+          item.unit?.floor?.type ||
+          item.unit?.description ||
+          item.unit?.type
+        )
+        const bathrooms = (rawBathrooms !== null && rawBathrooms !== undefined && rawBathrooms !== "")
+          ? Number(rawBathrooms)
+          : (parsedBathrooms ?? (bedrooms ? Math.max(1, Math.min(bedrooms, 3)) : null))
+
         return {
           ...item,
+          bedrooms,
+          bathrooms,
+          configurationLabel: item.unit?.floor?.configurationLabel || (bedrooms ? `${bedrooms} BHK` : ""),
           storedBaseRate: item.baseRate,
           storedBasePrice: item.basePrice,
           baseRate: pricing.baseRate,
@@ -654,6 +879,13 @@ exports.getUnit = async (req, res) => {
             floor: unit?.floor,
             floorNumber: item.floor,
             description: unit?.description,
+            type: unit?.floor?.type || unit?.type,
+            category: unit?.floor?.category || unit?.category,
+            bedrooms: item.bedrooms ?? unit?.floor?.bedrooms ?? unit?.bedrooms,
+            bathrooms: item.bathrooms ?? unit?.floor?.bathrooms ?? unit?.bathrooms,
+            carpet: unit?.floor?.carpet ?? unit?.carpet,
+            saleable: unit?.floor?.saleable ?? unit?.saleable,
+            rateBasis: unit?.floor?.rateBasis,
           })
         }
 

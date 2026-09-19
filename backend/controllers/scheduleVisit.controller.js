@@ -54,15 +54,30 @@ exports.getScheduleVisits = async (req, res) => {
 
 exports.upsertScheduleVisit = async (req, res) => {
   try {
+    const authUser = req.authUser || null
+    const authUserName = authUser
+      ? [authUser.firstName, authUser.lastName].filter(Boolean).join(" ").trim() || authUser.username || authUser.email
+      : null
+    const isSalesUser = authUser && !["ADMIN", "SUPER_ADMIN", "MANAGER"].includes(String(authUser.role).toUpperCase())
+
+    const explicitExecutive = req.body.salesExecutive || req.body.siteVisitExecutive
+    const salesExecutive = isSalesUser
+      ? authUserName
+      : (explicitExecutive || authUserName)
+    const initiatedBy = req.body.initiatedBy || req.body.siteVisitInitiatedBy || authUserName
+
     const payload = getVisitPayloadFromLeadUpdate(req.body.leadId, {
       ...req.body,
+      salesExecutive,
+      siteVisitExecutive: salesExecutive,
+      initiatedBy,
+      siteVisitInitiatedBy: initiatedBy,
       siteVisitStatus: normalizeVisitStatus(req.body.status || req.body.siteVisitStatus),
       visitStatus: normalizeVisitStatus(req.body.status || req.body.visitStatus),
       conductSiteStatus: normalizeVisitStatus(req.body.status || req.body.conductSiteStatus),
       conductSiteVisit: req.body.project || req.body.conductSiteVisit,
       siteVisitProject: req.body.project || req.body.siteVisitProject,
       siteVisitLocation: req.body.meetingPoint || req.body.siteVisitLocation,
-      siteVisitExecutive: req.body.salesExecutive || req.body.siteVisitExecutive,
       siteVisitNote: req.body.note || req.body.siteVisitNote,
       conductSiteDate: req.body.scheduledOn || req.body.conductSiteDate,
       siteVisitConductedOn: req.body.conductedOn || req.body.siteVisitConductedOn,
@@ -85,7 +100,7 @@ exports.upsertScheduleVisit = async (req, res) => {
         conductSiteStatus: payload.status,
         siteVisitLocation: payload.meetingPoint,
         meetingPoint: payload.meetingPoint,
-        siteVisitExecutive: payload.salesExecutive,
+        siteVisitExecutive: visit?.salesExecutive || payload.salesExecutive,
         siteVisitNote: payload.note,
         siteVisitInitiatedBy: payload.initiatedBy,
         siteVisitDate: payload.scheduledOn,

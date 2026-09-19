@@ -3,7 +3,25 @@ const multer = require("multer")
 
 const authenticate = require("../middleware/auth.middleware")
 const { optionalAuthenticate } = require("../middleware/auth.middleware")
-const {createLead, getLeads, getDuplicateLeads, getTrashLeads, getLeadById, updateLead, deleteLead, restoreLead, permanentlyDeleteLead, bulkTrashLeads, bulkRestoreLeads, bulkPermanentlyDeleteLeads, importExcel, sampleExcel} = require("../controllers/lead.controller")
+const {
+  createLead,
+  getLeads,
+  getUntaggedLeads,
+  tagLeadSource,
+  bulkTagLeadSources,
+  getDuplicateLeads,
+  getTrashLeads,
+  getLeadById,
+  updateLead,
+  deleteLead,
+  restoreLead,
+  permanentlyDeleteLead,
+  bulkTrashLeads,
+  bulkRestoreLeads,
+  bulkPermanentlyDeleteLeads,
+  importExcel,
+  sampleExcel,
+} = require("../controllers/lead.controller")
 
 const router = Router()
 
@@ -15,18 +33,21 @@ const upload = multer({
 
 
 router.post("/", optionalAuthenticate, createLead)
-router.get("/", getLeads)
-router.get("/duplicates", getDuplicateLeads)
-router.get("/trash", getTrashLeads)
+router.get("/", optionalAuthenticate, getLeads)
+router.get("/untagged", optionalAuthenticate, getUntaggedLeads)
+router.get("/duplicates", optionalAuthenticate, getDuplicateLeads)
+router.get("/trash", optionalAuthenticate, getTrashLeads)
 router.get('/sample-excel', sampleExcel)
-router.post('/import',upload.single("file"), importExcel)
+router.post('/import', optionalAuthenticate, upload.single("file"), importExcel)
 router.patch("/bulk/trash", authenticate, bulkTrashLeads)
 router.patch("/bulk/restore", authenticate, bulkRestoreLeads)
+router.patch("/bulk/tag-source", optionalAuthenticate, bulkTagLeadSources)
 router.delete("/bulk/permanent", authenticate, bulkPermanentlyDeleteLeads)
-router.get("/:id", getLeadById)
-router.patch("/:id", updateLead)
-router.patch("/:id/restore", restoreLead)
-router.delete("/:id", deleteLead)
-router.delete("/:id/permanent", permanentlyDeleteLead)
+router.patch("/:id/tag-source", optionalAuthenticate, tagLeadSource)
+router.get("/:id", optionalAuthenticate, getLeadById)
+router.patch("/:id", optionalAuthenticate, updateLead)
+router.patch("/:id/restore", optionalAuthenticate, restoreLead)
+router.delete("/:id", optionalAuthenticate, deleteLead)
+router.delete("/:id/permanent", authenticate, permanentlyDeleteLead)
 
 module.exports = router

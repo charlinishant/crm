@@ -1,6 +1,8 @@
 const bcrypt = require("bcryptjs")
 const prisma = require("../lib/prisma")
+const mcubeAgentService = require("../services/mcubeAgent.service")
 const { emitReportsUpdate } = require("../socket/socket")
+const { isAdminUser, maskLeadData, maskBookingData } = require("../utils/phoneMask")
 
 const normalizeLeadStageText = (value) =>
     String(value || "")
@@ -41,6 +43,7 @@ const profileUserSelect = {
     linkedUrl:true,
     description:true,
     profilePhoto:true,
+    reraNumber:true,
     role:true,
     department:true,
     teamId:true,
@@ -106,7 +109,7 @@ const normalizeUserPayload = (data, { partial = false } = {}) => {
 exports.createUser = async (req, res)=>{
     try {
         const data = normalizeUserPayload({...req.body})
-        const nullableFields = ["username", "phone", "secondaryPhone", "linkedUrl", "description", "timeZone", "profilePhoto"]
+        const nullableFields = ["username", "phone", "secondaryPhone", "linkedUrl", "description", "timeZone", "profilePhoto", "reraNumber"]
 
         nullableFields.forEach((field) => {
             if(typeof data[field] === "string"){
@@ -127,6 +130,15 @@ exports.createUser = async (req, res)=>{
 
         if(!data.password || String(data.password).length < 8){
             return res.status(400).json({message:"Password must be at least 8 characters"})
+        }
+
+        if(data.phone){
+            const cleanedPhone = String(data.phone).replace(/\D/g, '').slice(-10)
+            data.phone = cleanedPhone.length === 10 ? cleanedPhone : null
+        }
+        if(data.secondaryPhone){
+            const cleanedSecondary = String(data.secondaryPhone).replace(/\D/g, '').slice(-10)
+            data.secondaryPhone = cleanedSecondary.length === 10 ? cleanedSecondary : null
         }
 
         const duplicateChecks = []
@@ -164,14 +176,48 @@ exports.createUser = async (req, res)=>{
 
         const user = await prisma.user.create({data:data})
 
+        // Initialize MCube agent mapping if MCube is enabled
+        let mcubeInitResult = null
+        let mcubeInitError = null
+        if (user.email && (user.phone || user.secondaryPhone)) {
+            try {
+                // Check if MCube is enabled and configured
+                const mcubeConfig = require("../services/mcubeConfig.service")
+                if (mcubeConfig.isMcubeEnabled() && mcubeConfig.isConfigured()) {
+                    mcubeInitResult = await mcubeAgentService.upsertMcubeAgentMapping({
+                        userId: user.id,
+                        mcubeEmail: user.email,
+                        agentPhone: user.phone || user.secondaryPhone,
+                        callingMode: "softphone",
+                        isActive: true,
+                    })
+                } else {
+                    // MCube is not fully configured - create a pending mapping
+                    mcubeInitResult = await mcubeAgentService.upsertMcubeAgentMapping({
+                        userId: user.id,
+                        mcubeEmail: user.email,
+                        agentPhone: user.phone || user.secondaryPhone,
+                        callingMode: "softphone",
+                        isActive: false, // Start as inactive until properly configured
+                    })
+                    mcubeInitError = "MCube agent mapping created but requires configuration"
+                }
+            } catch (error) {
+                mcubeInitError = error.message
+                console.error("Failed to create MCube agent mapping for user:", user.id, error.message)
+                // Don't fail user creation if MCube mapping fails
+            }
+        }
+
         res.status(201).json({
             "id":user.id,
-            "message":"User created successfully"
+            "message":"User created successfully",
+            ...(mcubeInitError && {mcubeSetupWarning: mcubeInitError})
         })
         emitReportsUpdate("user:created")
 
     } catch (error) {
-        console.log(error);
+        console.error("Error in createUser:", error);
 
         if(error.code === "P2002"){
             const fields = Array.isArray(error.meta?.target)
@@ -183,7 +229,9 @@ exports.createUser = async (req, res)=>{
             })
         }
         
-        res.status(500).json({message:"Something went wrong"})
+        res.status(500).json({
+            message: error.message || "Failed to create user. Please check server database schema and logs."
+        })
     }
 }
 
@@ -301,7 +349,7 @@ exports.updateUser = async (req, res)=>{
         if(!user)
             res.status(400).json("User not found")    
 
-        const nullableFields = ["username", "phone", "secondaryPhone", "linkedUrl", "description", "timeZone", "profilePhoto"]
+        const nullableFields = ["username", "phone", "secondaryPhone", "linkedUrl", "description", "timeZone", "profilePhoto", "reraNumber"]
 
         nullableFields.forEach((field) => {
             if(typeof data[field] === "string"){
@@ -311,6 +359,15 @@ exports.updateUser = async (req, res)=>{
                 data[field] = null
             }
         })
+
+        if(data.phone){
+            const cleanedPhone = String(data.phone).replace(/\D/g, '').slice(-10)
+            data.phone = cleanedPhone.length === 10 ? cleanedPhone : null
+        }
+        if(data.secondaryPhone){
+            const cleanedSecondary = String(data.secondaryPhone).replace(/\D/g, '').slice(-10)
+            data.secondaryPhone = cleanedSecondary.length === 10 ? cleanedSecondary : null
+        }
 
         if(typeof data.email === "string"){
             data.email = data.email.trim().toLowerCase()
@@ -327,11 +384,32 @@ exports.updateUser = async (req, res)=>{
             data:data
         })
 
+        if (data.phone || data.email || user.phone || user.email) {
+          const existingAgent = await mcubeAgentService.findMcubeAgentByUserId(user.id)
+          await mcubeAgentService.upsertMcubeAgentMapping({
+            userId: user.id,
+            mcubeEmail: data.email || existingAgent?.mcubeEmail || user.email,
+            agentPhone: data.phone || existingAgent?.agentPhone || user.phone,
+            extension: existingAgent?.extension || null,
+            callingMode: existingAgent?.callingMode || "softphone",
+            isActive: true,
+          }).catch(() => null)
+        }
+
         res.status(200).json(userUpdate)
         emitReportsUpdate("user:updated")
     } catch (error) {
-        console.log(error);
-        res.status(500).json("Something went wrong")
+        console.error("Error in updateUser:", error);
+        if(error.code === "P2002"){
+            const fields = Array.isArray(error.meta?.target)
+                ? error.meta.target.join(", ")
+                : "email, username, or phone"
+
+            return res.status(409).json({
+                message:`User already exists with this ${fields}`
+            })
+        }
+        res.status(500).json({ message: error.message || "Failed to update user" })
     }
 }
 
@@ -392,6 +470,12 @@ exports.getAccessPanel = async (req, res)=>{
                 orderBy:{id:"desc"},
                 select:{
                     id:true,
+                    callAttemptCount:true,
+                    _count:{
+                        select:{
+                            callLogs:true
+                        }
+                    },
                     salutation:true,
                     firstName:true,
                     lastName:true,
@@ -482,7 +566,22 @@ exports.getAccessPanel = async (req, res)=>{
             }
         }
 
-        const leads = await getAssignedLeads()
+        const search = req.query.search?.trim() || ''
+
+        // Get unfiltered leads for stats and other computations
+        const unfilteredLeads = await getAssignedLeads()
+
+        // Filter leads by search term if provided
+        const leads = search ? unfilteredLeads.filter(lead => {
+            const idMatch = String(lead.id).includes(search)
+            const firstNameMatch = lead.firstName?.toLowerCase().includes(search.toLowerCase()) ?? false
+            const lastNameMatch = lead.lastName?.toLowerCase().includes(search.toLowerCase()) ?? false
+            const normalizedSearch = search.replace(/\D/g, '')
+            const phoneMatch = lead.phones?.some(p =>
+                String(p.value).replace(/\D/g, '').includes(normalizedSearch)
+            ) ?? false
+            return idMatch || firstNameMatch || lastNameMatch || phoneMatch
+        }) : unfilteredLeads
 
         let newLeadsToday = 0
         try {
@@ -507,11 +606,11 @@ exports.getAccessPanel = async (req, res)=>{
             newLeadsToday = assignedToday.length
 
             if (newLeadsToday === 0) {
-                newLeadsToday = leads.filter(isNewAssignedLead).length
+                newLeadsToday = unfilteredLeads.filter(isNewAssignedLead).length
             }
         } catch (error) {
             console.log("Unable to load new assigned lead stats", error)
-            newLeadsToday = leads.filter(isNewAssignedLead).length
+            newLeadsToday = unfilteredLeads.filter(isNewAssignedLead).length
         }
 
         let bookings = []
@@ -520,7 +619,7 @@ exports.getAccessPanel = async (req, res)=>{
                 where:{
                     stage:{in:["Booked", "booked", "Confirmed", "confirmed"]},
                     leadId:{
-                        in:leads.map(lead => lead.id)
+                        in:unfilteredLeads.map(lead => lead.id)
                     }
                 },
                 take:10,
@@ -676,10 +775,14 @@ exports.getAccessPanel = async (req, res)=>{
             team:user.team
         }
 
+        const isAdmin = isAdminUser(req)
+        const maskedLeads = isAdmin ? leads : leads.map((l) => maskLeadData(l, false))
+        const maskedBookings = isAdmin ? bookings : bookings.map((b) => maskBookingData(b, false))
+
         res.status(200).json({
             user:displayUser,
             stats:{
-                assignedLeads:leads.length,
+                assignedLeads:unfilteredLeads.length,
                 newLeadsToday,
                 followupsDue:followupStats.due,
                 followupsToday:followupStats.today,
@@ -687,7 +790,7 @@ exports.getAccessPanel = async (req, res)=>{
                 upcomingFollowups:followupStats.upcoming,
                 highPriorityFollowups:followupStats.highPriority,
                 callbacksDue:followupStats.callbacksDue || 0,
-                siteVisits:leads.filter(lead =>
+                siteVisits:unfilteredLeads.filter(lead =>
                     lead.conductSiteVisit ||
                     lead.conductSiteDate ||
                     lead.siteVisitProject ||
@@ -696,11 +799,11 @@ exports.getAccessPanel = async (req, res)=>{
                     lead.visitStatus ||
                     lead.conductSiteStatus
                 ).length,
-                bookings:bookings.length,
+                bookings:maskedBookings.length,
                 tasks:tasks.length
             },
-            leads:leads,
-            bookings:bookings,
+            leads:maskedLeads,
+            bookings:maskedBookings,
             tasks:tasks
         })
     } catch (error) {

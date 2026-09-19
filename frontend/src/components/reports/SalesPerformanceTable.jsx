@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 
 const RECORDS_PER_PAGE = 10;
 
-const SalesPerformanceTable = ({ data = [] }) => {
+const SalesPerformanceTable = ({ data = [], onSegmentClick }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -37,9 +37,46 @@ const SalesPerformanceTable = ({ data = [] }) => {
     setCurrentPage(1);
   };
 
+  const handleCellClick = (row, metric, metricLabel, count) => {
+    if (!onSegmentClick || !count || count <= 0) return;
+    onSegmentClick({
+      segmentType: "salesPerformance",
+      userId: row.userId,
+      salesUserId: row.userId,
+      userName: row.userName,
+      metric,
+      count,
+      title: `${metricLabel} — ${row.userName}`,
+    });
+  };
+
+  const renderClickableCount = (row, metric, metricLabel, count, badgeClass = "badge-info") => {
+    if (!onSegmentClick || !count || count <= 0) {
+      return <span>{count ?? 0}</span>;
+    }
+    return (
+      <button
+        type="button"
+        className="btn btn-sm btn-link p-0 text-decoration-none fw-bold"
+        style={{ cursor: "pointer", color: "inherit" }}
+        onClick={() => handleCellClick(row, metric, metricLabel, count)}
+        title={`Click to view ${count} ${metricLabel.toLowerCase()}`}
+      >
+        <span className={`badge ${badgeClass} text-primary bg-light border`}>
+          {count} 🔍
+        </span>
+      </button>
+    );
+  };
+
   return (
     <div className="admin-report-table-card sales-performance-table-card">
-      <h6>Sales User Performance</h6>
+      <div className="d-flex justify-content-between align-items-center mb-2">
+        <h6 className="mb-0">Sales User Performance</h6>
+        {onSegmentClick && (
+          <small className="text-muted" style={{ fontSize: "11px" }}>💡 Click any count badge to drill into leads</small>
+        )}
+      </div>
       <label className="crm-table-search sales-performance-search">
         <span aria-hidden="true">🔍</span>
         <input
@@ -70,13 +107,13 @@ const SalesPerformanceTable = ({ data = [] }) => {
                 <td>
                   <div className="sales-performance-user">{row.userName}</div>
                 </td>
-                <td>{row.assignedLeads}</td>
-                <td>{row.qualifiedLeads}</td>
-                <td>{row.followUpsDone}</td>
-                <td>{row.missedFollowUps}</td>
-                <td>{row.siteVisits}</td>
-                <td>{row.bookings}</td>
-                <td>{row.conversionPercentage}%</td>
+                <td>{renderClickableCount(row, "assignedLeads", "Assigned Leads", row.assignedLeads)}</td>
+                <td>{renderClickableCount(row, "qualifiedLeads", "Qualified Leads", row.qualifiedLeads)}</td>
+                <td>{renderClickableCount(row, "followupsDone", "Follow-ups Done", row.followUpsDone)}</td>
+                <td>{renderClickableCount(row, "missedFollowups", "Missed Follow-ups", row.missedFollowUps)}</td>
+                <td>{renderClickableCount(row, "siteVisits", "Site Visits", row.siteVisits)}</td>
+                <td>{renderClickableCount(row, "bookings", "Bookings", row.bookings)}</td>
+                <td><strong>{row.conversionPercentage}%</strong></td>
               </tr>
             )) : (
               <tr>

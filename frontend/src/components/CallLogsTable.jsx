@@ -53,7 +53,21 @@ const getRecordingPlaybackUrl = (recordingUrl) => {
   return url;
 };
 
-const ProtectedRecording = ({ callId, status, recordingUrl }) => {
+const getAuthUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem("authUser") || "null");
+  } catch {
+    return null;
+  }
+};
+
+const isUserAdminRole = (scope, authUser) => {
+  if (scope === "admin") return true;
+  const role = String(authUser?.role || "").toUpperCase();
+  return role === "ADMIN" || role === "SUPER_ADMIN";
+};
+
+const ProtectedRecording = ({ callId, status, recordingUrl, isAdmin = false }) => {
   const [audioUrl, setAudioUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -63,6 +77,7 @@ const ProtectedRecording = ({ callId, status, recordingUrl }) => {
   }, [audioUrl]);
 
   const loadRecording = async () => {
+    if (!isAdmin) return;
     setLoading(true);
     setError("");
     try {
@@ -77,7 +92,7 @@ const ProtectedRecording = ({ callId, status, recordingUrl }) => {
       setAudioUrl(URL.createObjectURL(await response.blob()));
     } catch (loadError) {
       const directUrl = getRecordingPlaybackUrl(recordingUrl);
-      if (directUrl) {
+      if (directUrl && isAdmin) {
         setAudioUrl(directUrl);
         setError("");
       } else {
@@ -87,6 +102,15 @@ const ProtectedRecording = ({ callId, status, recordingUrl }) => {
       setLoading(false);
     }
   };
+
+  if (!isAdmin) {
+    return (
+      <div className="call-log-recording-box">
+        <span className="call-log-recording-saved"><Headphones size={13} /> Saved in CRM</span>
+        <small className="call-log-recording-sub">{getStatusLabel(status)} call recording</small>
+      </div>
+    );
+  }
 
   if (audioUrl) {
     return (
@@ -110,8 +134,8 @@ const ProtectedRecording = ({ callId, status, recordingUrl }) => {
   );
 };
 
-const RecordingCell = ({ log }) => {
-  if (log.recordingUrl) return <ProtectedRecording callId={log.id} status={log.status} recordingUrl={log.recordingUrl} />;
+const RecordingCell = ({ log, isAdmin = false }) => {
+  if (log.recordingUrl) return <ProtectedRecording callId={log.id} status={log.status} recordingUrl={log.recordingUrl} isAdmin={isAdmin} />;
 
   const status = String(log.status || "").toLowerCase();
   const waiting = ["initiated", "queued", "calling", "ringing", "connected", "in-progress"].includes(status);
@@ -143,6 +167,9 @@ const detailRows = (log) => [
 ];
 
 const CallLogsTable = ({ scope = "admin", direction = "" }) => {
+  const authUser = getAuthUser();
+  const isAdmin = isUserAdminRole(scope, authUser);
+
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -205,7 +232,7 @@ const CallLogsTable = ({ scope = "admin", direction = "" }) => {
   const pageStart = (activePage - 1) * recordsPerPage;
   const pageEnd = Math.min(pageStart + logs.length, totalItems);
   const paginatedLogs = logs;
-  const tableSelection = useTableSelection({ rows:paginatedLogs, disabled:bulkDeleting, pruneOnRowsChange:true });
+  const tableSelection = useTableSelection({ rows:paginatedLogs, disabled:bulkDeleting || !isAdmin, pruneOnRowsChange:true });
   const selectedCount = tableSelection.selectedCount;
   const selectedLogIds = tableSelection.selectedIds.flatMap((id) => [id, Number(id)]);
   const allVisibleSelected = tableSelection.allVisibleSelected;
@@ -237,6 +264,7 @@ const CallLogsTable = ({ scope = "admin", direction = "" }) => {
   }, []);
 
   const deleteLog = async (log) => {
+    if (!isAdmin) return;
     setOpenActionLogId(null);
     try {
       const token = localStorage.getItem("authToken");
@@ -285,6 +313,7 @@ const CallLogsTable = ({ scope = "admin", direction = "" }) => {
   };
 
   const deleteSelectedLogs = async () => {
+    if (!isAdmin) return;
     const idsToDelete = [...tableSelection.selectedIds];
     if (!idsToDelete.length) {
       setIsBulkConfirmOpen(false);
@@ -361,7 +390,7 @@ const CallLogsTable = ({ scope = "admin", direction = "" }) => {
           <option value="false">Recording pending</option>
         </select>
       </div>
-      {selectedCount > 0 && !selectedLog && (
+      {isAdmin && selectedCount > 0 && !selectedLog && (
         <BulkActionToolbar
           count={selectedCount}
           disabled={loading}
@@ -391,30 +420,35 @@ const CallLogsTable = ({ scope = "admin", direction = "" }) => {
       ) : error ? <div className="call-log-error">{error}</div> : loading ? <div className="call-log-empty">Loading call logs...</div> : totalItems === 0 ? <div className="call-log-empty">No call logs found.</div> : (
         <>
         <div className="call-log-table-wrap"><table className="call-log-table"><thead><tr>
-          <th className="call-log-select-col">
-            <label className="call-log-check">
-              <input
-                type="checkbox"
-                aria-label="Select visible call logs"
-                checked={tableSelection.allVisibleSelected}
-                onChange={tableSelection.toggleVisible}
-                disabled={bulkDeleting}
-              />
-              <span>{selectingAll ? "..." : allMatchingSelected || allVisibleSelected ? "✓" : ""}</span>
-            </label>
-          </th><th>Lead</th><th>Direction</th><th>Disposition</th><th>{effectiveDirection === "inbound" ? "Caller Number" : "Lead Number"}</th><th>Agent</th><th>Call Status</th><th>Duration</th><th>Disconnected By</th><th>After Call Recording</th><th>Created</th><th>Actions</th>
-        </tr></thead><tbody>{paginatedLogs.map((log) => <tr className={tableSelection.isSelected(log.id) ? "selected" : ""} key={log.id}>
-          <td className="call-log-select-col">
-            <label className="call-log-check">
-              <input
-                type="checkbox"
-                aria-label={`Select call log #${log.id}`}
-                checked={tableSelection.isSelected(log.id)}
-                onChange={() => tableSelection.toggleRow(log.id)}
-              />
-              <span>{selectedLogIds.includes(log.id) ? "✓" : ""}</span>
-            </label>
-          </td>
+          {isAdmin && (
+            <th className="call-log-select-col">
+              <label className="call-log-check">
+                <input
+                  type="checkbox"
+                  aria-label="Select visible call logs"
+                  checked={tableSelection.allVisibleSelected}
+                  onChange={tableSelection.toggleVisible}
+                  disabled={bulkDeleting}
+                />
+                <span>{selectingAll ? "..." : allMatchingSelected || allVisibleSelected ? "✓" : ""}</span>
+              </label>
+            </th>
+          )}
+          <th>Lead</th><th>Direction</th><th>Disposition</th><th>{effectiveDirection === "inbound" ? "Caller Number" : "Lead Number"}</th><th>Agent</th><th>Call Status</th><th>Duration</th><th>Disconnected By</th><th>After Call Recording</th><th>Created</th><th>Actions</th>
+        </tr></thead><tbody>{paginatedLogs.map((log) => <tr className={isAdmin && tableSelection.isSelected(log.id) ? "selected" : ""} key={log.id}>
+          {isAdmin && (
+            <td className="call-log-select-col">
+              <label className="call-log-check">
+                <input
+                  type="checkbox"
+                  aria-label={`Select call log #${log.id}`}
+                  checked={tableSelection.isSelected(log.id)}
+                  onChange={() => tableSelection.toggleRow(log.id)}
+                />
+                <span>{selectedLogIds.includes(log.id) ? "✓" : ""}</span>
+              </label>
+            </td>
+          )}
           <td><span className="call-log-name">{log.lead ? getName(log.lead, `Lead #${log.leadId}`) : "Unknown Caller"}</span><span className="call-log-sub">{log.leadId ? `#${log.leadId}` : "No linked lead"}</span></td>
           <td>{getDirectionLabel(log)}</td>
           <td>{log.disposition || "-"}</td>
@@ -423,7 +457,7 @@ const CallLogsTable = ({ scope = "admin", direction = "" }) => {
           <td><span className="call-log-status">{getCallStatus(log)}</span></td>
           <td>{formatDuration(log.duration)}</td>
           <td>{log.disconnectedBy || "-"}</td>
-          <td><RecordingCell log={log} /></td>
+          <td><RecordingCell log={log} isAdmin={isAdmin} /></td>
           <td>{formatDate(log.createdAt)}</td>
           <td>
             <div className="call-log-actions">
@@ -453,12 +487,14 @@ const CallLogsTable = ({ scope = "admin", direction = "" }) => {
                   }}>
                     Dispose
                   </button>
-                  <button type="button" className="danger" onClick={() => {
-                    setPendingDeleteLog(log);
-                    setOpenActionLogId(null);
-                  }}>
-                    Delete
-                  </button>
+                  {isAdmin && (
+                    <button type="button" className="danger" onClick={() => {
+                      setPendingDeleteLog(log);
+                      setOpenActionLogId(null);
+                    }}>
+                      Delete
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -558,7 +594,7 @@ const CallLogsTable = ({ scope = "admin", direction = "" }) => {
             {selectedLog.recordingUrl && (
               <div style={{ marginTop: "16px", padding: "14px", background: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
                 <span style={{ display: "block", fontSize: "12px", color: "#64748b", fontWeight: "700", marginBottom: "8px" }}>Call Recording</span>
-                <ProtectedRecording callId={selectedLog.id} status={selectedLog.status} recordingUrl={selectedLog.recordingUrl} />
+                <ProtectedRecording callId={selectedLog.id} status={selectedLog.status} recordingUrl={selectedLog.recordingUrl} isAdmin={isAdmin} />
               </div>
             )}
 

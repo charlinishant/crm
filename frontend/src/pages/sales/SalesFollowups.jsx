@@ -116,12 +116,27 @@ const SalesFollowups = ({
   }, [filter]);
 
   const counts = useMemo(() => {
-    const nextCounts = { callbacks: 0, today: 0, upcoming: 0, missed: 0, completed: 0, all: followups.length };
+    const nextCounts = { all: 0, today: 0, upcoming: 0, due: 0, overdue: 0, completed: 0, cancelled: 0 };
     followups.forEach((followup) => {
-      const bucket = getFilterForFollowup(followup);
-      nextCounts[bucket] = (nextCounts[bucket] || 0) + 1;
-      if (followup.type === "Callback" && followup.status === "Pending") {
-        nextCounts.callbacks += 1;
+      nextCounts.all += 1;
+      const status = followup.effectiveStatus || followup.status;
+      if (status === "Done") {
+        nextCounts.completed += 1;
+      } else if (status === "Cancelled") {
+        nextCounts.cancelled += 1;
+      } else {
+        const datePart = String(followup.followUpDate || "").slice(0, 10);
+        const today = new Date().toISOString().slice(0, 10);
+        if (datePart === today) {
+          nextCounts.today += 1;
+          nextCounts.due += 1; // "Due Soon" includes today
+        } else if (datePart > today) {
+          nextCounts.upcoming += 1;
+          nextCounts.due += 1; // "Due Soon" includes upcoming
+        } else {
+          // Past due
+          nextCounts.overdue += 1;
+        }
       }
     });
     return nextCounts;

@@ -60,11 +60,12 @@ async function runSmokeTest() {
     
     const adminEmail = "smoke.admin@example.com";
     const salesEmail = "smoke.sales@example.com";
-    const testPassword = "Password123!";
+    const testPassword = String(process.env.SMOKE_TEST_PASSWORD || "").trim();
+    if (!testPassword) throw new Error("Missing SMOKE_TEST_PASSWORD for CRM smoke test login.");
 
     // Test Invalid Password rejection on existing account
     try {
-      await axios.post(`${BASE_URL}/auth/login`, { email: adminEmail, password: "WrongPassword123" });
+      await axios.post(`${BASE_URL}/auth/login`, { email: adminEmail, password: `${Date.now()}-invalid` });
       assert(false, "Invalid password should return 404/400", "authentication");
     } catch (err) {
       assert(err.response?.status === 404 || err.response?.status === 400, "Invalid password properly rejected with 404/400", "authentication");
@@ -374,7 +375,7 @@ async function runSmokeTest() {
     assert(statusWebhookRes.status === 200, "MCUBE status webhook accepted status update", "mcubeOutbound");
 
     const updatedLog = await prisma.callLog.findUnique({ where: { id: testCallLogId } });
-    assert(updatedLog && (updatedLog.status === "Connected" || updatedLog.status === "Completed" || updatedLog.status === "initiated"), "CallLog status updated in DB", "mcubeOutbound");
+    assert(updatedLog && ["connected", "completed", "initiated"].includes(String(updatedLog.status || "").toLowerCase()), "CallLog status updated in DB", "mcubeOutbound");
     results.mcubeOutbound.status = "PASS";
 
     // -------------------------------------------------------------
@@ -388,6 +389,7 @@ async function runSmokeTest() {
       leadId: testLeadId,
       disposition: "Callback Later",
       notes: "Customer interested in 2BHK. Requested callback tomorrow.",
+      nextFollowUpAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
       followupDate: new Date(Date.now() + 24 * 3600 * 1000).toISOString()
     }, salesHeaders);
 

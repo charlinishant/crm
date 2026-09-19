@@ -1,11 +1,12 @@
 const { Router } = require("express")
+const { optionalAuthenticate } = require("../middleware/auth.middleware")
 const { getScheduleVisits, upsertScheduleVisit, deleteScheduleVisit } = require("../controllers/scheduleVisit.controller")
 
 const router = Router()
 
-router.get("/", getScheduleVisits)
-router.post("/", upsertScheduleVisit)
-router.patch("/", upsertScheduleVisit)
-router.delete("/:id", deleteScheduleVisit)
+router.get("/", optionalAuthenticate, getScheduleVisits)
+router.post("/", optionalAuthenticate, upsertScheduleVisit)
+router.patch("/", optionalAuthenticate, upsertScheduleVisit)
+router.delete("/:id", optionalAuthenticate, deleteScheduleVisit)
 
 module.exports = router

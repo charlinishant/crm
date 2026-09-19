@@ -13,6 +13,7 @@ import {
   Smartphone,
   X,
 } from "lucide-react";
+import { matchesLeadSearch, matchesPhoneQuery } from "../utils/leadSearch";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 const DEFAULT_SENDER_EMAIL = "morenishant7777@gmail.com";
@@ -152,8 +153,9 @@ const UserConversationPanel = ({
     const query = conversationSearch.trim().toLowerCase();
     if (!query) return visibleRows;
 
-    return visibleRows.filter((record) =>
-      [
+    return visibleRows.filter((record) => {
+      if (matchesPhoneQuery(record, conversationSearch)) return true;
+      return [
         record.id,
         record.name,
         record.phone,
@@ -169,8 +171,8 @@ const UserConversationPanel = ({
         record.whatsappMessage,
       ]
         .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(query))
-    );
+        .some((value) => String(value).toLowerCase().includes(query));
+    });
   }, [conversationSearch, visibleRows]);
   const conversationTotalPages = Math.max(1, Math.ceil(searchedRows.length / conversationPageSize));
   const paginatedRows = searchedRows.slice(

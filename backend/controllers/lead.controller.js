@@ -3,6 +3,7 @@ const XLSX = require("xlsx")
 const prisma = require("../lib/prisma")
 const {sendNotification} = require("../services/notification.service")
 const { emitReportsUpdate } = require("../socket/socket")
+const { isAdminUser, maskLeadData } = require("../utils/phoneMask")
 
 const { create } = require("domain")
 const { getVisitPayloadFromLeadUpdate, upsertScheduleVisit } = require("../services/scheduleVisit.service")
@@ -198,7 +199,39 @@ const toImportFloat = (value, defaultValue = null) => {
   return Number.isNaN(number) ? defaultValue : number
 }
 
+const buildLockedSourceTags = ({ source, channelPartner, channelPartnerReraId, userId = null, userName = null }) => {
+  const parts = []
+  if (source) parts.push(`source:${source}`)
+  if (channelPartner) parts.push(`cp:${channelPartner}`)
+  if (channelPartnerReraId) parts.push(`rera:${channelPartnerReraId}`)
+  parts.push("sourceLocked:true")
+  parts.push(`taggedAt:${new Date().toISOString()}`)
+  if (userName || userId) parts.push(`taggedBy:${userName || userId}`)
+  return parts.join(" | ")
+}
+
+const isLeadSourceLocked = (lead) => {
+  if (!lead) return false
+  const tags = String(lead.tags || "")
+  if (tags.includes("sourceLocked:true")) return true
+  const source = lead.fundingSource
+  const cp = lead.channelPartner
+  return Boolean(source && source !== "Untagged") || Boolean(cp && cp !== "Untagged")
+}
+
+const isUntaggedLead = (lead) => {
+  if (!lead) return true
+  const tags = String(lead.tags || "")
+  if (tags.includes("sourceLocked:true")) return false
+  const cp = String(lead.channelPartner || "").trim()
+  const source = String(lead.fundingSource || "").trim()
+  if (cp && cp.toLowerCase() !== "untagged") return false
+  if (source && source.toLowerCase() !== "untagged") return false
+  return true
+}
+
 const isAdminRole = (user) => ["ADMIN", "SUPER_ADMIN", "MANAGER"].includes(String(user?.role || "").toUpperCase())
+
 const isSalesRole = (user) => ["SALES", "PRE_SALES", "POST_SALES"].includes(String(user?.role || "").toUpperCase())
 
 const normalizeBulkIds = (ids) => {
@@ -257,6 +290,137 @@ const buildBulkLeadResult = (ids, processedIds, failures, message) => ({
 const normalizeEmailValue = (value) => String(value || "").trim().toLowerCase()
 const normalizePhoneValue = (value) => String(value || "").replace(/\D/g, "")
 const toRequiredPhone = (value) => normalizePhoneValue(value)
+
+const getPhoneDigitVariants = (raw) => {
+  if (!raw) return []
+  const digits = String(raw).replace(/\D/g, "")
+  if (!digits) return []
+  const variants = new Set([digits])
+  if (digits.startsWith("91") && digits.length >= 11) {
+    variants.add(digits.slice(2))
+  }
+  if (digits.startsWith("0") && digits.length >= 11) {
+    variants.add(digits.slice(1))
+  }
+  return Array.from(variants)
+}
+
+const extractLeadPhoneStrings = (lead) => {
+  if (!lead) return []
+  const list = []
+  const add = (val) => {
+    if (!val) return
+    if (typeof val === "string" || typeof val === "number") {
+      list.push(String(val))
+    } else if (typeof val === "object") {
+      if (val.value) list.push(String(val.value))
+      if (val.phone) list.push(String(val.phone))
+      if (val.number) list.push(String(val.number))
+    }
+  }
+
+  if (Array.isArray(lead.phones)) {
+    lead.phones.forEach(add)
+  } else if (lead.phones) {
+    add(lead.phones)
+  }
+  if (Array.isArray(lead.phone)) {
+    lead.phone.forEach(add)
+  } else if (lead.phone) {
+    add(lead.phone)
+  }
+  if (lead.secondaryPhone) add(lead.secondaryPhone)
+  if (lead.mobile) add(lead.mobile)
+
+  return list
+}
+
+const matchesPhoneQuery = (lead, rawQuery) => {
+  if (!rawQuery) return false
+  const rawDigits = String(rawQuery).replace(/\D/g, "")
+  if (!rawDigits) return false
+
+  const queryVariants = getPhoneDigitVariants(rawQuery)
+  const phones = extractLeadPhoneStrings(lead)
+
+  for (const phone of phones) {
+    const leadVariants = getPhoneDigitVariants(phone)
+    for (const lVar of leadVariants) {
+      for (const qVar of queryVariants) {
+        if (lVar.includes(qVar) || qVar.includes(lVar)) {
+          return true
+        }
+      }
+    }
+  }
+  return false
+}
+
+const matchesLeadSearch = (lead, rawQuery) => {
+  if (!rawQuery) return true
+  const query = String(rawQuery).trim().toLowerCase()
+  if (!query) return true
+
+  // 1. Phone match (format-agnostic)
+  if (matchesPhoneQuery(lead, rawQuery)) return true
+
+  // 2. Lead ID match
+  const leadId = String(lead?.id || lead?._id || lead?.lead_id || "").toLowerCase()
+  const cleanQueryId = query.replace(/^lead\s*#?|^#/, "").trim()
+  if (leadId) {
+    if (leadId === query || leadId === cleanQueryId || leadId.includes(query) || leadId.includes(cleanQueryId)) {
+      return true
+    }
+    if (`lead #${leadId}`.includes(query) || `lead ${leadId}`.includes(query)) {
+      return true
+    }
+  }
+
+  // 3. Name match
+  const fullName = [lead?.firstName, lead?.lastName].filter(Boolean).join(" ").toLowerCase()
+  const directName = String(lead?.name || lead?.customer_name || "").toLowerCase()
+  if (fullName.includes(query) || directName.includes(query)) return true
+
+  // 4. Emails match
+  const emails = []
+  if (Array.isArray(lead?.emails)) {
+    lead.emails.forEach(e => emails.push(typeof e === "object" ? e?.value : e))
+  } else if (lead?.emails) {
+    emails.push(lead.emails)
+  }
+  if (lead?.email) emails.push(lead.email)
+  if (emails.some(e => String(e || "").toLowerCase().includes(query))) return true
+
+  // 5. Additional attributes
+  const additionalFields = [
+    lead?.owner,
+    lead?.sales,
+    lead?.telecaller,
+    lead?.team?.username,
+    lead?.team?.firstName,
+    lead?.team?.lastName,
+    lead?.source,
+    lead?.channelPartner,
+    lead?.channelPartnerReraId,
+    lead?.fundingSource,
+    lead?.tags,
+    lead?.stage,
+    lead?.status,
+    lead?.lead_status,
+    lead?.requirementComment,
+    lead?.configration,
+    lead?.configuration,
+    lead?.propertyType,
+    lead?.interestedProjects,
+    lead?.companyName,
+    lead?.budget,
+    lead?.city,
+    lead?.remarks,
+    lead?.note,
+  ]
+
+  return additionalFields.some(field => String(field || "").toLowerCase().includes(query))
+}
 
 const extractJsonValues = (items) => {
   if (!Array.isArray(items)) return []
@@ -456,6 +620,7 @@ exports.createLead = async (req, res) => {
       possessionMin,
       possessionMax,
       area,
+      source,
       fundingSource,
       propertyType,
       configration,
@@ -492,9 +657,17 @@ exports.createLead = async (req, res) => {
     }
 
     gender = gender ? gender.toUpperCase() : null
-    const authRole = String(req.authUser?.role || "").toUpperCase()
-    const forceOwnLead = ["SALES", "PRE_SALES", "POST_SALES"].includes(authRole)
-    teamId = forceOwnLead ? toNullableInt(req.authUser?.id) : toNullableInt(teamId)
+    const authRole = String(req.authUser?.role || req.authUser?.department || "").toUpperCase()
+    const isSalesUser = ["SALES", "PRE_SALES", "POST_SALES", "AGENT", "AGENCY_USER", "CHANNEL_PARTNER"].includes(authRole)
+    const forceOwnLead = isSalesUser && Boolean(req.authUser?.id)
+
+    // Normalize source & assignment
+    const rawSource = fundingSource || source || req.body.source || (forceOwnLead ? "Direct Entry" : "")
+    if (rawSource) {
+      fundingSource = String(rawSource).trim()
+    }
+
+    teamId = forceOwnLead ? toNullableInt(req.authUser?.id) : toNullableInt(teamId || req.body.teamId)
     status = status ? normalizeLeadStatusValue(status) : "New"  // Set default status
     const leadAddressList = normalizeAddressList(leadAddress)
     const personalAddressList = normalizeAddressList(personalAddress)
@@ -502,6 +675,37 @@ exports.createLead = async (req, res) => {
     const normalizedMaritalStatus = typeof maritalStatus === "boolean"
       ? maritalStatus
       : String(maritalStatus).toLowerCase() === "true"
+
+    const hasSource = Boolean(fundingSource && String(fundingSource).trim() !== "Untagged") || Boolean(channelPartner && String(channelPartner).trim() !== "Untagged")
+    let finalTags = tags || ""
+    if (hasSource) {
+      const authUserName = req.authUser ? [req.authUser.firstName, req.authUser.lastName].filter(Boolean).join(" ") || req.authUser.username || req.authUser.email : "Admin"
+      const lockedTagString = buildLockedSourceTags({
+        source: fundingSource,
+        channelPartner,
+        channelPartnerReraId: req.body.channelPartnerReraId,
+        userId: req.authUser?.id,
+        userName: authUserName,
+      })
+      finalTags = [tags ? String(tags).replace(/Untagged/gi, "").trim() : "", lockedTagString].filter(Boolean).join(" | ")
+    } else {
+      if (teamId || req.authUser?.id) {
+        fundingSource = fundingSource || "Direct Entry"
+        const authUserName = req.authUser ? [req.authUser.firstName, req.authUser.lastName].filter(Boolean).join(" ") || req.authUser.username || req.authUser.email : "Admin"
+        const lockedTagString = buildLockedSourceTags({
+          source: fundingSource,
+          channelPartner,
+          channelPartnerReraId: req.body.channelPartnerReraId,
+          userId: req.authUser?.id,
+          userName: authUserName,
+        })
+        finalTags = [tags ? String(tags).replace(/Untagged/gi, "").trim() : "", lockedTagString].filter(Boolean).join(" | ")
+      } else {
+        // Untagged quarantine: block assignment to telecallers until tagged
+        teamId = null
+        finalTags = [tags ? String(tags).trim() : "", "Untagged | Quarantined"].filter(Boolean).join(" | ")
+      }
+    }
 
     const lead = await prisma.lead.create({
       data: {
@@ -512,7 +716,7 @@ exports.createLead = async (req, res) => {
         phones,
         status,
         timeZone,
-        tags,
+        tags: finalTags,
         interestedProjects,
         teamId,
         channelPartner,
@@ -573,27 +777,41 @@ exports.createLead = async (req, res) => {
         personalAddress: true,
       },
     })
-    await createLeadAssignmentActivity({
-      leadId: lead.id,
-      assignedToId: teamId,
-      assignedById: req.authUser?.id,
-    })
-    await createLeadAssignmentNotification({
-      lead,
-      assignedToId: teamId,
-      assignedById: req.authUser?.id,
-    })
+    if (teamId) {
+      await createLeadAssignmentActivity({
+        leadId: lead.id,
+        assignedToId: teamId,
+        assignedById: req.authUser?.id,
+      })
+      await createLeadAssignmentNotification({
+        lead,
+        assignedToId: teamId,
+        assignedById: req.authUser?.id,
+      })
+    }
     await prisma.leadActivity.create({
       data: {
         leadId: lead.id,
         userId: req.authUser?.id ? Number(req.authUser.id) : null,
         type: "LEAD_CREATED",
-        message: "Lead created",
+        message: hasSource ? "Lead created with permanent source tag" : "Lead created in Untagged Quarantine",
         newStatus: lead.status || "New",
       },
     })
+    if (hasSource) {
+      await prisma.leadActivity.create({
+        data: {
+          leadId: lead.id,
+          userId: req.authUser?.id ? Number(req.authUser.id) : null,
+          type: "SOURCE_TAGGED_LOCKED",
+          message: `Lead source permanently locked to "${fundingSource || "Channel Partner"}"${channelPartner ? ` (CP: ${channelPartner}${req.body.channelPartnerReraId ? `, RERA: ${req.body.channelPartnerReraId}` : ""})` : ""}`,
+        },
+      })
+    }
     emitReportsUpdate("lead:created")
-    res.status(201).json(lead)
+    const isAdmin = isAdminUser(req)
+    res.status(201).json(isAdmin ? lead : maskLeadData(lead, false))
+
   } catch (err) {
     console.log(err)
     res.status(500).json({message: err.message || "Something went wrong"})
@@ -603,49 +821,36 @@ exports.createLead = async (req, res) => {
 exports.getLeads = async (req, res) => {
   try {
     const userId = req.query.userId || null
-    const activeLeadWhere = {
-      is_delete: false
+    const search = req.query.search?.trim() || ''
+    const isUntaggedQuery = req.query.untagged === 'true' || req.query.status === 'Untagged'
+    const authRole = String(req.authUser?.role || "").toUpperCase()
+    const isCaller = ["SALES", "PRE_SALES", "POST_SALES"].includes(authRole)
+
+    let where = {
+      is_delete: false,
+      ...(userId ? { teamId: parseInt(userId) } : {}),
     }
-    
-    if (userId) {
-      const leads = await prisma.lead.findMany({
-        where: {
-          ...activeLeadWhere,
-          teamId: parseInt(userId),
+
+    if (isUntaggedQuery) {
+      where = {
+        ...where,
+        OR: [
+          { tags: { contains: "Untagged" } },
+          { AND: [{ fundingSource: null }, { channelPartner: null }] },
+          { AND: [{ fundingSource: "" }, { channelPartner: "" }] },
+          { AND: [{ fundingSource: "Untagged" }, { channelPartner: null }] },
+        ],
+        NOT: {
+          tags: { contains: "sourceLocked:true" },
         },
-        include:{
-          team:{
-            select:{
-            id:true,
-            isActive:true,
-            username:true,
-            email:true,
-            firstName:true,
-            lastName:true,
-            phone:true,
-            secondaryPhone:true,
-            timeZone:true,
-            linkedUrl:true,
-            description:true,
-            role:true,
-            department:true,
-            defaultRouting:true,
-            defaultRoutingRule:true,
-            autoRoster:true,
-            teamId:true,
-            pushNotification:true,
-            gpsTracking:true
-            }
-          }
-        },
-      })
-      res.status(200).json(filterDuplicateLeads(leads).map(withLeadStageScore))
-    } else {
-      const Leads = await prisma.lead.findMany({
-        where: {...activeLeadWhere},
-        include:{
-          team:{
-            select:{
+      }
+    }
+
+    const leads = await prisma.lead.findMany({
+      where,
+      include:{
+        team:{
+          select:{
             id:true,
             isActive:true,
             username:true,
@@ -669,11 +874,225 @@ exports.getLeads = async (req, res) => {
           }
         }
       })
-      res.status(200).json(filterDuplicateLeads(Leads).map(withLeadStageScore))
-    }
+
+    // Filter leads by search term if provided
+    const filteredLeads = search ? leads.filter(lead => matchesLeadSearch(lead, search)) : leads
+    const isAdmin = isAdminUser(req)
+    const results = filterDuplicateLeads(filteredLeads).map(withLeadStageScore)
+
+    res.status(200).json(isAdmin ? results : results.map((l) => maskLeadData(l, false)))
   } catch (err) {
-  console.log(err)
-  res.status(500).json("something went wrong")
+    console.log(err)
+    res.status(500).json("something went wrong")
+  }
+}
+
+exports.getUntaggedLeads = async (req, res) => {
+  try {
+    const search = req.query.search?.trim() || ''
+    const leads = await prisma.lead.findMany({
+      where: {
+        is_delete: false,
+        OR: [
+          { tags: { contains: "Untagged" } },
+          { AND: [{ fundingSource: null }, { channelPartner: null }] },
+          { AND: [{ fundingSource: "" }, { channelPartner: "" }] },
+          { AND: [{ fundingSource: "Untagged" }, { channelPartner: null }] },
+        ],
+        NOT: {
+          tags: { contains: "sourceLocked:true" },
+        },
+      },
+      include: {
+        team: {
+          select: leadTeamSelect,
+        },
+        leadAddress: true,
+        personalAddress: true,
+      },
+      orderBy: { id: "desc" },
+    })
+
+    const filteredLeads = search ? leads.filter(lead => matchesLeadSearch(lead, search)) : leads
+    const isAdmin = isAdminUser(req)
+    const results = filteredLeads.map(withLeadStageScore)
+
+    res.status(200).json(isAdmin ? results : results.map((l) => maskLeadData(l, false)))
+  } catch (err) {
+    console.log(err)
+    res.status(500).json({ message: err.message || "Failed to fetch untagged leads" })
+  }
+}
+
+exports.tagLeadSource = async (req, res) => {
+  try {
+    const id = req.params.id
+    const lead = await prisma.lead.findUnique({ where: { id: Number(id) } })
+    if (!lead) return res.status(404).json({ message: "Lead not found" })
+
+    if (isLeadSourceLocked(lead)) {
+      return res.status(409).json({
+        message: "Lead source and Channel Partner attribution is permanently locked and cannot be modified.",
+        code: "SOURCE_TAG_LOCKED",
+      })
+    }
+
+    const { fundingSource, channelPartner, channelPartnerReraId, teamId } = req.body
+    if (!fundingSource && !channelPartner) {
+      return res.status(400).json({ message: "Source or Channel Partner is required to tag and release lead" })
+    }
+
+    const authUserName = req.authUser
+      ? [req.authUser.firstName, req.authUser.lastName].filter(Boolean).join(" ") || req.authUser.username || req.authUser.email
+      : "Admin"
+
+    const lockedTagString = buildLockedSourceTags({
+      source: fundingSource,
+      channelPartner,
+      channelPartnerReraId,
+      userId: req.authUser?.id,
+      userName: authUserName,
+    })
+
+    const cleanExistingTags = (lead.tags || "")
+      .replace(/Untagged/gi, "")
+      .replace(/Quarantined/gi, "")
+      .replace(/\|\s*\|/g, "|")
+      .trim()
+    const finalTags = [cleanExistingTags, lockedTagString].filter(Boolean).join(" | ")
+
+    const assignedTeamId = toNullableInt(teamId)
+
+    const updatedLead = await prisma.lead.update({
+      where: { id: lead.id },
+      data: {
+        fundingSource: fundingSource || (channelPartner ? "Channel Partner" : null),
+        channelPartner: channelPartner || null,
+        tags: finalTags,
+        ...(assignedTeamId ? { teamId: assignedTeamId } : {}),
+      },
+      include: {
+        leadAddress: true,
+        personalAddress: true,
+        team: { select: leadTeamSelect },
+      },
+    })
+
+    await prisma.leadActivity.create({
+      data: {
+        leadId: lead.id,
+        userId: req.authUser?.id ? Number(req.authUser.id) : null,
+        type: "SOURCE_TAGGED_LOCKED",
+        message: `Lead source permanently locked to "${updatedLead.fundingSource || "Channel Partner"}"${channelPartner ? ` (CP: ${channelPartner}${channelPartnerReraId ? `, RERA: ${channelPartnerReraId}` : ""})` : ""} and released from quarantine`,
+      },
+    })
+
+    if (assignedTeamId) {
+      await createLeadAssignmentActivity({
+        leadId: lead.id,
+        assignedToId: assignedTeamId,
+        assignedById: req.authUser?.id,
+        previousTeamId: lead.teamId,
+      })
+      await createLeadAssignmentNotification({
+        lead: updatedLead,
+        assignedToId: assignedTeamId,
+        assignedById: req.authUser?.id,
+        previousTeamId: lead.teamId,
+      })
+    }
+
+    emitReportsUpdate("lead:updated")
+    res.status(200).json(withLeadStageScore(updatedLead))
+  } catch (err) {
+    console.log(err)
+    res.status(500).json({ message: err.message || "Unable to tag and release lead" })
+  }
+}
+
+exports.bulkTagLeadSources = async (req, res) => {
+  try {
+    const ids = normalizeBulkIds(req.body?.ids)
+    const { fundingSource, channelPartner, channelPartnerReraId, teamId } = req.body
+
+    if (!fundingSource && !channelPartner) {
+      return res.status(400).json({ message: "Source or Channel Partner is required" })
+    }
+
+    const leads = await prisma.lead.findMany({
+      where: { id: { in: ids }, is_delete: false },
+    })
+
+    const leadById = new Map(leads.map((l) => [l.id, l]))
+    const failures = []
+    const processedIds = []
+    const assignedTeamId = toNullableInt(teamId)
+    const authUserName = req.authUser
+      ? [req.authUser.firstName, req.authUser.lastName].filter(Boolean).join(" ") || req.authUser.username || req.authUser.email
+      : "Admin"
+
+    for (const id of ids) {
+      const lead = leadById.get(id)
+      if (!lead) {
+        failures.push({ id, reason: "Lead not found" })
+        continue
+      }
+      if (isLeadSourceLocked(lead)) {
+        failures.push({ id, reason: "Lead source is already permanently locked" })
+        continue
+      }
+
+      const lockedTagString = buildLockedSourceTags({
+        source: fundingSource,
+        channelPartner,
+        channelPartnerReraId,
+        userId: req.authUser?.id,
+        userName: authUserName,
+      })
+      const cleanExistingTags = (lead.tags || "").replace(/Untagged/gi, "").replace(/Quarantined/gi, "").trim()
+      const finalTags = [cleanExistingTags, lockedTagString].filter(Boolean).join(" | ")
+
+      await prisma.lead.update({
+        where: { id: lead.id },
+        data: {
+          fundingSource: fundingSource || (channelPartner ? "Channel Partner" : null),
+          channelPartner: channelPartner || null,
+          tags: finalTags,
+          ...(assignedTeamId ? { teamId: assignedTeamId } : {}),
+        },
+      })
+
+      await prisma.leadActivity.create({
+        data: {
+          leadId: lead.id,
+          userId: req.authUser?.id ? Number(req.authUser.id) : null,
+          type: "SOURCE_TAGGED_LOCKED",
+          message: `Bulk tagged: source permanently locked to "${fundingSource || (channelPartner ? "Channel Partner" : "")}"${channelPartner ? ` (CP: ${channelPartner}${channelPartnerReraId ? `, RERA: ${channelPartnerReraId}` : ""})` : ""} and released from quarantine`,
+        },
+      })
+
+      if (assignedTeamId) {
+        await createLeadAssignmentActivity({
+          leadId: lead.id,
+          assignedToId: assignedTeamId,
+          assignedById: req.authUser?.id,
+          previousTeamId: lead.teamId,
+        })
+      }
+
+      processedIds.push(id)
+    }
+
+    emitReportsUpdate("lead:updated")
+    res.status(getBulkLeadStatus(failures, processedIds)).json({
+      message: `${processedIds.length} leads successfully tagged, locked, and released`,
+      processedCount: processedIds.length,
+      processedIds,
+      failures,
+    })
+  } catch (err) {
+    console.log(err)
+    res.status(err.statusCode || 500).json({ message: err.message || "Failed to bulk tag leads" })
   }
 }
 
@@ -714,6 +1133,13 @@ exports.getDuplicateLeads = async (req, res) => {
     })
 
     const groups = buildDuplicateLeadGroups(leads)
+    const isAdmin = isAdminUser(req)
+    if (!isAdmin) {
+      groups.forEach((group) => {
+        group.records = group.records.map((l) => maskLeadData(l, false))
+        if (group.original) group.original = maskLeadData(group.original, false)
+      })
+    }
     res.status(200).json({
       count: groups.length,
       duplicateCopyCount: groups.reduce((sum, group) => sum + Math.max(0, group.records.length - 1), 0),
@@ -761,7 +1187,8 @@ exports.getTrashLeads = async (req, res) => {
       },
     })
 
-    res.status(200).json(leads)
+    const isAdmin = isAdminUser(req)
+    res.status(200).json(isAdmin ? leads : leads.map((l) => maskLeadData(l, false)))
   } catch (err) {
     console.log(err)
     res.status(500).json("something went wrong")
@@ -783,7 +1210,9 @@ exports.getLeadById = async (req, res) => {
     })
     if (!lead) return res.status(404).json("Lead not found")
 
-    res.status(200).json(withLeadStageScore(lead))
+    const isAdmin = isAdminUser(req)
+    const scoredLead = withLeadStageScore(lead)
+    res.status(200).json(isAdmin ? scoredLead : maskLeadData(scoredLead, false))
   } catch (err) {
     console.log(err)
     res.status(500).json("something went wrong")
@@ -797,6 +1226,23 @@ exports.updateLead = async (req, res) => {
     if (!lead) return res.status(404).json("Lead not found")
 
     const source = { ...req.body }
+
+    // HARD LOCK ENFORCEMENT:
+    // Once locked, lead source and CP cannot be altered by anyone (including Admin)
+    const locked = isLeadSourceLocked(lead)
+    if (locked) {
+      const isFundingSourceChanged =
+        source.fundingSource !== undefined && source.fundingSource !== lead.fundingSource
+      const isChannelPartnerChanged =
+        source.channelPartner !== undefined && source.channelPartner !== lead.channelPartner
+      if (isFundingSourceChanged || isChannelPartnerChanged) {
+        return res.status(409).json({
+          message: "Lead source and Channel Partner attribution is permanently locked and cannot be modified.",
+          code: "SOURCE_TAG_LOCKED",
+        })
+      }
+    }
+
     const data = {}
 
     const stringFields = [
@@ -845,6 +1291,33 @@ exports.updateLead = async (req, res) => {
         data[field] = source[field] === null ? null : source[field]
       }
     })
+
+    // If not previously locked, check if source is now being set/locked
+    let newlyLocked = false
+    if (!locked) {
+      const newFundingSource = source.fundingSource !== undefined ? source.fundingSource : lead.fundingSource
+      const newCP = source.channelPartner !== undefined ? source.channelPartner : lead.channelPartner
+      const hasValidSource = Boolean(newFundingSource && String(newFundingSource).trim() !== "Untagged") || Boolean(newCP && String(newCP).trim() !== "Untagged")
+      if (hasValidSource) {
+        const authUserName = req.authUser
+          ? [req.authUser.firstName, req.authUser.lastName].filter(Boolean).join(" ") || req.authUser.username || req.authUser.email
+          : "Admin"
+        const lockedTagString = buildLockedSourceTags({
+          source: newFundingSource,
+          channelPartner: newCP,
+          channelPartnerReraId: req.body.channelPartnerReraId,
+          userId: req.authUser?.id,
+          userName: authUserName,
+        })
+        const cleanExistingTags = (source.tags !== undefined ? source.tags : lead.tags || "")
+          .replace(/Untagged/gi, "")
+          .replace(/Quarantined/gi, "")
+          .replace(/\|\s*\|/g, "|")
+          .trim()
+        data.tags = [cleanExistingTags, lockedTagString].filter(Boolean).join(" | ")
+        newlyLocked = true
+      }
+    }
 
     if (source.emails !== undefined) data.emails = Array.isArray(source.emails) ? source.emails : []
     if (source.phones !== undefined) data.phones = Array.isArray(source.phones) ? source.phones : []
@@ -915,6 +1388,17 @@ exports.updateLead = async (req, res) => {
       },
     })
 
+    if (newlyLocked) {
+      await prisma.leadActivity.create({
+        data: {
+          leadId: lead.id,
+          userId: req.authUser?.id ? Number(req.authUser.id) : null,
+          type: "SOURCE_TAGGED_LOCKED",
+          message: `Lead source permanently locked to "${result.fundingSource || "Channel Partner"}"${result.channelPartner ? ` (CP: ${result.channelPartner}${req.body.channelPartnerReraId ? `, RERA: ${req.body.channelPartnerReraId}` : ""})` : ""}`,
+        },
+      })
+    }
+
     if (
       source.teamId !== undefined &&
       data.teamId &&
@@ -950,7 +1434,9 @@ exports.updateLead = async (req, res) => {
       emitReportsUpdate("lead:updated")
     }
 
-    res.status(200).json(withLeadStageScore(result))
+    const isAdmin = isAdminUser(req)
+    const scoredResult = withLeadStageScore(result)
+    res.status(200).json(isAdmin ? scoredResult : maskLeadData(scoredResult, false))
   } catch (err) {
     console.log(err)
     res.status(500).json({ message: err.message || "Unable to update lead" })
@@ -1229,6 +1715,13 @@ exports.importExcel = async (req, res) => {
 
     const selectedTeamId = toNullableInt(req.body.teamId)
     const selectedTeamIds = toNullableIntList(req.body.teamIds)
+    const bulkFundingSource = toNullableString(req.body.fundingSource || req.body.source)
+    const bulkChannelPartner = toNullableString(req.body.channelPartner)
+    const bulkReraId = toNullableString(req.body.channelPartnerReraId || req.body.reraId)
+    const authUserName = req.authUser
+      ? [req.authUser.firstName, req.authUser.lastName].filter(Boolean).join(" ") || req.authUser.username || req.authUser.email
+      : "Admin"
+
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" })
     const sheet = workbook.Sheets[workbook.SheetNames[0]]
     const data = XLSX.utils.sheet_to_json(sheet)
@@ -1292,13 +1785,41 @@ exports.importExcel = async (req, res) => {
       const projectName = row["Interested projects"]
       const projectId = projectMap[projectName] || null
       const teamValue = row["Team"] ? String(row["Team"]).trim().toLowerCase() : ""
-      const teamId = selectedUsers.length
-        ? selectedUsers[index % selectedUsers.length].id
-        : selectedTeamId ||
-          userMap[teamValue] ||
-          (assignableUsers.length ? assignableUsers[index % assignableUsers.length].id : null)
+
+      const rowFundingSource = toNullableString(row["Funding source"] || row["Source"]) || bulkFundingSource
+      const rowChannelPartner = toNullableString(row["Channel partner"] || row["Channel Partner"]) || bulkChannelPartner
+      const rowRera = toNullableString(row["Channel partner RERA"] || row["RERA ID"] || row["Rera"]) || bulkReraId
+      const hasSource = Boolean(rowFundingSource && rowFundingSource !== "Untagged") || Boolean(rowChannelPartner && rowChannelPartner !== "Untagged")
+
+      let assignedTeamId = null
+      let rowTags = row["Tags"] ? String(row["Tags"]).trim() : ""
+
+      if (hasSource) {
+        assignedTeamId = selectedUsers.length
+          ? selectedUsers[index % selectedUsers.length].id
+          : selectedTeamId ||
+            userMap[teamValue] ||
+            (assignableUsers.length ? assignableUsers[index % assignableUsers.length].id : null)
+
+        const lockedTagString = buildLockedSourceTags({
+          source: rowFundingSource,
+          channelPartner: rowChannelPartner,
+          channelPartnerReraId: rowRera,
+          userId: req.authUser?.id,
+          userName: authUserName,
+        })
+        rowTags = [rowTags, lockedTagString].filter(Boolean).join(" | ")
+      } else {
+        // Quarantined from callers
+        assignedTeamId = null
+        rowTags = [rowTags, "Untagged | Quarantined"].filter(Boolean).join(" | ")
+      }
 
       return {
+        hasSource,
+        rowFundingSource,
+        rowChannelPartner,
+        rowRera,
         salutation: row["Salutation"] || null,
         firstName,
         lastName,
@@ -1310,10 +1831,10 @@ exports.importExcel = async (req, res) => {
         ],
         status: normalizeImportStatus(row["Status"]),
         timeZone: row["Timezone"] || null,
-        tags: "Hot Lead" || null,
+        tags: rowTags,
         interestedProjects: projectId,
-        teamId,
-        channelPartner: row["Channel partner"] || null,
+        teamId: assignedTeamId,
+        channelPartner: hasSource ? (rowChannelPartner || null) : null,
         conductSiteVisit: row["Conduct site visit"] || null,
         conductSiteDate:
           row["Conduct site date"] && row["Conduct site date"] !== ""
@@ -1367,7 +1888,7 @@ exports.importExcel = async (req, res) => {
         possessionMin: row["Possession min"] || null,
         possessionMax: row["Possession Max"] || null,
         area: row["Area"] || null,
-        fundingSource: row["Funding source"] || null,
+        fundingSource: hasSource ? (rowFundingSource || (rowChannelPartner ? "Channel Partner" : null)) : null,
         propertyType: row["Property type"] || null,
         configration: row["Configration"] || null,
         budget: toNullableString(row["Budget"]),
@@ -1396,26 +1917,53 @@ exports.importExcel = async (req, res) => {
       }
 
       try {
+        const { hasSource, rowFundingSource, rowChannelPartner, rowRera, ...createData } = row
         const lead = await prisma.lead.create({
           data: {
-            ...row,
-            gender: row.gender ? String(row.gender).toUpperCase() : null,
+            ...createData,
+            gender: createData.gender ? String(createData.gender).toUpperCase() : null,
             is_delete: false,
             is_active: true,
             leadAddress: {
-              create: [row.leadAddress],
+              create: [createData.leadAddress],
             },
             personalAddress: {
-              create: [row.personalAddress],
+              create: [createData.personalAddress],
             },
           },
         })
         result.push(lead)
         addLeadKeysToSet(existingKeys, row)
 
-        if (row.teamId) {
-          const userName = userNameMap[row.teamId] || `User #${row.teamId}`
+        if (hasSource) {
+          await prisma.leadActivity.create({
+            data: {
+              leadId: lead.id,
+              userId: req.authUser?.id ? Number(req.authUser.id) : null,
+              type: "SOURCE_TAGGED_LOCKED",
+              message: `Lead imported with permanent source tag "${lead.fundingSource || "Channel Partner"}"${rowChannelPartner ? ` (CP: ${rowChannelPartner}${rowRera ? `, RERA: ${rowRera}` : ""})` : ""}`,
+            },
+          })
+        } else {
+          await prisma.leadActivity.create({
+            data: {
+              leadId: lead.id,
+              userId: req.authUser?.id ? Number(req.authUser.id) : null,
+              type: "LEAD_CREATED",
+              message: "Lead imported into Untagged Quarantine (caller assignment blocked until source is tagged)",
+              newStatus: lead.status || "New",
+            },
+          })
+        }
+
+        if (lead.teamId) {
+          const userName = userNameMap[lead.teamId] || `User #${lead.teamId}`
           assignmentCounts[userName] = (assignmentCounts[userName] || 0) + 1
+          await createLeadAssignmentActivity({
+            leadId: lead.id,
+            assignedToId: lead.teamId,
+            assignedById: req.authUser?.id,
+          })
         }
       } catch (error) {
         console.log(`Lead import failed at Excel row ${index + 2}`, error)
@@ -1425,13 +1973,12 @@ exports.importExcel = async (req, res) => {
       }
     }
 
-    // const leads = await prisma.lead.createMany({ data: mapData })
-    console.log(result)
+    emitReportsUpdate("lead:imported")
 
     res.status(201).json({
       message: skippedDuplicates.length
         ? `Lead import completed. ${result.length} imported, ${skippedDuplicates.length} duplicate rows skipped.`
-        : "lead inserted successfully",
+        : "Leads imported successfully",
       importedCount: result.length,
       skippedDuplicateCount: skippedDuplicates.length,
       skippedDuplicateRows: skippedDuplicates,

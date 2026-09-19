@@ -9,7 +9,9 @@ const WhatAppPage = () => {
 
       {/* MasterLayout */}
       <MasterLayout>
-        <UserWhatsAppPage adminMode />
+        <div className="admin-whatsapp-container">
+          <UserWhatsAppPage adminMode embedded />
+        </div>
       </MasterLayout>
 
     </>

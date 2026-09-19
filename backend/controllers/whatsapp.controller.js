@@ -1,5 +1,18 @@
 const crypto = require("crypto")
 const prisma = require("../lib/prisma")
+const { isAdminUser, maskWhatsAppMessageData } = require("../utils/phoneMask")
+
+const getLeadPhone = (lead) => {
+  if (!lead) return ""
+  if (Array.isArray(lead.phones)) {
+    const first = lead.phones[0]
+    return typeof first === "object" ? first.value || first.phone || first.number || "" : first || ""
+  }
+  if (typeof lead.phones === "object") {
+    return lead.phones?.value || lead.phones?.phone || lead.phones?.number || ""
+  }
+  return lead.phones || lead.phone || lead.mobile || ""
+}
 
 const normalizeRecipientPhone = (phone) => {
   const digits = String(phone || "").replace(/\D/g, "")
@@ -16,7 +29,7 @@ const toWhatsAppAddress = (phone) => {
 }
 
 const isAdmin = (req) =>
-  ["ADMIN", "MANAGER", "SUPER_ADMIN"].includes(String(req.authUser?.role || "").toUpperCase())
+  ["ADMIN", "SUPER_ADMIN"].includes(String(req.authUser?.role || "").toUpperCase())
 
 const createCallbackToken = (id) =>
   crypto.createHmac("sha256", String(process.env.JWT_SECRET || ""))
@@ -68,7 +81,7 @@ const sendWhatsAppMessage = async (req, res) => {
     const userId = Number(req.authUser?.id)
     if (!leadId) return res.status(400).json({ message:"leadId is required" })
     if (!userId) return res.status(401).json({ message:"Authentication is required" })
-    await assertLeadAccess(req, leadId)
+    const lead = await assertLeadAccess(req, leadId)
 
     const { accountSid, authToken, from } = getConfig()
     if (!accountSid || !authToken || !from) {
@@ -76,7 +89,11 @@ const sendWhatsAppMessage = async (req, res) => {
         message:"Twilio WhatsApp is not configured. Add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN and TWILIO_WHATSAPP_FROM.",
       })
     }
-    const to = toWhatsAppAddress(req.body?.phone)
+    const rawPhone = String(req.body?.phone || "").trim()
+    const resolvedPhone = (!rawPhone || rawPhone.includes("X") || rawPhone.includes("x"))
+      ? getLeadPhone(lead)
+      : rawPhone
+    const to = toWhatsAppAddress(resolvedPhone)
     const body = String(req.body?.message || "").trim()
     if (!to) return res.status(400).json({ message:"Lead WhatsApp phone number is required" })
     if (!body) return res.status(400).json({ message:"WhatsApp message is required" })
@@ -115,12 +132,13 @@ const sendWhatsAppMessage = async (req, res) => {
       where:{ id:messageLog.id },
       data:{ providerMessageId:result.sid || null, status:result.status || "queued", sentAt:new Date() },
     })
+    const isSuperOrAdmin = isAdminUser(req)
     res.status(201).json({
       message:"WhatsApp message queued",
       provider:"twilio",
       providerMessageId:saved.providerMessageId,
       providerStatus:saved.status,
-      data:saved,
+      data:isSuperOrAdmin ? saved : maskWhatsAppMessageData(saved, false),
     })
   } catch (error) {
     if (messageLog?.id) {
@@ -143,7 +161,8 @@ const listLeadMessages = async (req, res) => {
       orderBy:{ createdAt:"asc" },
       take:200,
     })
-    res.json({ data })
+    const isSuperOrAdmin = isAdminUser(req)
+    res.json({ data: isSuperOrAdmin ? data : data.map((msg) => maskWhatsAppMessageData(msg, false)) })
   } catch (error) {
     res.status(error.statusCode || 500).json({ message:error.message || "Unable to load messages" })
   }

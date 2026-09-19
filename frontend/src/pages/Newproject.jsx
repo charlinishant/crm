@@ -64,6 +64,8 @@ const initialProjectForm = {
   active: false,
   inventory: false,
   integratedPortals: "",
+  elevationPhoto: "",
+  image: "",
 };
 
 const normalizeProjectType = (value) => {
@@ -162,6 +164,8 @@ const NEWPROJECT = () => {
           active: parseBoolean(project.active),
           inventory: parseBoolean(project.inventory),
           integratedPortals: project.integratedPortals || "",
+          elevationPhoto: project.elevationPhoto || project.image || "",
+          image: project.image || project.elevationPhoto || "",
         });
 
         if (editorRef.current) {
@@ -354,6 +358,63 @@ const NEWPROJECT = () => {
                     className="np-editor-body"
                   ></div>
                 </div>
+              </div>
+
+              {/* BUILDING ELEVATION / PROJECT PHOTO */}
+              <div className="np-field">
+                <label>BUILDING ELEVATION / PHOTO</label>
+                <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
+                  <input
+                    type="text"
+                    name="elevationPhoto"
+                    placeholder="Enter image URL or browse image file"
+                    value={formData.elevationPhoto || formData.image || ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setFormData((prev) => ({ ...prev, elevationPhoto: val, image: val }));
+                    }}
+                    disabled={isLoadingProject}
+                  />
+                  <label className="np-file-upload-btn" style={{ cursor: "pointer", background: "#f1f5f9", padding: "8px 16px", borderRadius: "6px", border: "1px solid #cbd5e1", whiteSpace: "nowrap", fontWeight: "500", fontSize: "13px" }}>
+                    📁 Browse
+                    <input
+                      type="file"
+                      accept="image/*"
+                      style={{ display: "none" }}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const dataUrl = event.target?.result;
+                            if (dataUrl) {
+                              setFormData((prev) => ({ ...prev, elevationPhoto: dataUrl, image: dataUrl }));
+                            }
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+                {(formData.elevationPhoto || formData.image) && (
+                  <div style={{ marginTop: "10px", position: "relative", display: "inline-block" }}>
+                    <img
+                      src={formData.elevationPhoto || formData.image}
+                      alt="Building Elevation Preview"
+                      style={{ height: "110px", width: "180px", objectFit: "cover", borderRadius: "8px", border: "1px solid #cbd5e1" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setFormData((prev) => ({ ...prev, elevationPhoto: "", image: "" }))}
+                      style={{ position: "absolute", top: "4px", right: "4px", background: "rgba(0,0,0,0.65)", color: "#fff", border: "none", borderRadius: "50%", width: "22px", height: "22px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "14px" }}
+                      title="Remove image"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+                <span className="np-help-text">Elevation/building image displayed on Level 1 of Preview Inventory.</span>
               </div>
 
               {/* RERA + SALES */}

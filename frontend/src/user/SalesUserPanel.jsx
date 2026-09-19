@@ -13,13 +13,12 @@ import {
   LogOut,
   MessageSquare,
   Phone,
-  Search,
   Smartphone,
   UserCircle,
   Users,
   X,
 } from "lucide-react";
-import UserAddlead from "./userAddlead";
+import UserAddlead from "./UserAddlead";
 import UserConversationPanel from "./UserConversationPanel";
 import UserDetails from "./userDetails";
 import UserWhatsAppPage from "./UserWhatsAppPage";
@@ -32,7 +31,12 @@ import LeadTableToolbar from "../components/common/LeadTableToolbar";
 import { getReportsSocket } from "../services/socketClient";
 import UserSalesNotifications from "./UserSalesNotifications";
 import UserSalesProfile from "./UserSalesProfile";
-import { getMyNotifications } from "../services/userSalesApi";
+import { getMcubeWidget, getMyNotifications, initiateMcubeClickToCall } from "../services/userSalesApi";
+import FollowupReminderModal from "../components/sales/FollowupReminderModal";
+import CreateFollowupModal from "../components/sales/CreateFollowupModal";
+import { createFollowup } from "../services/followupApi";
+import { calculateBookingPricing, toSafeNumber } from "../utils/pricing";
+import { matchesLeadSearch } from "../utils/leadSearch";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
@@ -66,32 +70,34 @@ const getScreenFromPath = (pathname) =>
   pathname === "/user/sales"
     ? "home"
     : pathname.endsWith("/leads")
-    ? "leads"
-    : pathname.endsWith("/bookings")
-      ? "bookings"
-    : pathname.endsWith("/details")
-      ? "details"
-      : pathname.endsWith("/whatsapp")
-        ? "whatsapp"
-        : pathname.endsWith("/calls/inbound") || pathname.endsWith("/calls/outbound") || pathname.endsWith("/calls")
-          ? "calls"
-          : pathname.endsWith("/disposition")
-            ? "disposition"
-            : pathname.endsWith("/my-call-logs") || pathname === "/my-call-logs"
-              ? "callLogs"
-              : pathname.endsWith("/followups")
-                ? "followups"
-                : pathname.endsWith("/site-visit")
-                  ? "scheduleVisit"
-                  : pathname.endsWith("/conversation")
-                    ? "conversation"
-                    : pathname.endsWith("/add-lead")
-                      ? "addLead"
-                      : pathname.endsWith("/profile")
-                        ? "profile"
-                        : pathname.endsWith("/notifications")
-                          ? "notifications"
-                      : "";
+      ? "leads"
+      : pathname.endsWith("/bookings")
+        ? "bookings"
+        : pathname.endsWith("/details")
+          ? "details"
+          : pathname.endsWith("/whatsapp")
+            ? "whatsapp"
+            : pathname.endsWith("/calls/inbound") || pathname.endsWith("/calls/outbound") || pathname.endsWith("/calls")
+              ? "calls"
+              : pathname.endsWith("/disposition")
+                ? "disposition"
+                : pathname.endsWith("/my-call-logs") || pathname === "/my-call-logs"
+                  ? "callLogs"
+                  : pathname.endsWith("/followups")
+                    ? "followups"
+                    : pathname.endsWith("/site-visit")
+                      ? "scheduleVisit"
+                      : pathname.endsWith("/conversation")
+                        ? "conversation"
+                        : pathname.endsWith("/tasks") || pathname === "/tasks" || pathname === "/user/tasks"
+                          ? "tasks"
+                          : pathname.endsWith("/add-lead")
+                            ? "addLead"
+                            : pathname.endsWith("/profile")
+                              ? "profile"
+                              : pathname.endsWith("/notifications")
+                                ? "notifications"
+                                : "";
 
 const statusLabel = {
   Fresh_Lead: "Fresh Lead",
@@ -210,14 +216,16 @@ const getLeadPhoneOptions = (lead) => {
   const phones = [];
   const addPhone = (label, value, type = "") => {
     const raw = String(value || "").trim();
+    if (!raw || raw === "-") return;
+    const isMasked = raw.includes("X") || raw.includes("x") || raw.includes("*");
     const digits = normalizePhoneDigits(raw);
-    if (digits.length < 10) return;
-    if (phones.some((item) => normalizePhoneDigits(item.value).slice(-10) === digits.slice(-10))) return;
+    if (!isMasked && digits.length < 10) return;
+    if (phones.some((item) => item.value === raw || (!isMasked && normalizePhoneDigits(item.value).slice(-10) === digits.slice(-10)))) return;
     phones.push({
       label,
       type,
       value: raw,
-      dialValue: raw.replace(/[^\d+]/g, ""),
+      dialValue: isMasked ? raw : raw.replace(/[^\d+]/g, ""),
     });
   };
 
@@ -301,8 +309,8 @@ const isRecordingPending = (callLog) => {
 
 const enrichLeadForInbound = (lead) => lead ? {
   ...lead,
-  source:lead.source || lead.channelPartner || lead.tags || "",
-  project:lead.project || lead.interestedProjects || lead.propertyType || "",
+  source: lead.source || lead.channelPartner || lead.tags || "",
+  project: lead.project || lead.interestedProjects || lead.propertyType || "",
 } : null;
 
 const getLeadId = (lead) => lead?.id || lead?._id || lead?.lead_id || "";
@@ -665,7 +673,7 @@ const clearAttendanceSessionStart = (userId) => {
 };
 
 const withAttendanceLoadedAt = (attendance) =>
-  attendance ? { ...attendance, loadedAt: Date.now(), sessionStartedAt:getAttendanceSessionStartedAt(attendance) } : null;
+  attendance ? { ...attendance, loadedAt: Date.now(), sessionStartedAt: getAttendanceSessionStartedAt(attendance) } : null;
 
 const attendanceSecondsValue = (primary, fallback = 0) => {
   const value = Number(primary);
@@ -712,6 +720,8 @@ const SalesUserPanel = () => {
   const [error, setError] = useState("");
   const [activeScreen, setActiveScreen] = useState(initialScreen);
   const [activeLeadStage, setActiveLeadStage] = useState("all");
+  const [reminderQueue, setReminderQueue] = useState([]);
+  const [showQuickFollowupModal, setShowQuickFollowupModal] = useState(false);
   const [activeFollowupFilter, setActiveFollowupFilter] = useState(
     new URLSearchParams(window.location.search).get("filter") || "today"
   );
@@ -731,6 +741,7 @@ const SalesUserPanel = () => {
     new URLSearchParams(window.location.search).get("leadId") || null
   );
   const [callDispositions, setCallDispositions] = useState({});
+  const [leadCallAttempts, setLeadCallAttempts] = useState({});
   const [callLogsByLead, setCallLogsByLead] = useState({});
   const [callLogCount, setCallLogCount] = useState(0);
   const [inboundCallCount, setInboundCallCount] = useState(0);
@@ -771,6 +782,29 @@ const SalesUserPanel = () => {
   const [bookingPreview, setBookingPreview] = useState(null);
   const bookingStartKeyRef = useRef("");
   const bookingPreviewKeyRef = useRef("");
+
+  useEffect(() => {
+    if (!isBookingFormOpen || isBookingSuccess) return undefined;
+
+    window.history.pushState({ bookingWizard: true, bookingStepIndex }, "");
+
+    const handleBookingPopState = () => {
+      if (bookingStepIndex > 0) {
+        setBookingStepIndex((current) => Math.max(0, current - 1));
+        window.history.pushState({ bookingWizard: true, bookingStepIndex: bookingStepIndex - 1 }, "");
+        return;
+      }
+
+      setIsBookingFormOpen(false);
+      setBookingLead(null);
+      setBookingStepIndex(0);
+      setIsBookingSuccess(false);
+      window.history.pushState({ bookingWizardClosed: true }, "");
+    };
+
+    window.addEventListener("popstate", handleBookingPopState);
+    return () => window.removeEventListener("popstate", handleBookingPopState);
+  }, [bookingStepIndex, isBookingFormOpen, isBookingSuccess]);
   const [viewTask, setViewTask] = useState(null);
   const [leadTableSearch, setLeadTableSearch] = useState("");
   const [leadTablePage, setLeadTablePage] = useState(1);
@@ -805,48 +839,48 @@ const SalesUserPanel = () => {
       setLoading(true);
     }
 
-      const token = localStorage.getItem("authToken");
-      const savedUser = JSON.parse(localStorage.getItem("authUser") || "null");
+    const token = localStorage.getItem("authToken");
+    const savedUser = JSON.parse(localStorage.getItem("authUser") || "null");
 
-      if (!token) {
-        setPanel((current) => ({ ...current, user: savedUser || current.user }));
-        setLoading(false);
+    if (!token) {
+      setPanel((current) => ({ ...current, user: savedUser || current.user }));
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/users/access-panel`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const result = await response.json();
+
+      if (response.status === 401) {
+        localStorage.removeItem("authToken");
+        localStorage.removeItem("authUser");
+        window.location.href = "/sign-in";
         return;
       }
 
-      try {
-        const response = await fetch(`${API_URL}/users/access-panel`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-        const result = await response.json();
-
-        if (response.status === 401) {
-          localStorage.removeItem("authToken");
-          localStorage.removeItem("authUser");
-          window.location.href = "/sign-in";
-          return;
-        }
-
-        if (!response.ok) {
-          throw new Error(result?.message || "Unable to load user panel");
-        }
-
-        setPanel({
-          ...result,
-          leads: applyCachedLeadStatusUpdates(result.leads || []),
-          user: {
-            ...result.user,
-            profilePhoto: result.user?.profilePhoto || savedUser?.profilePhoto || getProfilePhoto(result.user),
-          },
-        });
-      } catch (err) {
-        setPanel((current) => ({ ...current, user: savedUser || current.user }));
-        setError(err.message);
-      } finally {
-        setLoading(false);
+      if (!response.ok) {
+        throw new Error(result?.message || "Unable to load user panel");
       }
+
+      setPanel({
+        ...result,
+        leads: applyCachedLeadStatusUpdates(result.leads || []),
+        user: {
+          ...result.user,
+          profilePhoto: result.user?.profilePhoto || savedUser?.profilePhoto || getProfilePhoto(result.user),
+        },
+      });
+    } catch (err) {
+      setPanel((current) => ({ ...current, user: savedUser || current.user }));
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -865,21 +899,15 @@ const SalesUserPanel = () => {
     const loadMcubeWidget = async () => {
       try {
         setMcubeWidgetStatus("loading");
-        const response = await fetch(`${API_URL}/api/calls/browser-phone/widget`, {
-          headers: { Authorization: `Bearer ${token}` },
+        const result = await getMcubeWidget();
+        if (!isMounted) return;
+        setMcubeWidgetUrl(result.widgetUrl || "");
+        setMcubeWidgetMeta({
+          agentExtension: result.agentExtension || result.mcubeAgent?.extension || "",
+          agentCallingMode: result.agentCallingMode || result.mcubeAgent?.callingMode || "",
+          mcubeUsername: result.mcubeUsername || result.mcubeEmail || result.crmEmail || "",
         });
-        const result = await response.json().catch(() => ({}));
-        if (response.ok && isMounted) {
-          setMcubeWidgetUrl(result.widgetUrl || "");
-          setMcubeWidgetMeta({
-            agentExtension:result.agentExtension || "",
-            agentCallingMode:result.agentCallingMode || "",
-            mcubeUsername:result.mcubeUsername || "",
-          });
-          setMcubeWidgetStatus(result.widgetUrl ? "registered" : "offline");
-        } else if (isMounted) {
-          setMcubeWidgetStatus("error");
-        }
+        setMcubeWidgetStatus(result.widgetUrl ? "registered" : "offline");
       } catch (error) {
         if (isMounted) {
           setMcubeWidgetUrl("");
@@ -906,16 +934,16 @@ const SalesUserPanel = () => {
   const normalizeOutboundStatus = useCallback((status) => {
     const normalized = String(status || "initiated").toLowerCase().replace(/[_\s]+/g, "-");
     const aliases = {
-      initiated:"ringing",
-      queued:"ringing",
-      calling:"ringing",
-      answered:"connected",
-      "in-progress":"connected",
-      hangup:"completed",
-      noanswer:"no-answer",
-      no_answer:"no-answer",
-      cancelled:"canceled",
-      rejected:"failed",
+      initiated: "ringing",
+      queued: "ringing",
+      calling: "ringing",
+      answered: "connected",
+      "in-progress": "connected",
+      hangup: "completed",
+      noanswer: "no-answer",
+      no_answer: "no-answer",
+      cancelled: "canceled",
+      rejected: "failed",
     };
     return aliases[normalized] || normalized;
   }, []);
@@ -956,7 +984,7 @@ const SalesUserPanel = () => {
         panel.leads,
         call.callerNumber || call.customerNumber || call.leadPhone || call.phone
       );
-      const enrichedCall = matchedLead ? { ...call, lead:enrichLeadForInbound(matchedLead) } : call;
+      const enrichedCall = matchedLead ? { ...call, lead: enrichLeadForInbound(matchedLead) } : call;
       setInboundCall((current) => {
         const sameCall = current?.providerCallId === enrichedCall.providerCallId || current?.callLogId === enrichedCall.callLogId;
         if (!sameCall) {
@@ -999,13 +1027,13 @@ const SalesUserPanel = () => {
       isMounted = false;
       getReportsSocket()
         .then((socket) => inboundEvents.forEach((eventName) => socket.off(eventName, handleInboundCall)))
-        .catch(() => {});
+        .catch(() => { });
     };
   }, [panel.leads, panel.user]);
 
   const loadSalesNotifications = useCallback(async () => {
     try {
-      const result = await getMyNotifications({ page:1, limit:10 });
+      const result = await getMyNotifications({ page: 1, limit: 10 });
       setSalesNotifications(
         (Array.isArray(result.data) ? result.data : [])
           .sort((first, second) => new Date(second.createdAt || 0) - new Date(first.createdAt || 0))
@@ -1059,7 +1087,7 @@ const SalesUserPanel = () => {
           socket.off(`notification-${userId}`, replaceNotifications);
           socket.off(`newNotification-${userId}`, mergeNotification);
         })
-        .catch(() => {});
+        .catch(() => { });
     };
   }, [loadSalesNotifications, panel.user]);
 
@@ -1080,30 +1108,30 @@ const SalesUserPanel = () => {
         callLog.callerNumber || callLog.customerNumber || callLog.leadPhone || callLog.phone
       );
       return {
-        id:callLog.id,
-        callLogId:callLog.id,
-        providerCallId:callLog.providerCallId || callLog.callId || "",
-        direction:"inbound",
-        status:callLog.status || "calling",
-        providerStatus:callLog.providerStatus || "",
-        callerNumber:callLog.callerNumber || callLog.customerNumber || callLog.leadPhone || callLog.phone || "",
-        customerNumber:callLog.customerNumber || callLog.leadPhone || callLog.phone || "",
-        virtualNumber:callLog.virtualNumber || "",
-        agentNumber:callLog.agentNumber || callLog.agentPhone || "",
-        agentExtension:callLog.agentExtension || "",
-        agentName:getName(callLog.agent),
-        campaignId:callLog.campaignName || "",
-        queueId:callLog.queueName || "",
-        startedAt:callLog.startedAt || callLog.createdAt,
-        answeredAt:callLog.answeredAt || callLog.connectedAt || null,
-        connectedAt:callLog.connectedAt || callLog.answeredAt || null,
-        endedAt:callLog.endedAt || null,
-        duration:callLog.duration || 0,
-        recordingUrl:callLog.recordingUrl ? "available" : "",
-        recordingStatus:callLog.recordingUrl ? "available" : "pending",
-        disconnectedBy:callLog.disconnectedBy || "",
-        disposition:callLog.disposition || "",
-        lead:enrichLeadForInbound(matchedLead),
+        id: callLog.id,
+        callLogId: callLog.id,
+        providerCallId: callLog.providerCallId || callLog.callId || "",
+        direction: "inbound",
+        status: callLog.status || "calling",
+        providerStatus: callLog.providerStatus || "",
+        callerNumber: callLog.callerNumber || callLog.customerNumber || callLog.leadPhone || callLog.phone || "",
+        customerNumber: callLog.customerNumber || callLog.leadPhone || callLog.phone || "",
+        virtualNumber: callLog.virtualNumber || "",
+        agentNumber: callLog.agentNumber || callLog.agentPhone || "",
+        agentExtension: callLog.agentExtension || "",
+        agentName: getName(callLog.agent),
+        campaignId: callLog.campaignName || "",
+        queueId: callLog.queueName || "",
+        startedAt: callLog.startedAt || callLog.createdAt,
+        answeredAt: callLog.answeredAt || callLog.connectedAt || null,
+        connectedAt: callLog.connectedAt || callLog.answeredAt || null,
+        endedAt: callLog.endedAt || null,
+        duration: callLog.duration || 0,
+        recordingUrl: callLog.recordingUrl ? "available" : "",
+        recordingStatus: callLog.recordingUrl ? "available" : "pending",
+        disconnectedBy: callLog.disconnectedBy || "",
+        disposition: callLog.disposition || "",
+        lead: enrichLeadForInbound(matchedLead),
       };
     };
 
@@ -1458,7 +1486,7 @@ const SalesUserPanel = () => {
       const leads = panel.leads
         .map((lead) => ({
           lead,
-          callLog:getLeadDisposition(lead),
+          callLog: getLeadDisposition(lead),
         }))
         .filter((item) => item.callLog?.disposition === disposition);
 
@@ -1496,12 +1524,12 @@ const SalesUserPanel = () => {
       await Promise.all(activeLogs.map(async (log) => {
         try {
           const response = await fetch(`${API_URL}/api/calls/status/${log.id}`, {
-            headers:token ? { Authorization:`Bearer ${token}` } : {},
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
           });
           const result = await response.json().catch(() => ({}));
           if (!response.ok || !result.callLog) return;
           const nextLog = result.callLog;
-          setCallLogsByLead((current) => ({ ...current, [nextLog.leadId]:nextLog }));
+          setCallLogsByLead((current) => ({ ...current, [nextLog.leadId]: nextLog }));
           const nextStatus = normalizeOutboundStatus(nextLog.status);
           if (isFinalOutboundStatus(nextStatus) && !nextLog.disposition) {
             const lead = panel.leads.find((item) => String(getLeadId(item)) === String(nextLog.leadId));
@@ -1513,7 +1541,7 @@ const SalesUserPanel = () => {
               setDispositionInitialValue(nextLog.status === "no-answer" ? "No Answer" : nextLog.status === "busy" ? "Busy" : "");
               setCallTarget(null);
               setActiveModal("disposition");
-              setDispositionTarget((current) => current || { lead, callLog:nextLog });
+              setDispositionTarget((current) => current || { lead, callLog: nextLog });
             }
           } else if (nextLog?.id === activeCallId && nextLog?.status) {
             setOutboundCallStatus(nextStatus);
@@ -1616,6 +1644,13 @@ const SalesUserPanel = () => {
       .sort((first, second) => first.name.localeCompare(second.name));
   }, [panel.user, users]);
 
+  const authUserRole = String(
+    panel.user?.role ||
+    (JSON.parse(localStorage.getItem("authUser") || "null"))?.role ||
+    ""
+  ).toUpperCase();
+  const isAdminOrManager = ["ADMIN", "MANAGER", "SUPER_ADMIN"].includes(authUserRole);
+
   const getExecutiveIdFromValue = useCallback(
     (value) => {
       if (!value) return "";
@@ -1676,25 +1711,25 @@ const SalesUserPanel = () => {
         const matchedLead = leadsById.get(String(leadId)) || booking.lead || null;
         const bookingLead = matchedLead
           ? {
-              ...matchedLead,
-              status:"Booked",
-              bookings:[
-                booking,
-                ...((matchedLead.bookings || []).filter((item) => String(item?.id) !== String(booking.id))),
-              ],
-            }
+            ...matchedLead,
+            status: "Booked",
+            bookings: [
+              booking,
+              ...((matchedLead.bookings || []).filter((item) => String(item?.id) !== String(booking.id))),
+            ],
+          }
           : {
-              id:leadId || `booking-${booking.id}`,
-              firstName:booking.customerName || "Booked",
-              lastName:booking.customerName ? "" : "Lead",
-              phones:booking.phone ? [{ type:"Mobile", value:booking.phone }] : [],
-              status:"Booked",
-              interestedProjects:booking.projectDetails || booking.project?.name || "",
-              propertyType:booking.unit || booking.unitNumber || "",
-              configration:booking.unit || booking.unitNumber || "",
-              budget:booking.basePrice || booking.agreementValue || booking.totalConsideration || "",
-              bookings:[booking],
-            };
+            id: leadId || `booking-${booking.id}`,
+            firstName: booking.customerName || "Booked",
+            lastName: booking.customerName ? "" : "Lead",
+            phones: booking.phone ? [{ type: "Mobile", value: booking.phone }] : [],
+            status: "Booked",
+            interestedProjects: booking.projectDetails || booking.project?.name || "",
+            propertyType: booking.unit || booking.unitNumber || "",
+            configration: booking.unit || booking.unitNumber || "",
+            budget: booking.basePrice || booking.agreementValue || booking.totalConsideration || "",
+            bookings: [booking],
+          };
 
         rows.push(bookingLead);
       });
@@ -1738,25 +1773,9 @@ const SalesUserPanel = () => {
 
   const searchedLeads = useMemo(() => {
     if (!isSearchableLeadTable) return filteredLeads;
+    if (!leadTableSearch.trim()) return filteredLeads;
 
-    const query = leadTableSearch.trim().toLowerCase();
-    if (!query) return filteredLeads;
-
-    return filteredLeads.filter((lead) =>
-      [
-        getLeadName(lead),
-        getLeadPhone(lead),
-        lead.email,
-        lead.companyName,
-        lead.interestedProjects,
-        lead.propertyType,
-        lead.configration,
-        lead.budget,
-        lead.status,
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(query))
-    );
+    return filteredLeads.filter((lead) => matchesLeadSearch(lead, leadTableSearch));
   }, [filteredLeads, isSearchableLeadTable, leadTableSearch]);
 
   const leadTableTotalPages = Math.max(1, Math.ceil(searchedLeads.length / salesTablePageSize));
@@ -1805,12 +1824,57 @@ const SalesUserPanel = () => {
     setLeadTablePage((currentPage) => Math.min(currentPage, leadTableTotalPages));
   }, [activeScreen, isPaginatedLeadTable, leadTableTotalPages]);
 
+
+  useEffect(() => {
+    let activeSocket = null;
+    let isSubscribed = true;
+
+    const setupSocket = async () => {
+      try {
+        activeSocket = await getReportsSocket();
+        if (!isSubscribed || !activeSocket) return;
+
+        const authUserId = panel.user?.id || (JSON.parse(localStorage.getItem("authUser") || "null"))?.id;
+        if (authUserId) {
+          activeSocket.emit("register", authUserId);
+        }
+
+        const handleFollowupReminder = (reminder) => {
+          if (!reminder) return;
+          setReminderQueue((prev) => {
+            if (prev.some((r) => r.followUpId === reminder.followUpId)) return prev;
+            return [...prev, reminder];
+          });
+        };
+
+        activeSocket.on("followup-reminder", handleFollowupReminder);
+        if (authUserId) {
+          activeSocket.on(`followup-reminder-${authUserId}`, handleFollowupReminder);
+          activeSocket.on(`newNotification-${authUserId}`, () => {
+            getMyNotifications({ page: 1, limit: 10 }).catch(() => { });
+          });
+        }
+      } catch (err) {
+        console.warn("Socket connection error:", err);
+      }
+    };
+
+    setupSocket();
+
+    return () => {
+      isSubscribed = false;
+      if (activeSocket) {
+        activeSocket.off("followup-reminder");
+      }
+    };
+  }, [panel.user?.id]);
+
   const funnelData = useMemo(() => {
-    const leads = panel.leads;
+    const leads = (panel.leads || []).filter((lead) => !lead.is_delete && !lead.deletedAt);
     const totalLeads = leads.length;
     const qualified = leads.filter((lead) => getLeadStage(lead) === "qualified").length;
     const sourced = leads.filter((lead) => getLeadStage(lead) === "sourcing").length;
-    const visited = leads.filter((lead) => lead.conductSiteVisit || lead.conductSiteDate).length;
+    const visited = leads.filter((lead) => Boolean(lead.conductSiteVisit || lead.conductSiteDate || (lead.scheduleVisits && lead.scheduleVisits.length > 0))).length;
     const booked = leads.filter(isBookedLead).length;
 
     return [
@@ -1834,16 +1898,16 @@ const SalesUserPanel = () => {
       },
       {
         key: "sourcing",
-        label: `Sourced - ${getPercent(sourced, qualified || totalLeads)}`,
+        label: `In Sourcing - ${getPercent(sourced, totalLeads)}`,
         value: sourced,
-        detail: "Sourced",
+        detail: "In Sourcing",
         color: "#85b7eb",
         textColor: "#042c53",
         height: 54,
       },
       {
         key: "visited",
-        label: `Visited - ${getPercent(visited, sourced || qualified || totalLeads)}`,
+        label: `Visited - ${getPercent(visited, totalLeads)}`,
         value: visited,
         detail: "Visited",
         color: "#378add",
@@ -1880,8 +1944,15 @@ const SalesUserPanel = () => {
       siteVisitExecutive: nextLead?.siteVisitExecutive || cachedVisit?.siteVisitExecutive,
       siteVisitNote: nextLead?.siteVisitNote || cachedVisit?.siteVisitNote,
     };
-    const savedExecutive = visitData.siteVisitExecutive || nextLead?.team || getName(panel.user);
-    const savedExecutiveId = getExecutiveIdFromValue(savedExecutive);
+    const loggedInUserName = getName(panel.user) || [panel.user?.firstName, panel.user?.lastName].filter(Boolean).join(" ").trim() || panel.user?.username || "Sales User";
+    const loggedInUserId = String(getUserId(panel.user) || panel.user?.id || "");
+
+    const savedExecutive = isAdminOrManager
+      ? (visitData.siteVisitExecutive || nextLead?.team || loggedInUserName)
+      : loggedInUserName;
+    const savedExecutiveId = isAdminOrManager
+      ? (getExecutiveIdFromValue(savedExecutive) || loggedInUserId)
+      : loggedInUserId;
 
     setOpenActionLeadId(null);
     setSiteVisitLead(nextLead);
@@ -1894,12 +1965,12 @@ const SalesUserPanel = () => {
         : getDefaultVisitDateTime(),
       location: visitData.siteVisitLocation || visitData.meetingPoint || nextLead?.locationPreferences || "",
       executiveId: savedExecutiveId,
-      executive: savedExecutiveId ? getExecutiveNameFromId(savedExecutiveId) : getSalesExecutiveName(savedExecutive),
+      executive: savedExecutiveId ? getExecutiveNameFromId(savedExecutiveId) || savedExecutive : getSalesExecutiveName(savedExecutive) || loggedInUserName,
       note: visitData.siteVisitNote || "",
       status: visitData.siteVisitStatus || visitData.visitStatus || visitData.conductSiteStatus || "Scheduled",
     });
     setActiveScreen("scheduleVisit");
-  }, [getExecutiveIdFromValue, getExecutiveNameFromId, getSalesExecutiveName, panel.leads, panel.user]);
+  }, [getExecutiveIdFromValue, getExecutiveNameFromId, getSalesExecutiveName, isAdminOrManager, panel.leads, panel.user]);
 
   const homeMetrics = useMemo(() => {
     const todayKey = getDateKey(new Date());
@@ -2006,8 +2077,16 @@ const SalesUserPanel = () => {
     }
 
     const nextLead = panel.leads.find((lead) => String(getLeadId(lead)) === String(value)) || null;
-    const savedExecutive = nextLead?.siteVisitExecutive || nextLead?.team || "";
-    const savedExecutiveId = getExecutiveIdFromValue(savedExecutive);
+    const loggedInUserName = getName(panel.user) || [panel.user?.firstName, panel.user?.lastName].filter(Boolean).join(" ").trim() || panel.user?.username || "Sales User";
+    const loggedInUserId = String(getUserId(panel.user) || panel.user?.id || "");
+
+    const savedExecutive = isAdminOrManager
+      ? (nextLead?.siteVisitExecutive || nextLead?.team || loggedInUserName)
+      : loggedInUserName;
+    const savedExecutiveId = isAdminOrManager
+      ? (getExecutiveIdFromValue(savedExecutive) || loggedInUserId)
+      : loggedInUserId;
+
     setSiteVisitLead(nextLead);
     setSiteVisitForm((current) => {
       return {
@@ -2016,10 +2095,10 @@ const SalesUserPanel = () => {
         project: getDisplayText(nextLead?.siteVisitProject || nextLead?.conductSiteVisit || nextLead?.interestedProjects || nextLead?.propertyType || current.project, ""),
         visitDateTime: nextLead?.conductSiteDate ? toDateTimeLocalValue(nextLead.conductSiteDate) : current.visitDateTime,
         location: nextLead?.siteVisitLocation || nextLead?.meetingPoint || nextLead?.locationPreferences || current.location,
-        executiveId: savedExecutiveId || current.executiveId,
+        executiveId: savedExecutiveId,
         executive: savedExecutiveId
-          ? getExecutiveNameFromId(savedExecutiveId)
-          : getSalesExecutiveName(savedExecutive) || current.executive,
+          ? getExecutiveNameFromId(savedExecutiveId) || savedExecutive
+          : getSalesExecutiveName(savedExecutive) || loggedInUserName,
         note: nextLead?.siteVisitNote || current.note,
         status: nextLead?.siteVisitStatus || nextLead?.visitStatus || nextLead?.conductSiteStatus || current.status,
       };
@@ -2029,11 +2108,13 @@ const SalesUserPanel = () => {
   const saveSiteVisit = async (event) => {
     event.preventDefault();
 
-    const selectedExecutiveName =
-      getExecutiveNameFromId(siteVisitForm.executiveId) || getSalesExecutiveName(siteVisitForm.executive);
+    const loggedInUserName = getName(panel.user) || [panel.user?.firstName, panel.user?.lastName].filter(Boolean).join(" ").trim() || panel.user?.username || "Sales User";
+    const selectedExecutiveName = isAdminOrManager
+      ? (getExecutiveNameFromId(siteVisitForm.executiveId) || getSalesExecutiveName(siteVisitForm.executive) || loggedInUserName)
+      : loggedInUserName;
 
     if (!siteVisitForm.leadId || !siteVisitForm.project || !siteVisitForm.visitDateTime || !selectedExecutiveName) {
-      setSiteVisitMessage("Select lead, project, date, time and sales executive before saving.");
+      setSiteVisitMessage("Select lead, project, date, time and status before saving.");
       return;
     }
 
@@ -2049,7 +2130,7 @@ const SalesUserPanel = () => {
       conductSiteStatus: siteVisitForm.status,
       meetingPoint: siteVisitForm.location,
     };
-    
+
     const leadId = siteVisitForm.leadId;
     const previousLeads = panel.leads;
     const previousStats = panel.stats;
@@ -2095,7 +2176,7 @@ const SalesUserPanel = () => {
           meetingPoint: siteVisitForm.location,
           salesExecutive: selectedExecutiveName,
           note: siteVisitForm.note,
-          initiatedBy: panel.user?.firstName || panel.user?.username || panel.user?.email || "",
+          initiatedBy: getName(panel.user),
           scheduledOn: new Date(siteVisitForm.visitDateTime).toISOString(),
         }),
       });
@@ -2107,18 +2188,18 @@ const SalesUserPanel = () => {
         leads: current.leads.map((lead) =>
           String(getLeadId(lead)) === String(leadId)
             ? {
-                ...lead,
-                ...result,
-                ...updates,
-                scheduleVisits:[
-                  savedVisit,
-                  ...((lead.scheduleVisits || []).filter((visit) => String(visit?.id) !== String(savedVisit?.id))),
-                ],
-              }
+              ...lead,
+              ...result,
+              ...updates,
+              scheduleVisits: [
+                savedVisit,
+                ...((lead.scheduleVisits || []).filter((visit) => String(visit?.id) !== String(savedVisit?.id))),
+              ],
+            }
             : lead
         ),
       }));
-      setSiteVisitLead((current) => (current ? { ...current, ...result, ...updates, scheduleVisits:[savedVisit] } : current));
+      setSiteVisitLead((current) => (current ? { ...current, ...result, ...updates, scheduleVisits: [savedVisit] } : current));
       setSiteVisitMessage("Site visit scheduled and saved in this lead.");
     } catch (err) {
       setPanel((current) => ({ ...current, stats: previousStats, leads: previousLeads }));
@@ -2206,13 +2287,13 @@ const SalesUserPanel = () => {
     setDispositionInitialValue(dispositionLabels[type] || type);
     setDispositionTarget({
       lead,
-      callLog:callLog?.id ? callLog : {
-        id:null,
-        leadId:Number(leadId),
-        leadPhone:getActionPhone(lead),
-        phone:getActionPhone(lead),
-        status:"completed",
-        provider:"manual",
+      callLog: callLog?.id ? callLog : {
+        id: null,
+        leadId: Number(leadId),
+        leadPhone: getActionPhone(lead),
+        phone: getActionPhone(lead),
+        status: "completed",
+        provider: "manual",
       },
     });
   };
@@ -2230,7 +2311,7 @@ const SalesUserPanel = () => {
     setDispositionInitialValue("");
     setDispositionTarget({
       lead,
-      callLog:activeBlockedCall,
+      callLog: activeBlockedCall,
     });
   };
 
@@ -2356,20 +2437,20 @@ const SalesUserPanel = () => {
       ...(name === "closingRate" ? { closingBaseRate: nextValue } : {}),
       ...(name === "source" && !isChannelPartnerSource(nextValue)
         ? {
-            channelPartnerId: "",
-            channelPartner: "",
-            cpReraNumber: "",
-          }
+          channelPartnerId: "",
+          channelPartner: "",
+          cpReraNumber: "",
+        }
         : {}),
       ...(name === "parkingRequired" && value === "No"
         ? {
-            carParkingSlots: "",
-            parkingType: "",
-            parkingSlotNumber: "",
-            twoWheelerSlots: "",
-            basementStoreroomArea: "",
-            parkingCharges: "0",
-          }
+          carParkingSlots: "",
+          parkingType: "",
+          parkingSlotNumber: "",
+          twoWheelerSlots: "",
+          basementStoreroomArea: "",
+          parkingCharges: "0",
+        }
         : {}),
     }));
   };
@@ -2384,7 +2465,8 @@ const SalesUserPanel = () => {
     }
 
     if (bookingStepIndex === 0) {
-      if (!bookingForm.projectDetails.trim()) {
+      const projectDetails = String(bookingForm.projectDetails || "").trim();
+      if (!projectDetails && !bookingForm.projectId) {
         setBookingMessage("Select a project before continuing.");
         return;
       }
@@ -2395,7 +2477,8 @@ const SalesUserPanel = () => {
     }
 
     if (bookingStepIndex === 1) {
-      if (!bookingForm.unit.trim()) {
+      const unit = String(bookingForm.unit || "").trim();
+      if (!unit || unit === "-") {
         setBookingProjectMessage("Select a unit before continuing.");
         return;
       }
@@ -2405,7 +2488,9 @@ const SalesUserPanel = () => {
       return;
     }
 
-    if (!bookingForm.customerName.trim() || !bookingForm.projectDetails.trim()) {
+    const customerName = String(bookingForm.customerName || (bookingLead ? getLeadName(bookingLead) : "")).trim();
+    const projectDetails = String(bookingForm.projectDetails || "").trim();
+    if (!customerName || !projectDetails) {
       setBookingMessage("Customer name and project details are required.");
       return;
     }
@@ -2426,10 +2511,23 @@ const SalesUserPanel = () => {
     setBookingMessage("");
 
     try {
+      const savePricing = calculateBookingPricing({
+        reraArea: bookingForm.reraArea || bookingForm.carpetArea,
+        baseRate: bookingForm.baseRate,
+        closingRate: bookingForm.closingRate ?? bookingForm.closingBaseRate ?? bookingForm.baseRate,
+        parkingAmount: bookingForm.parkingRequired === "No" ? 0 : bookingForm.parkingCharges,
+        gstPercent: 5,
+        stampDutyPercent: 6,
+        legalCharges: bookingForm.legalDocumentationCharges,
+        registrationCharges: bookingForm.registrationAmount,
+        otherExpenses: bookingForm.customOtherCharges,
+      });
+      const token = localStorage.getItem("authToken");
       const response = await fetch(`${API_URL}/bookings`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           ...bookingForm,
@@ -2443,6 +2541,13 @@ const SalesUserPanel = () => {
           bookingDate: bookingForm.bookingDate || bookingForm.bookedOn || new Date().toISOString().slice(0, 10),
           saleableArea: bookingForm.saleableArea || bookingForm.carpetArea,
           closingRate: bookingForm.closingRate ?? bookingForm.closingBaseRate ?? bookingForm.baseRate,
+          parkingCharges: String(savePricing.parkingAmount),
+          agreementValue: String(savePricing.agreementValue),
+          totalPrice: String(savePricing.totalAllInclusiveCost),
+          soldPrice: String(savePricing.totalAllInclusiveCost),
+          gstAmount: String(savePricing.gstAmount),
+          stampDutyAmount: String(savePricing.stampDutyAmount),
+          basePrice: String(toSafeNumber(bookingForm.basePrice, savePricing.totalFlatPrice)),
           otherExpenses: bookingForm.customOtherCharges,
           source: bookingForm.source ?? "Walk-in",
           channelPartnerId: isChannelPartnerSource(bookingForm.source) ? bookingForm.channelPartnerId : undefined,
@@ -2457,7 +2562,10 @@ const SalesUserPanel = () => {
       const savedBooking = {
         ...bookingForm,
         ...result,
-        soldPrice: result?.soldPrice ?? result?.totalPrice ?? bookingForm.totalPrice,
+        parkingCharges: result?.parkingCharges ?? savePricing.parkingAmount,
+        agreementValue: result?.agreementValue ?? savePricing.agreementValue,
+        totalPrice: result?.totalPrice ?? savePricing.totalAllInclusiveCost,
+        soldPrice: result?.soldPrice ?? result?.totalPrice ?? savePricing.totalAllInclusiveCost,
         leadId: Number(leadId),
         unit: result?.unit || bookingForm.unit,
         stage: "Booked",
@@ -2582,7 +2690,7 @@ const SalesUserPanel = () => {
     attendance?.sessionStartedAt && !attendance?.logoutAt
       ? secondsSince(attendance.sessionStartedAt, attendanceNow)
       : attendanceSecondsValue(attendance?.todayLoginSeconds, attendance?.currentSessionSeconds) +
-        (attendance && !attendance.logoutAt ? attendanceLoadedElapsedSeconds : 0);
+      (attendance && !attendance.logoutAt ? attendanceLoadedElapsedSeconds : 0);
   const liveTodayBreakSeconds =
     attendanceSecondsValue(attendance?.todayBreakSeconds, attendance?.currentBreakSeconds) +
     (attendance?.breakStartedAt && !attendance?.breakEndedAt ? attendanceLoadedElapsedSeconds : 0);
@@ -2638,6 +2746,52 @@ const SalesUserPanel = () => {
           "Call Lead";
   const callBlocked = Boolean(startingCallLeadId) || isLiveOutboundStatus(outboundCallStatus);
 
+  const getLeadAttemptDisplay = useCallback(
+    (lead) => {
+      if (!lead) return "1 of 3";
+      const leadId = String(getLeadId(lead));
+      const dbAttempts = Math.max(
+        Number(lead.callAttemptCount) || 0,
+        Number(lead._count?.callLogs) || 0
+      );
+      const hasSessionDisposition = Boolean(callDispositions[leadId]);
+      const sessionCount = Math.max(
+        Number(leadCallAttempts[leadId]) || 0,
+        hasSessionDisposition ? 1 : 0
+      );
+      const totalPastCalls = Math.max(dbAttempts, sessionCount);
+      const currentAttempt = totalPastCalls + 1;
+      const maxAttempts = Math.max(3, currentAttempt);
+      return `${currentAttempt} of ${maxAttempts}`;
+    },
+    [callDispositions, leadCallAttempts]
+  );
+
+  // Helper function to filter out metadata from tags
+  const cleanTagsForDisplay = useCallback((tags) => {
+    if (!tags || typeof tags !== 'string') return tags;
+
+    // Split the tags by the separator used in buildLockedSourceTags
+    const parts = tags.split(' | ');
+
+    // Filter out metadata parts
+    const filteredParts = parts.filter(part => {
+      // Remove source metadata
+      if (part.startsWith('source:')) return false;
+      // Remove sourceLocked metadata
+      if (part === 'sourceLocked:true') return false;
+      // Remove taggedAt metadata
+      if (part.startsWith('taggedAt:')) return false;
+      // Remove taggedBy metadata
+      if (part.startsWith('taggedBy:')) return false;
+      // Keep everything else
+      return true;
+    });
+
+    // Join the remaining parts back together
+    return filteredParts.length > 0 ? filteredParts.join(' | ') : '';
+  }, []);
+
   const startSelectedCallLead = async (lead, selectedPhone = null) => {
     if (!lead) return;
     const leadId = getLeadId(lead);
@@ -2648,11 +2802,12 @@ const SalesUserPanel = () => {
     const phoneOptions = getLeadPhoneOptions(lead);
     const selectedDigits = normalizePhoneDigits(selectedPhone);
     const selectedPhoneOption = selectedDigits
-      ? phoneOptions.find((phone) => normalizePhoneDigits(phone.value).slice(-10) === selectedDigits.slice(-10))
+      ? phoneOptions.find((phone) => normalizePhoneDigits(phone.value).slice(-10) === selectedDigits.slice(-10) || phone.value === selectedPhone)
       : phoneOptions[0];
     const leadPhone = selectedPhoneOption?.dialValue || getActionPhone(lead);
+    const isMasked = String(leadPhone || "").includes("X") || String(leadPhone || "").includes("x") || String(leadPhone || "").includes("*");
     const digits = String(leadPhone || "").replace(/\D/g, "");
-    if (digits.length < 10) {
+    if (!isMasked && digits.length < 10 && !leadId) {
       setCallError(selectedPhone ? "Selected number is unavailable." : "Lead number is unavailable.");
       return;
     }
@@ -2680,47 +2835,25 @@ const SalesUserPanel = () => {
 
     let acceptedCall = false;
     try {
-      const token = localStorage.getItem("authToken");
-      const response = await fetch(`${API_URL}/api/calls/mcube/click-to-call`, {
-        method:"POST",
-        headers:{
-          "Content-Type":"application/json",
-          ...(token ? { Authorization:`Bearer ${token}` } : {}),
-        },
-        body:JSON.stringify({
-          leadId:Number(leadId),
-          phone:leadPhone,
-          dialedPhone:leadPhone,
-          phoneLabel:selectedPhoneOption?.label || "Primary",
-          requestId,
-        }),
+      const result = await initiateMcubeClickToCall({
+        leadId: Number(leadId),
+        phone: leadPhone,
+        dialedPhone: leadPhone,
+        phoneLabel: selectedPhoneOption?.label || "Primary",
+        requestId,
       });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok || result?.success === false) {
-        if (response.status === 409 && result?.callLog) {
-          const blockedStatus = normalizeOutboundStatus(result.callLog.status || "ringing");
-          const blockedLeadId = result.callLog.leadId ? String(result.callLog.leadId) : "";
-          setActiveBlockedCall(result.callLog);
-          setActiveCallId(result.callLog.id || null);
-          setOutboundCallStatus(blockedStatus);
-          if (blockedLeadId) {
-            setCallLogsByLead((current) => ({ ...current, [blockedLeadId]:result.callLog }));
-          }
-        }
-        throw new Error(result?.message || "Unable to start call");
-      }
       setActiveBlockedCall(null);
       if (result?.callLog) {
-        setCallLogsByLead((current) => ({ ...current, [leadId]:result.callLog }));
+        setCallLogsByLead((current) => ({ ...current, [leadId]: result.callLog }));
       }
       const nextCallId = result?.callLog?.id || result?.callLogId || result?.data?.callLogId || null;
       setActiveCallId(nextCallId);
       setCurrentCallRequest({
         requestId,
         leadId,
-        phone:digits,
-        displayPhone:selectedPhoneOption?.value || leadPhone,
-        phoneLabel:selectedPhoneOption?.label || "Primary",
+        phone: digits,
+        displayPhone: selectedPhoneOption?.value || leadPhone,
+        phoneLabel: selectedPhoneOption?.label || "Primary",
       });
       setCallTarget(lead);
       setDispositionTarget(null);
@@ -2730,22 +2863,40 @@ const SalesUserPanel = () => {
       if (result?.agentExtension || result?.agentCallingMode || result?.mcubeUsername) {
         setMcubeWidgetMeta((current) => ({
           ...current,
-          agentExtension:result.agentExtension || current.agentExtension || "",
-          agentCallingMode:result.agentCallingMode || current.agentCallingMode || "",
-          mcubeUsername:result.mcubeUsername || current.mcubeUsername || "",
+          agentExtension: result.agentExtension || current.agentExtension || "",
+          agentCallingMode: result.agentCallingMode || current.agentCallingMode || "",
+          mcubeUsername: result.mcubeUsername || current.mcubeUsername || "",
         }));
       }
-    } catch (callError) {
-      setCallTarget(null);
-      setActiveCallId(null);
-      setCurrentCallRequest(null);
-      setOutboundCallStatus("failed");
-      setCallError(callError.message || "Unable to start call");
-    } finally {
+      // If the call is not accepted (i.e., final status), we can reset the in-progress flag now.
       if (!acceptedCall) {
         outboundRequestInProgressRef.current = false;
       }
+    } catch (callError) {
+      const result = callError.result || {};
+      if (callError.status === 409 && result?.callLog) {
+        const blockedStatus = normalizeOutboundStatus(result.callLog.status || "ringing");
+        const blockedLeadId = result.callLog.leadId ? String(result.callLog.leadId) : "";
+        setActiveBlockedCall(result.callLog);
+        setActiveCallId(result.callLog.id || null);
+        setOutboundCallStatus(blockedStatus);
+        if (blockedLeadId) {
+          setCallLogsByLead((current) => ({ ...current, [blockedLeadId]: result.callLog }));
+        }
+      }
+      setCallTarget(null);
+      if (callError.status !== 409) setActiveCallId(null);
+      if (callError.status !== 409) setCurrentCallRequest(null);
+      if (callError.status !== 409) setOutboundCallStatus("failed");
+      setCallError(callError.message || "Unable to start call");
+      // Reset in-progress flag on error to allow retry.
+      outboundRequestInProgressRef.current = false;
+    } finally {
+      // Always clear the starting lead ID because the attempt has finished (either success or error).
       setStartingCallLeadId(null);
+      // Note: We do NOT reset outboundRequestInProgressRef here because we already set it appropriately
+      // in the try and catch blocks. For a live call (acceptedCall true), we want it to stay true
+      // until the call ends (handled elsewhere).
     }
   };
 
@@ -2771,28 +2922,24 @@ const SalesUserPanel = () => {
     const scheduledVisits = leads.filter(leadHasScheduledSiteVisit).length;
     const bookedLeads = bookingLeadRows.length || leads.filter(isBookedLead).length;
     const followupLeads = leads.filter((lead) => {
-      const status = normalizeStageText(lead.status);
       return (
-        status === "fresh lead" ||
-        status === "prospect" ||
-        status === "new" ||
         callbackLeadIds.has(String(getLeadId(lead))) ||
         Boolean(lead.nextFollowUpAt || lead.followUpDate || lead.followupDate || lead.followUpTime)
       );
     }).length;
 
     return {
-      home:leads.length,
-      leads:leads.length,
-      conversation:leads.length,
-      calls:callQueue.length + inboundCallCount,
-      callLogs:callLogCount,
-      followups:followupLeads || Number(panel.stats.followupsDue) || 0,
-      scheduleVisit:scheduledVisits || Number(panel.stats.siteVisits) || 0,
-      bookings:bookedLeads || Number(panel.stats.bookings) || 0,
-      whatsapp:leadsWithWhatsApp,
-      tasks:tasks.length || Number(panel.stats.tasks) || 0,
-      notifications:salesUnreadCount,
+      home: leads.length,
+      leads: leads.length,
+      conversation: leads.length,
+      calls: callQueue.length + inboundCallCount,
+      callLogs: callLogCount,
+      followups: followupLeads || Number(panel.stats.followupsDue) || 0,
+      scheduleVisit: scheduledVisits || Number(panel.stats.siteVisits) || 0,
+      bookings: bookedLeads || Number(panel.stats.bookings) || 0,
+      whatsapp: leadsWithWhatsApp,
+      tasks: tasks.length || Number(panel.stats.tasks) || 0,
+      notifications: salesUnreadCount,
     };
   }, [
     bookingLeadRows,
@@ -2818,7 +2965,7 @@ const SalesUserPanel = () => {
     { key: "followups", label: "Follow-ups", icon: CalendarDays, count: sidebarCounts.followups },
     { key: "scheduleVisit", label: "Schedule Visit", icon: CalendarDays, count: sidebarCounts.scheduleVisit },
     { key: "bookings", label: "Bookings", icon: LayoutDashboard, count: sidebarCounts.bookings },
-   
+
     { key: "whatsapp", label: "WhatsApp", icon: Smartphone, count: sidebarCounts.whatsapp },
     { key: "tasks", label: "Tasks", icon: LayoutDashboard, count: sidebarCounts.tasks },
     { key: "notifications", label: "Notifications", icon: Bell, count: sidebarCounts.notifications },
@@ -2830,7 +2977,7 @@ const SalesUserPanel = () => {
       ? [{ key: "all", label: "All" }]
       : activeScreen === "leads"
         ? [...leadStageFilters, ...dispositionLeadFilters]
-      : leadStageFilters;
+        : leadStageFilters;
   const activeDispositionFilter = getDispositionFilterValue(activeLeadStage);
   const siteVisitLeadOptions = panel.leads.map((lead) => ({
     value: String(getLeadId(lead)),
@@ -2845,8 +2992,8 @@ const SalesUserPanel = () => {
   ];
   const siteVisitExecutiveOptions = [
     ...(siteVisitForm.executive &&
-    !siteVisitForm.executiveId &&
-    !salesExecutiveOptions.some((executive) => executive.name.toLowerCase() === siteVisitForm.executive.toLowerCase())
+      !siteVisitForm.executiveId &&
+      !salesExecutiveOptions.some((executive) => executive.name.toLowerCase() === siteVisitForm.executive.toLowerCase())
       ? [{ value: "", label: siteVisitForm.executive }]
       : []),
     ...salesExecutiveOptions.map((executive) => ({
@@ -3052,16 +3199,16 @@ const SalesUserPanel = () => {
                   setActiveModal("disposition");
                   setDispositionTarget({
                     lead,
-                    callLog:{
-                      id:inboundCall?.callLogId || inboundCall?.id || null,
-                      leadId:lead?.id || inboundCall?.leadId || null,
-                      leadPhone:inboundCall?.customerNumber || inboundCall?.callerNumber || "",
-                      phone:inboundCall?.customerNumber || inboundCall?.callerNumber || "",
-                      callerNumber:inboundCall?.callerNumber || "",
-                      customerNumber:inboundCall?.customerNumber || inboundCall?.callerNumber || "",
-                      direction:"inbound",
-                      provider:inboundCall?.provider || "mcube",
-                      status:rawInboundStatus === "waiting" ? "completed" : inboundCall?.status || "completed",
+                    callLog: {
+                      id: inboundCall?.callLogId || inboundCall?.id || null,
+                      leadId: lead?.id || inboundCall?.leadId || null,
+                      leadPhone: inboundCall?.customerNumber || inboundCall?.callerNumber || "",
+                      phone: inboundCall?.customerNumber || inboundCall?.callerNumber || "",
+                      callerNumber: inboundCall?.callerNumber || "",
+                      customerNumber: inboundCall?.customerNumber || inboundCall?.callerNumber || "",
+                      direction: "inbound",
+                      provider: inboundCall?.provider || "mcube",
+                      status: rawInboundStatus === "waiting" ? "completed" : inboundCall?.status || "completed",
                     },
                   });
                 }}
@@ -3073,9 +3220,9 @@ const SalesUserPanel = () => {
                 onClick={() => {
                   setActiveScreen("callLogs");
                   navigate("/my-call-logs", {
-                    state:{
-                      direction:"inbound",
-                      phone:inboundCallerNumber,
+                    state: {
+                      direction: "inbound",
+                      phone: inboundCallerNumber,
                     },
                   });
                 }}
@@ -3092,13 +3239,10 @@ const SalesUserPanel = () => {
 
   return (
     <div
-      className={`sales-app sales-panel ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${
-        activeScreen === "whatsapp" ? "whatsapp-screen" : ""
-      } ${
-        activeScreen === "details" ? "details-screen" : ""
-      } ${
-        isBookingFormOpen ? "booking-softphone-enabled" : ""
-      }`}
+      className={`sales-app sales-panel ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${activeScreen === "whatsapp" ? "whatsapp-screen" : ""
+        } ${activeScreen === "details" ? "details-screen" : ""
+        } ${isBookingFormOpen ? "booking-softphone-enabled" : ""
+        }`}
     >
       {mcubeWidgetUrl && (
         <>
@@ -3119,10 +3263,6 @@ const SalesUserPanel = () => {
               <div className="sales-mcube-widget-header">
                 <div>
                   <span id="sales-mcube-widget-title">MCUBE Softphone</span>
-                  <small>
-                    {mcubeWidgetMeta.agentExtension ? `Ext: ${mcubeWidgetMeta.agentExtension}` : mcubeWidgetStatus}
-                    {mcubeWidgetMeta.agentCallingMode ? ` | ${mcubeWidgetMeta.agentCallingMode}` : ""}
-                  </small>
                 </div>
                 <button
                   type="button"
@@ -3143,30 +3283,6 @@ const SalesUserPanel = () => {
                 />
               </div>
               <div className="sales-mcube-widget-footer">
-                <div className="sales-softphone-summary">
-                  <strong>{callTarget ? getLeadName(callTarget) : "Softphone ready"}</strong>
-                  <span>
-                    {currentCallRequest?.phoneLabel ? `${currentCallRequest.phoneLabel}: ` : ""}
-                    {currentCallRequest?.displayPhone || currentCallRequest?.phone || "Use Call from any sales screen"}
-                  </span>
-                  {activeSoftphoneCallLog?.id && (
-                    <small>
-                      {String(activeSoftphoneCallLog.status || outboundCallStatus).replace(/-/g, " ")}
-                      {activeSoftphoneCallLog.duration ? ` | ${formatDuration(activeSoftphoneCallLog.duration)}` : ""}
-                    </small>
-                  )}
-                </div>
-                <div className={`sales-recording-status ${activeRecordingStatus}`}>
-                  <span>{getRecordingStatusLabel(activeRecordingStatus)}</span>
-                  {activeRecordingUrl && (
-                    <>
-                      <audio controls preload="metadata" src={activeRecordingUrl} />
-                      <a href={activeRecordingUrl} target="_blank" rel="noreferrer">
-                        Open Recording
-                      </a>
-                    </>
-                  )}
-                </div>
                 <button type="button" className="secondary" onClick={hideMcubeWidget}>
                   Minimize
                 </button>
@@ -3198,7 +3314,7 @@ const SalesUserPanel = () => {
       <aside className="sales-sidebar">
         <div className="sales-brand">
           <img className="sales-logo" src="/assets/images/logo.png" alt="SWAMI" />
-          
+
         </div>
 
         <div className="sales-nav-label">Workspace</div>
@@ -3212,16 +3328,20 @@ const SalesUserPanel = () => {
                 type="button"
                 onClick={() => {
                   setActiveScreen(item.key);
-                  if (item.key === "bookings") setActiveLeadStage("all");
+                  if (item.key === "home") navigate("/user/sales");
+                  if (item.key === "leads") navigate("/user/sales/leads");
+                  if (item.key === "conversation") navigate("/user/sales/conversation");
                   if (item.key === "calls") navigate("/user/sales/calls");
                   if (item.key === "callLogs") navigate("/my-call-logs");
                   if (item.key === "followups") openFollowups(activeFollowupFilter);
-                  if (item.key === "conversation") navigate("/user/sales/conversation");
-                  if (item.key === "whatsapp") navigate("/user/sales/whatsapp");
-                  if (item.key === "leads") navigate("/user/sales/leads");
-                  if (item.key === "bookings") navigate("/user/sales/bookings");
-                  if (item.key === "addLead") navigate("/user/sales/add-lead");
                   if (item.key === "scheduleVisit") openSalesSiteVisitPage();
+                  if (item.key === "bookings") {
+                    setActiveLeadStage("all");
+                    navigate("/user/sales/bookings");
+                  }
+                  if (item.key === "whatsapp") navigate("/user/sales/whatsapp");
+                  if (item.key === "tasks") navigate("/user/sales/tasks");
+                  if (item.key === "addLead") navigate("/user/sales/add-lead");
                   if (item.key === "notifications") navigate("/user/sales/notifications");
                   if (item.key === "profile") navigate("/user/sales/profile");
                 }}
@@ -3362,9 +3482,9 @@ const SalesUserPanel = () => {
                   onClick={() => {
                     setActiveScreen("callLogs");
                     navigate("/my-call-logs", {
-                      state:{
-                        direction:"inbound",
-                        phone:inboundCall.callerNumber || inboundCall.customerNumber || "",
+                      state: {
+                        direction: "inbound",
+                        phone: inboundCall.callerNumber || inboundCall.customerNumber || "",
                       },
                     });
                   }}
@@ -3417,9 +3537,9 @@ const SalesUserPanel = () => {
                       setIsInboundPopupOpen(false);
                       setActiveScreen("callLogs");
                       navigate("/my-call-logs", {
-                        state:{
-                          direction:"inbound",
-                          phone:inboundCall.callerNumber || inboundCall.customerNumber || "",
+                        state: {
+                          direction: "inbound",
+                          phone: inboundCall.callerNumber || inboundCall.customerNumber || "",
                         },
                       });
                     }}
@@ -3544,7 +3664,7 @@ const SalesUserPanel = () => {
           {activeScreen === "profile" ? (
             <UserSalesProfile
               onProfileUpdated={(nextUser) => {
-                setPanel((current) => ({ ...current, user:{ ...current.user, ...nextUser } }));
+                setPanel((current) => ({ ...current, user: { ...current.user, ...nextUser } }));
               }}
             />
           ) : activeScreen === "notifications" ? (
@@ -3622,14 +3742,14 @@ const SalesUserPanel = () => {
                   </div>
 
                   <div className="sales-call-meta">
-                    <div><span>Source</span><strong>{currentCallLead.channelPartner || currentCallLead.tags || "Website"}</strong></div>
+                    <div><span>Source</span><strong>{currentCallLead.channelPartner || cleanTagsForDisplay(currentCallLead.tags) || "Website"}</strong></div>
                     <div><span>Interested in</span><strong>{getDisplayText(currentCallLead.interestedProjects || currentCallLead.propertyType)}</strong></div>
                     <div><span>Budget</span><strong>{getDisplayText(currentCallLead.budget || [currentCallLead.budgetMin, currentCallLead.budgetMax].filter(Boolean).join(" - "))}</strong></div>
-                    <div><span>Attempt</span><strong>{callDispositions[getLeadId(currentCallLead)] ? "2 of 3" : "1 of 3"}</strong></div>
+                    <div><span>Attempt</span><strong>{getLeadAttemptDisplay(currentCallLead)}</strong></div>
                   </div>
 
                   <div className="sales-call-sla">
-                    SLA breach in 3 min. {currentCallLead.tags || "Assigned lead"}.
+                    SLA breach in 3 min. {cleanTagsForDisplay(currentCallLead.tags) || "Assigned lead"}.
                   </div>
 
                   {currentCallLog && (
@@ -3729,7 +3849,7 @@ const SalesUserPanel = () => {
                   >
                     <span>
                       <strong>{getLeadName(lead)} - Score {lead.score || 65}</strong>
-                      <small>{lead.channelPartner || lead.tags || "Lead"} - {callDispositions[getLeadId(lead)]?.label || "new"}</small>
+                      <small>{lead.channelPartner || cleanTagsForDisplay(lead.tags) || "Lead"} - {callDispositions[getLeadId(lead)]?.label || "new"}</small>
                     </span>
                     <time>Today {lead.conductSiteDate ? formatTaskDate(lead.conductSiteDate) : "9:15 AM"}</time>
                   </button>
@@ -3815,24 +3935,26 @@ const SalesUserPanel = () => {
                   />
                 </label>
 
-                <label>
-                  <span>Assign sales executive</span>
-                  <SalesSearchableSelect
-                    value={siteVisitForm.executiveId}
-                    options={siteVisitExecutiveOptions}
-                    placeholder={isLoadingUsers ? "Loading executives..." : "Select sales executive"}
-                    searchPlaceholder="Search executive..."
-                    disabled={isLoadingUsers}
-                    onChange={(value) => {
-                      const selectedExecutive = salesExecutiveOptions.find((executive) => String(executive.id) === String(value));
-                      setSiteVisitForm((current) => ({
-                        ...current,
-                        executiveId: value,
-                        executive: selectedExecutive?.name || siteVisitForm.executive,
-                      }));
-                    }}
-                  />
-                </label>
+                {isAdminOrManager && (
+                  <label>
+                    <span>Assign sales executive</span>
+                    <SalesSearchableSelect
+                      value={siteVisitForm.executiveId}
+                      options={siteVisitExecutiveOptions}
+                      placeholder={isLoadingUsers ? "Loading executives..." : "Select sales executive"}
+                      searchPlaceholder="Search executive..."
+                      disabled={isLoadingUsers}
+                      onChange={(value) => {
+                        const selectedExecutive = salesExecutiveOptions.find((executive) => String(executive.id) === String(value));
+                        setSiteVisitForm((current) => ({
+                          ...current,
+                          executiveId: value,
+                          executive: selectedExecutive?.name || siteVisitForm.executive,
+                        }));
+                      }}
+                    />
+                  </label>
+                )}
 
                 <label>
                   <span>Visit Status</span>
@@ -3863,6 +3985,10 @@ const SalesUserPanel = () => {
                   <div>
                     <span>Phone</span>
                     <strong>{siteVisitLead ? getLeadPhone(siteVisitLead) : "-"}</strong>
+                  </div>
+                  <div>
+                    <span>Assigned executive</span>
+                    <strong>{isAdminOrManager ? (siteVisitForm.executive || "Unassigned") : (getName(panel.user) || siteVisitForm.executive || "Sales User")}</strong>
                   </div>
                   <div>
                     <span>Status visible to admin</span>
@@ -3897,6 +4023,8 @@ const SalesUserPanel = () => {
               user={panel.user}
               loading={loading}
               embedded
+              onOpenCallLead={openCallPage}
+              onOpenLeadDetails={openLeadDetails}
             />
           ) : activeScreen === "details" ? (
             <UserDetails
@@ -3956,207 +4084,204 @@ const SalesUserPanel = () => {
               </div>
             </section>
           ) : (
-          <div className="sales-grid">
-            <section className="sales-card sales-leads-card">
-              <div className="sales-card-head">
-                <div>
-                  <h2>{activeScreen === "home" ? "My active leads" : navItems.find((item) => item.key === activeScreen)?.label}</h2>
-                  <p>{visibleRecordCount} records available</p>
-                </div>
-              </div>
-
-              {isSearchableLeadTable && (
-                <LeadTableToolbar
-                  searchValue={leadTableSearch}
-                  onSearch={(query) => {
-                    setLeadTableSearch(query);
-                    setLeadTablePage(1);
-                  }}
-                  onRefresh={() => {
-                    loadPanel();
-                  }}
-                  showImport={false}
-                  showExport={false}
-                  showExportAll={false}
-                  showAddLead={false}
-                  placeholder={activeScreen === "bookings" ? "Search booked leads..." : "Search leads..."}
-                />
-              )}
-
-              <div className="sales-stage-tabs" aria-label="Lead stage filters">
-                {visibleLeadStageFilters.map((stage) => (
-                  <button
-                    key={stage.key}
-                    type="button"
-                    className={activeLeadStage === stage.key ? "active" : ""}
-                    onClick={() => setActiveLeadStage(stage.key)}
-                  >
-                    {stage.label}
-                  </button>
-                ))}
-              </div>
-
-              <div className="sales-table">
-                <div className={`sales-table-head ${activeDispositionFilter ? "with-disposition" : ""}`}>
-                  <span>Lead</span>
-                  <span>Requirement</span>
-                  <span>Status</span>
-                  {activeDispositionFilter && <span>Disposition details</span>}
-                  <span>Action</span>
-                </div>
-                {tableLeads.length === 0 && (
-                  <div className="sales-empty">
-                    {activeScreen === "bookings"
-                      ? leadTableSearch.trim()
-                        ? "No booked leads match your search."
-                        : "No booked leads available for this sales user yet."
-                      : leadTableSearch.trim() && isPaginatedLeadTable
-                        ? "No leads match your search."
-                        : "No leads available for this sales user yet."}
+            <div className="sales-grid">
+              <section className="sales-card sales-leads-card">
+                <div className="sales-card-head">
+                  <div>
+                    <h2>{activeScreen === "home" ? "My active leads" : navItems.find((item) => item.key === activeScreen)?.label}</h2>
+                    <p>{visibleRecordCount} records available</p>
                   </div>
-                )}
-                {tableLeads.map((lead, index) => {
-                  const leadId = getLeadId(lead);
-                  const latestDisposition = getLeadDisposition(lead);
-                  const dispositionLabel =
-                    activeDispositionFilter === "Site Visit Scheduled" && leadHasScheduledSiteVisit(lead)
-                      ? "Site Visit Scheduled"
-                      : latestDisposition?.disposition || "-";
-                  const dispositionDetail =
-                    activeDispositionFilter === "Site Visit Scheduled" && leadHasScheduledSiteVisit(lead)
-                      ? getLeadSiteVisitDetail(lead)
-                      : getDispositionDetail(latestDisposition);
+                </div>
 
-                  return (
-                  <div
-                    className={`sales-row ${activeDispositionFilter ? "with-disposition" : ""}`}
-                    key={leadId || lead.email}
-                    onClick={() => {
-                      openLeadDetails(lead);
+                {isSearchableLeadTable && (
+                  <LeadTableToolbar
+                    searchValue={leadTableSearch}
+                    onSearch={(query) => {
+                      setLeadTableSearch(query);
+                      setLeadTablePage(1);
                     }}
-                  >
-                    <span className="sales-lead-name">
-                      <span className="sales-avatar small">{initials(getLeadName(lead))}</span>
-                      <span>
-                        <strong>{getLeadName(lead)}</strong>
-                        <small>{getLeadPhone(lead)}</small>
-                      </span>
-                    </span>
+                    onRefresh={() => {
+                      loadPanel();
+                    }}
+                    showImport={false}
+                    showExport={false}
+                    showExportAll={false}
+                    showAddLead={false}
+                    placeholder={activeScreen === "bookings" ? "Search booked leads..." : "Search leads..."}
+                  />
+                )}
+
+                <div className="sales-stage-tabs" aria-label="Lead stage filters">
+                  {visibleLeadStageFilters.map((stage) => (
+                    <button
+                      key={stage.key}
+                      type="button"
+                      className={activeLeadStage === stage.key ? "active" : ""}
+                      onClick={() => setActiveLeadStage(stage.key)}
+                    >
+                      {stage.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="sales-table">
+                  <div className={`sales-table-head ${activeDispositionFilter ? "with-disposition" : ""}`}>
+                    <span>Lead</span>
+                    <span>Requirement</span>
+                    <span>Status</span>
+                    {activeDispositionFilter && <span>Disposition details</span>}
+                    <span>Action</span>
+                  </div>
+                  {tableLeads.length === 0 && (
+                    <div className="sales-empty">
+                      {activeScreen === "bookings"
+                        ? leadTableSearch.trim()
+                          ? "No booked leads match your search."
+                          : "No booked leads available for this sales user yet."
+                        : leadTableSearch.trim() && isPaginatedLeadTable
+                          ? "No leads match your search."
+                          : "No leads available for this sales user yet."}
+                    </div>
+                  )}
+                  {tableLeads.map((lead, index) => {
+                    const leadId = getLeadId(lead);
+                    const latestDisposition = getLeadDisposition(lead);
+                    const dispositionLabel =
+                      activeDispositionFilter === "Site Visit Scheduled" && leadHasScheduledSiteVisit(lead)
+                        ? "Site Visit Scheduled"
+                        : latestDisposition?.disposition || "-";
+                    const dispositionDetail =
+                      activeDispositionFilter === "Site Visit Scheduled" && leadHasScheduledSiteVisit(lead)
+                        ? getLeadSiteVisitDetail(lead)
+                        : getDispositionDetail(latestDisposition);
+
+                    return (
+                      <div
+                        className={`sales-row ${activeDispositionFilter ? "with-disposition" : ""} ${openActionLeadId === leadId ? "has-open-menu" : ""}`}
+                        key={leadId || lead.email}
+                      >
+                        <span className="sales-lead-name">
+                          <span className="sales-avatar small">{initials(getLeadName(lead))}</span>
+                          <span>
+                            <strong>{getLeadName(lead)}</strong>
+                            <small>{getLeadPhone(lead)}</small>
+                          </span>
+                        </span>
+                        <span>
+                          <strong>{getDisplayText(lead.interestedProjects || lead.propertyType)}</strong>
+                          <small>{getDisplayText(lead.configration || lead.budget)}</small>
+                        </span>
+                        <span>
+                          <mark>{statusLabel[lead.status] || lead.status || "New"}</mark>
+                        </span>
+                        {activeDispositionFilter && (
+                          <span className="sales-disposition-cell">
+                            <strong>{dispositionLabel}</strong>
+                            <small>{dispositionDetail}</small>
+                          </span>
+                        )}
+                        <span className="sales-row-actions" onClick={(event) => event.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="sales-row-menu-btn"
+                            title="Open lead actions"
+                            aria-label="Open lead actions"
+                            onClick={(event) => toggleLeadActionMenu(event, lead)}
+                          >
+                            <MoreVertical size={16} />
+                          </button>
+                          {openActionLeadId === leadId && (
+                            <div className={`sales-row-menu ${tableLeads.length >= 4 && index >= tableLeads.length - 2 && index >= 2 ? "open-upwards" : ""}`}>
+
+                              {getLeadPhoneOptions(lead).map((phone) => (
+                                <button
+                                  type="button"
+                                  key={`${leadId}-${phone.label}-${phone.dialValue}`}
+                                  disabled={callBlocked}
+                                  onClick={() => {
+                                    setOpenActionLeadId(null);
+                                    startSelectedCallLead(lead, phone.value);
+                                  }}
+                                >
+                                  Call {phone.label}
+                                </button>
+                              ))}
+                              <button type="button" onClick={() => openLeadDetails(lead)}>
+                                Preview
+                              </button>
+                              {!isBookedLead(lead) && (
+                                <button type="button" onClick={() => openLeadPreview(lead, true)}>
+                                  Book Lead
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {isPaginatedLeadTable && searchedLeads.length > 0 && (
+                  <div className="sales-table-pagination">
                     <span>
-                      <strong>{getDisplayText(lead.interestedProjects || lead.propertyType)}</strong>
-                      <small>{getDisplayText(lead.configration || lead.budget)}</small>
+                      Showing {(leadTablePage - 1) * salesTablePageSize + 1}-
+                      {Math.min(leadTablePage * salesTablePageSize, searchedLeads.length)} of {searchedLeads.length}
                     </span>
-                    <span>
-                      <mark>{statusLabel[lead.status] || lead.status || "New"}</mark>
-                    </span>
-                    {activeDispositionFilter && (
-                      <span className="sales-disposition-cell">
-                        <strong>{dispositionLabel}</strong>
-                        <small>{dispositionDetail}</small>
-                      </span>
-                    )}
-                    <span className="sales-row-actions" onClick={(event) => event.stopPropagation()}>
+                    <div>
                       <button
                         type="button"
-                        className="sales-row-menu-btn"
-                        title="Open lead actions"
-                        aria-label="Open lead actions"
-                        onClick={(event) => toggleLeadActionMenu(event, lead)}
+                        disabled={leadTablePage === 1}
+                        onClick={() => setLeadTablePage((current) => Math.max(1, current - 1))}
                       >
-                        <MoreVertical size={16} />
+                        Previous
                       </button>
-                      {openActionLeadId === leadId && (
-                        <div className={`sales-row-menu ${index >= tableLeads.length - 2 ? "open-upwards" : ""}`}>
-
-                          {getLeadPhoneOptions(lead).map((phone) => (
-                            <button
-                              type="button"
-                              key={`${leadId}-${phone.label}-${phone.dialValue}`}
-                              disabled={callBlocked}
-                              onClick={() => {
-                                setOpenActionLeadId(null);
-                                startSelectedCallLead(lead, phone.value);
-                              }}
-                            >
-                              Call {phone.label}
-                            </button>
-                          ))}
-                          <button type="button" onClick={() => openLeadDetails(lead)}>
-                            Preview
-                          </button>
-                          {!isBookedLead(lead) && (
-                            <button type="button" onClick={() => openLeadPreview(lead, true)}>
-                              Book Lead
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </span>
+                      <button
+                        type="button"
+                        disabled={leadTablePage >= leadTableTotalPages}
+                        onClick={() => setLeadTablePage((current) => Math.min(leadTableTotalPages, current + 1))}
+                      >
+                        Next
+                      </button>
+                    </div>
                   </div>
-                  );
-                })}
-              </div>
-              {isPaginatedLeadTable && searchedLeads.length > 0 && (
-                <div className="sales-table-pagination">
-                  <span>
-                    Showing {(leadTablePage - 1) * salesTablePageSize + 1}-
-                    {Math.min(leadTablePage * salesTablePageSize, searchedLeads.length)} of {searchedLeads.length}
-                  </span>
+                )}
+              </section>
+
+              <aside className="sales-card">
+                <div className="sales-card-head">
                   <div>
-                    <button
-                      type="button"
-                      disabled={leadTablePage === 1}
-                      onClick={() => setLeadTablePage((current) => Math.max(1, current - 1))}
-                    >
-                      Previous
-                    </button>
-                    <button
-                      type="button"
-                      disabled={leadTablePage >= leadTableTotalPages}
-                      onClick={() => setLeadTablePage((current) => Math.min(leadTableTotalPages, current + 1))}
-                    >
-                      Next
-                    </button>
+                    <h2>Quick actions</h2>
+                    <p>Sales workflow</p>
                   </div>
                 </div>
-              )}
-            </section>
-
-            <aside className="sales-card">
-              <div className="sales-card-head">
-                <div>
-                  <h2>Quick actions</h2>
-                  <p>Sales workflow</p>
+                <div className="sales-action-list">
+                  <button type="button" disabled={callBlocked} onClick={() => {
+                    if (currentCallLead) {
+                      openCallPage(currentCallLead);
+                      return;
+                    }
+                    openCallPage();
+                  }}><Phone size={15} /> Call next lead</button>
+                  <button type="button" onClick={() => openScheduleVisit()}><CalendarDays size={15} /> Schedule visit</button>
                 </div>
-              </div>
-              <div className="sales-action-list">
-                <button type="button" disabled={callBlocked} onClick={() => {
-                  if (currentCallLead) {
-                    openCallPage(currentCallLead);
-                    return;
-                  }
-                  openCallPage();
-                }}><Phone size={15} /> Call next lead</button>
-                <button type="button" onClick={() => openScheduleVisit()}><CalendarDays size={15} /> Schedule visit</button>
-              </div>
 
-              <div className="sales-card-head compact">
-                <div>
-                  <h2>Recent bookings</h2>
-                  <p>{panel.bookings.length} found</p>
-                </div>
-              </div>
-              <div className="sales-bookings">
-                {panel.bookings.length === 0 && <div className="sales-empty compact">No bookings yet.</div>}
-                {panel.bookings.map((booking) => (
-                  <div className="sales-booking" key={booking.id}>
-                    <strong>{booking.customerName || "Customer"}</strong>
-                    <small>{getDisplayText(booking.projectDetails || booking.unit, "Unit details pending")}</small>
+                <div className="sales-card-head compact">
+                  <div>
+                    <h2>Recent bookings</h2>
+                    <p>{panel.bookings.length} found</p>
                   </div>
-                ))}
-              </div>
-            </aside>
-          </div>
+                </div>
+                <div className="sales-bookings">
+                  {panel.bookings.length === 0 && <div className="sales-empty compact">No bookings yet.</div>}
+                  {panel.bookings.map((booking) => (
+                    <div className="sales-booking" key={booking.id}>
+                      <strong>{booking.customerName || "Customer"}</strong>
+                      <small>{getDisplayText(booking.projectDetails || booking.unit, "Unit details pending")}</small>
+                    </div>
+                  ))}
+                </div>
+              </aside>
+            </div>
           )}
         </section>
       </main>
@@ -4213,14 +4338,43 @@ const SalesUserPanel = () => {
           onSaved={(savedCallLog) => {
             const leadId = savedCallLog?.leadId ? String(savedCallLog.leadId) : "";
             if (leadId) {
-              setCallLogsByLead((current) => ({ ...current, [leadId]:savedCallLog }));
+              setCallLogsByLead((current) => ({ ...current, [leadId]: savedCallLog }));
               setCallDispositions((current) => ({
                 ...current,
-                [leadId]:{
-                  type:savedCallLog.disposition,
-                  label:savedCallLog.disposition,
-                  time:new Date().toISOString(),
+                [leadId]: {
+                  type: savedCallLog.disposition,
+                  label: savedCallLog.disposition,
+                  time: new Date().toISOString(),
                 },
+              }));
+              setLeadCallAttempts((prev) => {
+                const leadInList = panel.leads.find((l) => String(getLeadId(l)) === leadId);
+                const currentTotal = Math.max(
+                  Number(prev[leadId]) || 0,
+                  Number(leadInList?.callAttemptCount) || 0,
+                  Number(leadInList?._count?.callLogs) || 0,
+                  Number(dispositionTarget?.lead?.callAttemptCount) || 0,
+                  Number(dispositionTarget?.lead?._count?.callLogs) || 0
+                );
+                return {
+                  ...prev,
+                  [leadId]: currentTotal + 1,
+                };
+              });
+              setPanel((current) => ({
+                ...current,
+                leads: (current.leads || []).map((l) =>
+                  String(getLeadId(l)) === leadId
+                    ? {
+                        ...l,
+                        callAttemptCount: (Number(l.callAttemptCount) || 0) + 1,
+                        _count: {
+                          ...l._count,
+                          callLogs: (Number(l._count?.callLogs) || 0) + 1,
+                        },
+                      }
+                    : l
+                ),
               }));
               setDisposedLeadIds((current) => current.includes(leadId) ? current : [...current, leadId]);
               const nextLead = panel.leads.find((item) => {
@@ -4234,13 +4388,13 @@ const SalesUserPanel = () => {
             if (String(savedCallLog?.direction || "").toLowerCase() === "inbound") {
               setInboundCall((current) => current ? {
                 ...current,
-                lead:enrichLeadForInbound(savedCallLog.lead || current.lead),
-                callerNumber:savedCallLog.callerNumber || savedCallLog.customerNumber || savedCallLog.leadPhone || savedCallLog.phone || current.callerNumber,
-                customerNumber:savedCallLog.customerNumber || savedCallLog.callerNumber || savedCallLog.leadPhone || savedCallLog.phone || current.customerNumber,
-                status:savedCallLog.status || current.status,
-                disposition:savedCallLog.disposition || current.disposition,
-                duration:savedCallLog.duration || current.duration,
-                endedAt:savedCallLog.endedAt || current.endedAt,
+                lead: enrichLeadForInbound(savedCallLog.lead || current.lead),
+                callerNumber: savedCallLog.callerNumber || savedCallLog.customerNumber || savedCallLog.leadPhone || savedCallLog.phone || current.callerNumber,
+                customerNumber: savedCallLog.customerNumber || savedCallLog.callerNumber || savedCallLog.leadPhone || savedCallLog.phone || current.customerNumber,
+                status: savedCallLog.status || current.status,
+                disposition: savedCallLog.disposition || current.disposition,
+                duration: savedCallLog.duration || current.duration,
+                endedAt: savedCallLog.endedAt || current.endedAt,
               } : current);
               setCallLogCount((count) => count + (savedCallLog?.id ? 0 : 1));
             }
@@ -4248,6 +4402,43 @@ const SalesUserPanel = () => {
             setDispositionInitialValue("");
             setActiveModal(null);
             resetOutboundCallState();
+          }}
+        />
+      )}
+
+      {reminderQueue.length > 0 && (
+        <FollowupReminderModal
+          reminders={reminderQueue}
+          onDismiss={(id) => {
+            setReminderQueue((prev) => prev.filter((r) => r.followUpId !== id));
+          }}
+          onOpenLead={(lead) => {
+            setReminderQueue((prev) => prev.filter((r) => r.followUpId !== lead.followUpId));
+            openLeadDetails(lead);
+          }}
+          onCallLead={(lead) => {
+            setReminderQueue((prev) => prev.filter((r) => r.followUpId !== lead.followUpId));
+            startSelectedCallLead(lead);
+          }}
+          onWhatsAppLead={(lead) => {
+            setReminderQueue((prev) => prev.filter((r) => r.followUpId !== lead.followUpId));
+            openWhatsAppPage(lead);
+          }}
+          onReminderActionCompleted={() => {
+            loadPanel(false);
+          }}
+        />
+      )}
+
+      {showQuickFollowupModal && (
+        <CreateFollowupModal
+          currentUser={panel.user}
+          leads={panel.leads}
+          onClose={() => setShowQuickFollowupModal(false)}
+          onSubmit={async (payload) => {
+            await createFollowup(payload);
+            setShowQuickFollowupModal(false);
+            loadPanel(false);
           }}
         />
       )}
@@ -4479,8 +4670,8 @@ const InboundCallPopupModal = ({
                 {isRinging
                   ? "Ringing..."
                   : isConnected
-                  ? `Connected • ${formatDuration(timerSeconds)}`
-                  : `Ended • Duration: ${formatDuration(inboundCall?.duration || timerSeconds)}`}
+                    ? `Connected • ${formatDuration(timerSeconds)}`
+                    : `Ended • Duration: ${formatDuration(inboundCall?.duration || timerSeconds)}`}
               </strong>
             </p>
           </div>

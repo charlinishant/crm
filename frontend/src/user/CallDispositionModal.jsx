@@ -18,24 +18,16 @@ const dispositions = [
 
 const callStatuses = ["completed", "connected", "failed", "no-answer", "busy"];
 
-const getRecordingUrl = (callLog) => {
-  try {
-    const value = String(callLog?.recordingUrl || "").trim().replace(/\\\//g, "/");
-    const url = new URL(value);
-    return ["http:", "https:"].includes(url.protocol) ? value : "";
-  } catch {
-    return "";
-  }
-};
+const isMcubeSystemNote = (value) =>
+  /^MCube\s+(inbound|outbound)(\b| - | click2call\b)/i.test(String(value || "").trim());
 
-const getRecordingStatusLabel = (callLog) => {
-  if (getRecordingUrl(callLog)) return "Recording available";
-  const status = String(callLog?.recordingStatus || "").toLowerCase();
-  if (status === "failed") return "Recording failed";
-  if (status === "not_available" || status === "not-available" || status === "unavailable") return "Recording unavailable";
-  if (callLog?.id) return "Recording processing...";
-  return "Recording not started";
-};
+const getEditableNotes = (value) =>
+  String(value || "")
+    .split("\n")
+    .filter((line) => !isMcubeSystemNote(line))
+    .join("\n")
+    .trim();
+
 
 const getProjectName = (project) =>
   project?.name || project?.projectName || project?.title || project?.label || "";
@@ -81,7 +73,7 @@ const CallDispositionModal = ({ lead, callLog, projects = [], initialDisposition
           : callStatuses.includes(savedStatus) ? savedStatus : "completed",
       disposition:initialDisposition || callLog.disposition || "Qualified",
       phone:callLog.leadPhone || callLog.phone || callLog.callerNumber || callLog.customerNumber || lead?.leadPhone || lead?.phone || "",
-      notes:callLog.notes || "",
+      notes:getEditableNotes(callLog.notes),
       nextAction:callLog.nextAction || "",
       nextFollowUpAt:getDefaultDateTime(),
       interestedProjectId:savedProject ? String(getProjectId(savedProject)) : "",
@@ -191,15 +183,6 @@ const CallDispositionModal = ({ lead, callLog, projects = [], initialDisposition
             {needsVisit && <label className="wide"><span>Visit date and time</span><input type="datetime-local" required value={form.visitDateTime} onChange={(e) => update("visitDateTime", e.target.value)} /></label>}
             <label className="wide"><span>Next action</span><input value={form.nextAction} onChange={(e) => update("nextAction", e.target.value)} placeholder="Call again, send brochure, schedule visit..." /></label>
             <label className="wide"><span>Notes</span><textarea rows="4" value={form.notes} onChange={(e) => update("notes", e.target.value)} placeholder="Call notes and next action" /></label>
-            <div className="call-disposition-recording wide">
-              <span>{getRecordingStatusLabel(callLog)}</span>
-              {getRecordingUrl(callLog) && (
-                <>
-                  <audio controls preload="metadata" src={getRecordingUrl(callLog)} />
-                  <a href={getRecordingUrl(callLog)} target="_blank" rel="noreferrer">Open Recording</a>
-                </>
-              )}
-            </div>
           </div>
           {error && <div className="call-disposition-error">{error}</div>}
           <div className="call-disposition-footer">

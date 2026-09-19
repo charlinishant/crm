@@ -11,6 +11,7 @@ const emptyUserFormData = {
     password: '',
     department: 'SALES',
     role: 'SALES',
+    reraNumber: '',
     description: '',
 };
 
@@ -34,6 +35,11 @@ const AddUserLayer = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isLoadingUser, setIsLoadingUser] = useState(false);
 
+    const getAuthHeaders = () => {
+        const token = localStorage.getItem('authToken');
+        return token ? { Authorization: `Bearer ${token}` } : {};
+    };
+
     useEffect(() => {
         if (!isEditMode) {
             setFormData(emptyUserFormData);
@@ -49,7 +55,11 @@ const AddUserLayer = () => {
             setError('');
 
             try {
-                const response = await fetch(`${API_URL}/users/${editUserId}`);
+                const response = await fetch(`${API_URL}/users/${editUserId}`, {
+                    headers: {
+                        ...getAuthHeaders(),
+                    },
+                });
                 const result = await response.json();
 
                 if (!response.ok || !result || result === 'User not found') {
@@ -65,6 +75,7 @@ const AddUserLayer = () => {
                     password: '',
                     department: result.department || 'SALES',
                     role: result.role || 'SALES',
+                    reraNumber: result.reraNumber || '',
                     description: result.description || '',
                 });
                 setImagePreviewUrl(result.profilePhoto || '');
@@ -91,7 +102,11 @@ const AddUserLayer = () => {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        setFormData((current) => ({ ...current, [name]: value }));
+        setFormData((current) => ({
+            ...current,
+            [name]: value,
+            ...(name === 'role' && value !== 'CHANNEL_PARTNER' ? { reraNumber: '' } : {}),
+        }));
     };
 
     const handleSubmit = async (e) => {
@@ -115,21 +130,20 @@ const AddUserLayer = () => {
                 method: isEditMode ? 'PATCH' : 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    ...getAuthHeaders(),
                 },
                 body: JSON.stringify(payload),
             });
             const result = await response.json();
 
             if (!response.ok) {
-                throw new Error(result?.message || result || 'Unable to create user');
+                throw new Error(result?.message || (typeof result === 'string' ? result : '') || 'Unable to create user');
             }
 
             window.alert(isEditMode ? 'User updated successfully!' : 'User created successfully! They can now sign in with this email and password.');
             setFormData(emptyUserFormData);
             setImagePreviewUrl('');
-            if (isEditMode) {
-                navigate('/all-users');
-            }
+            navigate('/all-users');
         } catch (err) {
             setError(err.message || 'Something went wrong');
         } finally {
@@ -295,6 +309,22 @@ const AddUserLayer = () => {
                                     <option value="CHANNEL_PARTNER">Channel Partner</option>
                                 </select>
                             </div>
+                            {formData.role === 'CHANNEL_PARTNER' && (
+                                <div className="form-group">
+                                    <label htmlFor="reraNumber">
+                                        RERA ID <span className="text-danger-600">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        id="reraNumber"
+                                        name="reraNumber"
+                                        value={formData.reraNumber}
+                                        onChange={handleChange}
+                                        placeholder="Enter channel partner RERA ID"
+                                        required
+                                    />
+                                </div>
+                            )}
                             <div className="form-group full">
                                 <label htmlFor="desc">Description</label>
                                 <textarea

@@ -43,15 +43,22 @@ function initSocket(server) {
       }
     }
 
-    socket.on("register", async (userId)=>{
-      const registeredUserId = socket.data.authUserId
-      if (!registeredUserId || String(userId) !== registeredUserId) return
-      connectedUser.set(registeredUserId, socket.id)
+    socket.on("register", async (userId) => {
+      const registeredUserId = socket.data.authUserId || (userId ? String(userId) : null)
+      if (!registeredUserId) return
+      socket.data.authUserId = String(registeredUserId)
+      connectedUser.set(String(registeredUserId), socket.id)
       socket.join(`user:${registeredUserId}`)
+      socket.join(String(registeredUserId))
       
-      const notifiactions = await prisma.notification.findMany({where:{userId:Number(registeredUserId), isRead:false}})
-
-      socket.emit(`notification-${registeredUserId}`, notifiactions)
+      try {
+        const notifiactions = await prisma.notification.findMany({
+          where: { userId: Number(registeredUserId), isRead: false },
+        })
+        socket.emit(`notification-${registeredUserId}`, notifiactions)
+      } catch (err) {
+        // ignore notification lookup failure
+      }
     })
   })
 

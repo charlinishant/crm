@@ -21,6 +21,17 @@ const fetchActivityNotifications = async () => {
   return dedupeActivityNotifications(Array.isArray(notifications) ? notifications : []);
 };
 
+const fetchMyNotifications = async () => {
+  const token = localStorage.getItem("authToken");
+  if (!token) return { data: [], unreadCount: 0 };
+
+  const response = await fetch(`${API_URL}/notification/me?page=1&limit=10`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) throw new Error("Unable to load notifications");
+  return response.json();
+};
+
 const formatNotificationTime = (value) => {
   const date = value ? new Date(value) : null;
   if (!date || Number.isNaN(date.getTime())) return "";
@@ -31,6 +42,15 @@ const formatNotificationTime = (value) => {
     hour: "numeric",
     minute: "2-digit",
   });
+};
+
+const getNotificationTitle = (notification) =>
+  notification?.titile || notification?.title || "Notification";
+
+const getNotificationDescription = (notification) => {
+  const description = notification?.description || notification?.message || "";
+  const leadName = notification?.leadName;
+  return leadName ? `${leadName}: ${description}` : description;
 };
 
 const normalizeProfilePhoto = (value) => {
@@ -44,69 +64,29 @@ const MasterLayout = ({ children }) => {
   let [mobileMenu, setMobileMenu] = useState(false);
   const [navbarSearch, setNavbarSearch] = useState("");
   const [activityNotifications, setActivityNotifications] = useState([]);
+  const [adminNotifications, setAdminNotifications] = useState([]);
+  const [adminUnreadCount, setAdminUnreadCount] = useState(0);
   const [adminNotificationToast, setAdminNotificationToast] = useState(null);
   const notificationLoadRef = useRef({ initialized: false, ids: new Set() });
   const notificationSoundRef = useRef(null);
   const location = useLocation(); // Hook to get the current route
   const navigate = useNavigate();
+  const isWhatsAppPage = Boolean(
+    location.pathname && ["/whatapp", "/whatsapp"].includes(location.pathname.toLowerCase())
+  );
   const savedUser = JSON.parse(localStorage.getItem("authUser") || "null");
-  const displayName =
-    [savedUser?.firstName, savedUser?.lastName].filter(Boolean).join(" ") ||
-    savedUser?.username ||
-    "User";
-  const displayRole = savedUser?.role
-    ? savedUser.role.charAt(0).toUpperCase() +
-      savedUser.role.slice(1).toLowerCase()
-    : "User";
-  const profilePhoto = normalizeProfilePhoto(savedUser?.profilePhoto);
-  const recentActivityNotifications = activityNotifications.slice(0, 5);
-  const handleLogout = async () => {
-    const token = localStorage.getItem("authToken");
+  const userRole = String(savedUser?.role || savedUser?.department || "").trim().toUpperCase();
+  const salesRoleSet = new Set(["SALES", "PRE_SALES", "POST_SALES", "AGENT", "AGENCY_USER", "CHANNEL_PARTNER"]);
+  const adminRoleSet = new Set(["ADMIN", "SUPER_ADMIN", "MANAGER"]);
+  const isSalesRole = salesRoleSet.has(userRole);
+  const isAdminRole = adminRoleSet.has(userRole);
 
-    if (token) {
-      try {
-        await fetch(`${process.env.REACT_APP_API_URL || "http://localhost:5000"}/attendance/logout`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      } catch (error) {
-        console.error("Unable to update attendance logout:", error);
-      }
+  // Move all useEffect hooks to the top level to ensure they're always called
+  useEffect(() => {
+    if (isSalesRole && !isAdminRole) {
+      navigate("/user/sales", { replace: true });
     }
-
-    localStorage.removeItem("authToken");
-    if (savedUser?.id) localStorage.removeItem(`swamiAttendanceSessionStartedAt:${savedUser.id}`);
-    localStorage.removeItem("authUser");
-    navigate("/sign-in");
-  };
-
-  const handleNavbarSearch = (event) => {
-    event.preventDefault();
-
-    const query = navbarSearch.trim().toLowerCase();
-    if (!query) return;
-
-    const sidebarLinks = Array.from(
-      document.querySelectorAll(".sidebar-menu a[href]")
-    )
-      .map((link) => ({
-        href: link.getAttribute("href"),
-        text: link.textContent.replace(/\s+/g, " ").trim(),
-      }))
-      .filter((link) => link.href && link.href !== "#" && link.text);
-
-    const normalize = (value) => value.toLowerCase();
-    const matchedLink =
-      sidebarLinks.find((link) => normalize(link.text) === query) ||
-      sidebarLinks.find((link) => normalize(link.text).startsWith(query)) ||
-      sidebarLinks.find((link) => normalize(link.text).includes(query));
-
-    if (!matchedLink) return;
-
-    const targetUrl = new URL(matchedLink.href, window.location.origin);
-    navigate(`${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`);
-    setNavbarSearch("");
-  };
+  }, [isSalesRole, isAdminRole, navigate]);
 
   useEffect(() => {
     const token = localStorage.getItem("authToken");
@@ -166,6 +146,76 @@ const MasterLayout = ({ children }) => {
       window.removeEventListener("crmActivityNotificationsChanged", refreshNotifications);
     };
   }, [savedUser?.role]);
+
+  useEffect(() => {
+    if (!savedUser?.id) return undefined;
+
+    let isMounted = true;
+
+    const loadAdminNotifications = () => {
+      fetchMyNotifications()
+        .then((result) => {
+          if (!isMounted) return;
+          setAdminNotifications(Array.isArray(result?.data) ? result.data : []);
+          setAdminUnreadCount(Number(result?.unreadCount) || 0);
+        })
+        .catch((error) => {
+          console.error("Unable to load admin notifications:", error);
+        });
+    };
+
+    const mergeAdminNotification = (notification) => {
+      if (!isMounted || !notification) return;
+      setAdminNotifications((current) =>
+        [notification, ...current.filter((item) => item.id !== notification.id)].slice(0, 10)
+      );
+      if (!notification.isRead) {
+        setAdminUnreadCount((count) => count + 1);
+      }
+      setAdminNotificationToast({
+        title: getNotificationTitle(notification),
+        description: getNotificationDescription(notification),
+        actorName: "CRM",
+      });
+      window.setTimeout(() => setAdminNotificationToast(null), 6000);
+    };
+
+    const replaceAdminNotifications = (notifications) => {
+      if (!isMounted || !Array.isArray(notifications)) return;
+      setAdminNotifications((current) =>
+        [...notifications, ...current]
+          .filter((item, index, items) => item?.id && items.findIndex((next) => next.id === item.id) === index)
+          .sort((first, second) => new Date(second.createdAt || 0) - new Date(first.createdAt || 0))
+          .slice(0, 10)
+      );
+      setAdminUnreadCount(notifications.filter((item) => !item.isRead).length);
+    };
+
+    loadAdminNotifications();
+    const refreshId = window.setInterval(loadAdminNotifications, 15000);
+
+    getReportsSocket()
+      .then((socket) => {
+        if (!isMounted) return;
+        socket.emit("register", String(savedUser.id));
+        socket.on(`notification-${savedUser.id}`, replaceAdminNotifications);
+        socket.on(`newNotification-${savedUser.id}`, mergeAdminNotification);
+      })
+      .catch((socketError) => {
+        console.error("Unable to connect admin notification socket:", socketError);
+      });
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(refreshId);
+      getReportsSocket()
+        .then((socket) => {
+          socket.off(`notification-${savedUser.id}`, replaceAdminNotifications);
+          socket.off(`newNotification-${savedUser.id}`, mergeAdminNotification);
+        })
+        .catch(() => { });
+    };
+  }, [savedUser?.id, savedUser?.role]);
 
   useEffect(() => {
     if (!adminNotificationToast) return;
@@ -247,6 +297,66 @@ const MasterLayout = ({ children }) => {
     };
   }, [location.pathname]);
 
+  const displayName =
+    [savedUser?.firstName, savedUser?.lastName].filter(Boolean).join(" ") ||
+    savedUser?.username ||
+    "User";
+  const displayRole = savedUser?.role
+    ? savedUser.role.charAt(0).toUpperCase() +
+    savedUser.role.slice(1).toLowerCase()
+    : "User";
+  const profilePhoto = normalizeProfilePhoto(savedUser?.profilePhoto);
+  const recentActivityNotifications = (
+    adminNotifications.length ? adminNotifications : activityNotifications
+  ).slice(0, 5);
+  const handleLogout = async () => {
+    const token = localStorage.getItem("authToken");
+
+    if (token) {
+      try {
+        await fetch(`${process.env.REACT_APP_API_URL || "http://localhost:5000"}/attendance/logout`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+      } catch (error) {
+        console.error("Unable to update attendance logout:", error);
+      }
+    }
+
+    localStorage.removeItem("authToken");
+    if (savedUser?.id) localStorage.removeItem(`swamiAttendanceSessionStartedAt:${savedUser.id}`);
+    localStorage.removeItem("authUser");
+    navigate("/sign-in");
+  };
+
+  const handleNavbarSearch = (event) => {
+    event.preventDefault();
+
+    const query = navbarSearch.trim().toLowerCase();
+    if (!query) return;
+
+    const sidebarLinks = Array.from(
+      document.querySelectorAll(".sidebar-menu a[href]")
+    )
+      .map((link) => ({
+        href: link.getAttribute("href"),
+        text: link.textContent.replace(/\s+/g, " ").trim(),
+      }))
+      .filter((link) => link.href && link.href !== "#" && link.text);
+
+    const normalize = (value) => value.toLowerCase();
+    const matchedLink =
+      sidebarLinks.find((link) => normalize(link.text) === query) ||
+      sidebarLinks.find((link) => normalize(link.text).startsWith(query)) ||
+      sidebarLinks.find((link) => normalize(link.text).includes(query));
+
+    if (!matchedLink) return;
+
+    const targetUrl = new URL(matchedLink.href, window.location.origin);
+    navigate(`${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`);
+    setNavbarSearch("");
+  };
+
   let sidebarControl = () => {
     seSidebarActive(!sidebarActive);
   };
@@ -255,17 +365,24 @@ const MasterLayout = ({ children }) => {
     setMobileMenu(!mobileMenu);
   };
 
+  if (isSalesRole && !isAdminRole) {
+    return null;
+  }
+
   return (
-    <section className={mobileMenu ? "admin-app overlay active" : "admin-app overlay "}>
+    <section
+      className={`${mobileMenu ? "admin-app overlay active" : "admin-app overlay"} ${isWhatsAppPage ? "admin-whatsapp-screen" : ""
+        }`.trim()}
+    >
       {adminNotificationToast && (
         <div className='admin-notification-toast' role='status' aria-live='polite'>
           <span className='admin-notification-toast__icon'>
             <Icon icon='iconoir:bell-notification' />
           </span>
           <div>
-            <strong>{adminNotificationToast.title}</strong>
+            <strong>{getNotificationTitle(adminNotificationToast)}</strong>
             <p>
-              {adminNotificationToast.leadName}: {adminNotificationToast.description}
+              {getNotificationDescription(adminNotificationToast)}
             </p>
           </div>
           <button type='button' onClick={() => setAdminNotificationToast(null)} aria-label='Dismiss notification'>
@@ -279,8 +396,8 @@ const MasterLayout = ({ children }) => {
           sidebarActive
             ? "sidebar active "
             : mobileMenu
-            ? "sidebar sidebar-open"
-            : "sidebar"
+              ? "sidebar sidebar-open"
+              : "sidebar"
         }
       >
         <button
@@ -332,7 +449,7 @@ const MasterLayout = ({ children }) => {
                   </NavLink>
                  </li> */}
 
-                 <li>
+                <li>
                   <NavLink
                     to='/dashboard'
                     className={(navData) =>
@@ -345,7 +462,7 @@ const MasterLayout = ({ children }) => {
                 </li>
 
 
-                
+
                 <li>
                   <NavLink
                     to='/svp-dashboard'
@@ -434,10 +551,10 @@ const MasterLayout = ({ children }) => {
                     POS & Inventory
                   </NavLink>
                 </li> */}
-                
+
               </ul>
             </li>
-{/* 
+            {/* 
             <li className='sidebar-menu-group-title'>Application</li>
             <li>
               <NavLink
@@ -534,19 +651,19 @@ const MasterLayout = ({ children }) => {
             </li> */}
 
             {/* Ai Application Dropdown */}
-            
+
 
             {/* Request */}
             <li className='dropdown'>
               <Link to='#'>
-                
+
                 <i class="ri-database-2-line" />
-                
+
                 <span>Leads Management</span>
               </Link>
               <ul className='sidebar-submenu'>
                 <li>
-                  <NavLink 
+                  <NavLink
                     to='/add-lead'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
@@ -567,7 +684,7 @@ const MasterLayout = ({ children }) => {
                     All Leads
                   </NavLink>
                 </li>
-                
+
                 <li>
                   <NavLink
                     to='/import-leads'
@@ -579,6 +696,17 @@ const MasterLayout = ({ children }) => {
                     Smart Import
                   </NavLink>
                 </li>
+                {/* <li>
+                  <NavLink
+                    to='/lead-merge'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-info-main w-auto' />{" "}
+                    Lead Merge
+                  </NavLink>
+                </li> */}
                 <li>
                   <NavLink
                     to='/trash'
@@ -1192,24 +1320,24 @@ const MasterLayout = ({ children }) => {
               </ul>
             </li>
 
-            {/* Finance Dropdown */}
+            {/* Inventory Dropdown */}
             <li className='dropdown'>
               <Link to='#'>
                 <Icon icon='solar:pie-chart-outline' className='menu-icon' />
-                <span>Products & Services</span>
+                <span>Inventory</span>
               </Link>
               <ul className='sidebar-submenu'>
-                {/* <li>
+                <li>
                   <NavLink
-                    to='/line-chart'
+                    to='/preview-inventory'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
                   >
-                    <i className='ri-circle-fill circle-icon text-danger-main w-auto' />{" "}
-                    Product Management
+                    <i className='ri-circle-fill circle-icon text-primary-600 w-auto' />{" "}
+                    Preview Inventory
                   </NavLink>
-                </li> */}
+                </li>
                 <li>
                   <NavLink
                     to='/projects'
@@ -1328,7 +1456,7 @@ const MasterLayout = ({ children }) => {
             {/* Users Dropdown */}
             <li className='dropdown'>
               <Link to='#'>
-                <Icon icon='flowbite:users-group-outline'className='menu-icon'/>
+                <Icon icon='flowbite:users-group-outline' className='menu-icon' />
                 <span>Manage User</span>
               </Link>
               <ul className='sidebar-submenu'>
@@ -1749,7 +1877,8 @@ const MasterLayout = ({ children }) => {
       </aside>
 
       <main
-        className={sidebarActive ? "dashboard-main active" : "dashboard-main"}
+        className={`${sidebarActive ? "dashboard-main active" : "dashboard-main"} ${isWhatsAppPage ? "whatsapp-screen" : ""
+          }`.trim()}
       >
         <div className='navbar-header'>
           <div className='row align-items-center justify-content-between'>
@@ -2197,6 +2326,11 @@ const MasterLayout = ({ children }) => {
                       icon='iconoir:bell'
                       className='text-primary-light text-xl'
                     />
+                    {adminUnreadCount > 0 && (
+                      <span className='admin-notification-count'>
+                        {Math.min(adminUnreadCount, 99)}
+                      </span>
+                    )}
                   </button>
                   <div className='dropdown-menu to-top dropdown-menu-lg p-0 admin-notifications-menu'>
                     <div className='admin-notifications-head'>
@@ -2206,7 +2340,7 @@ const MasterLayout = ({ children }) => {
                         </h6>
                       </div>
                       <span className='text-primary-600 fw-semibold text-lg w-40-px h-40-px rounded-circle bg-base d-flex justify-content-center align-items-center'>
-                        {activityNotifications.length.toString().padStart(2, "0")}
+                        {adminUnreadCount.toString().padStart(2, "0")}
                       </span>
                     </div>
                     <div className='admin-notifications-list scroll-sm'>
@@ -2217,10 +2351,9 @@ const MasterLayout = ({ children }) => {
                       ) : (
                         recentActivityNotifications.map((notification, index) => (
                           <Link
-                            to='/activity-notifications'
-                            className={`admin-notification-item ${
-                              index % 2 ? "bg-neutral-50" : ""
-                            }`}
+                            to={notification.link || "/activity-notifications"}
+                            className={`admin-notification-item ${index % 2 ? "bg-neutral-50" : ""
+                              }`}
                             key={notification.id}
                           >
                             <div className='admin-notification-content text-black hover-bg-transparent hover-text-primary'>
@@ -2229,10 +2362,10 @@ const MasterLayout = ({ children }) => {
                               </span>
                               <div className='admin-notification-copy'>
                                 <h6 className='admin-notification-title'>
-                                  {notification.title}
+                                  {getNotificationTitle(notification)}
                                 </h6>
                                 <p className='admin-notification-message'>
-                                  {notification.leadName}: {notification.description}
+                                  {getNotificationDescription(notification)}
                                 </p>
                                 <p className='admin-notification-meta'>
                                   {notification.meta || `Done by ${notification.actorName || "Sales User"}`}
@@ -2343,21 +2476,28 @@ const MasterLayout = ({ children }) => {
         </div>
 
         {/* dashboard-main-body */}
-        <div className='dashboard-main-body'>{children}</div>
+        <div
+          className={`dashboard-main-body ${isWhatsAppPage ? "whatsapp-main-body" : ""
+            }`.trim()}
+        >
+          {children}
+        </div>
 
         {/* Footer section */}
-        <footer className='d-footer'>
-          <div className='row align-items-center justify-content-between'>
-            <div className='col-auto'>
-              <p className='mb-0'></p>
+        {!isWhatsAppPage && (
+          <footer className='d-footer'>
+            <div className='row align-items-center justify-content-between'>
+              <div className='col-auto'>
+                <p className='mb-0'></p>
+              </div>
+              <div className='col-auto'>
+                <p className='mb-0'>
+                  <span className='text-primary-600'></span>
+                </p>
+              </div>
             </div>
-            <div className='col-auto'>
-              <p className='mb-0'>
-              <span className='text-primary-600'></span>
-              </p>
-            </div>
-          </div>
-        </footer>
+          </footer>
+        )}
       </main>
     </section>
   );

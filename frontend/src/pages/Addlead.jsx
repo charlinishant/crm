@@ -743,9 +743,9 @@ const ADDLEAD = () => {
                   </select>
                 </div>
 
-                {/* TEAMS */}
+                {/* ASSIGNED TO / SALES EXECUTIVE */}
                 <div className="lead-group lead-full">
-                  <label>TEAMS</label>
+                  <label>ASSIGNED TO (SALES EXECUTIVE)</label>
                   <select
                     name="teamId"
                     value={formData.teamId}
@@ -753,7 +753,7 @@ const ADDLEAD = () => {
                     disabled={loadingUsers}
                   >
                     <option value="">
-                      {loadingUsers ? "Loading users..." : "Select user"}
+                      {loadingUsers ? "Loading users..." : "Select sales executive"}
                     </option>
                     {users.map((user) => (
                       <option key={user.id || user.email} value={user.id}>
@@ -1119,10 +1119,131 @@ const ADDLEAD = () => {
       <input type="text" name="area" placeholder="Area" value={formData.area} onChange={handleChange} />
     </div>
 
-    {/* FUNDING SOURCE */}
-    <div className="lead-group lead-full">
-      <label>FUNDING SOURCE</label>
-      <input type="text" name="fundingSource" placeholder="Funding Source" value={formData.fundingSource || formData.fundingSouurce || ""} onChange={handleChange} />
+    {/* LEAD SOURCE & CHANNEL PARTNER ATTRIBUTION */}
+    <div className="lead-group lead-full p-3 rounded" style={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" }}>
+      <div className="d-flex align-items-center justify-content-between mb-2">
+        <label className="fw-bold mb-0" style={{ color: "#1e293b", fontSize: "14px" }}>
+          LEAD SOURCE ATTRIBUTION {Boolean(editLeadId && (formData.tags?.includes("sourceLocked:true") || formData.fundingSource || formData.channelPartner)) ? (
+            <span className="badge bg-danger ms-2" style={{ fontSize: "11px" }}>🔒 PERMANENTLY LOCKED</span>
+          ) : (
+            <span className="badge bg-warning text-dark ms-2" style={{ fontSize: "11px" }}>🔒 Will lock permanently on save</span>
+          )}
+        </label>
+      </div>
+
+      {Boolean(editLeadId && (formData.tags?.includes("sourceLocked:true") || formData.fundingSource || formData.channelPartner)) ? (
+        <div className="row g-2 align-items-center">
+          <div className="col-md-4">
+            <input
+              type="text"
+              className="form-control bg-light"
+              value={formData.fundingSource || "Direct / Other"}
+              readOnly
+              disabled
+              style={{ cursor: "not-allowed", fontWeight: "600" }}
+            />
+          </div>
+          {formData.channelPartner && (
+            <>
+              <div className="col-md-4">
+                <input
+                  type="text"
+                  className="form-control bg-light"
+                  value={`CP: ${formData.channelPartner}`}
+                  readOnly
+                  disabled
+                  style={{ cursor: "not-allowed", fontWeight: "600" }}
+                />
+              </div>
+              <div className="col-md-4">
+                <input
+                  type="text"
+                  className="form-control bg-light"
+                  value={formData.channelPartnerReraId ? `RERA: ${formData.channelPartnerReraId}` : "RERA Verified"}
+                  readOnly
+                  disabled
+                  style={{ cursor: "not-allowed" }}
+                />
+              </div>
+            </>
+          )}
+          <small className="text-muted mt-1">
+            🔒 Lead source attribution is permanently immutable for the life of this lead (no edit or admin override).
+          </small>
+        </div>
+      ) : (
+        <div className="row g-2">
+          <div className="col-md-4">
+            <select
+              className="form-select"
+              name="fundingSource"
+              value={formData.fundingSource || ""}
+              onChange={(e) => {
+                const val = e.target.value;
+                setFormData((prev) => ({
+                  ...prev,
+                  fundingSource: val,
+                  ...(val !== "Channel Partner" ? { channelPartner: "", channelPartnerReraId: "" } : {}),
+                }));
+              }}
+            >
+              <option value="">Select Source</option>
+              <option value="Channel Partner">Channel Partner</option>
+              <option value="Walk-in">Walk-in</option>
+              <option value="Website">Website</option>
+              <option value="Portal">Portal</option>
+              <option value="Reference">Reference</option>
+              <option value="Direct">Direct</option>
+            </select>
+          </div>
+
+          {formData.fundingSource === "Channel Partner" && (
+            <>
+              <div className="col-md-4">
+                <select
+                  className="form-select"
+                  value={formData.channelPartner || ""}
+                  onChange={(e) => {
+                    const cpName = e.target.value;
+                    const cp = users.find(
+                      (u) =>
+                        String(u.role).toUpperCase() === "CHANNEL_PARTNER" &&
+                        ([u.firstName, u.lastName].filter(Boolean).join(" ") === cpName || u.username === cpName || u.email === cpName)
+                    );
+                    setFormData((prev) => ({
+                      ...prev,
+                      channelPartner: cpName,
+                      channelPartnerReraId: cp?.reraNumber || "",
+                    }));
+                  }}
+                >
+                  <option value="">Select Channel Partner</option>
+                  {users
+                    .filter((u) => String(u.role).toUpperCase() === "CHANNEL_PARTNER")
+                    .map((cp) => {
+                      const name = [cp.firstName, cp.lastName].filter(Boolean).join(" ") || cp.username || cp.email;
+                      return (
+                        <option key={cp.id} value={name}>
+                          {name} {cp.reraNumber ? `(${cp.reraNumber})` : ""}
+                        </option>
+                      );
+                    })}
+                </select>
+              </div>
+              <div className="col-md-4">
+                <input
+                  type="text"
+                  className="form-control bg-light"
+                  placeholder="CP RERA ID (Auto-filled)"
+                  value={formData.channelPartnerReraId ? `RERA: ${formData.channelPartnerReraId}` : ""}
+                  readOnly
+                  style={{ cursor: "not-allowed", fontWeight: "600", color: "#334155" }}
+                />
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
 
     {/* TRANSACTION TYPE */}

@@ -8,7 +8,12 @@ const path = require("path")
 const prisma = require("./lib/prisma")
 const {initSocket} = require("./socket")
 const { initializeCallbackReminders } = require("./services/callbackReminder.service")
+const { initializeSiteVisitReminders } = require("./services/siteVisitNotification.service")
 const { initializeUnitHoldReleaseJob } = require("./services/unitHold.service")
+const mcubeConfig = require("./services/mcubeConfig.service")
+
+initializeCallbackReminders()
+initializeSiteVisitReminders()
 
 const app = express()
 const BODY_LIMIT = process.env.BODY_LIMIT || "250mb"
@@ -59,10 +64,16 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")))
 app.use("/projects", projectRouter)
 app.use("/api/projects", projectRouter)
 app.use("/auth", authRouter)
+app.use("/api/auth", authRouter)
+app.use("/api/authentication", authRouter)
 app.use("/lead-notes", leadNoteRouter)
 app.use("/lead-activities", leadActivityRouter)
 app.use("/leads", leadRouter)
+app.use("/api/leads", leadRouter)
 app.use("/users", userRouter)
+app.use("/user", userRouter)
+app.use("/api/users", userRouter)
+app.use("/api/user", userRouter)
 app.use("/teams", teamRouter)
 app.use("/tower", towerRouter)
 app.use("/towers", towerRouter)
@@ -116,6 +127,24 @@ app.use((error, req, res, next) => {
 })
 
 const PORT = process.env.PORT || 5000
+
+// Log MCube configuration status
+const mcubeStatus = mcubeConfig.getSafeStatus()
+console.log("MCube integration:", mcubeStatus.enabled ? "ENABLED" : "DISABLED")
+if (mcubeStatus.enabled) {
+  console.log("MCube click-to-call:", mcubeStatus.clickToCallConfigured ? "CONFIGURED" : "NOT CONFIGURED")
+  console.log("MCube disposition:", mcubeStatus.dispositionConfigured ? "CONFIGURED" : "NOT CONFIGURED")
+  console.log("MCube webphone:", mcubeStatus.webphoneConfigured ? "CONFIGURED" : "NOT CONFIGURED")
+  console.log("MCube webhook:", mcubeStatus.webhookConfigured ? "CONFIGURED" : "NOT CONFIGURED")
+
+  if (!mcubeStatus.isValid) {
+    console.warn("MCube configuration has errors:")
+    mcubeStatus.validationErrors.forEach(error => {
+      console.warn("  -", error)
+    })
+  }
+}
+
 server.listen(PORT, () => {
   console.log(`Server running on ${PORT}`)
   initializeCallbackReminders().catch((error) => {

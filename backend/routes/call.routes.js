@@ -26,6 +26,10 @@ const {
   getRecording,
   answerInboundCall,
   rejectInboundCall,
+  getMyMcubeAgentMapping,
+  listMcubeAgentMappingsAdmin,
+  saveMcubeAgentMappingAdmin,
+  deleteMcubeAgentMappingAdmin,
 } = require("../controllers/call.controller")
 
 const router = Router()
@@ -34,6 +38,10 @@ router.post("/start", authenticate, startCall)
 router.post("/browser-phone/start", authenticate, startBrowserPhone)
 router.post("/mcube/click-to-call", authenticate, clickToCallLead)
 router.get("/browser-phone/widget", authenticate, getBrowserPhoneWidget)
+router.get("/mcube/agent/me", authenticate, getMyMcubeAgentMapping)
+router.get("/mcube/agents", authenticate, listMcubeAgentMappingsAdmin)
+router.post("/mcube/agents", authenticate, saveMcubeAgentMappingAdmin)
+router.delete("/mcube/agents/:userId", authenticate, deleteMcubeAgentMappingAdmin)
 router.post("/dispose", authenticate, disposeCall)
 router.put("/disposition/:id", authenticate, updateDisposition)
 router.post("/answer/:id", authenticate, answerInboundCall)

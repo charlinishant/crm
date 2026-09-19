@@ -16,9 +16,13 @@ async function sendNotification(userId, title, description="", options = {}){
         if (existing) return existing
     }
 
+    const finalDescription = options.dedupeKey && !description.includes(options.dedupeKey)
+        ? `${description}\n${options.dedupeKey}`
+        : description
+
     const notification = await prisma.notification.create({data:{
         titile:title,
-        description:description,
+        description:finalDescription,
         link:options.link || "",
         userId:numericUserId
     }})

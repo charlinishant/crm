@@ -4,6 +4,9 @@ const columnDefinitions = {
   FloorPlan: [
     ["floorRiseEnabled", "BOOLEAN NOT NULL DEFAULT false"],
   ],
+  User: [
+    ["reraNumber", "VARCHAR(191) NULL"],
+  ],
   Booking: [
     ["floorRiseEnabled", "BOOLEAN NOT NULL DEFAULT false"],
     ["floorRisePerSqft", "DOUBLE NULL"],

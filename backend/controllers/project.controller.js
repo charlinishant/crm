@@ -76,13 +76,7 @@ const normalizeSalesIds = (salesIds, fallbackSalesId) => {
     return [...new Set(values.map(Number).filter(Number.isInteger))]
 }
 
-const assertProjectModelRules = (data, salesIds) => {
-    if(salesIds.length > 3){
-        const error = new Error("Select at most 3 sales users for a project.")
-        error.statusCode = 400
-        throw error
-    }
-
+const assertProjectModelRules = (data) => {
     if(data.active === true && data.inventory !== true){
         const error = new Error("Project cannot be Active until Inventory is Yes.")
         error.statusCode = 400

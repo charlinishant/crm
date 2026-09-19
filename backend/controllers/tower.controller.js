@@ -20,6 +20,8 @@ const towerSelect = {
     projectId:true,
     totalFloor:true,
     reraTowerId:true,
+    image:true,
+    elevationPhoto:true,
     project:{
         select:{
             id:true,
@@ -46,6 +48,8 @@ const formatTowerResponse = (tower) => {
         totalFloor: tower.totalFloor,
         totalFloors: tower.totalFloor,
         reraTowerId: tower.reraTowerId,
+        image: tower.image || tower.elevationPhoto || null,
+        elevationPhoto: tower.elevationPhoto || tower.image || null,
         project: tower.project,
         floorPlanCount: tower._count?.floors ?? 0,
         unitCount: tower._count?.units ?? 0,
@@ -87,6 +91,12 @@ const buildTowerPayload = (body = {}, { requireRequiredFields = false } = {}) =>
     const rawReraTowerId = body.reraTowerId ?? body.reraId
     if(rawReraTowerId !== undefined){
         data.reraTowerId = String(rawReraTowerId || "").trim() || null
+    }
+
+    const rawImage = body.image ?? body.elevationPhoto
+    if(rawImage !== undefined){
+        data.image = String(rawImage || "").trim() || null
+        data.elevationPhoto = String(rawImage || "").trim() || null
     }
 
     if(requireRequiredFields){
