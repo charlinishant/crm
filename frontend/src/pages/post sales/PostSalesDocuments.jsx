@@ -35,6 +35,8 @@ const getBrandedDocumentHtml = (html = "") => {
 };
 
 const DOC_TYPES = [
+  { type: "BOOKING_COST_SHEET_PDF", icon: "📊", label: "Cost Sheet & Schedule (PDF)", desc: "Authoritative Jaiganga-style Cost Sheet & Payment Schedule", color: "#2563eb", bg: "#eff6ff" },
+  { type: "BOOKING_COST_SHEET_XLSX", icon: "📑", label: "Cost Sheet Excel Master", desc: "Editable XLSX Master with live formulas", color: "#16a34a", bg: "#f0fdf4" },
   { type: "WELCOME_LETTER",      icon: "🏠", label: "Welcome Letter",          desc: "First letter sent on booking confirmation",     color: "#3b82f6", bg: "#eff6ff" },
   { type: "ALLOTMENT_LETTER",    icon: "📋", label: "Allotment Letter",         desc: "Formal unit allotment confirmation letter",     color: "#10b981", bg: "#f0fdf4" },
   { type: "AGREEMENT",           icon: "📝", label: "Agreement for Sale",       desc: "Full ATS summary with all terms",               color: "#8b5cf6", bg: "#f5f3ff" },
@@ -117,20 +119,72 @@ const PostSalesDocuments = () => {
     finally { setGenerating(null); }
   };
 
-  const handlePreview = (doc) => setPreviewDoc(doc);
+  const handlePreview = (doc) => {
+    if (doc.type === "BOOKING_COST_SHEET_XLSX") {
+      const generatedDocsList = bookingDetails?.generatedDocuments || [];
+      const pdfDoc = generatedDocsList.find(d => d.type === "BOOKING_COST_SHEET_PDF");
+      if (pdfDoc && pdfDoc.htmlContent) {
+        setPreviewDoc(pdfDoc);
+      } else {
+        window.open(`${API_URL}/api/bookings/${selectedBookingId}/cost-sheet/pdf`, "_blank");
+      }
+      return;
+    }
+    setPreviewDoc(doc);
+  };
+
   const handlePrint = (doc) => {
+    if (doc.type === "BOOKING_COST_SHEET_XLSX") {
+      const generatedDocsList = bookingDetails?.generatedDocuments || [];
+      const pdfDoc = generatedDocsList.find(d => d.type === "BOOKING_COST_SHEET_PDF");
+      if (pdfDoc && pdfDoc.htmlContent) {
+        const w = window.open("", "_blank");
+        w.document.write(getBrandedDocumentHtml(pdfDoc.htmlContent));
+        w.document.close();
+        setTimeout(() => w.print(), 500);
+      } else {
+        window.open(`${API_URL}/api/bookings/${selectedBookingId}/cost-sheet/pdf?action=print`, "_blank");
+      }
+      return;
+    }
     const w = window.open("", "_blank");
     w.document.write(getBrandedDocumentHtml(doc.htmlContent));
     w.document.close();
     setTimeout(() => w.print(), 500);
   };
-  const handleDownload = (doc) => {
+
+  const handleDownload = async (doc) => {
+    if (doc.type === "BOOKING_COST_SHEET_XLSX") {
+      try {
+        const r = await fetch(`${API_URL}/api/bookings/${selectedBookingId}/cost-sheet`, { headers: authHeaders() });
+        if (!r.ok) throw new Error("Failed to download excel");
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `cost-sheet-${selectedBookingId}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        window.open(`${API_URL}/api/bookings/${selectedBookingId}/cost-sheet`, "_blank");
+      }
+      // Log download
+      fetch(`${API_URL}/post-sales/documents/audit-log`, {
+        method: "POST", headers: authHeaders(),
+        body: JSON.stringify({ bookingId: Number(selectedBookingId), type: doc.type, action: "DOWNLOAD", details: `Downloaded ${doc.type}` })
+      }).catch(() => {});
+      return;
+    }
     const blob = new Blob([getBrandedDocumentHtml(doc.htmlContent)], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = `${doc.title || doc.type}.html`;
+    document.body.appendChild(a);
     a.click();
+    a.remove();
     URL.revokeObjectURL(url);
     // Log download
     fetch(`${API_URL}/post-sales/documents/audit-log`, {

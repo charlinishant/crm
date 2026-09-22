@@ -162,8 +162,8 @@ const validateFloorPlan = (data) => {
         validationErrors.floorRiseEnabled = "Floor-rise values must be empty when Floor Rise is No"
     }
 
-    if (data.baseFloorForFloorRise !== null && data.baseFloorForFloorRise < 1) {
-        validationErrors.baseFloorForFloorRise = "Base Floor for Floor Rise must be at least 1"
+    if (data.baseFloorForFloorRise !== null && data.baseFloorForFloorRise < 0) {
+        validationErrors.baseFloorForFloorRise = "Base Floor for Floor Rise cannot be negative"
     }
 
     if (
@@ -174,12 +174,12 @@ const validateFloorPlan = (data) => {
         return "Applicable Floor From must be less than or equal to Applicable Floor To"
     }
 
-    if (data.applicableFloorFrom !== null && data.applicableFloorFrom < 1) {
-        return "Applicable Floor From must be at least 1"
+    if (data.applicableFloorFrom !== null && data.applicableFloorFrom < 0) {
+        return "Applicable Floor From cannot be negative"
     }
 
-    if (data.applicableFloorTo !== null && data.applicableFloorTo < 1) {
-        return "Applicable Floor To must be at least 1"
+    if (data.applicableFloorTo !== null && data.applicableFloorTo < 0) {
+        return "Applicable Floor To cannot be negative"
     }
 
     if (
@@ -250,8 +250,8 @@ const validateFloorPlanTowerBounds = async (data) => {
     }
 
     const totalFloors = Number(tower.totalFloor) || 0
-    if (totalFloors < 1) {
-        return "Selected tower must have Total Floors set to at least 1 before adding floor plans"
+    if (totalFloors < 0) {
+        return "Selected tower Total Floors cannot be negative"
     }
 
     if (data.applicableFloorTo !== null && data.applicableFloorTo > totalFloors) {
@@ -271,7 +271,7 @@ const applyDerivedFloorPlanFields = async (data) => {
         ...inheritedData,
         totalUnitsOfPlan: getClaimedSlots(inheritedData).length,
         unitNumbers: getClaimedSlots(inheritedData)
-            .map((slot) => buildGeneratedUnitNumber(slot.floor, slot.unitPosition))
+            .map((slot) => buildGeneratedUnitNumber(slot.floor, slot.unitPosition, inheritedData.type, inheritedData.category))
             .filter(Boolean)
             .join(", ") || null,
     }
@@ -505,8 +505,17 @@ const getUnitPricingForFloor = (floorPlan, floor) => {
     }
 }
 
-const buildGeneratedUnitNumber = (floor, unitPosition) => {
+const buildGeneratedUnitNumber = (floor, unitPosition, type = "", category = "") => {
     if (!Number.isInteger(Number(floor)) || !unitPosition) return ""
+    const isCommercial = 
+        COMMERCIAL_TYPES.has(type) ||
+        COMMERCIAL_CATEGORIES.has(category) ||
+        String(type || "").toLowerCase().includes("commercial") ||
+        String(category || "").toLowerCase() === "shop"
+
+    if (isCommercial) {
+        return `SH-${String(unitPosition).padStart(2, "0")}`
+    }
 
     return `${Number(floor)}${String(unitPosition).padStart(2, "0")}`
 }
@@ -530,7 +539,7 @@ const formatFloorPlanResponse = (floorPlan) => {
 const createUnitsFromFloorPlanTemplate = async (tx, floorPlan) => {
     const generatedUnits = getClaimedSlots(floorPlan)
         .map((slot) => ({
-            name: buildGeneratedUnitNumber(slot.floor, slot.unitPosition),
+            name: buildGeneratedUnitNumber(slot.floor, slot.unitPosition, floorPlan.type, floorPlan.category),
             floor: slot.floor,
             unitIndex: Number(slot.unitPosition),
         }))
@@ -612,7 +621,7 @@ const createUnitsFromFloorPlanTemplate = async (tx, floorPlan) => {
 const getGeneratedUnitNamesForFloorPlan = async (tx, floorPlan) => {
     return new Set(
         getClaimedSlots(floorPlan)
-            .map((slot) => buildGeneratedUnitNumber(slot.floor, slot.unitPosition))
+            .map((slot) => buildGeneratedUnitNumber(slot.floor, slot.unitPosition, floorPlan.type, floorPlan.category))
             .filter(Boolean)
     )
 }

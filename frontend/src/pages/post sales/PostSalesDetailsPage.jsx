@@ -84,6 +84,8 @@ const getBrandedDocumentHtml = (html = "") => {
 };
 
 const DOC_META = {
+  BOOKING_COST_SHEET_PDF: { icon: "📊", label: "Cost Sheet & Schedule (PDF)", color: "#2563eb" },
+  BOOKING_COST_SHEET_XLSX: { icon: "📑", label: "Cost Sheet Excel Master", color: "#16a34a" },
   WELCOME_LETTER:     { icon: "🏠", label: "Welcome Letter",          color: "#3b82f6" },
   ALLOTMENT_LETTER:   { icon: "📋", label: "Allotment Letter",         color: "#10b981" },
   AGREEMENT:          { icon: "📝", label: "Agreement for Sale",       color: "#8b5cf6" },
@@ -169,8 +171,64 @@ const PostSalesDetailsPage = () => {
     finally { setGenerating(null); }
   };
 
-  const handlePreview = (doc) => setPreviewDoc(doc);
+  const handleDownload = async (doc) => {
+    if (doc.type === "BOOKING_COST_SHEET_XLSX") {
+      try {
+        const r = await fetch(`${API_URL}/api/bookings/${bookingId}/cost-sheet`, { headers: authHeaders() });
+        if (!r.ok) throw new Error("Failed to download excel");
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `cost-sheet-${bookingId}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        window.open(`${API_URL}/api/bookings/${bookingId}/cost-sheet`, "_blank");
+      }
+      return;
+    }
+    const blob = new Blob([getBrandedDocumentHtml(doc.htmlContent)], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${doc.title || doc.type}.html`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePreview = (doc) => {
+    if (doc.type === "BOOKING_COST_SHEET_XLSX") {
+      const generatedDocsList = booking?.generatedDocuments || [];
+      const pdfDoc = generatedDocsList.find(d => d.type === "BOOKING_COST_SHEET_PDF");
+      if (pdfDoc && pdfDoc.htmlContent) {
+        setPreviewDoc(pdfDoc);
+      } else {
+        window.open(`${API_URL}/api/bookings/${bookingId}/cost-sheet/pdf`, "_blank");
+      }
+      return;
+    }
+    setPreviewDoc(doc);
+  };
+
   const handlePrint = (doc) => {
+    if (doc.type === "BOOKING_COST_SHEET_XLSX") {
+      const generatedDocsList = booking?.generatedDocuments || [];
+      const pdfDoc = generatedDocsList.find(d => d.type === "BOOKING_COST_SHEET_PDF");
+      if (pdfDoc && pdfDoc.htmlContent) {
+        const w = window.open("", "_blank");
+        w.document.write(getBrandedDocumentHtml(pdfDoc.htmlContent));
+        w.document.close();
+        setTimeout(() => w.print(), 500);
+      } else {
+        window.open(`${API_URL}/api/bookings/${bookingId}/cost-sheet/pdf?action=print`, "_blank");
+      }
+      return;
+    }
     const w = window.open("", "_blank");
     w.document.write(getBrandedDocumentHtml(doc.htmlContent));
     w.document.close();
@@ -420,13 +478,17 @@ const PostSalesDetailsPage = () => {
                           {isGenerated ? (
                             <>
                               <div style={{ fontSize: 11, color: "#15803d", marginBottom: 10 }}>✓ Generated · {fmtDateTime(existing.createdAt)}</div>
-                              <div style={{ display: "flex", gap: 6 }}>
+                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                                 <button onClick={() => handlePreview(existing)}
                                   style={{ padding: "5px 12px", background: "#eff6ff", color: "#1d4ed8", border: "1px solid #bfdbfe", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                                   👁️ Preview
                                 </button>
-                                <button onClick={() => handlePrint(existing)}
+                                <button onClick={() => handleDownload(existing)}
                                   style={{ padding: "5px 12px", background: "#f0fdf4", color: "#15803d", border: "1px solid #86efac", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
+                                  {type === "BOOKING_COST_SHEET_XLSX" ? "📥 Excel" : "⬇️ Download"}
+                                </button>
+                                <button onClick={() => handlePrint(existing)}
+                                  style={{ padding: "5px 12px", background: "#f8fafc", color: "#475569", border: "1px solid #cbd5e1", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer" }}>
                                   🖨️ Print
                                 </button>
                                 <button onClick={() => handleGenerate(type)} disabled={isGenerating}

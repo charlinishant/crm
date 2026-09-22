@@ -64,12 +64,21 @@ const AddUnits = () => {
   const [error, setError] = useState("");
 
   const generatedUnitNumbers = useMemo(() => {
+    const isCommercial =
+      String(selectedFloorPlan?.type || "").toLowerCase().includes("commercial") ||
+      String(selectedFloorPlan?.category || "").toLowerCase() === "shop" ||
+      String(selectedFloorPlan?.configurationLabel || "").toLowerCase().includes("shop");
+
     return units.map((unit) => {
       const position = formatUnitPosition(unit.unitIndex);
-      if (unit.floor === "" || !position) return "";
-      return `${Number(unit.floor)}${position}`;
+      if (unit.floor === "" || unit.floor === null || unit.floor === undefined || !position) return "";
+      const floorNum = Number(unit.floor);
+      if (isCommercial) {
+        return `SH-${position}`;
+      }
+      return `${floorNum}${position}`;
     });
-  }, [units]);
+  }, [units, selectedFloorPlan]);
 
   useEffect(() => {
     const loadProjects = async () => {
@@ -336,7 +345,7 @@ const AddUnits = () => {
 
                     <div className="add-units-field">
                       <label>FLOOR *</label>
-                      <input name="floor" type="number" min="1" value={unit.floor} onChange={(event) => updateUnit(index, event)} onWheel={(event) => event.currentTarget.blur()} required />
+                      <input name="floor" type="number" min="0" value={unit.floor} onChange={(event) => updateUnit(index, event)} onWheel={(event) => event.currentTarget.blur()} required />
                     </div>
 
                     <div className="add-units-field">

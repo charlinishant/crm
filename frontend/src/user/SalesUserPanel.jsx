@@ -543,7 +543,14 @@ const applyCachedLeadStatusUpdates = (leads = []) => {
 
   return leads.map((lead) => {
     const update = cachedUpdates[String(getLeadId(lead))];
-    return update ? { ...lead, ...update, status: update.status, score: update.score } : lead;
+    const baseLead = update ? { ...lead, ...update, status: update.status, score: update.score } : lead;
+    
+    // Dynamically enforce "Booked" status if lead has any bookings
+    if (baseLead.bookings?.length > 0 && baseLead.status !== "Booked") {
+      return { ...baseLead, status: "Booked", lead_status: "Booked" };
+    }
+    
+    return baseLead;
   });
 };
 
@@ -2363,12 +2370,33 @@ const SalesUserPanel = () => {
       lead?.propertyType ||
       ""
     );
-    const leadSource =
-      lead?.source ||
-      lead?.leadSource ||
-      lead?.campaign ||
-      lead?.tags ||
-      "";
+    // --- Parse source attribution cleanly (never dump raw tags into form) ---
+    const _tags = typeof lead?.tags === 'string' ? lead.tags : '';
+    const _isSourceLocked = _tags.includes('sourceLocked:true') ||
+      (lead?.fundingSource && lead?.fundingSource !== 'Untagged') ||
+      (lead?.channelPartner && lead?.channelPartner !== 'Untagged');
+
+    let _cleanSource = '';
+    let _cleanCp = '';
+    let _cleanRera = '';
+
+    if (_isSourceLocked) {
+      const _srcMatch = _tags.match(/source:\s*([^|]+)/i);
+      _cleanSource = (_srcMatch && _srcMatch[1] ? _srcMatch[1] : '').trim();
+      const _cpMatch = _tags.match(/cp:\s*([^|]+)/i);
+      _cleanCp = (_cpMatch && _cpMatch[1] ? _cpMatch[1] : '').trim();
+      const _reraMatch = _tags.match(/rera:\s*([^|]+)/i);
+      _cleanRera = (_reraMatch && _reraMatch[1] ? _reraMatch[1] : '').trim();
+
+      // Fallbacks from direct fields (these are always clean strings)
+      if (!_cleanSource && lead?.fundingSource && lead.fundingSource !== 'Untagged') _cleanSource = lead.fundingSource;
+      if (!_cleanCp && lead?.channelPartner && lead.channelPartner !== 'Untagged') _cleanCp = lead.channelPartner;
+      if (!_cleanRera && lead?.channelPartnerReraId) _cleanRera = lead.channelPartnerReraId;
+
+      if (_cleanSource.toLowerCase() === 'channel_partner') _cleanSource = 'Channel Partner';
+    }
+
+    const leadSource = _isSourceLocked ? _cleanSource : '';
 
     setOpenActionLeadId(null);
     setBookingLead(lead);
@@ -2431,9 +2459,17 @@ const SalesUserPanel = () => {
   const handleBookingFieldChange = (event) => {
     const { name, value } = event.target;
     const nextValue = name === "source" ? normalizeBookingSource(value) : value;
+    const pAmt = name === "parkingCharges" || name === "parkingAmount" ? Number(value || 0) : null;
     setBookingForm((current) => ({
       ...current,
       [name]: nextValue,
+      ...(name === "parkingCharges" ? { parkingAmount: nextValue } : {}),
+      ...(name === "parkingAmount" ? { parkingCharges: nextValue } : {}),
+      ...(pAmt !== null ? {
+        parkingRequired: pAmt > 0 ? "Yes" : "No",
+        carParkingSlots: pAmt > 0 ? (current.carParkingSlots || "1") : "",
+        parkingType: pAmt > 0 ? (current.parkingType || "Covered") : "",
+      } : {}),
       ...(name === "closingRate" ? { closingBaseRate: nextValue } : {}),
       ...(name === "source" && !isChannelPartnerSource(nextValue)
         ? {
@@ -2442,7 +2478,7 @@ const SalesUserPanel = () => {
           cpReraNumber: "",
         }
         : {}),
-      ...(name === "parkingRequired" && value === "No"
+      ...(name === "parkingRequired" && value === "No" && !pAmt
         ? {
           carParkingSlots: "",
           parkingType: "",
@@ -2450,6 +2486,7 @@ const SalesUserPanel = () => {
           twoWheelerSlots: "",
           basementStoreroomArea: "",
           parkingCharges: "0",
+          parkingAmount: "0",
         }
         : {}),
     }));
@@ -2511,11 +2548,13 @@ const SalesUserPanel = () => {
     setBookingMessage("");
 
     try {
+      const rawParking = Number(bookingForm.parkingCharges || bookingForm.parkingAmount || 0);
+      const isParkingRequired = rawParking > 0 || bookingForm.parkingRequired === "Yes";
       const savePricing = calculateBookingPricing({
         reraArea: bookingForm.reraArea || bookingForm.carpetArea,
         baseRate: bookingForm.baseRate,
         closingRate: bookingForm.closingRate ?? bookingForm.closingBaseRate ?? bookingForm.baseRate,
-        parkingAmount: bookingForm.parkingRequired === "No" ? 0 : bookingForm.parkingCharges,
+        parkingAmount: rawParking,
         gstPercent: 5,
         stampDutyPercent: 6,
         legalCharges: bookingForm.legalDocumentationCharges,
@@ -2541,7 +2580,11 @@ const SalesUserPanel = () => {
           bookingDate: bookingForm.bookingDate || bookingForm.bookedOn || new Date().toISOString().slice(0, 10),
           saleableArea: bookingForm.saleableArea || bookingForm.carpetArea,
           closingRate: bookingForm.closingRate ?? bookingForm.closingBaseRate ?? bookingForm.baseRate,
+          parkingRequired: isParkingRequired ? "Yes" : "No",
+          carParkingSlots: isParkingRequired ? (bookingForm.carParkingSlots || "1") : "",
+          parkingType: isParkingRequired ? (bookingForm.parkingType || "Covered") : "",
           parkingCharges: String(savePricing.parkingAmount),
+          parkingAmount: String(savePricing.parkingAmount),
           agreementValue: String(savePricing.agreementValue),
           totalPrice: String(savePricing.totalAllInclusiveCost),
           soldPrice: String(savePricing.totalAllInclusiveCost),
@@ -2563,6 +2606,7 @@ const SalesUserPanel = () => {
         ...bookingForm,
         ...result,
         parkingCharges: result?.parkingCharges ?? savePricing.parkingAmount,
+        parkingAmount: result?.parkingAmount ?? result?.parkingCharges ?? savePricing.parkingAmount,
         agreementValue: result?.agreementValue ?? savePricing.agreementValue,
         totalPrice: result?.totalPrice ?? savePricing.totalAllInclusiveCost,
         soldPrice: result?.soldPrice ?? result?.totalPrice ?? savePricing.totalAllInclusiveCost,

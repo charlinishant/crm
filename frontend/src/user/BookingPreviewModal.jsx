@@ -1,5 +1,11 @@
 import React from "react";
-import { FaEnvelope, FaPrint, FaRegFilePdf, FaTimes, FaWhatsapp } from "react-icons/fa";
+import { FaEnvelope, FaFileExcel, FaPrint, FaRegFilePdf, FaTimes, FaWhatsapp } from "react-icons/fa";
+
+const API_URL =
+  process.env.REACT_APP_API_URL ||
+  (typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname)
+    ? window.location.origin
+    : "http://localhost:5000");
 
 const formatMoney = (value) => {
   if (value === undefined || value === null || value === "") return "-";
@@ -219,6 +225,10 @@ const BookingPreviewModal = ({ booking, lead, onClose }) => {
   };
 
   const downloadPdf = () => {
+    if (booking.id) {
+      window.open(`${API_URL}/api/bookings/${booking.id}/cost-sheet/pdf`, "_blank");
+      return;
+    }
     const url = URL.createObjectURL(getPdfBlob());
     const link = document.createElement("a");
     link.href = url;
@@ -229,7 +239,40 @@ const BookingPreviewModal = ({ booking, lead, onClose }) => {
     URL.revokeObjectURL(url);
   };
 
+  const downloadExcel = async () => {
+    if (!booking.id) return;
+    try {
+      const token = localStorage.getItem("authToken");
+      const response = await fetch(`${API_URL}/api/bookings/${booking.id}/cost-sheet`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (!response.ok) throw new Error("Failed");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `cost-sheet-${booking.unit || booking.id}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (_) {
+      window.open(`${API_URL}/api/bookings/${booking.id}/cost-sheet`, "_blank");
+    }
+  };
+
   const printBooking = () => {
+    if (booking.id) {
+      const printWindow = window.open(`${API_URL}/api/bookings/${booking.id}/cost-sheet/pdf?action=print`, "_blank");
+      if (printWindow) {
+        setTimeout(() => {
+          try {
+            printWindow.print();
+          } catch (_) {}
+        }, 1000);
+        return;
+      }
+    }
     const printWindow = window.open("", "_blank", "noopener,noreferrer");
     if (!printWindow) return;
     printWindow.document.write(getDocumentHtml());
@@ -261,6 +304,7 @@ const BookingPreviewModal = ({ booking, lead, onClose }) => {
         </div>
 
         <footer className="booking-preview-actions">
+          <button type="button" className="btn btn-success" style={{ background: "#16a34a", borderColor: "#16a34a", color: "#fff", fontWeight: 700 }} onClick={downloadExcel}><FaFileExcel /> Download Cost Sheet (Excel)</button>
           <button type="button" onClick={downloadPdf}><FaRegFilePdf /> Download Booking PDF</button>
           <button type="button" onClick={printBooking}><FaPrint /> Print Booking</button>
           <button type="button" disabled title="WhatsApp API will be connected later"><FaWhatsapp /> Send WhatsApp</button>

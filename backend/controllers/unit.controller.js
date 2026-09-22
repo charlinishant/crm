@@ -43,11 +43,21 @@ const calculateUnitPricing = (floorPlan, floor) => {
   }
 }
 
-const generateUnitNumber = (floor, position) => {
+const generateUnitNumber = (floor, position, type = "", category = "") => {
   const floorNumber = toNumberOrNull(floor)
   const positionNumber = toNumberOrNull(position)
 
   if (floorNumber === null || positionNumber === null) return ""
+
+  const isCommercial =
+    String(type || "").toLowerCase().includes("commercial") ||
+    String(type || "").toLowerCase().includes("retail") ||
+    String(category || "").toLowerCase() === "shop"
+
+  if (isCommercial) {
+    return `SH-${String(Math.trunc(positionNumber)).padStart(2, "0")}`
+  }
+
   return `${Math.trunc(floorNumber)}${String(Math.trunc(positionNumber)).padStart(2, "0")}`
 }
 
@@ -138,10 +148,11 @@ const getExpectedGeneratedUnitName = (item) =>
   generateUnitNumber(item.floor, item.unitIndex)
 
 const isFloorPlanGeneratedUnitItem = (item, claimedSlotKeys) => {
-  const expectedName = getExpectedGeneratedUnitName(item)
-  return Boolean(expectedName) &&
-    claimedSlotKeys.has(getUnitItemClaimKey(item)) &&
-    String(item.name || "").trim().toUpperCase() === expectedName
+  const nameStr = String(item.name || "").trim().toUpperCase()
+  const expectedResidential = generateUnitNumber(item.floor, item.unitIndex)
+  const expectedCommercial = generateUnitNumber(item.floor, item.unitIndex, "Commercial", "Shop")
+  const matchesName = nameStr === expectedResidential || nameStr === expectedCommercial
+  return Boolean(matchesName) && claimedSlotKeys.has(getUnitItemClaimKey(item))
 }
 
 const getUnitItemTowerFloorPositionKey = (item) => {
@@ -442,8 +453,8 @@ exports.createUnit = async (req, res) => {
       return res.status(400).json({ message: "Project, tower, floor plan, floor, and unit position are required." })
     }
 
-    if (!Number.isInteger(floor) || floor < 1) {
-      return res.status(400).json({ message: "Floor must be a whole number of at least 1." })
+    if (!Number.isInteger(floor) || floor < 0) {
+      return res.status(400).json({ message: "Floor cannot be negative." })
     }
 
     const unitPosition = formatUnitPosition(unitIndex)
@@ -477,7 +488,7 @@ exports.createUnit = async (req, res) => {
       return res.status(400).json({ message: "Selected floor plan must belong to the selected project and tower." })
     }
 
-    const generatedName = generateUnitNumber(floor, unitIndex)
+    const generatedName = generateUnitNumber(floor, unitIndex, floorPlan.type, floorPlan.category)
 
     const floorNumber = Math.trunc(floor)
     const positionNumber = Math.trunc(unitIndex)
@@ -703,6 +714,27 @@ exports.getUnit = async (req, res) => {
           ],
         })
       }
+      if (req.query.floor !== undefined && req.query.floor !== null && req.query.floor !== "") {
+        const fNum = parseInt(req.query.floor)
+        if (!Number.isNaN(fNum)) {
+          andClauses.push({ floor: fNum })
+        }
+      }
+      if (req.query.status) {
+        const s = String(req.query.status).trim()
+        andClauses.push({ status: s })
+      }
+      if (req.query.type) {
+        const t = String(req.query.type).trim()
+        andClauses.push({
+          OR: [
+            { unit: { type: { contains: t } } },
+            { unit: { floor: { is: { type: { contains: t } } } } },
+            { unit: { category: { contains: t } } },
+            { unit: { floor: { is: { category: { contains: t } } } } },
+          ],
+        })
+      }
       if (andClauses.length > 0) {
         unitItemConditions.AND = andClauses
       }
@@ -727,6 +759,22 @@ exports.getUnit = async (req, res) => {
           status:true,
           heldBy:true,
           heldUntil:true,
+          bookings: {
+            select: {
+              id: true,
+              stage: true,
+              customerName: true,
+              leadId: true,
+              lead: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  companyName: true,
+                },
+              },
+            },
+          },
           unit:{
             select:{
               id:true,
@@ -828,8 +876,14 @@ exports.getUnit = async (req, res) => {
           ? Number(rawBathrooms)
           : (parsedBathrooms ?? (bedrooms ? Math.max(1, Math.min(bedrooms, 3)) : null))
 
+        const primaryBooking = (item.bookings || [])[0]
+        const leadName = primaryBooking?.customerName || (primaryBooking?.lead ? [primaryBooking.lead.firstName, primaryBooking.lead.lastName].filter(Boolean).join(" ") || primaryBooking.lead.companyName : null) || null
+        const leadId = primaryBooking?.leadId || primaryBooking?.lead?.id || null
+
         return {
           ...item,
+          leadName,
+          leadId,
           bedrooms,
           bathrooms,
           configurationLabel: item.unit?.floor?.configurationLabel || (bedrooms ? `${bedrooms} BHK` : ""),

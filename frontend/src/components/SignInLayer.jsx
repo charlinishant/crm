@@ -241,12 +241,13 @@ const SignInLayer = () => {
 
           {/* Submit Button */}
           <button
+            className="signin-submit-btn"
             type="submit"
             disabled={isSubmitting}
             style={{
               width: "100%",
               padding: "15px",
-              background: "#f8fafc",
+              background: "#ffffff",
               color: "#1268ea",
               border: "none",
               borderRadius: "999px",

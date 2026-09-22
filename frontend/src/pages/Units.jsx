@@ -163,7 +163,8 @@ const Units = () => {
           carpet: group.floor?.carpet || unit.unit?.floor?.carpet || group.carpet
             ? `${group.floor?.carpet || unit.unit?.floor?.carpet || group.carpet} ${group.floor?.measure === "sqm" || unit.unit?.floor?.measure === "sqm" || group.measure === "sqm" ? "Sq. M." : "Sq. Ft."}`
             : "-",
-          leads: "-",
+          leadId: unit.leadId || unit.bookings?.[0]?.leadId || unit.bookings?.[0]?.lead?.id || null,
+          leads: unit.leadName || unit.bookings?.[0]?.customerName || (unit.bookings?.[0]?.lead ? [unit.bookings[0].lead.firstName, unit.bookings[0].lead.lastName].filter(Boolean).join(" ") || unit.bookings[0].lead.companyName : null) || "None",
           updated: "-",
         }));
       });
@@ -598,6 +599,7 @@ const Units = () => {
                     "CARPET AREA",
                     "BASE RATE",
                     "BASE PRICE",
+                    "LEAD",
                     "STATUS",
                     "ACTIONS",
                   ].map((head) => (
@@ -609,15 +611,15 @@ const Units = () => {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="17" className="floor-empty">Loading units...</td>
+                    <td colSpan="18" className="floor-empty">Loading units...</td>
                   </tr>
                 ) : error ? (
                   <tr>
-                    <td colSpan="17" className="floor-empty text-danger">{error}</td>
+                    <td colSpan="18" className="floor-empty text-danger">{error}</td>
                   </tr>
                 ) : filteredData.length === 0 ? (
                   <tr>
-                    <td colSpan="17" className="floor-empty">{searchQuery ? "No matching units found." : "No units found."}</td>
+                    <td colSpan="18" className="floor-empty">{searchQuery ? "No matching units found." : "No units found."}</td>
                   </tr>
                 ) : (
                   paginatedData.map((item, index) => (
@@ -644,6 +646,17 @@ const Units = () => {
                       <td>{item.carpet}</td>
                       <td>{item.baseRate || "-"}</td>
                       <td className="fw-bold">{item.price}</td>
+                      <td>
+                        {item.leadId ? (
+                          <Link to={`/preview`} state={{ lead: { id: item.leadId, name: item.leads, firstName: item.leads } }} className="fw-semibold text-primary" title="View Lead Details">
+                            {item.leads}
+                          </Link>
+                        ) : (
+                          <span className={item.leads === "None" ? "text-muted" : "fw-medium"}>
+                            {item.leads}
+                          </span>
+                        )}
+                      </td>
                       <td><span className={`unit-status-badge ${String(item.status).toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>{item.status}</span></td>
                       <td className="unit-actions-cell">
                         <button
@@ -749,6 +762,7 @@ const UnitViewModal = ({ unit, onClose }) => (
         <Detail label="Floor Rise Amount" value={unit.floorRiseAmount} />
         <Detail label="Base Price" value={unit.basePrice} />
         <Detail label="Status" value={unit.status} />
+        <Detail label="Lead" value={unit.leads} />
         <Detail label="Rate Basis" value={unit.rateBasis} />
         <Detail label="Bedrooms" value={unit.bedrooms} />
         <Detail label="Bathrooms" value={unit.bathrooms} />

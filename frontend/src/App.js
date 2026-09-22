@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import ADDLEAD from"./pages/Addlead"
 import LeadMergePage from "./pages/LeadMergePage";
-import UntaggedLeadsPage from "./pages/UntaggedLeadsPage";
 import DashboardResultsPage from "./pages/DashboardResultsPage";
 // import HomePageOne from "./pages/HomePageOne";
 import HomePageTwo from "./pages/HomePageTwo";
@@ -141,6 +140,7 @@ import PostSalesDashboard from "./pages/post sales/PostSalesDashboard";
 import PostSalesBookingList from "./pages/post sales/PostSalesBookingList";
 import PostSalesDocuments from "./pages/post sales/PostSalesDocuments";
 import PostSalesDetailsPage from "./pages/post sales/PostSalesDetailsPage";
+import BookingInvoicesPage from "./pages/BookingInvoicesPage";
 import {
   PostSalesPaymentPlans,
   PostSalesDemands,
@@ -453,6 +453,8 @@ const ProtectedAppRoutes = () => {
         {/* Admin Post-Sales Routes */}
         <Route exact path='/post-sales/dashboard' element={<PostSalesDashboard />} />
         <Route exact path='/post-sales/booking-list' element={<PostSalesBookingList />} />
+        {/* <Route exact path='/post-sales/booking-invoices' element={<BookingInvoicesPage />} />
+        <Route exact path='/booking-invoices' element={<BookingInvoicesPage />} /> */}
         <Route exact path='/post-sales/documents' element={<PostSalesDocuments />} />
         <Route exact path='/post-sales/details/:bookingId' element={<PostSalesDetailsPage />} />
         <Route exact path='/post-sales/payment-plans' element={<PostSalesPaymentPlans />} />

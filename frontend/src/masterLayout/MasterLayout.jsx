@@ -1338,6 +1338,17 @@ const MasterLayout = ({ children }) => {
                     Preview Inventory
                   </NavLink>
                 </li>
+                {/* <li>
+                  <NavLink
+                    to='/booking-invoices'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-success-main w-auto' />{" "}
+                    Booking Invoices
+                  </NavLink>
+                </li> */}
                 <li>
                   <NavLink
                     to='/projects'

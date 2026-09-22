@@ -1303,6 +1303,8 @@ const UserPreview = () => {
         bookingForm.channelPartnerId ||
         registeredChannelPartners.find((user) => getUserName(user) === bookingForm.channelPartner)?.id ||
         "";
+      const rawParking = Number(bookingForm.parkingCharges || bookingForm.parkingAmount || 0);
+      const isParkingRequired = rawParking > 0 || bookingForm.parkingRequired === "Yes";
       const normalizedSource = normalizeBookingSource(bookingForm.source || leadSource);
       const response = await fetch(`${API_URL}/bookings`, {
         method: "POST",
@@ -1312,6 +1314,11 @@ const UserPreview = () => {
         },
         body: JSON.stringify({
           ...bookingForm,
+          parkingRequired: isParkingRequired ? "Yes" : "No",
+          carParkingSlots: isParkingRequired ? (bookingForm.carParkingSlots || "1") : "",
+          parkingType: isParkingRequired ? (bookingForm.parkingType || "Covered") : "",
+          parkingCharges: String(rawParking),
+          parkingAmount: String(rawParking),
           soldPrice: Number(bookingForm.totalPrice || quotationAgreementValue || 0),
           stage: "Booked",
           leadId: Number(leadId),

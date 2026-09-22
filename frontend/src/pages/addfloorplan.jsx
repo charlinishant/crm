@@ -191,7 +191,7 @@ const parseUnitPositions = (value) =>
     })
     .filter(Boolean)));
 
-const getGeneratedUnitNumbers = ({ from, to, unitPosition, skippedFloors }) => {
+const getGeneratedUnitNumbers = ({ from, to, unitPosition, skippedFloors, isCommercial = false }) => {
   if (from === null || to === null || from > to) return [];
 
   const positions = parseUnitPositions(unitPosition);
@@ -203,7 +203,11 @@ const getGeneratedUnitNumbers = ({ from, to, unitPosition, skippedFloors }) => {
   for (let floor = from; floor <= to; floor += 1) {
     if (skippedFloorSet.has(floor)) continue;
     positions.forEach((positionLabel) => {
-      units.push(`${floor}${positionLabel}`);
+      if (isCommercial) {
+        units.push(`SH-${positionLabel}`);
+      } else {
+        units.push(`${floor}${positionLabel}`);
+      }
     });
   }
 
@@ -327,9 +331,9 @@ const AddFloorplan = () => {
     const towerTotalFloors = toNumberOrNull(selectedTower?.totalFloor ?? selectedTower?.totalFloors);
 
     if (from !== null && to !== null && from > to) return "Applicable Floor From must be less than or equal to Applicable Floor To.";
-    if (from !== null && from < 1) return "Applicable Floor From must be at least 1.";
-    if (to !== null && to < 1) return "Applicable Floor To must be at least 1.";
-    if (towerTotalFloors !== null && towerTotalFloors < 1) return "Selected tower must have Total Floors set to at least 1 before adding floor plans.";
+    if (from !== null && from < 0) return "Applicable Floor From cannot be negative.";
+    if (to !== null && to < 0) return "Applicable Floor To cannot be negative.";
+    if (towerTotalFloors !== null && towerTotalFloors < 0) return "Selected tower must have Total Floors set to at least 0 before adding floor plans.";
     if (towerTotalFloors !== null && to !== null && to > towerTotalFloors) {
       return `Applicable Floor To cannot exceed this tower's Total Floors (${towerTotalFloors}).`;
     }
@@ -470,6 +474,8 @@ const AddFloorplan = () => {
     };
   }, [floorRangeValidation, formData, skippedFloorValidation.error, skippedFloorValidation.floors]);
 
+  const isCommercial = formData.type === "Commercial" || formData.category === "Shop" || formData.configurationLabel === "Shop" || isCommercialType;
+
   const generatedUnitNumbers = useMemo(() => {
     const from = toNumberOrNull(formData.applicableFloorFrom);
     const to = toNumberOrNull(formData.applicableFloorTo);
@@ -478,6 +484,7 @@ const AddFloorplan = () => {
       to,
       skippedFloors: skippedFloorValidation.error || floorRangeValidation ? [] : skippedFloorValidation.floors,
       unitPosition: formData.unitPosition,
+      isCommercial,
     });
   }, [
     formData.applicableFloorFrom,
@@ -485,6 +492,7 @@ const AddFloorplan = () => {
     skippedFloorValidation,
     floorRangeValidation,
     formData.unitPosition,
+    isCommercial,
   ]);
 
   useEffect(() => {
@@ -611,9 +619,9 @@ const AddFloorplan = () => {
 
     if (floorRangeValidation) return floorRangeValidation;
     if (from !== null && to !== null && from > to) return "Applicable Floor From must be less than or equal to Applicable Floor To";
-    if (from !== null && from < 1) return "Applicable Floor From must be at least 1";
-    if (to !== null && to < 1) return "Applicable Floor To must be at least 1";
-    if (towerTotalFloors !== null && towerTotalFloors < 1) return "Selected tower must have Total Floors set to at least 1 before adding floor plans.";
+    if (from !== null && from < 0) return "Applicable Floor From cannot be negative";
+    if (to !== null && to < 0) return "Applicable Floor To cannot be negative";
+    if (towerTotalFloors !== null && towerTotalFloors < 0) return "Selected tower must have Total Floors set to at least 0 before adding floor plans.";
     if (towerTotalFloors !== null && to !== null && to > towerTotalFloors) {
       return `Applicable Floor To cannot exceed this tower's Total Floors (${towerTotalFloors}).`;
     }
@@ -811,8 +819,36 @@ const AddFloorplan = () => {
 
               <Section title="Position & Inventory">
                 <div className="lead-grid">
-                  <InputField label="APPLICABLE FLOOR FROM *" name="applicableFloorFrom" type="number" min="1" value={formData.applicableFloorFrom} onChange={handleChange} required error={floorRangeValidation && floorRangeValidation.includes("From") ? floorRangeValidation : ""} />
-                  <InputField label="APPLICABLE FLOOR TO *" name="applicableFloorTo" type="number" min="1" max={selectedTower?.totalFloor || selectedTower?.totalFloors || undefined} value={formData.applicableFloorTo} onChange={handleChange} required error={floorRangeValidation && !floorRangeValidation.includes("From") ? floorRangeValidation : ""} />
+                  {isCommercial && (
+                    <InputField
+                      label="NO. OF SHOPS"
+                      name="noOfShops"
+                      type="number"
+                      min="1"
+                      max="99"
+                      placeholder="e.g. 10"
+                      value={parseUnitPositions(formData.unitPosition).length || ""}
+                      onChange={(e) => {
+                        const count = parseInt(e.target.value, 10);
+                        if (!Number.isNaN(count) && count > 0) {
+                          const positions = Array.from({ length: Math.min(count, 99) }, (_, i) =>
+                            String(i + 1).padStart(2, "0")
+                          ).join(", ");
+                          setFormData((prev) => ({
+                            ...prev,
+                            applicableFloorFrom: prev.applicableFloorFrom === "" ? "0" : prev.applicableFloorFrom,
+                            applicableFloorTo: prev.applicableFloorTo === "" ? "0" : prev.applicableFloorTo,
+                            unitPosition: positions,
+                          }));
+                        } else if (e.target.value === "") {
+                          setFormData((prev) => ({ ...prev, unitPosition: "" }));
+                        }
+                      }}
+                      helperText="Automatically generates shop numbers SH-01 to SH-N on Floor 0 (Ground Floor)."
+                    />
+                  )}
+                  <InputField label="APPLICABLE FLOOR FROM *" name="applicableFloorFrom" type="number" min="0" value={formData.applicableFloorFrom} onChange={handleChange} required error={floorRangeValidation && floorRangeValidation.includes("From") ? floorRangeValidation : ""} />
+                  <InputField label="APPLICABLE FLOOR TO *" name="applicableFloorTo" type="number" min="0" max={selectedTower?.totalFloor || selectedTower?.totalFloors || undefined} value={formData.applicableFloorTo} onChange={handleChange} required error={floorRangeValidation && !floorRangeValidation.includes("From") ? floorRangeValidation : ""} />
                   <InputField label="UNIT POSITION(S) *" name="unitPosition" value={formData.unitPosition} onChange={handleChange} placeholder="01, 02, 03, 04" required />
                   <InputField
                     label="SKIPPED FLOORS"
@@ -831,7 +867,7 @@ const AddFloorplan = () => {
                     onChange={() => {}}
                     disabled
                   />
-                  <GeneratedUnitsField units={generatedUnitNumbers} error={floorRangeValidation} />
+                  <GeneratedUnitsField units={generatedUnitNumbers} error={floorRangeValidation} isCommercial={isCommercial} />
                 </div>
               </Section>
 
@@ -891,27 +927,6 @@ const AddFloorplan = () => {
                 </button>
               </div>
               </div>
-
-              <aside className="floorplan-summary">
-                <div className="section-card">
-                  <h6>Computed Summary at Base Floor</h6>
-                  <SummaryRow label="Carpet" value={`${computed.carpet || 0} ${areaSuffix(formData.measure)}`} />
-                  <SummaryRow label="Saleable" value={`${computed.saleable || 0} ${areaSuffix(formData.measure)}`} />
-                  <SummaryRow label="Base Price at Base Floor" value={formatMoney(computed.basePrice)} />
-                  <SummaryRow label="Floor Rise" value={computed.floorRiseEnabled ? "Yes" : "No"} />
-                  {!computed.floorRiseEnabled ? (
-                    <SummaryRow label="Floor Rise Amount" value={formatMoney(0)} highlight />
-                  ) : (
-                    <>
-                      <SummaryRow label="Floor Rise Rate" value={`${formatMoney(computed.floorRiseRate || 0)} / ${areaSuffix(formData.measure)}`} />
-                      <SummaryRow label="Rise From Floor" value={`Floor ${computed.riseFromFloor || 1}`} />
-                      <SummaryRow label="Selected/Preview Floor" value={`Floor ${computed.previewFloor || computed.riseFromFloor}`} />
-                      <SummaryRow label="Rise Steps" value={computed.floorRiseSteps || 0} />
-                      <SummaryRow label="Floor Rise Calculated Amount" value={formatMoney(computed.floorRiseAmount)} highlight />
-                    </>
-                  )}
-                </div>
-              </aside>
             </div>
           </form>
           )}
@@ -1023,9 +1038,9 @@ const SelectField = ({ label, name, value, onChange, children, options, required
   </FieldShell>
 );
 
-const GeneratedUnitsField = ({ units, error }) => (
+const GeneratedUnitsField = ({ units, error, isCommercial }) => (
   <div className="lead-group lead-full">
-    <label>UNIT NUMBERS</label>
+    <label>{isCommercial ? "GENERATED SHOPS" : "UNIT NUMBERS"}</label>
     <div className={`floorplan-generated-units ${error ? "has-error" : ""}`}>
       {units.length ? (
         units.map((unit) => (

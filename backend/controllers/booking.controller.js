@@ -317,7 +317,8 @@ exports.createBooking = async (req, res) => {
         (!selectedUnitItem?.heldUntil || new Date(selectedUnitItem.heldUntil).getTime() > Date.now())
 
       if (selectedUnitItem && selectedStatus !== UNIT_STATUS.Available && !heldByCurrentUser) {
-        const conflict = new Error("Selected unit is already booked or unavailable")
+        const isShop = String(selectedUnitItem.name || "").startsWith("SH-") || String(selectedUnitItem.unit?.type || "").toLowerCase().includes("commercial")
+        const conflict = new Error(isShop ? "This shop is already booked." : "This unit is already booked.")
         conflict.statusCode = 409
         throw conflict
       }
@@ -341,7 +342,8 @@ exports.createBooking = async (req, res) => {
         })
 
         if (holdResult.count !== 1) {
-          const conflict = new Error("This unit was just taken. Please pick another unit.")
+          const isShop = String(selectedUnitItem.name || "").startsWith("SH-") || String(selectedUnitItem.unit?.type || "").toLowerCase().includes("commercial")
+          const conflict = new Error(isShop ? "This shop is already booked." : "This unit was just taken. Please pick another unit.")
           conflict.statusCode = 409
           throw conflict
         }
@@ -358,14 +360,19 @@ exports.createBooking = async (req, res) => {
         areaError.statusCode = 400
         throw areaError
       }
+      const parkingAmountEntered = toNumberOrZero(data.parkingAmount ?? data.parkingCharges)
+      const hasParking = parkingAmountEntered > 0 || toBoolean(data.parkingRequired)
+
       if (toBoolean(data.parkingRequired) && (!toNumberOrNull(data.carParkingSlots) || !data.parkingType)) {
-        const parkingError = new Error("Parking Details are required when parking is selected")
-        parkingError.statusCode = 400
-        parkingError.validationErrors = {
-          carParkingSlots: !toNumberOrNull(data.carParkingSlots) ? "Number of Car Parking Slots is required" : undefined,
-          parkingType: !data.parkingType ? "Parking Type is required" : undefined,
+        if (!parkingAmountEntered) {
+          const parkingError = new Error("Parking Details are required when parking is selected")
+          parkingError.statusCode = 400
+          parkingError.validationErrors = {
+            carParkingSlots: !toNumberOrNull(data.carParkingSlots) ? "Number of Car Parking Slots is required" : undefined,
+            parkingType: !data.parkingType ? "Parking Type is required" : undefined,
+          }
+          throw parkingError
         }
-        throw parkingError
       }
 
       let  bookingData =  {
@@ -402,12 +409,12 @@ exports.createBooking = async (req, res) => {
           floorRiseCalculatedAmount: priceSnapshot.floorRiseCalculatedAmount,
           calculatedUnitPrice: priceSnapshot.calculatedUnitPrice,
           priceSnapshot: priceSnapshot.priceSnapshot,
-          parkingRequired: toBoolean(data.parkingRequired),
-          carParkingSlots: toBoolean(data.parkingRequired) ? toNonNegativeIntOrNull(data.carParkingSlots, "Number of Car Parking Slots") : null,
-          parkingType: toBoolean(data.parkingRequired) ? data.parkingType || null : null,
-          parkingSlotNumber: toBoolean(data.parkingRequired) ? data.parkingSlotNumber || null : null,
-          twoWheelerSlots: toBoolean(data.parkingRequired) ? toNonNegativeIntOrNull(data.twoWheelerSlots, "Number of Two-Wheeler Slots") : null,
-          basementStoreroomArea: toBoolean(data.parkingRequired) ? toNonNegativeNumberOrNull(data.basementStoreroomArea, "Basement/Storeroom Area") : null,
+          parkingRequired: hasParking,
+          carParkingSlots: hasParking ? (toNonNegativeIntOrNull(data.carParkingSlots, "Number of Car Parking Slots") || 1) : null,
+          parkingType: hasParking ? (data.parkingType || "Covered") : null,
+          parkingSlotNumber: hasParking ? data.parkingSlotNumber || null : null,
+          twoWheelerSlots: hasParking ? toNonNegativeIntOrNull(data.twoWheelerSlots, "Number of Two-Wheeler Slots") : null,
+          basementStoreroomArea: hasParking ? toNonNegativeNumberOrNull(data.basementStoreroomArea, "Basement/Storeroom Area") : null,
           parkingCharges: priceSnapshot.bookingPricing.parkingAmount,
           parkingAmount: priceSnapshot.bookingPricing.parkingAmount,
           gstPercent: priceSnapshot.bookingPricing.gstPercent,
@@ -569,6 +576,16 @@ exports.createBooking = async (req, res) => {
       orderBy: { createdAt: "desc" },
     })
 
+    // Automatically generate and file Cost Sheet documents in background
+    if (createdBookingId) {
+      const { generateAndStoreBookingDocuments } = require("../services/bookingDocument.service");
+      generateAndStoreBookingDocuments(createdBookingId, {
+        performedBy: req.authUser?.email || req.authUser?.name || "System"
+      }).catch((docErr) => {
+        console.error("Non-blocking background document generation error:", docErr);
+      });
+    }
+
     res.status(201).json(
       createdBooking
         ? { ...createdBooking, unit: data.unit || null }
@@ -668,13 +685,22 @@ exports.updateBooking = async (req, res) => {
     if (data.totalPrice !== undefined) updateData.totalPrice = toNonNegativeNumberOrNull(data.totalPrice, "Total Price")
     if (data.soldPrice !== undefined) updateData.soldPrice = toNonNegativeNumberOrNull(data.soldPrice, "Sold Price")
     if (data.agreementValue !== undefined) updateData.agreementValue = toNonNegativeNumberOrNull(data.agreementValue, "Agreement Value")
-    if (data.parkingRequired !== undefined) updateData.parkingRequired = toBoolean(data.parkingRequired)
-    if (data.carParkingSlots !== undefined) updateData.carParkingSlots = toBoolean(data.parkingRequired ?? booking.parkingRequired) ? toNonNegativeIntOrNull(data.carParkingSlots, "Number of Car Parking Slots") : null
-    if (data.parkingType !== undefined) updateData.parkingType = toBoolean(data.parkingRequired ?? booking.parkingRequired) ? data.parkingType || null : null
-    if (data.parkingSlotNumber !== undefined) updateData.parkingSlotNumber = toBoolean(data.parkingRequired ?? booking.parkingRequired) ? data.parkingSlotNumber || null : null
-    if (data.twoWheelerSlots !== undefined) updateData.twoWheelerSlots = toBoolean(data.parkingRequired ?? booking.parkingRequired) ? toNonNegativeIntOrNull(data.twoWheelerSlots, "Number of Two-Wheeler Slots") : null
-    if (data.basementStoreroomArea !== undefined) updateData.basementStoreroomArea = toBoolean(data.parkingRequired ?? booking.parkingRequired) ? toNonNegativeNumberOrNull(data.basementStoreroomArea, "Basement/Storeroom Area") : null
-    if (data.parkingCharges !== undefined) updateData.parkingCharges = toBoolean(data.parkingRequired ?? booking.parkingRequired) ? toNonNegativeNumberOrNull(data.parkingCharges, "Parking Charges") || 0 : 0
+    if (data.parkingCharges !== undefined || data.parkingAmount !== undefined) {
+      const pAmt = toNonNegativeNumberOrNull(data.parkingAmount ?? data.parkingCharges, "Parking Charges") || 0
+      updateData.parkingCharges = pAmt
+      updateData.parkingAmount = pAmt
+      if (pAmt > 0) {
+        updateData.parkingRequired = true
+        if (!booking.carParkingSlots && !data.carParkingSlots) updateData.carParkingSlots = 1
+        if (!booking.parkingType && !data.parkingType) updateData.parkingType = "Covered"
+      }
+    }
+    if (data.parkingRequired !== undefined) updateData.parkingRequired = toBoolean(data.parkingRequired) || (updateData.parkingCharges > 0)
+    if (data.carParkingSlots !== undefined) updateData.carParkingSlots = toBoolean(data.parkingRequired ?? updateData.parkingRequired ?? booking.parkingRequired) ? toNonNegativeIntOrNull(data.carParkingSlots, "Number of Car Parking Slots") : null
+    if (data.parkingType !== undefined) updateData.parkingType = toBoolean(data.parkingRequired ?? updateData.parkingRequired ?? booking.parkingRequired) ? data.parkingType || null : null
+    if (data.parkingSlotNumber !== undefined) updateData.parkingSlotNumber = toBoolean(data.parkingRequired ?? updateData.parkingRequired ?? booking.parkingRequired) ? data.parkingSlotNumber || null : null
+    if (data.twoWheelerSlots !== undefined) updateData.twoWheelerSlots = toBoolean(data.parkingRequired ?? updateData.parkingRequired ?? booking.parkingRequired) ? toNonNegativeIntOrNull(data.twoWheelerSlots, "Number of Two-Wheeler Slots") : null
+    if (data.basementStoreroomArea !== undefined) updateData.basementStoreroomArea = toBoolean(data.parkingRequired ?? updateData.parkingRequired ?? booking.parkingRequired) ? toNonNegativeNumberOrNull(data.basementStoreroomArea, "Basement/Storeroom Area") : null
     if (data.gstPercent !== undefined) updateData.gstPercent = toNonNegativeNumberOrNull(data.gstPercent, "GST %")
     if (data.stampDutyPercent !== undefined) updateData.stampDutyPercent = toNonNegativeNumberOrNull(data.stampDutyPercent, "Stamp Duty %")
     if (data.registrationAmount !== undefined) updateData.registrationAmount = toNonNegativeNumberOrNull(data.registrationAmount, "Registration Charges")
@@ -799,6 +825,16 @@ exports.generateBookingDocument = async (req, res) => {
     const bookingId = Number(req.params.id)
     const { type = "WELCOME_LETTER" } = req.body
 
+    if (type === "BOOKING_COST_SHEET_XLSX" || type === "BOOKING_COST_SHEET_PDF" || type === "BOOKING_COST_SHEET") {
+      const { generateAndStoreBookingDocuments } = require("../services/bookingDocument.service");
+      const result = await generateAndStoreBookingDocuments(bookingId, {
+        performedBy: req.authUser?.email || req.authUser?.name || "Admin",
+        isRegeneration: true,
+      });
+      const document = type === "BOOKING_COST_SHEET_XLSX" ? result.xlsxDoc : result.pdfDoc;
+      return res.status(201).json({ message: "Cost sheet generated successfully", document, ...result });
+    }
+
     const booking = await prisma.booking.findUnique({
       where: { id: bookingId },
       include: { lead: true, unit: true },
@@ -851,3 +887,174 @@ exports.getBookingLedger = async (req, res) => {
     res.status(500).json({ message: "Something went wrong" })
   }
 }
+
+exports.generateCostSheet = async (req, res) => {
+  try {
+    const bookingId = Number(req.params.id);
+    const { buildBookingCostSheetData } = require('../services/costSheetData.service');
+    const { generateCostSheetExcel } = require('../services/excelCostSheetGenerator');
+    const { logBookingDocumentAction } = require('../services/bookingDocument.service');
+
+    const data = await buildBookingCostSheetData(bookingId);
+    const workbook = await generateCostSheetExcel(data);
+
+    const filename = `booking-cost-sheet-${data.bookingReference}-${data.unit.unitNo}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+    await logBookingDocumentAction(
+      bookingId,
+      'BOOKING_COST_SHEET_XLSX',
+      'DOWNLOAD',
+      `Downloaded Excel Cost Sheet for ${data.unit.unitNo}`,
+      req.authUser?.email || 'User'
+    ).catch(() => {});
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error("Error generating cost sheet XLSX:", error);
+    res.status(500).json({ message: error.message || "Something went wrong generating cost sheet" });
+  }
+};
+
+exports.getCostSheetPdf = async (req, res) => {
+  try {
+    const bookingId = Number(req.params.id);
+    const { buildBookingCostSheetData } = require('../services/costSheetData.service');
+    const { renderCostSheetHtml } = require('../services/costSheetPdf.service');
+    const { logBookingDocumentAction } = require('../services/bookingDocument.service');
+
+    const data = await buildBookingCostSheetData(bookingId);
+    const html = await renderCostSheetHtml(data);
+
+    const action = req.query.action === 'print' ? 'PRINT' : 'DOWNLOAD';
+    await logBookingDocumentAction(
+      bookingId,
+      'BOOKING_COST_SHEET_PDF',
+      action,
+      `${action === 'PRINT' ? 'Printed' : 'Downloaded/Viewed'} PDF Cost Sheet for ${data.unit.unitNo}`,
+      req.authUser?.email || 'User'
+    ).catch(() => {});
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (error) {
+    console.error("Error rendering cost sheet PDF/HTML:", error);
+    res.status(500).json({ message: error.message || "Something went wrong rendering cost sheet" });
+  }
+};
+
+exports.getBookingDocuments = async (req, res) => {
+  try {
+    const bookingId = Number(req.params.id);
+    const documents = await prisma.generatedDocument.findMany({
+      where: { bookingId },
+      orderBy: { createdAt: 'desc' },
+    });
+    const auditLogs = await prisma.documentAuditLog.findMany({
+      where: { bookingId },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.status(200).json({ documents, auditLogs });
+  } catch (error) {
+    res.status(500).json({ message: error.message || "Failed to fetch documents" });
+  }
+};
+
+exports.generateCostSheetDocuments = async (req, res) => {
+  try {
+    const bookingId = Number(req.params.id);
+    const { generateAndStoreBookingDocuments } = require('../services/bookingDocument.service');
+    const result = await generateAndStoreBookingDocuments(bookingId, {
+      performedBy: req.authUser?.email || 'Admin',
+      isRegeneration: false,
+    });
+    res.status(200).json({ message: "Documents generated and stored successfully", ...result });
+  } catch (error) {
+    console.error("Document generation error:", error);
+    res.status(500).json({ message: error.message || "Document generation failed" });
+  }
+};
+
+exports.regenerateCostSheetDocuments = async (req, res) => {
+  try {
+    const bookingId = Number(req.params.id);
+    const { generateAndStoreBookingDocuments } = require('../services/bookingDocument.service');
+    const result = await generateAndStoreBookingDocuments(bookingId, {
+      performedBy: req.authUser?.email || 'Admin',
+      isRegeneration: true,
+    });
+    res.status(200).json({ message: "New document version regenerated successfully", ...result });
+  } catch (error) {
+    console.error("Document regeneration error:", error);
+    res.status(500).json({ message: error.message || "Document regeneration failed" });
+  }
+};
+
+exports.getAdminBookingInvoices = async (req, res) => {
+  try {
+    const { projectId, customerName, unitNo, bookingId, startDate, endDate, search, page = 1, limit = 50 } = req.query;
+    const where = {};
+
+    if (projectId) where.projectId = Number(projectId);
+    if (bookingId) where.id = Number(bookingId);
+    if (startDate || endDate) {
+      where.bookedOn = {};
+      if (startDate) where.bookedOn.gte = new Date(startDate);
+      if (endDate) where.bookedOn.lte = new Date(endDate);
+    }
+
+    const bookings = await prisma.booking.findMany({
+      where,
+      include: {
+        lead: true,
+        unit: {
+          include: {
+            project: true,
+            tower: true,
+            floor: true,
+          },
+        },
+        unitItem: true,
+        generatedDocuments: {
+          where: {
+            type: { in: ['BOOKING_COST_SHEET_XLSX', 'BOOKING_COST_SHEET_PDF'] },
+          },
+          orderBy: { createdAt: 'desc' },
+        },
+        documentAuditLogs: {
+          orderBy: { createdAt: 'desc' },
+          take: 5,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: (Number(page) - 1) * Number(limit),
+      take: Number(limit),
+    });
+
+    const total = await prisma.booking.count({ where });
+
+    let items = bookings;
+    if (search) {
+      const q = String(search).toLowerCase();
+      items = items.filter((b) => {
+        const cust = (b.customerName || `${b.lead?.firstName || ''} ${b.lead?.lastName || ''}`).toLowerCase();
+        const proj = (b.unit?.project?.name || b.projectDetails || '').toLowerCase();
+        const u = (b.unitItem?.name || b.unit?.unitNo || b.unit?.name || '').toLowerCase();
+        const idStr = String(b.id);
+        return cust.includes(q) || proj.includes(q) || u.includes(q) || idStr.includes(q);
+      });
+    }
+
+    res.status(200).json({
+      data: items,
+      total,
+      page: Number(page),
+      limit: Number(limit),
+    });
+  } catch (error) {
+    console.error("Error fetching admin booking invoices:", error);
+    res.status(500).json({ message: error.message || "Failed to fetch booking invoices" });
+  }
+};

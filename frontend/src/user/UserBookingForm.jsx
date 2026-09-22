@@ -4,6 +4,7 @@ import {
   FaCheckCircle,
   FaEllipsisV,
   FaEnvelope,
+  FaFileExcel,
   FaPen,
   FaPrint,
   FaRegFilePdf,
@@ -1182,7 +1183,7 @@ const UserBookingForm = ({
     reraArea: reraAreaValue,
     baseRate: baseRateValue,
     closingRate: closingBaseRateValue,
-    parkingAmount: bookingForm.parkingCharges,
+    parkingAmount: bookingForm.parkingCharges !== undefined && bookingForm.parkingCharges !== "" ? bookingForm.parkingCharges : (bookingForm.parkingAmount ?? 0),
     gstPercent: 5,
     stampDutyPercent: 6,
     legalCharges: bookingForm.legalDocumentationCharges,
@@ -1192,6 +1193,7 @@ const UserBookingForm = ({
     baseRateValue,
     bookingForm.legalDocumentationCharges,
     bookingForm.parkingCharges,
+    bookingForm.parkingAmount,
     bookingForm.registrationAmount,
     closingBaseRateValue,
     customCharges,
@@ -1416,12 +1418,13 @@ const UserBookingForm = ({
           )}
           {allFloorGroups.map(({ floor, units }) => (
             <React.Fragment key={floor}>
-              <div className="ubf-floor-label">Floor {floor}</div>
+              <div className="ubf-floor-label">{Number(floor) === 0 || floor === "0" || floor === 0 ? "Ground Floor" : `Floor ${floor}`}</div>
               <div className="ubf-units-line">
                 {units.map((unit) => {
                   const status = normalizeUnitStatus(unit.status, unit);
                   const tone = bookingForm.unit === unit.name ? "selected" : interestedUnits.has(unit.name) ? "interested" : status;
                   const isLocked = ["booked", "blocked", "refuge", "investor", "rehab"].includes(status);
+                  const isShop = String(unit.name || "").startsWith("SH-") || String(unit.unitType || "").toLowerCase().includes("commercial") || String(unit.configurationLabel || "").toLowerCase().includes("shop");
                   return (
                     <button
                       type="button"
@@ -1429,7 +1432,7 @@ const UserBookingForm = ({
                       className={`ubf-unit-cell ${tone}`}
                       onClick={() => selectUnit(unit)}
                       disabled={isLocked}
-                      title={`Flat no: ${unit.name}${isRehabUnit(unit) ? " - Rehab Unit" : ""}`}
+                      title={`${isShop ? "Shop no" : "Flat no"}: ${unit.name}${isRehabUnit(unit) ? " - Rehab Unit" : ""}`}
                     >
                       {unit.image ? (
                         <img src={unit.image} alt="" />
@@ -1441,7 +1444,7 @@ const UserBookingForm = ({
                           <i />
                         </span>
                       )}
-                      <b>Flat no : {unit.name}</b>
+                      <b>{isShop ? "Shop no" : "Flat no"} : {unit.name}</b>
                       <span
                         className="ubf-unit-dots-trigger"
                         onClick={(e) => e.stopPropagation()}
@@ -1450,7 +1453,7 @@ const UserBookingForm = ({
                       >
                         <FaEllipsisV aria-hidden="true" />
                         <span className="ubf-unit-popup">
-                          <span className="ubf-unit-popup-header">Flat {unit.name}</span>
+                          <span className="ubf-unit-popup-header">{isShop ? "Shop" : "Flat"} {unit.name}</span>
                           <span className="ubf-unit-popup-price">
                             {formatUnitPopupPrice(unit.basePrice)}
                             {unit.basePrice ? (
@@ -1664,10 +1667,22 @@ const UserBookingForm = ({
 
   const updateAgreementDetailsField = (name, rawValue) => {
     updateField(name, rawValue);
+    if (name === "parkingCharges" || name === "parkingAmount") {
+      updateField("parkingCharges", rawValue);
+      updateField("parkingAmount", rawValue);
+      const parsedParking = toSafeNumber(rawValue);
+      if (parsedParking > 0) {
+        updateField("parkingRequired", "Yes");
+        if (!bookingForm.carParkingSlots) updateField("carParkingSlots", "1");
+        if (!bookingForm.parkingType) updateField("parkingType", "Covered");
+      } else {
+        updateField("parkingRequired", "No");
+      }
+    }
 
     const nextReraArea = name === "reraArea" ? toSafeNumber(rawValue) : toSafeNumber(bookingForm.reraArea ?? reraAreaValue);
     const nextClosingRate = name === "closingRate" ? toSafeNumber(rawValue) : toSafeNumber(bookingForm.closingRate ?? calculatedPricing.closingRate);
-    const parkingAmount = name === "parkingCharges" ? toSafeNumber(rawValue) : toSafeNumber(bookingForm.parkingCharges ?? calculatedPricing.parkingAmount);
+    const parkingAmount = (name === "parkingCharges" || name === "parkingAmount") ? toSafeNumber(rawValue) : toSafeNumber(bookingForm.parkingCharges ?? bookingForm.parkingAmount ?? calculatedPricing.parkingAmount);
     const legalCharges = name === "legalDocumentationCharges" ? toSafeNumber(rawValue) : toSafeNumber(bookingForm.legalDocumentationCharges ?? calculatedPricing.legalCharges);
     const registrationCharges = name === "registrationAmount" ? toSafeNumber(rawValue) : toSafeNumber(bookingForm.registrationAmount ?? calculatedPricing.registrationCharges);
     const otherExpenseTotal = Number(customCharges.reduce((total, row) => total + toSafeNumber(row.amount, 0), 0).toFixed(2));
@@ -1850,7 +1865,9 @@ const UserBookingForm = ({
                 {renderPricingField({
                   label: "Parking",
                   name: "parkingCharges",
-                  value: calculatedPricing.parkingAmount,
+                  value: (bookingForm.parkingCharges !== undefined && bookingForm.parkingCharges !== "")
+                    ? bookingForm.parkingCharges
+                    : ((bookingForm.parkingAmount !== undefined && bookingForm.parkingAmount !== "") ? bookingForm.parkingAmount : calculatedPricing.parkingAmount),
                   onChange: (event) => updateAgreementDetailsField("parkingCharges", event.target.value),
                 })}
               </div>
@@ -2446,21 +2463,76 @@ const UserBookingForm = ({
     return new Blob([pdf], { type: "application/pdf" });
   };
 
-  const downloadBookingPdf = () => {
-    setCompletionActionMessage("");
-    const blob = getBookingPdfBlob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `booking-${bookingForm.unit || selectedUnit.name || Date.now()}.pdf`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+  const downloadCostSheetExcel = async () => {
+    const bookingId = bookingForm.id || bookingForm._id || bookingForm.bookingId;
+    if (!bookingId) {
+      setCompletionActionMessage("Booking ID not available for Excel generation.");
+      return;
+    }
+    setCompletionActionMessage("Generating Cost Sheet Excel...");
+    try {
+      const response = await fetch(`${API_URL}/api/bookings/${bookingId}/cost-sheet`, {
+        method: 'GET',
+        headers: getAuthHeaders()
+      });
+      if (!response.ok) throw new Error("Failed to fetch cost sheet Excel");
+      
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `cost-sheet-${bookingForm.unit || selectedUnit?.name || bookingId}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setCompletionActionMessage("Cost Sheet Excel downloaded successfully.");
+    } catch (error) {
+      console.error("Error downloading cost sheet Excel:", error);
+      setCompletionActionMessage("Failed to generate cost sheet Excel.");
+    }
+  };
+
+  const downloadBookingPdf = async () => {
+    const bookingId = bookingForm.id || bookingForm._id || bookingForm.bookingId;
+    if (bookingId) {
+      setCompletionActionMessage("Opening customer Cost Sheet...");
+      const printWindow = window.open(`${API_URL}/api/bookings/${bookingId}/cost-sheet/pdf`, "_blank");
+      if (printWindow) {
+        setCompletionActionMessage("Cost Sheet opened successfully.");
+        return;
+      }
+    }
+    try {
+      const url = URL.createObjectURL(getBookingPdfBlob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `booking-${bookingForm.id || bookingForm.unit || selectedUnit?.name || selectedUnit?.unitName || Date.now()}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      setCompletionActionMessage("Booking PDF downloaded successfully.");
+    } catch (error) {
+      console.error("Error downloading PDF:", error);
+      setCompletionActionMessage("Failed to generate PDF.");
+    }
   };
 
   const printBooking = () => {
     setCompletionActionMessage("");
+    const bookingId = bookingForm.id || bookingForm._id || bookingForm.bookingId;
+    if (bookingId) {
+      const printWindow = window.open(`${API_URL}/api/bookings/${bookingId}/cost-sheet/pdf?action=print`, "_blank");
+      if (printWindow) {
+        setTimeout(() => {
+          try {
+            printWindow.print();
+          } catch (_) {}
+        }, 1000);
+        return;
+      }
+    }
     const printWindow = window.open("", "_blank", "noopener,noreferrer");
     if (!printWindow) return;
     printWindow.document.write(getBookingDocumentHtml());
@@ -2490,10 +2562,21 @@ const UserBookingForm = ({
         </small>
       </div>
       <div className="ubf-success-actions">
-        <button type="button" onClick={downloadBookingPdf}><FaRegFilePdf /> Download Booking PDF</button>
-        <button type="button" onClick={printBooking}><FaPrint /> Print Booking</button>
-        <button type="button" onClick={() => showDeferredAction("WhatsApp")}><FaWhatsapp /> Send WhatsApp</button>
-        <button type="button" onClick={() => showDeferredAction("Email")}><FaEnvelope /> Send Email</button>
+        <button type="button" className="btn btn-success" style={{ background: "#16a34a", borderColor: "#16a34a", color: "#fff", fontWeight: 700 }} onClick={downloadCostSheetExcel}>
+          <FaFileExcel /> Download Cost Sheet (Excel)
+        </button>
+        <button type="button" onClick={downloadBookingPdf}>
+          <FaRegFilePdf /> Download PDF
+        </button>
+        <button type="button" onClick={printBooking}>
+          <FaPrint /> Print Booking
+        </button>
+        <button type="button" onClick={() => showDeferredAction("WhatsApp")}>
+          <FaWhatsapp /> Send WhatsApp
+        </button>
+        <button type="button" onClick={() => showDeferredAction("Email")}>
+          <FaEnvelope /> Send Email
+        </button>
         <button type="button" className="primary" onClick={onClose}>Close</button>
       </div>
       {completionActionMessage && <div className="ubf-success-note">{completionActionMessage}</div>}

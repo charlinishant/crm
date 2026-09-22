@@ -2,6 +2,8 @@ const prisma = require("../lib/prisma");
 
 // ─── Document types catalogue ────────────────────────────────────────────────
 const docTypes = [
+  "BOOKING_COST_SHEET_XLSX",
+  "BOOKING_COST_SHEET_PDF",
   "WELCOME_LETTER",
   "ALLOTMENT_LETTER",
   "AGREEMENT",
@@ -711,6 +713,16 @@ exports.generateDocument = async (req, res) => {
 
     if (!docTypes.includes(type)) {
       return res.status(400).json({ message: `Invalid document type. Allowed: ${docTypes.join(", ")}` });
+    }
+
+    if (type === "BOOKING_COST_SHEET_XLSX" || type === "BOOKING_COST_SHEET_PDF" || type === "BOOKING_COST_SHEET") {
+      const { generateAndStoreBookingDocuments } = require("../services/bookingDocument.service");
+      const result = await generateAndStoreBookingDocuments(bookingId, {
+        performedBy: req.authUser?.email || req.authUser?.name || "Admin",
+        isRegeneration: true,
+      });
+      const document = type === "BOOKING_COST_SHEET_XLSX" ? result.xlsxDoc : result.pdfDoc;
+      return res.status(201).json({ message: "Cost sheet generated successfully", document, ...result });
     }
 
     const booking = await prisma.booking.findUnique({

@@ -1,4 +1,36 @@
+const fs = require("fs")
+const path = require("path")
 const prisma = require("../lib/prisma")
+
+const saveMediaFile = (dataOrUrl, subfolder = "projects") => {
+    if (!dataOrUrl || typeof dataOrUrl !== "string") return dataOrUrl
+    const trimmed = dataOrUrl.trim()
+    if (!trimmed.startsWith("data:image/")) return trimmed
+
+    try {
+        const match = trimmed.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/)
+        if (!match) return trimmed
+
+        let ext = match[1].toLowerCase()
+        if (ext === "jpeg") ext = "jpg"
+        if (ext === "svg+xml") ext = "svg"
+        const base64Data = match[2]
+
+        const dirPath = path.join(__dirname, "..", "uploads", subfolder)
+        if (!fs.existsSync(dirPath)) {
+            fs.mkdirSync(dirPath, { recursive: true })
+        }
+
+        const filename = `img_${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${ext}`
+        const filePath = path.join(dirPath, filename)
+        fs.writeFileSync(filePath, Buffer.from(base64Data, "base64"))
+
+        return `/uploads/${subfolder}/${filename}`
+    } catch (err) {
+        console.error("Error saving base64 image:", err)
+        return trimmed
+    }
+}
 
 const withGeneratedUnitCounts = async (projects) => {
     const rows = Array.isArray(projects) ? projects : [projects]
@@ -112,6 +144,15 @@ exports.createProject = async (req, res)=>{
         data.active = false
         assertProjectModelRules(data, normalizedSalesIds)
 
+        if (data.elevationPhoto) {
+            data.elevationPhoto = saveMediaFile(data.elevationPhoto, "projects");
+        }
+        if (data.image) {
+            data.image = saveMediaFile(data.image, "projects");
+        }
+        if (data.elevationPhoto && !data.image) data.image = data.elevationPhoto;
+        if (data.image && !data.elevationPhoto) data.elevationPhoto = data.image;
+
         const project = await prisma.project.create({
             data:{
                 ...data,
@@ -131,7 +172,7 @@ exports.createProject = async (req, res)=>{
         if(err.statusCode){
             return res.status(err.statusCode).json({ message: err.message })
         }
-        res.status(500).json("something went wrong")
+        res.status(500).json({ message: err.message || "Failed to create project" })
     }
 }
 
@@ -143,11 +184,11 @@ exports.getProject = async (req, res)=>{
     }
     catch(err)
     {
-        console.log(err);
+        console.error("Get projects error:", err);
         if(err.statusCode){
             return res.status(err.statusCode).json({ message: err.message })
         }
-        res.status(500).json("something went wrong")
+        res.status(500).json({ message: err.message || "Failed to fetch projects" })
     }
 }
 
@@ -159,13 +200,13 @@ exports.getProjectById = async (req, res)=>{
             include:projectSalesInclude
         });
         if(!project)
-            return res.status(404).json("Project not found")
+            return res.status(404).json({ message: "Project not found" })
         res.status(200).json(formatProject(await withGeneratedUnitCounts(project)))
     }
     catch(err)
     {
-        console.log(err);
-        res.status(500).json("something went wrong")
+        console.error("Get project by ID error:", err);
+        res.status(500).json({ message: err.message || "Failed to fetch project" })
     }
 }
 
@@ -179,7 +220,7 @@ exports.updateProject = async (req, res)=>{
             include:{ _count:{ select:{ unit:true } } }
         });
         if(!project)
-            return res.status(404).json("Project not found")
+            return res.status(404).json({ message: "Project not found" })
 
         const derivedInventory = (project._count?.unit ?? 0) > 0
         delete data.inventory
@@ -199,6 +240,15 @@ exports.updateProject = async (req, res)=>{
             }
         }
 
+        if (data.elevationPhoto) {
+            data.elevationPhoto = saveMediaFile(data.elevationPhoto, "projects");
+        }
+        if (data.image) {
+            data.image = saveMediaFile(data.image, "projects");
+        }
+        if (data.elevationPhoto !== undefined && data.image === undefined) data.image = data.elevationPhoto;
+        if (data.image !== undefined && data.elevationPhoto === undefined) data.elevationPhoto = data.image;
+
         const result = await prisma.project.update({
             where:{id:project.id},
             data:data,
@@ -208,8 +258,11 @@ exports.updateProject = async (req, res)=>{
     }
     catch(err)
     {
-        console.log(err);
-        res.status(500).json("something went wrong")
+        console.error("Update project error:", err);
+        if(err.statusCode){
+            return res.status(err.statusCode).json({ message: err.message })
+        }
+        res.status(500).json({ message: err.message || "Failed to update project" })
     }
 }
 

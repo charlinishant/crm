@@ -1162,27 +1162,46 @@ exports.clickToCallLead = async (req, res) => {
       const activeAt = activeCall.startedAt || activeCall.createdAt
       const activeAgeMs = activeAt ? Date.now() - new Date(activeAt).getTime() : 0
 
-      if (liveCallStatuses.has(activeStatus) && activeAgeMs < 30 * 60 * 1000) {
-        return res.status(409).json({
-          success: false,
-          message: "Another call is currently active. Please complete it before starting a new call.",
-          callLog: activeCall,
-        })
-      }
-
-      if (!liveCallStatuses.has(activeStatus) && activeAgeMs > MCUBE_STALE_ACTIVE_CALL_MS) {
+      // If previous call is a non-live inbound call older than 30s, mark it missed and allow new call
+      if (activeCall.direction === "inbound" && !liveCallStatuses.has(activeStatus) && activeAgeMs > 30 * 1000) {
+        await prisma.callLog.update({
+          where: { id: activeCall.id },
+          data: {
+            status: "missed",
+            endedAt: new Date(),
+            notes: (activeCall.notes ? activeCall.notes + " - " : "") + "Marked missed before outbound call",
+          },
+        }).catch(() => null)
+      } else if (!liveCallStatuses.has(activeStatus) && activeAgeMs > 45 * 1000) {
+        // Any non-live call (initiating, calling, ringing) older than 45s is stale; cancel and allow new call
         await prisma.callLog.update({
           where: { id: activeCall.id },
           data: {
             status: "canceled",
             endedAt: new Date(),
-            notes: activeCall.notes || "MCube outbound call was canceled after becoming stale.",
+            notes: activeCall.notes || "Call was canceled after becoming stale.",
           },
         }).catch(() => null)
+      } else if (liveCallStatuses.has(activeStatus) && activeAgeMs > 2 * 60 * 60 * 1000) {
+        // Stale connected call older than 2 hours; mark completed and allow new call
+        await prisma.callLog.update({
+          where: { id: activeCall.id },
+          data: {
+            status: "completed",
+            endedAt: new Date(),
+            notes: activeCall.notes || "Stale active call marked completed.",
+          },
+        }).catch(() => null)
+      } else if (liveCallStatuses.has(activeStatus)) {
+        return res.status(409).json({
+          success: false,
+          message: "Another call is currently connected. Please complete it before starting a new call.",
+          callLog: activeCall,
+        })
       } else {
         return res.status(409).json({
           success: false,
-          message: "Another call is currently active. Please wait before starting a new call.",
+          message: "Another call is currently connecting. Please wait a few moments or complete it.",
           callLog: activeCall,
         })
       }
@@ -1759,10 +1778,41 @@ exports.getActiveInboundCall = async (req, res) => {
   try {
     const userId = toNumberOrNull(req.authUser?.id)
     if (!userId) return res.status(400).json({ message: "User is required" })
+
+    // Automatically mark stale ringing/queued inbound calls (> 45s) as missed
+    const staleRingingThreshold = new Date(Date.now() - 45 * 1000)
+    await prisma.callLog.updateMany({
+      where: {
+        direction: "inbound",
+        status: { in: ["initiating", "initiated", "queued", "calling", "ringing"] },
+        startedAt: { lt: staleRingingThreshold },
+      },
+      data: {
+        status: "missed",
+        endedAt: new Date(),
+        notes: "Inbound call ringing timeout",
+      },
+    }).catch(() => null)
+
+    // Automatically mark stale connected inbound calls (> 2 hours) as completed
+    const staleConnectedThreshold = new Date(Date.now() - 2 * 60 * 60 * 1000)
+    await prisma.callLog.updateMany({
+      where: {
+        direction: "inbound",
+        status: { in: ["connected", "in-progress"] },
+        startedAt: { lt: staleConnectedThreshold },
+      },
+      data: {
+        status: "completed",
+        endedAt: new Date(),
+      },
+    }).catch(() => null)
+
     const callLog = await prisma.callLog.findFirst({
       where: {
         direction: "inbound",
         status: { in: activeCallStatuses },
+        startedAt: { gte: new Date(Date.now() - 2 * 60 * 60 * 1000) },
         ...(isAdminUser(req) ? {} : getSalesCallAccessWhere(userId)),
       },
       include: callInclude,
@@ -2932,3 +2982,63 @@ exports.rejectInboundCall = async (req, res) => {
     res.status(500).json({ message: "Unable to reject inbound call" })
   }
 }
+
+exports.dismissInboundCall = async (req, res) => {
+  try {
+    const callLogId = toNumberOrNull(req.params.id || req.body.callLogId || req.body.id)
+    if (!callLogId) return res.status(400).json({ message: "callLogId is required" })
+
+    const callLog = await prisma.callLog.findUnique({
+      where: { id: callLogId },
+      include: callInclude,
+    })
+    if (!callLog) return res.status(404).json({ message: "Call log not found" })
+
+    const updated = await prisma.callLog.update({
+      where: { id: callLogId },
+      data: {
+        status: "missed",
+        endedAt: new Date(),
+        disconnectedBy: "agent",
+        notes: (callLog.notes ? callLog.notes + " - " : "") + "Dismissed by agent",
+      },
+      include: callInclude,
+    })
+
+    emitInboundCallEvent(updated, { status: "missed", endedAt: updated.endedAt }, true)
+    res.status(200).json({ message: "Inbound call dismissed", callLog: updated })
+  } catch (error) {
+    console.error("Dismiss inbound call error:", error)
+    res.status(500).json({ message: "Unable to dismiss inbound call" })
+  }
+}
+
+exports.endInboundCall = async (req, res) => {
+  try {
+    const callLogId = toNumberOrNull(req.params.id || req.body.callLogId || req.body.id)
+    if (!callLogId) return res.status(400).json({ message: "callLogId is required" })
+
+    const callLog = await prisma.callLog.findUnique({
+      where: { id: callLogId },
+      include: callInclude,
+    })
+    if (!callLog) return res.status(404).json({ message: "Call log not found" })
+
+    const updated = await prisma.callLog.update({
+      where: { id: callLogId },
+      data: {
+        status: "completed",
+        endedAt: new Date(),
+        disconnectedBy: "agent",
+      },
+      include: callInclude,
+    })
+
+    emitInboundCallEvent(updated, { status: "completed", endedAt: updated.endedAt }, true)
+    res.status(200).json({ message: "Inbound call ended", callLog: updated })
+  } catch (error) {
+    console.error("End inbound call error:", error)
+    res.status(500).json({ message: "Unable to end inbound call" })
+  }
+}
+

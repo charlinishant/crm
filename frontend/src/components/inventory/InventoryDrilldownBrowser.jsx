@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   FaBuilding,
   FaArrowLeft,
@@ -10,10 +11,25 @@ import {
   FaCheckCircle,
   FaInfoCircle,
   FaTimes,
+  FaUserFriends,
+  FaTag,
+  FaExternalLinkAlt,
+  FaPlusCircle,
+  FaCheck,
+  FaPhoneAlt,
+  FaEnvelope,
+  FaUserCheck,
+  FaRegCalendarAlt,
 } from "react-icons/fa";
+import UserBookingForm from "../../user/UserBookingForm";
 import "../../styles/inventory-drilldown.css";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+
+const getAuthHeaders = () => {
+  const token = localStorage.getItem("token") || sessionStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const normalizeList = (data) =>
   Array.isArray(data)
@@ -30,10 +46,13 @@ const resolveMediaUrl = (source) => {
     source = source.url || source.src || source.dataUrl || source.path || "";
   }
   if (!source || typeof source !== "string") return "";
-  if (/^(https?:|data:|blob:)/i.test(source)) return source;
-  if (source.startsWith("/uploads/")) return `${API_URL}${source}`;
-  if (source.startsWith("uploads/")) return `${API_URL}/${source}`;
-  return source;
+  const trimmed = source.trim();
+  if (!trimmed) return "";
+  if (/^(https?:|data:|blob:)/i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith("/uploads/")) return `${API_URL}${trimmed}`;
+  if (trimmed.startsWith("uploads/")) return `${API_URL}/${trimmed}`;
+  if (trimmed.startsWith("/")) return `${API_URL}${trimmed}`;
+  return `${API_URL}/${trimmed}`;
 };
 
 const formatPrice = (value) => {
@@ -135,8 +154,79 @@ const flattenUnits = (unitGroups = []) =>
         group?.facing ||
         "";
 
-      const rawFloor = unit?.floor ?? floorPlan?.name ?? group?.floor ?? 1;
-      const floorNumber = Number(String(rawFloor).replace(/\D/g, "")) || 1;
+      const rawFloor = (unit?.floor !== null && unit?.floor !== undefined)
+        ? unit.floor
+        : (group?.floor !== null && group?.floor !== undefined ? group.floor : (floorPlan?.name ?? 1));
+      const floorDigits = String(rawFloor).replace(/[^\d-]/g, "");
+      const parsedFloor = Number(floorDigits);
+      const floorNumber = Number.isFinite(parsedFloor) ? parsedFloor : 0;
+
+      const floorPlanName =
+        floorPlan?.planName ||
+        floorPlan?.name ||
+        unit?.floorPlan?.planName ||
+        unit?.floorPlan?.name ||
+        group?.floorPlan?.planName ||
+        group?.floor?.name ||
+        group?.name ||
+        "";
+
+      const floorPlanId =
+        floorPlan?.id ||
+        unit?.floorPlanId ||
+        group?.floorPlanId ||
+        group?.floor?.id ||
+        "";
+
+      const rawPurpose = String(
+        unit?.propertyPurpose || unit?.unitStream || unit?.floorPlanUnitStream || ""
+      ).toLowerCase();
+      const unitType =
+        unit?.type ||
+        floorPlan?.type ||
+        group?.type ||
+        group?.category ||
+        (rawPurpose.includes("rehab") ? "REHAB" : "SALE");
+
+      const firstBooking = Array.isArray(unit?.bookings) && unit.bookings.length > 0 
+        ? unit.bookings[0] 
+        : (Array.isArray(group?.bookings) && group.bookings.length > 0 ? group.bookings[0] : null);
+
+      const leadObj = firstBooking?.lead || unit?.lead || group?.lead || null;
+
+      const rawLead =
+        unit?.leadName ||
+        (leadObj
+          ? `${leadObj.firstName || ""} ${leadObj.lastName || ""}`.trim() || leadObj.name || leadObj.companyName
+          : null) ||
+        firstBooking?.leadName ||
+        firstBooking?.customerName ||
+        group?.leadName ||
+        "";
+
+      const leadId =
+        unit?.leadId ||
+        leadObj?.id ||
+        firstBooking?.leadId ||
+        group?.leadId ||
+        null;
+
+      const leadPhone =
+        leadObj?.phone || leadObj?.contact || leadObj?.mobile || unit?.leadPhone || firstBooking?.phone || group?.leadPhone || "";
+
+      const leadEmail =
+        leadObj?.email || unit?.leadEmail || firstBooking?.email || group?.leadEmail || "";
+
+      const leadStage =
+        leadObj?.stage || leadObj?.status || leadObj?.lead_status || firstBooking?.stage || "";
+
+      const bookingDate =
+        firstBooking?.bookingDate || firstBooking?.createdAt || unit?.bookingDate || "";
+
+      const agreementValue =
+        firstBooking?.agreementValue || firstBooking?.totalCost || unit?.agreementValue || "";
+
+      const bookings = unit?.bookings || group?.bookings || (firstBooking ? [firstBooking] : []);
 
       return {
         id: unit?.id || group?.id || `${rawFloor}-${index}`,
@@ -149,6 +239,17 @@ const flattenUnits = (unitGroups = []) =>
         areaDisplay: areaDisplay !== "-" ? areaDisplay : "",
         bedrooms: rawBedrooms,
         configurationLabel: configLabel,
+        floorPlanName,
+        floorPlanId,
+        unitType,
+        leadName: rawLead || "",
+        leadId,
+        leadPhone,
+        leadEmail,
+        leadStage,
+        bookingDate,
+        agreementValue,
+        bookings,
         facing: facingVal,
         baseRate: baseRateVal,
         basePrice: basePriceVal,
@@ -176,9 +277,34 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
   // Filter & Search State
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStatusFilter, setActiveStatusFilter] = useState("all");
+  const [selectedFloorPlanFilter, setSelectedFloorPlanFilter] = useState("all");
 
   // Read-only modal preview state
   const [previewUnit, setPreviewUnit] = useState(null);
+
+  // Booking and Lead Integration State
+  const [selectedBookingUnit, setSelectedBookingUnit] = useState(null);
+  const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
+  const [leadsList, setLeadsList] = useState([]);
+  const [leadSearchQuery, setLeadSearchQuery] = useState("");
+  const [loadingLeads, setLoadingLeads] = useState(false);
+  const [isCreatingNewLead, setIsCreatingNewLead] = useState(false);
+  const [newLeadForm, setNewLeadForm] = useState({
+    firstName: "",
+    lastName: "",
+    phone: "",
+    email: "",
+    source: "Website",
+  });
+  const [leadError, setLeadError] = useState("");
+  const [savingLead, setSavingLead] = useState(false);
+
+  const [isBookingOpen, setIsBookingOpen] = useState(false);
+  const [bookingStepIndex, setBookingStepIndex] = useState(0);
+  const [isSavingBooking, setIsSavingBooking] = useState(false);
+  const [bookingMessage, setBookingMessage] = useState("");
+  const [isBookingSuccess, setIsBookingSuccess] = useState(false);
+  const [bookingForm, setBookingForm] = useState({});
 
   // Fetch all Projects on mount
   const loadProjects = useCallback(async () => {
@@ -261,12 +387,14 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
     setCurrentLevel(2);
     setSearchQuery("");
     loadTowersForProject(project);
+    loadUnitsForTower(project, null);
   };
 
   const handleSelectTower = (tower) => {
     setSelectedTower(tower);
     setCurrentLevel(3);
     setActiveStatusFilter("all");
+    setSelectedFloorPlanFilter("all");
     loadUnitsForTower(selectedProject, tower);
   };
 
@@ -281,11 +409,171 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
   const handleBackToTowers = () => {
     setCurrentLevel(2);
     setSelectedTower(null);
-    setUnits([]);
+    setSelectedFloorPlanFilter("all");
     if (selectedProject) {
       loadTowersForProject(selectedProject);
+      loadUnitsForTower(selectedProject, null);
     }
   };
+
+  // Booking and Lead Handlers
+  const handleOpenBookingForUnit = async (unit) => {
+    setSelectedBookingUnit(unit);
+    setPreviewUnit(null);
+
+    // If unit already has a linked lead, open booking directly
+    if (unit.leadId) {
+      setBookingForm({
+        leadId: unit.leadId,
+        customerName: unit.leadName || "Customer",
+        projectId: unit.projectId || selectedProject?.id,
+        projectDetails: selectedProject?.name || "",
+        towerId: unit.towerId || selectedTower?.id,
+        unitItemId: unit.id,
+        unit: unit.name,
+        floor: unit.floor,
+        baseRate: unit.baseRate,
+        basePrice: unit.basePrice,
+        carpetArea: unit.carpet,
+        saleableArea: unit.saleable,
+        rateBasis: unit.rateBasis || "On Carpet",
+        stage: "Booked",
+        idempotencyKey: `booking-${unit.leadId}-${unit.id}-${Date.now()}`,
+      });
+      setBookingStepIndex(0);
+      setIsBookingSuccess(false);
+      setBookingMessage("");
+      setIsBookingOpen(true);
+      return;
+    }
+
+    // Otherwise load leads and open lead selection / creation modal
+    try {
+      setLoadingLeads(true);
+      setLeadError("");
+      const res = await fetch(`${API_URL}/leads/`, { headers: getAuthHeaders() });
+      const data = await res.json();
+      setLeadsList(normalizeList(data));
+    } catch (err) {
+      setLeadsList([]);
+    } finally {
+      setLoadingLeads(false);
+      setIsLeadModalOpen(true);
+    }
+  };
+
+  const handleSelectLeadForBooking = (lead) => {
+    setIsLeadModalOpen(false);
+    const leadName = `${lead.firstName || ""} ${lead.lastName || ""}`.trim() || lead.name || lead.companyName || "Lead";
+    setBookingForm({
+      leadId: lead.id,
+      customerName: leadName,
+      projectId: selectedBookingUnit?.projectId || selectedProject?.id,
+      projectDetails: selectedProject?.name || "",
+      towerId: selectedBookingUnit?.towerId || selectedTower?.id,
+      unitItemId: selectedBookingUnit?.id,
+      unit: selectedBookingUnit?.name,
+      floor: selectedBookingUnit?.floor,
+      baseRate: selectedBookingUnit?.baseRate,
+      basePrice: selectedBookingUnit?.basePrice,
+      carpetArea: selectedBookingUnit?.carpet,
+      saleableArea: selectedBookingUnit?.saleable,
+      rateBasis: selectedBookingUnit?.rateBasis || "On Carpet",
+      stage: "Booked",
+      idempotencyKey: `booking-${lead.id}-${selectedBookingUnit?.id}-${Date.now()}`,
+    });
+    setBookingStepIndex(0);
+    setIsBookingSuccess(false);
+    setBookingMessage("");
+    setIsBookingOpen(true);
+  };
+
+  const handleCreateNewLeadForBooking = async (e) => {
+    e.preventDefault();
+    if (!newLeadForm.firstName || !newLeadForm.phone) {
+      setLeadError("First Name and Phone are required.");
+      return;
+    }
+
+    setSavingLead(true);
+    setLeadError("");
+    try {
+      const res = await fetch(`${API_URL}/leads/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          ...newLeadForm,
+          interestedProjects: selectedProject?.name || "",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data?.message || data?.error || "Failed to create lead");
+      }
+      const createdLead = data?.data || data;
+      setIsCreatingNewLead(false);
+      handleSelectLeadForBooking(createdLead);
+    } catch (err) {
+      setLeadError(err.message || "Failed to create lead");
+    } finally {
+      setSavingLead(false);
+    }
+  };
+
+  const handleSubmitBooking = async (event) => {
+    if (event?.preventDefault) event.preventDefault();
+    if (bookingStepIndex < 2) {
+      setBookingStepIndex((prev) => prev + 1);
+      return;
+    }
+
+    setIsSavingBooking(true);
+    setBookingMessage("");
+    try {
+      const payload = {
+        ...bookingForm,
+        stage: "Booked",
+        soldPrice: Number(bookingForm.totalPrice || bookingForm.basePrice || 0),
+        unitItemId: bookingForm.unitItemId ? Number(bookingForm.unitItemId) : undefined,
+        leadId: bookingForm.leadId ? Number(bookingForm.leadId) : undefined,
+      };
+      const res = await fetch(`${API_URL}/bookings`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify(payload),
+      });
+      const result = await res.json();
+      if (!res.ok) {
+        throw new Error(result?.message || result?.error || "Failed to create booking");
+      }
+      setIsBookingSuccess(true);
+      setBookingMessage("Booking created successfully!");
+      // Immediately refresh inventory from database
+      if (selectedProject && selectedTower) {
+        loadUnitsForTower(selectedProject, selectedTower);
+      }
+    } catch (err) {
+      setBookingMessage(err.message || "Something went wrong while booking.");
+    } finally {
+      setIsSavingBooking(false);
+    }
+  };
+
+  const filteredLeads = useMemo(() => {
+    const q = leadSearchQuery.trim().toLowerCase();
+    if (!q) return leadsList;
+    return leadsList.filter((l) =>
+      [l.firstName, l.lastName, l.name, l.phone, l.email, l.companyName]
+        .filter(Boolean)
+        .some((val) => String(val).toLowerCase().includes(q))
+    );
+  }, [leadsList, leadSearchQuery]);
 
   // Status Counts for Level 3
   const statusCounts = useMemo(() => {
@@ -306,20 +594,87 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
     return counts;
   }, [units]);
 
+  // Phase 18 Project Dashboard Statistics
+  const dashboardStats = useMemo(() => {
+    const totalUnits = units.length;
+    let availableUnits = 0;
+    let bookedUnits = 0;
+    let unitsWithLeads = 0;
+    let totalBookingAmount = 0;
+
+    units.forEach((u) => {
+      const st = String(u.status || "").toLowerCase();
+      if (st === "available" || st === "rehab" || st === "vacant") {
+        availableUnits += 1;
+      }
+      if (st === "booked" || st === "sold") {
+        bookedUnits += 1;
+      }
+      if (u.leadName && String(u.leadName).trim() !== "") {
+        unitsWithLeads += 1;
+      }
+      if (Array.isArray(u.bookings)) {
+        u.bookings.forEach((b) => {
+          if (b.stage === "Confirmed" || b.status === "Approved") {
+            const amt = Number(b.finalAmount || b.tokenAmount || 0);
+            if (!Number.isNaN(amt)) totalBookingAmount += amt;
+          }
+        });
+      }
+    });
+
+    return {
+      totalUnits,
+      availableUnits,
+      bookedUnits,
+      unitsWithLeads,
+      totalBookingAmount:
+        totalBookingAmount > 0
+          ? `₹${totalBookingAmount.toLocaleString("en-IN")}`
+          : "₹0",
+    };
+  }, [units]);
+
+  // Phase 17 Available Floor Plans for Tower Filter
+  const availableFloorPlans = useMemo(() => {
+    const map = new Map();
+    units.forEach((u) => {
+      const name = u.floorPlanName || "General";
+      if (!map.has(name)) {
+        map.set(name, {
+          name,
+          count: 0,
+        });
+      }
+      map.get(name).count += 1;
+    });
+    return Array.from(map.values()).sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { numeric: true })
+    );
+  }, [units]);
+
   // Group units by Floor in descending order
   const floorGroups = useMemo(() => {
-    const filtered =
-      activeStatusFilter === "all"
-        ? units
-        : units.filter((u) => u.status === activeStatusFilter);
+    let filtered = units;
+    if (activeStatusFilter !== "all") {
+      filtered = filtered.filter((u) => u.status === activeStatusFilter);
+    }
+    if (selectedFloorPlanFilter !== "all") {
+      filtered = filtered.filter(
+        (u) => (u.floorPlanName || "General") === selectedFloorPlanFilter
+      );
+    }
 
     const map = new Map();
     filtered.forEach((unit) => {
-      const floorKey = unit.floorNumber || 1;
+      const floorKey = (unit.floor !== null && unit.floor !== undefined && unit.floor !== "")
+        ? Number(unit.floor)
+        : (unit.floorNumber ?? 0);
+      const floorLabel = floorKey === 0 ? "Ground Floor" : `Floor ${floorKey}`;
       if (!map.has(floorKey)) {
         map.set(floorKey, {
           floorNumber: floorKey,
-          floorLabel: `Floor ${floorKey}`,
+          floorLabel,
           units: [],
         });
       }
@@ -328,7 +683,7 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
 
     // If a tower has specified totalFloors, include all floors descending
     const totalFloors = selectedTower?.totalFloor || selectedTower?.totalFloors || 0;
-    if (totalFloors > 0 && activeStatusFilter === "all") {
+    if (totalFloors > 0 && activeStatusFilter === "all" && selectedFloorPlanFilter === "all") {
       for (let f = 1; f <= totalFloors; f++) {
         if (!map.has(f)) {
           map.set(f, {
@@ -341,7 +696,7 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
     }
 
     return Array.from(map.values()).sort((a, b) => b.floorNumber - a.floorNumber);
-  }, [units, activeStatusFilter, selectedTower]);
+  }, [units, activeStatusFilter, selectedFloorPlanFilter, selectedTower]);
 
   // Filtered Projects for Level 1 Search
   const filteredProjects = useMemo(() => {
@@ -483,15 +838,22 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                         src={photoUrl}
                         alt={`${project.name} Elevation`}
                         className="inv-project-photo"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          const fallback = e.currentTarget.parentElement?.querySelector('.inv-project-photo-fallback');
+                          if (fallback) fallback.style.display = 'flex';
+                        }}
                       />
-                    ) : (
-                      <div className="inv-project-photo-fallback">
-                        <FaBuilding className="inv-project-photo-fallback-icon" />
-                        <span className="inv-project-photo-fallback-initials">
-                          {project.name || "Project"}
-                        </span>
-                      </div>
-                    )}
+                    ) : null}
+                    <div
+                      className="inv-project-photo-fallback"
+                      style={{ display: photoUrl ? 'none' : 'flex' }}
+                    >
+                      <FaBuilding className="inv-project-photo-fallback-icon" />
+                      <span className="inv-project-photo-fallback-initials">
+                        {project.name || "Project"}
+                      </span>
+                    </div>
                     <div className="inv-project-photo-overlay" />
 
                     {/* Top Type Badge */}
@@ -600,10 +962,57 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
               </div>
               <div className="inv-banner-metric-item">
                 <div className="inv-banner-metric-val">
-                  {selectedProject.unitCount || "--"}
+                  {selectedProject.unitCount || dashboardStats.totalUnits || "--"}
                 </div>
                 <div className="inv-banner-metric-lbl">Total Units</div>
               </div>
+            </div>
+          </div>
+
+          {/* Phase 18 Project Dashboard Statistics */}
+          <div className="inv-dashboard-stats-grid">
+            <div className="inv-stat-card">
+              <div className="inv-stat-content">
+                <span className="inv-stat-title">Total Units</span>
+                <span className="inv-stat-value">{dashboardStats.totalUnits}</span>
+              </div>
+              <FaBuilding className="inv-stat-icon text-primary" />
+            </div>
+            <div className="inv-stat-card">
+              <div className="inv-stat-content">
+                <span className="inv-stat-title">Available Units</span>
+                <span className="inv-stat-value" style={{ color: "#10b981" }}>
+                  {dashboardStats.availableUnits}
+                </span>
+              </div>
+              <FaDoorOpen className="inv-stat-icon" style={{ color: "#10b981" }} />
+            </div>
+            <div className="inv-stat-card">
+              <div className="inv-stat-content">
+                <span className="inv-stat-title">Booked Units</span>
+                <span className="inv-stat-value" style={{ color: "#ef4444" }}>
+                  {dashboardStats.bookedUnits}
+                </span>
+              </div>
+              <FaCheckCircle className="inv-stat-icon" style={{ color: "#ef4444" }} />
+            </div>
+            <div className="inv-stat-card">
+              <div className="inv-stat-content">
+                <span className="inv-stat-title">Units With Leads</span>
+                <span className="inv-stat-value" style={{ color: "#3b82f6" }}>
+                  {dashboardStats.unitsWithLeads}
+                </span>
+              </div>
+              <FaUserFriends className="inv-stat-icon" style={{ color: "#3b82f6" }} />
+            </div>
+            <div className="inv-stat-card">
+              <div className="inv-stat-content">
+                <span className="inv-stat-title">Total Booking Amount</span>
+                <span className="inv-stat-value" style={{ color: "#8b5cf6" }}>
+                  {dashboardStats.totalBookingAmount}
+                </span>
+              </div>
+              <FaTag className="inv-stat-icon" style={{ color: "#8b5cf6" }} />
             </div>
           </div>
 
@@ -715,7 +1124,91 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
             )}
           </div>
 
+          {/* Phase 18 Project Dashboard Statistics */}
+          <div className="inv-dashboard-stats-grid">
+            <div className="inv-stat-card">
+              <div className="inv-stat-content">
+                <span className="inv-stat-title">Total Units</span>
+                <span className="inv-stat-value">{dashboardStats.totalUnits}</span>
+              </div>
+              <FaBuilding className="inv-stat-icon text-primary" />
+            </div>
+            <div className="inv-stat-card">
+              <div className="inv-stat-content">
+                <span className="inv-stat-title">Available Units</span>
+                <span className="inv-stat-value" style={{ color: "#10b981" }}>
+                  {dashboardStats.availableUnits}
+                </span>
+              </div>
+              <FaDoorOpen className="inv-stat-icon" style={{ color: "#10b981" }} />
+            </div>
+            <div className="inv-stat-card">
+              <div className="inv-stat-content">
+                <span className="inv-stat-title">Booked Units</span>
+                <span className="inv-stat-value" style={{ color: "#ef4444" }}>
+                  {dashboardStats.bookedUnits}
+                </span>
+              </div>
+              <FaCheckCircle className="inv-stat-icon" style={{ color: "#ef4444" }} />
+            </div>
+            <div className="inv-stat-card">
+              <div className="inv-stat-content">
+                <span className="inv-stat-title">Units With Leads</span>
+                <span className="inv-stat-value" style={{ color: "#3b82f6" }}>
+                  {dashboardStats.unitsWithLeads}
+                </span>
+              </div>
+              <FaUserFriends className="inv-stat-icon" style={{ color: "#3b82f6" }} />
+            </div>
+            <div className="inv-stat-card">
+              <div className="inv-stat-content">
+                <span className="inv-stat-title">Total Booking Amount</span>
+                <span className="inv-stat-value" style={{ color: "#8b5cf6" }}>
+                  {dashboardStats.totalBookingAmount}
+                </span>
+              </div>
+              <FaTag className="inv-stat-icon" style={{ color: "#8b5cf6" }} />
+            </div>
+          </div>
 
+          {/* Phase 17 Floor Plan Pills Navigation & Filter */}
+          {availableFloorPlans.length > 0 && (
+            <div className="inv-fp-filter-wrapper">
+              <div className="inv-fp-filter-header">
+                <span>
+                  <FaLayerGroup className="me-1 text-primary" /> Floor Plans ({availableFloorPlans.length})
+                </span>
+                {selectedFloorPlanFilter !== "all" && (
+                  <button
+                    className="btn btn-sm btn-link text-decoration-none p-0 text-primary"
+                    onClick={() => setSelectedFloorPlanFilter("all")}
+                    style={{ fontSize: 12, fontWeight: 600 }}
+                  >
+                    Clear Filter (Show All Floor Plans)
+                  </button>
+                )}
+              </div>
+              <div className="inv-fp-pills-list">
+                <button
+                  type="button"
+                  className={`inv-fp-pill ${selectedFloorPlanFilter === "all" ? "active" : ""}`}
+                  onClick={() => setSelectedFloorPlanFilter("all")}
+                >
+                  All Floor Plans ({units.length})
+                </button>
+                {availableFloorPlans.map((fp) => (
+                  <button
+                    key={fp.name}
+                    type="button"
+                    className={`inv-fp-pill ${selectedFloorPlanFilter === fp.name ? "active" : ""}`}
+                    onClick={() => setSelectedFloorPlanFilter(fp.name)}
+                  >
+                    {fp.name} ({fp.count})
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Floor-wise Unit Grid (Reusing Booking Layout) */}
           <div className="inv-grid-wrapper">
@@ -724,7 +1217,10 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                 <h6>No units found matching &apos;{activeStatusFilter}&apos; filter.</h6>
                 <button
                   className="btn btn-sm btn-outline-primary mt-2"
-                  onClick={() => setActiveStatusFilter("all")}
+                  onClick={() => {
+                    setActiveStatusFilter("all");
+                    setSelectedFloorPlanFilter("all");
+                  }}
                 >
                   Clear Filter
                 </button>
@@ -741,13 +1237,14 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                     ) : (
                       floorUnits.map((unit) => {
                         const areaText = unit.areaDisplay ? `${unit.areaDisplay} sq.ft` : "";
+                        const isShop = String(unit.name).startsWith("SH-") || String(unit.unitType || "").toLowerCase().includes("commercial") || String(unit.configurationLabel || "").toLowerCase().includes("shop");
 
                         return (
                           <div
                             key={unit.id}
                             className={`inv-unit-box ${unit.status}`}
                             onClick={() => setPreviewUnit(unit)}
-                            title={`Click to view specs: Flat ${unit.name} · ${areaText || "Area not set"}`}
+                            title={`Click to view specs: ${isShop ? "Shop" : "Flat"} ${unit.name} · ${areaText || "Area not set"}`}
                           >
                             {/* Plan 4-pane icon or thumbnail */}
                             {unit.image ? (
@@ -761,16 +1258,36 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                               </span>
                             )}
 
-                            {/* Flat Number AND Area Together */}
+                            {/* Flat/Shop Number AND Area Together */}
                             <div className="inv-unit-info">
                               <span className="inv-unit-name-text">
-                                Flat no : {unit.name}
+                                {isShop ? "Shop no" : "Flat no"} : {unit.name}
                               </span>
                               {areaText && (
                                 <span className="inv-unit-area-text">
                                   {areaText}
                                 </span>
                               )}
+                              {unit.floorPlanName && (
+                                <span style={{ fontSize: 10.5, color: "#64748b", fontWeight: 600 }}>
+                                  {unit.floorPlanName} · {unit.unitType}
+                                </span>
+                              )}
+                              {unit.status === "booked" ? (
+                                <span className="inv-unit-lead-pill" style={{ background: "#fee2e2", color: "#991b1b" }}>
+                                  🔒 BOOKED {unit.leadName ? `(${unit.leadName})` : ""}
+                                </span>
+                              ) : unit.leadName ? (
+                                <span className="inv-unit-lead-pill" title={`Lead: ${unit.leadName}`}>
+                                  👤 {unit.leadName}
+                                </span>
+                              ) : (
+                                <span className="inv-unit-vacant-pill">
+                                  AVAILABLE
+                                </span>
+                              )}
+
+                              {/* Book button removed from preview inventory grid per request */}
                             </div>
 
                             {/* 3-Dots Preview Popup Trigger */}
@@ -784,7 +1301,7 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                               <FaEllipsisV />
                               <span className="inv-unit-popup">
                                 <span className="inv-popup-header">
-                                  FLAT {unit.name}
+                                  {isShop ? "SHOP" : "FLAT"} {unit.name}
                                 </span>
                                 <span className="inv-popup-price">
                                   {formatPrice(unit.basePrice)}
@@ -795,31 +1312,39 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                                   ) : null}
                                 </span>
 
+                                {unit.floorPlanName && (
+                                  <span className="inv-popup-meta">
+                                    Floor Plan: <strong>{unit.floorPlanName}</strong>
+                                  </span>
+                                )}
                                 {unit.carpet && (
                                   <span className="inv-popup-meta">
                                     Carpet: <strong>{unit.carpet} sq.ft</strong>
                                   </span>
                                 )}
-                                {unit.configurationLabel && (
+                                {unit.unitType && (
                                   <span className="inv-popup-meta">
-                                    Type: <strong>{unit.configurationLabel}</strong>
+                                    Type: <strong>{unit.unitType}</strong>
                                   </span>
                                 )}
-                                {unit.saleable && (
-                                  <span className="inv-popup-meta">
-                                    Saleable: <strong>{unit.saleable} sq.ft</strong>
-                                  </span>
-                                )}
-                                {unit.baseRate && (
-                                  <span className="inv-popup-meta">
-                                    Rate: <strong>₹{Number(unit.baseRate).toLocaleString("en-IN")}/sq.ft</strong>
-                                  </span>
-                                )}
-                                {unit.facing && (
-                                  <span className="inv-popup-meta">
-                                    Facing: <strong>{unit.facing}</strong>
-                                  </span>
-                                )}
+                                <span className="inv-popup-meta">
+                                  Status: <strong className="text-uppercase">{unit.status}</strong>
+                                </span>
+                                <span className="inv-popup-meta">
+                                  Lead: <strong>{unit.leadName || "None (Vacant)"}</strong>
+                                </span>
+                                {/* {unit.status === "available" && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-primary w-100 mt-2 py-1 fw-bold"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleOpenBookingForUnit(unit);
+                                    }}
+                                  >
+                                    Book Now
+                                  </button>
+                                )} */}
                               </span>
                             </span>
                           </div>
@@ -839,46 +1364,72 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
           ========================================================================= */}
       {previewUnit && (
         <div className="inv-modal-overlay" onClick={() => setPreviewUnit(null)}>
-          <div className="inv-modal-content" onClick={(e) => e.stopPropagation()}>
+          <div className="inv-modal-content" style={{ maxWidth: "600px" }} onClick={(e) => e.stopPropagation()}>
             <div className="inv-modal-header">
-              <div className="d-flex align-items-center gap-2">
-                <FaInfoCircle />
-                <h5 className="inv-modal-title">
-                  Flat {previewUnit.name} Specifications
-                </h5>
+              <div className="inv-modal-header-left">
+                <div className="inv-modal-header-icon">
+                  <FaInfoCircle />
+                </div>
+                <div>
+                  <h5 className="inv-modal-title">
+                    {String(previewUnit.name).startsWith("SH-") || String(previewUnit.unitType || "").toLowerCase().includes("commercial") ? "Shop" : "Flat"} {previewUnit.name} Specifications
+                  </h5>
+                  <p className="inv-modal-subtitle">
+                    {selectedProject?.name || previewUnit.projectName || "Project"} &bull; {selectedTower?.name || previewUnit.towerName || "Tower"}
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
                 className="inv-modal-close-btn"
                 onClick={() => setPreviewUnit(null)}
+                aria-label="Close"
               >
                 <FaTimes />
               </button>
             </div>
 
             <div className="inv-modal-body">
-              <div className="d-flex align-items-center justify-content-between mb-3">
-                <span
-                  className="badge text-uppercase"
-                  style={{
-                    backgroundColor:
-                      previewUnit.status === "available"
-                        ? "#10b981"
-                        : previewUnit.status === "booked"
-                        ? "#ef4444"
-                        : "#64748b",
-                    padding: "6px 12px",
-                    fontSize: 12,
-                  }}
-                >
-                  Status: {previewUnit.status}
-                </span>
+              {/* Highlight Price & Status Bar */}
+              <div className="inv-unit-highlight-banner">
+                <div className="d-flex align-items-center gap-2">
+                  <span
+                    className="badge text-uppercase"
+                    style={{
+                      backgroundColor:
+                        previewUnit.status === "available"
+                          ? "#10b981"
+                          : previewUnit.status === "booked"
+                          ? "#ef4444"
+                          : previewUnit.status === "blocked"
+                          ? "#f59e0b"
+                          : "#64748b",
+                      padding: "6px 12px",
+                      fontSize: 12,
+                      fontWeight: 700,
+                      letterSpacing: "0.5px",
+                    }}
+                  >
+                    Status: {previewUnit.status}
+                  </span>
+                  {previewUnit.status === "booked" && previewUnit.bookingDate && (
+                    <span className="text-muted" style={{ fontSize: 12 }}>
+                      Booked on {new Date(previewUnit.bookingDate).toLocaleDateString("en-IN")}
+                    </span>
+                  )}
+                </div>
 
-                <span className="text-primary fw-bold" style={{ fontSize: 16 }}>
-                  {formatPrice(previewUnit.basePrice)}
-                </span>
+                <div className="text-end">
+                  <span className="text-muted d-block" style={{ fontSize: 11, textTransform: "uppercase", fontWeight: 700 }}>
+                    {previewUnit.agreementValue ? "Agreement Value" : "Base Price"}
+                  </span>
+                  <span className="text-primary fw-bold" style={{ fontSize: 18 }}>
+                    {formatPrice(previewUnit.agreementValue || previewUnit.basePrice)}
+                  </span>
+                </div>
               </div>
 
+              {/* Specifications Grid */}
               <div className="inv-modal-grid">
                 <div className="inv-modal-field">
                   <span className="inv-modal-label">Project</span>
@@ -890,13 +1441,28 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                 </div>
                 <div className="inv-modal-field">
                   <span className="inv-modal-label">Floor</span>
-                  <span className="inv-modal-val">Floor {previewUnit.floor}</span>
+                  <span className="inv-modal-val">
+                    {Number(previewUnit.floor) === 0 || previewUnit.floor === "0" || previewUnit.floor === 0
+                      ? "Ground Floor"
+                      : `Floor ${previewUnit.floor}`}
+                  </span>
                 </div>
                 <div className="inv-modal-field">
-                  <span className="inv-modal-label">Unit Type</span>
+                  <span className="inv-modal-label">Floor Plan</span>
+                  <span className="inv-modal-val">{previewUnit.floorPlanName || "--"}</span>
+                </div>
+                <div className="inv-modal-field">
+                  <span className="inv-modal-label">Unit Number</span>
                   <span className="inv-modal-val">
-                    {previewUnit.configurationLabel ||
-                      (previewUnit.bedrooms ? `${previewUnit.bedrooms} BHK` : "--")}
+                    {String(previewUnit.name).startsWith("SH-") || String(previewUnit.unitType || "").toLowerCase().includes("commercial")
+                      ? `Shop ${previewUnit.name}`
+                      : `Flat ${previewUnit.name}`}
+                  </span>
+                </div>
+                <div className="inv-modal-field">
+                  <span className="inv-modal-label">Unit Type / Config</span>
+                  <span className="inv-modal-val">
+                    {previewUnit.unitType || previewUnit.configurationLabel || "--"}
                   </span>
                 </div>
                 <div className="inv-modal-field">
@@ -906,10 +1472,8 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                   </span>
                 </div>
                 <div className="inv-modal-field">
-                  <span className="inv-modal-label">Saleable Area</span>
-                  <span className="inv-modal-val">
-                    {previewUnit.saleable ? `${previewUnit.saleable} sq.ft` : "--"}
-                  </span>
+                  <span className="inv-modal-label">Facing</span>
+                  <span className="inv-modal-val">{previewUnit.facing || "--"}</span>
                 </div>
                 <div className="inv-modal-field">
                   <span className="inv-modal-label">Base Rate</span>
@@ -920,23 +1484,326 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                   </span>
                 </div>
                 <div className="inv-modal-field">
-                  <span className="inv-modal-label">Facing</span>
-                  <span className="inv-modal-val">{previewUnit.facing || "--"}</span>
+                  <span className="inv-modal-label">Status</span>
+                  <span className="inv-modal-val text-uppercase">
+                    {previewUnit.status}
+                  </span>
                 </div>
               </div>
+
+              {/* Purchaser / Lead Details Section */}
+              {previewUnit.leadName || previewUnit.leadId ? (
+                <div className="inv-lead-section">
+                  <div className="inv-lead-header">
+                    <div className="d-flex align-items-center gap-2">
+                      <FaUserCheck className="text-primary" />
+                      <strong style={{ fontSize: 13, color: "#0369a1", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                        Purchaser / Assigned Lead
+                      </strong>
+                    </div>
+                    {previewUnit.leadStage && (
+                      <span className="badge bg-primary text-uppercase" style={{ fontSize: 10 }}>
+                        {previewUnit.leadStage}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="inv-lead-info-row">
+                    <div className="inv-lead-info-item">
+                      <span className="inv-modal-label">Full Name</span>
+                      <span className="inv-modal-val fw-bold" style={{ color: "#0f172a" }}>
+                        {previewUnit.leadId ? (
+                          <Link
+                            to={`/details?leadId=${previewUnit.leadId}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-decoration-none text-primary"
+                          >
+                            {previewUnit.leadName || `Lead #${previewUnit.leadId}`}
+                          </Link>
+                        ) : (
+                          previewUnit.leadName || `Lead #${previewUnit.leadId}`
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="inv-lead-info-item">
+                      <span className="inv-modal-label">Phone Number</span>
+                      <span className="inv-modal-val" style={{ color: "#0f172a" }}>
+                        {previewUnit.leadPhone ? (
+                          <a href={`tel:${previewUnit.leadPhone}`} className="text-decoration-none text-dark d-inline-flex align-items-center gap-1">
+                            <FaPhoneAlt size={11} className="text-muted" /> {previewUnit.leadPhone}
+                          </a>
+                        ) : (
+                          "--"
+                        )}
+                      </span>
+                    </div>
+
+                    {previewUnit.leadEmail && (
+                      <div className="inv-lead-info-item">
+                        <span className="inv-modal-label">Email Address</span>
+                        <span className="inv-modal-val" style={{ color: "#0f172a", fontSize: 13 }}>
+                          <a href={`mailto:${previewUnit.leadEmail}`} className="text-decoration-none text-dark d-inline-flex align-items-center gap-1">
+                            <FaEnvelope size={11} className="text-muted" /> {previewUnit.leadEmail}
+                          </a>
+                        </span>
+                      </div>
+                    )}
+
+                    {previewUnit.leadId && (
+                      <div className="inv-lead-info-item">
+                        <span className="inv-modal-label">Lead Reference</span>
+                        <span className="inv-modal-val text-muted" style={{ fontSize: 13 }}>
+                          ID #{previewUnit.leadId}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {previewUnit.leadId && (
+                    <div className="inv-lead-actions">
+                      <Link
+                        to={`/details?leadId=${previewUnit.leadId}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="btn btn-primary btn-sm d-inline-flex align-items-center gap-2 fw-semibold px-3 py-2"
+                        style={{ borderRadius: 8, fontSize: 12.5 }}
+                      >
+                        <FaExternalLinkAlt size={12} />
+                        <span>View Lead Details (Admin) &rarr;</span>
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="inv-vacant-banner">
+                  <FaInfoCircle className="text-secondary" />
+                  <span>This unit is currently vacant with no purchaser or lead assigned.</span>
+                </div>
+              )}
             </div>
 
-            <div className="inv-modal-footer">
+            <div className="inv-modal-footer d-flex justify-content-between align-items-center">
               <button
                 type="button"
-                className="btn btn-secondary btn-sm px-4"
+                className="btn btn-outline-secondary btn-sm px-4 fw-semibold"
+                style={{ borderRadius: 8 }}
                 onClick={() => setPreviewUnit(null)}
               >
                 Close Preview
               </button>
+
+              {previewUnit.status === "booked" && (
+                <span className="badge bg-danger p-2 px-3 text-uppercase fw-bold" style={{ borderRadius: 6 }}>
+                  BOOKED
+                </span>
+              )}
             </div>
           </div>
         </div>
+      )}
+
+      {/* =========================================================================
+          Select or Create Lead Modal for Booking
+          ========================================================================= */}
+      {isLeadModalOpen && (
+        <div className="inv-modal-overlay" onClick={() => setIsLeadModalOpen(false)}>
+          <div className="inv-modal-content" style={{ maxWidth: "560px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="inv-modal-header">
+              <div className="d-flex align-items-center gap-2">
+                <FaUserFriends className="text-primary" />
+                <h5 className="inv-modal-title">
+                  Select Lead to Book {selectedBookingUnit?.name}
+                </h5>
+              </div>
+              <button
+                type="button"
+                className="inv-modal-close-btn"
+                onClick={() => setIsLeadModalOpen(false)}
+              >
+                <FaTimes />
+              </button>
+            </div>
+
+            <div className="inv-modal-body">
+              {leadError && <div className="alert alert-danger mb-3 py-2">{leadError}</div>}
+
+              <div className="d-flex align-items-center justify-content-between mb-3">
+                <span className="text-muted" style={{ fontSize: 13 }}>
+                  {isCreatingNewLead ? "Create a new lead" : "Choose an existing customer lead"}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-primary"
+                  onClick={() => {
+                    setIsCreatingNewLead(!isCreatingNewLead);
+                    setLeadError("");
+                  }}
+                >
+                  {isCreatingNewLead ? "← Pick Existing Lead" : "+ Create New Lead"}
+                </button>
+              </div>
+
+              {isCreatingNewLead ? (
+                <form onSubmit={handleCreateNewLeadForBooking}>
+                  <div className="mb-2">
+                    <label className="form-label mb-1" style={{ fontSize: 12, fontWeight: 600 }}>First Name *</label>
+                    <input
+                      type="text"
+                      className="form-control form-control-sm"
+                      value={newLeadForm.firstName}
+                      onChange={(e) => setNewLeadForm({ ...newLeadForm, firstName: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="mb-2">
+                    <label className="form-label mb-1" style={{ fontSize: 12, fontWeight: 600 }}>Last Name</label>
+                    <input
+                      type="text"
+                      className="form-control form-control-sm"
+                      value={newLeadForm.lastName}
+                      onChange={(e) => setNewLeadForm({ ...newLeadForm, lastName: e.target.value })}
+                    />
+                  </div>
+                  <div className="mb-2">
+                    <label className="form-label mb-1" style={{ fontSize: 12, fontWeight: 600 }}>Phone *</label>
+                    <input
+                      type="tel"
+                      className="form-control form-control-sm"
+                      value={newLeadForm.phone}
+                      onChange={(e) => setNewLeadForm({ ...newLeadForm, phone: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="mb-2">
+                    <label className="form-label mb-1" style={{ fontSize: 12, fontWeight: 600 }}>Email</label>
+                    <input
+                      type="email"
+                      className="form-control form-control-sm"
+                      value={newLeadForm.email}
+                      onChange={(e) => setNewLeadForm({ ...newLeadForm, email: e.target.value })}
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label mb-1" style={{ fontSize: 12, fontWeight: 600 }}>Source</label>
+                    <select
+                      className="form-select form-select-sm"
+                      value={newLeadForm.source}
+                      onChange={(e) => setNewLeadForm({ ...newLeadForm, source: e.target.value })}
+                    >
+                      <option value="Walk-in">Walk-in</option>
+                      <option value="Website">Website</option>
+                      <option value="Channel Partner">Channel Partner</option>
+                      <option value="Portal">Portal</option>
+                      <option value="Reference">Reference</option>
+                    </select>
+                  </div>
+
+                  <div className="d-flex justify-content-end gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => setIsCreatingNewLead(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-primary btn-sm fw-bold px-3"
+                      disabled={savingLead}
+                    >
+                      {savingLead ? "Saving..." : "Create & Continue to Booking →"}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <div>
+                  <div className="mb-3">
+                    <input
+                      type="text"
+                      className="form-control form-control-sm"
+                      placeholder="Search lead by name, phone, email..."
+                      value={leadSearchQuery}
+                      onChange={(e) => setLeadSearchQuery(e.target.value)}
+                    />
+                  </div>
+
+                  {loadingLeads ? (
+                    <div className="text-center py-4 text-muted">Loading leads...</div>
+                  ) : filteredLeads.length === 0 ? (
+                    <div className="text-center py-4 text-muted">
+                      <p className="mb-2">No leads found matching your search.</p>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        onClick={() => setIsCreatingNewLead(true)}
+                      >
+                        + Create New Lead
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={{ maxHeight: "300px", overflowY: "auto" }}>
+                      <ul className="list-group list-group-flush">
+                        {filteredLeads.slice(0, 50).map((l) => {
+                          const name = `${l.firstName || ""} ${l.lastName || ""}`.trim() || l.name || l.companyName || `Lead #${l.id}`;
+                          return (
+                            <li
+                              key={l.id}
+                              className="list-group-item list-group-item-action d-flex align-items-center justify-content-between p-2"
+                              style={{ cursor: "pointer" }}
+                              onClick={() => handleSelectLeadForBooking(l)}
+                            >
+                              <div>
+                                <strong style={{ fontSize: 13 }}>{name}</strong>
+                                <div className="text-muted" style={{ fontSize: 11.5 }}>
+                                  {l.phone || "No phone"} {l.email ? `· ${l.email}` : ""}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-primary py-1 px-3"
+                                style={{ fontSize: 11.5, fontWeight: 600 }}
+                              >
+                                Select →
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =========================================================================
+          Full CRM Booking Flow (UserBookingForm)
+          ========================================================================= */}
+      {isBookingOpen && (
+        <UserBookingForm
+          isOpen={isBookingOpen}
+          bookingStepIndex={bookingStepIndex}
+          bookingMessage={bookingMessage}
+          bookingProjectMessage=""
+          bookingForm={bookingForm}
+          leadName={bookingForm.customerName}
+          isSavingBooking={isSavingBooking}
+          isLoadingBookingProject={false}
+          bookingSuccess={isBookingSuccess}
+          onClose={() => {
+            setIsBookingOpen(false);
+            if (selectedProject && selectedTower) {
+              loadUnitsForTower(selectedProject, selectedTower);
+            }
+          }}
+          onSubmit={handleSubmitBooking}
+          onPrevious={() => setBookingStepIndex((prev) => Math.max(0, prev - 1))}
+          onFieldChange={(field, value) => setBookingForm((prev) => ({ ...prev, [field]: value }))}
+        />
       )}
     </div>
   );

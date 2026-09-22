@@ -86,7 +86,12 @@ app.use("/unit", unitRouter)
 app.use("/units", unitRouter)
 app.use("/api/unit", unitRouter)
 app.use("/bookings", bookingRouter)
+app.use("/api/bookings", bookingRouter)
 app.use("/tasks", taskRouter)
+app.use("/api/admin/booking-invoices", (req, res, next) => {
+  const { getAdminBookingInvoices } = require("./controllers/booking.controller");
+  return getAdminBookingInvoices(req, res, next);
+})
 app.use("/schedule-visits", scheduleVisitRouter)
 app.use("/api/schedule-visits", scheduleVisitRouter)
 app.use("/attendance", attendanceRouter)

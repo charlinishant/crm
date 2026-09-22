@@ -106,3 +106,29 @@ select.form-control:focus,
   position: sticky !important;
   top: 0 !important;
 }
+
+/* Sign In Button Override */
+button.signin-submit-btn {
+  background-color: #ffffff !important;
+  color: #1268ea !important;
+  border: none !important;
+  border-radius: 999px !important;
+}
+
+button.signin-submit-btn:hover {
+  background-color: #f1f5f9 !important;
+  color: #1268ea !important;
+}
+
+/* --------------------------------------------------------------------------
+   5. Floor Plan Full Width Layout (Removed floating summary column)
+   -------------------------------------------------------------------------- */
+.floorplan-layout {
+  display: block !important;
+  width: 100% !important;
+}
+
+.floorplan-main {
+  width: 100% !important;
+  max-width: 100% !important;
+}

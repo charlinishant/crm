@@ -60,14 +60,14 @@ const validateFloorRiseInputs = ({
   if (toNumberOrNull(reraArea) === null || Number(reraArea) <= 0) return "RERA Area is required for floor-rise calculation."
   if (!floorRiseEnabled) return null
   if (toNumberOrNull(floorRisePerSqft) === null || Number(floorRisePerSqft) < 0) return "Enter Floor Rise / Sqft."
-  if (!Number.isInteger(Number(riseFromFloor)) || Number(riseFromFloor) < 1) return "Select Base Floor for Floor Rise."
+  if (!Number.isInteger(Number(riseFromFloor)) || Number(riseFromFloor) < 0) return "Select Base Floor for Floor Rise."
   if (applicableFloorFrom !== null && Number(riseFromFloor) < Number(applicableFloorFrom)) {
     return "Base Floor for Floor Rise cannot be before Applicable Floor From."
   }
   if (applicableFloorTo !== null && Number(riseFromFloor) > Number(applicableFloorTo)) {
     return "Base Floor for Floor Rise cannot exceed Applicable Floor To."
   }
-  if (!Number.isInteger(Number(floorNumber)) || Number(floorNumber) < 1) return "Unit floor number is required."
+  if (!Number.isInteger(Number(floorNumber)) || Number(floorNumber) < 0) return "Unit floor number is required."
   if (parseSkippedFloors(skippedFloors).includes(Number(riseFromFloor))) {
     return "Base Floor for Floor Rise cannot be a skipped floor."
   }

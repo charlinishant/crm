@@ -831,6 +831,20 @@ exports.getLeads = async (req, res) => {
       ...(userId ? { teamId: parseInt(userId) } : {}),
     }
 
+    if (isCaller) {
+      where = {
+        ...where,
+        teamId: req.authUser?.id ? Number(req.authUser.id) : undefined,
+        NOT: [
+          { tags: { contains: "Untagged" } },
+          { tags: { contains: "Quarantined" } },
+          { AND: [{ fundingSource: null }, { channelPartner: null }] },
+          { AND: [{ fundingSource: "" }, { channelPartner: "" }] },
+          { AND: [{ fundingSource: "Untagged" }, { channelPartner: null }] },
+        ],
+      }
+    }
+
     if (isUntaggedQuery) {
       where = {
         ...where,
@@ -1336,6 +1350,16 @@ exports.updateLead = async (req, res) => {
         return res.status(409).json({ message: "Booked lead status cannot be changed." })
       }
     }
+    // QUARANTINE ENFORCEMENT:
+    // Untagged leads cannot be assigned to telecallers/team members until source is tagged.
+    const isUntagged = isUntaggedLead(lead)
+    if (isUntagged && !newlyLocked && source.teamId !== undefined && source.teamId !== null && source.teamId !== "" && Number(source.teamId) > 0) {
+      return res.status(400).json({
+        message: "Untagged lead is quarantined and cannot be assigned to telecallers. Please tag lead source first to release from quarantine.",
+        code: "UNTAGGED_QUARANTINED",
+      })
+    }
+
     if (source.teamId !== undefined) data.teamId = toNullableInt(source.teamId)
     if (source.seats !== undefined) data.seats = toInt(source.seats, 0)
     if (source.tenure !== undefined) data.tenure = toFloat(source.tenure, 0)

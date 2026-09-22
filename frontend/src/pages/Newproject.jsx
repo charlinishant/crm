@@ -301,6 +301,8 @@ const NEWPROJECT = () => {
       latitude: formData.latitude,
       longitude: formData.longitude,
       integratedPortals: formData.integratedPortals || "",
+      elevationPhoto: formData.elevationPhoto || formData.image || null,
+      image: formData.image || formData.elevationPhoto || null,
     };
 
     try {

@@ -1,12 +1,21 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { FaEllipsisV } from "react-icons/fa";
+import { FaEllipsisV, FaLock, FaExclamationTriangle, FaTag } from "react-icons/fa";
 import BulkActionToolbar from "../table/BulkActionToolbar";
 import BulkDeleteConfirmation from "../table/BulkDeleteConfirmation";
 import TableSelectionCheckbox from "../table/TableSelectionCheckbox";
 import { useTableSelection } from "../table/useTableSelection";
 import LeadTableToolbar from "../common/LeadTableToolbar";
 import { matchesLeadSearch } from "../../utils/leadSearch";
+
+const SOURCE_OPTIONS = [
+  "Channel Partner",
+  "Walk-in",
+  "Website",
+  "Portal",
+  "Reference",
+  "Direct",
+];
 
 const PaymentHistoryOne = ({ trashMode = false }) => {
   const [leadData, setLeadData] = useState([]);
@@ -22,6 +31,19 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkMessage, setBulkMessage] = useState("");
   const [bulkError, setBulkError] = useState("");
+
+  // In-table Tag Modal State (No separate page needed)
+  const [isTagModalOpen, setIsTagModalOpen] = useState(false);
+  const [activeTargetLead, setActiveTargetLead] = useState(null);
+  const [tagForm, setTagForm] = useState({
+    fundingSource: "Channel Partner",
+    channelPartnerId: "",
+    channelPartner: "",
+    channelPartnerReraId: "",
+    teamId: "",
+  });
+  const [isConfirmedLock, setIsConfirmedLock] = useState(false);
+  const [isSubmittingTag, setIsSubmittingTag] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
@@ -90,18 +112,45 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
     return lead.owner || lead.sales || getUserName(lead.team) || "Unassigned";
   }, [getUserName]);
 
-  const getLastSource = useCallback((lead) => {
-    if (lead.source) return lead.source;
-    if (lead.fundingSource) return lead.fundingSource;
-    if (lead.channelPartner) return lead.channelPartner;
-    if (typeof lead.tags === 'string') {
-      const match = lead.tags.match(/source:\s*([^|]+)/);
-      if (match && match[1]) return match[1].trim();
-      if (lead.tags.includes("Untagged")) return "Untagged";
-      return lead.tags.split('|')[0].trim();
+  const getLastSourceInfo = useCallback((lead) => {
+    const tags = typeof lead.tags === 'string' ? lead.tags : '';
+    const isLocked = tags.includes('sourceLocked:true') ||
+      (lead.fundingSource && lead.fundingSource !== 'Untagged') ||
+      (lead.channelPartner && lead.channelPartner !== 'Untagged');
+
+    // Extract clean source from tags or direct fields
+    let source = '';
+    let cpName = '';
+    let isUntagged = false;
+
+    if (isLocked) {
+      // Parse from tag string first
+      const srcMatch = tags.match(/source:\s*([^|]+)/i);
+      source = (srcMatch && srcMatch[1] ? srcMatch[1] : '').trim();
+      const cpMatch = tags.match(/cp:\s*([^|]+)/i);
+      cpName = (cpMatch && cpMatch[1] ? cpMatch[1] : '').trim();
+
+      // Fallback to direct lead fields (preferred, cleaner)
+      if (!source && lead.fundingSource && lead.fundingSource !== 'Untagged') {
+        source = lead.fundingSource;
+      }
+      if (!cpName && lead.channelPartner && lead.channelPartner !== 'Untagged') {
+        cpName = lead.channelPartner;
+      }
+      // Normalize
+      if (source.toLowerCase() === 'channel_partner') source = 'Channel Partner';
+    } else {
+      isUntagged = true;
     }
-    return "-";
+
+    return { isLocked, isUntagged, source, cpName };
   }, []);
+
+  const getLastSource = useCallback((lead) => {
+    const { isLocked, isUntagged, source, cpName } = getLastSourceInfo(lead);
+    if (isUntagged) return 'Untagged';
+    return [source, cpName].filter(Boolean).join(' / ') || '-';
+  }, [getLastSourceInfo]);
 
   const getStage = useCallback((lead) => {
     const stage = lead.lead_status || lead.status || lead.stage || "New";
@@ -655,6 +704,12 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
   };
 
   const handleTeamChange = async (lead, userId) => {
+    const { isUntagged } = getLastSourceInfo(lead);
+    if (isUntagged && userId) {
+      alert("Untagged lead is quarantined and cannot be assigned to telecallers. Please tag lead source first.");
+      return;
+    }
+
     const leadId = getLeadKey(lead);
     const previousData = leadData;
     const nextTeam = users.find((user) => String(user.id) === String(userId)) || null;
@@ -690,6 +745,9 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
   const handleTeamMenuToggle = (event, lead) => {
     event.stopPropagation();
     if (isLoadingUsers) return;
+
+    const { isUntagged } = getLastSourceInfo(lead);
+    if (isUntagged) return;
 
     const leadId = getLeadKey(lead);
     if (teamMenu?.leadId === leadId) {
@@ -810,10 +868,143 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
     );
   };
 
+  const channelPartners = useMemo(
+    () => users.filter((u) => String(u?.role || "").toUpperCase() === "CHANNEL_PARTNER"),
+    [users]
+  );
+
+  const telecallers = useMemo(
+    () => users.filter((u) => ["SALES", "PRE_SALES", "POST_SALES", "AGENT"].includes(String(u?.role || "").toUpperCase())),
+    [users]
+  );
+
+  const selectedUntaggedCount = paginatedLeadData
+    .filter((lead) => tableSelection.isSelected(getLeadKey(lead)) && getLastSourceInfo(lead).isUntagged)
+    .length;
+
+  const openTagModalForSingle = (lead) => {
+    setActiveTargetLead(lead);
+    setTagForm({
+      fundingSource: "Channel Partner",
+      channelPartnerId: "",
+      channelPartner: "",
+      channelPartnerReraId: "",
+      teamId: "",
+    });
+    setIsConfirmedLock(false);
+    setIsTagModalOpen(true);
+  };
+
+  const openTagModalForBulk = () => {
+    setActiveTargetLead(null);
+    setTagForm({
+      fundingSource: "Channel Partner",
+      channelPartnerId: "",
+      channelPartner: "",
+      channelPartnerReraId: "",
+      teamId: "",
+    });
+    setIsConfirmedLock(false);
+    setIsTagModalOpen(true);
+  };
+
+  const handleCPChange = (cpId) => {
+    const cp = channelPartners.find((u) => String(u.id) === String(cpId));
+    setTagForm((prev) => ({
+      ...prev,
+      channelPartnerId: cpId,
+      channelPartner: cp ? getUserName(cp) : "",
+      channelPartnerReraId: cp?.reraNumber || "",
+    }));
+  };
+
+  const handleSourceChange = (source) => {
+    setTagForm((prev) => ({
+      ...prev,
+      fundingSource: source,
+      ...(source !== "Channel Partner"
+        ? { channelPartnerId: "", channelPartner: "", channelPartnerReraId: "" }
+        : {}),
+    }));
+  };
+
+  const handleSubmitTagRelease = async (e) => {
+    e.preventDefault();
+    if (!isConfirmedLock) {
+      alert("Please confirm the permanent lock checkbox before proceeding.");
+      return;
+    }
+
+    if (tagForm.fundingSource === "Channel Partner" && !tagForm.channelPartner) {
+      alert("Please select a registered Channel Partner.");
+      return;
+    }
+
+    const token = localStorage.getItem("authToken");
+    const headers = {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+
+    try {
+      setIsSubmittingTag(true);
+      const isSingle = Boolean(activeTargetLead);
+      const targetIds = isSingle
+        ? [Number(getLeadKey(activeTargetLead))]
+        : paginatedLeadData
+            .filter((lead) => tableSelection.isSelected(getLeadKey(lead)) && getLastSourceInfo(lead).isUntagged)
+            .map((l) => Number(getLeadKey(l)))
+            .filter((id) => Number.isInteger(id) && id > 0);
+
+      const url = isSingle
+        ? `${API_URL}/leads/${getLeadKey(activeTargetLead)}/tag-source`
+        : `${API_URL}/leads/bulk/tag-source`;
+
+      const payload = isSingle
+        ? {
+            fundingSource: tagForm.fundingSource,
+            channelPartner: tagForm.channelPartner || null,
+            channelPartnerReraId: tagForm.channelPartnerReraId || null,
+            teamId: tagForm.teamId ? Number(tagForm.teamId) : null,
+          }
+        : {
+            ids: targetIds,
+            fundingSource: tagForm.fundingSource,
+            channelPartner: tagForm.channelPartner || null,
+            channelPartnerReraId: tagForm.channelPartnerReraId || null,
+            teamId: tagForm.teamId ? Number(tagForm.teamId) : null,
+          };
+
+      const response = await fetch(url, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result?.message || "Failed to tag and release lead(s)");
+      }
+
+      setBulkMessage(
+        isSingle
+          ? `Lead #${getLeadKey(activeTargetLead)} source permanently locked to "${tagForm.fundingSource}" and released!`
+          : `${result.processedCount || targetIds.length} leads tagged, locked, and released to calling queues!`
+      );
+
+      setIsTagModalOpen(false);
+      if (!isSingle) tableSelection.clearSelection();
+      await fetchLeadData();
+    } catch (err) {
+      console.error(err);
+      alert(err.message || "Something went wrong while tagging lead.");
+    } finally {
+      setIsSubmittingTag(false);
+    }
+  };
+
   return (
     <>
-      
-
       <div  className="table-section fa-2x">
         {/* <p>{trashMode ? "Trash" : "Lead Data"}</p> */}
         {/* <label className="crm-table-search">
@@ -864,6 +1055,19 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
             </button>
           </div>
         )}
+        {!trashMode && tableSelection.selectedCount > 0 && selectedUntaggedCount > 0 && (
+          <div className="bulk-secondary-actions" style={{ marginTop: '8px', marginBottom: '8px' }}>
+            <button
+              type="button"
+              className="btn btn-sm btn-warning d-inline-flex align-items-center gap-1"
+              onClick={openTagModalForBulk}
+              disabled={bulkBusy}
+              style={{ padding: '6px 14px', borderRadius: '6px', fontWeight: 600, background: '#f59e0b', color: '#1e293b', border: '1px solid #d97706' }}
+            >
+              <FaTag size={12} /> Bulk Tag & Release ({selectedUntaggedCount} Untagged)
+            </button>
+          </div>
+        )}
 
         <table border="1" cellPadding="0" cellSpacing="0">
           <thead>
@@ -911,26 +1115,91 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
                     <div className="lead-name-main" style={{ fontSize: '14px' }}>{getLeadName(lead)}</div>
                     {/* <div className="lead-name-owner">{getLeadOwner(lead)}</div> */}
                   </td>
-                  <td>{getLastSource(lead)}</td>
+                  <td>
+                    {(() => {
+                      const { isLocked, isUntagged, source, cpName } = getLastSourceInfo(lead);
+                      if (isUntagged) {
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => openTagModalForSingle(lead)}
+                            title="Untagged lead quarantined from callers — Click to tag source and release"
+                            style={{
+                              fontSize: '12px',
+                              padding: '3px 8px',
+                              borderRadius: '4px',
+                              background: '#fef9c3',
+                              color: '#92400e',
+                              fontWeight: 600,
+                              border: '1px solid #fde68a',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                            }}
+                          >
+                            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#d97706' }}></span>
+                            Untagged (Tag Source)
+                          </button>
+                        );
+                      }
+                      return (
+                        <span style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                          <span style={{ fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 600 }}>
+                            🔒 {source || 'Source Locked'}
+                          </span>
+                          {cpName && <span style={{ fontSize: '11px', color: '#64748b' }}>CP: {cpName}</span>}
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td>{getStage(lead)}</td>
                   <td>{renderReceivedOn(lead)}</td>
                   <td>{getRequirement(lead)}</td>
                   <td>
                     {trashMode ? (
                       getLeadOwner(lead)
-                    ) : (
-                      <div className="lead-team-dropdown">
-                        <button
-                          type="button"
-                          className="lead-team-select"
-                          onClick={(event) => handleTeamMenuToggle(event, lead)}
-                          disabled={isLoadingUsers}
-                        >
-                          <span>{isLoadingUsers ? "Loading users..." : getSelectedTeamName(lead)}</span>
-                        </button>
-                        {renderTeamDropdown(lead)}
-                      </div>
-                    )}
+                    ) : (() => {
+                      const { isUntagged } = getLastSourceInfo(lead);
+                      if (isUntagged) {
+                        return (
+                          <div
+                            className="lead-team-quarantined"
+                            title="Untagged lead is quarantined and cannot be assigned until source is tagged"
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              padding: '4px 9px',
+                              borderRadius: '5px',
+                              background: '#fffbeb',
+                              border: '1px solid #fef3c7',
+                              color: '#b45309',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              cursor: 'not-allowed',
+                              userSelect: 'none',
+                            }}
+                          >
+                            <span style={{ fontSize: '11px' }}>🔒</span>
+                            <span>Quarantined</span>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="lead-team-dropdown">
+                          <button
+                            type="button"
+                            className="lead-team-select"
+                            onClick={(event) => handleTeamMenuToggle(event, lead)}
+                            disabled={isLoadingUsers}
+                          >
+                            <span>{isLoadingUsers ? "Loading users..." : getSelectedTeamName(lead)}</span>
+                          </button>
+                          {renderTeamDropdown(lead)}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="lead-action-cell">
                     <button
@@ -973,6 +1242,19 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
                           </>
                         ) : (
                           <>
+                            {getLastSourceInfo(lead).isUntagged && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setOpenMenu(null);
+                                  setMenuPosition(null);
+                                  openTagModalForSingle(lead);
+                                }}
+                                style={{ color: '#d97706', fontWeight: 600 }}
+                              >
+                                Tag Source & Release
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => handlePreview(lead)}
@@ -1071,6 +1353,166 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
           />
         )}
       </div>
+
+      {/* In-table Source Tagging & Hard Lock Modal */}
+      {isTagModalOpen && (
+        <div
+          className="modal fade show d-block"
+          tabIndex="-1"
+          style={{ backgroundColor: "rgba(0,0,0,0.55)", zIndex: 1055, position: "fixed", top: 0, left: 0, right: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+        >
+          <div className="modal-dialog modal-dialog-centered modal-lg" style={{ width: "90%", maxWidth: "650px", margin: "auto" }}>
+            <div className="modal-content border-0 shadow" style={{ borderRadius: "12px", overflow: "hidden" }}>
+              <div className="modal-header text-white" style={{ background: "#2563eb", padding: "16px 20px" }}>
+                <h5 className="modal-title d-flex align-items-center gap-2" style={{ fontSize: "16px", fontWeight: 700, margin: 0, color: "#fff" }}>
+                  <FaLock />
+                  {activeTargetLead
+                    ? `Tag Source & Release Lead #${getLeadKey(activeTargetLead)} (${getLeadName(activeTargetLead)})`
+                    : `Bulk Tag & Release ${selectedUntaggedCount || tableSelection.selectedCount} Leads`}
+                </h5>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={() => setIsTagModalOpen(false)}
+                  style={{ filter: "brightness(0) invert(1)" }}
+                />
+              </div>
+
+              <form onSubmit={handleSubmitTagRelease}>
+                <div className="modal-body p-4" style={{ background: "#ffffff" }}>
+                  <div
+                    className="alert alert-warning d-flex align-items-start gap-2 mb-3"
+                    style={{ fontSize: "13px", padding: "12px 14px", background: "#fef3c7", border: "1px solid #fde68a", color: "#92400e", borderRadius: "8px" }}
+                  >
+                    <FaExclamationTriangle className="mt-1 flex-shrink-0" size={16} />
+                    <div>
+                      <strong>Permanent Lock Rule:</strong> Once source attribution is saved, it is{" "}
+                      <strong>permanently immutable for the life of the lead</strong> (hard lock, no override by anyone including Admin).
+                    </div>
+                  </div>
+
+                  {activeTargetLead && (
+                    <div className="p-3 mb-3 bg-light rounded border" style={{ fontSize: "13.5px" }}>
+                      <strong>Lead:</strong> {getLeadName(activeTargetLead)} | <strong>Phone:</strong>{" "}
+                      {activeTargetLead.phones?.[0]?.value || activeTargetLead.phone || "-"}
+                    </div>
+                  )}
+
+                  <div className="mb-3">
+                    <label className="form-label fw-bold" style={{ fontSize: "13px", color: "#334155" }}>Select Source Category *</label>
+                    <select
+                      className="form-select"
+                      value={tagForm.fundingSource}
+                      onChange={(e) => handleSourceChange(e.target.value)}
+                      required
+                      style={{ height: "42px", borderRadius: "6px" }}
+                    >
+                      {SOURCE_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {tagForm.fundingSource === "Channel Partner" && (
+                    <div className="row g-3 mb-3 p-3 bg-light rounded border">
+                      <div className="col-md-7">
+                        <label className="form-label fw-bold" style={{ fontSize: "13px", color: "#334155" }}>Select Registered Channel Partner *</label>
+                        <select
+                          className="form-select"
+                          value={tagForm.channelPartnerId}
+                          onChange={(e) => handleCPChange(e.target.value)}
+                          required
+                          style={{ height: "42px", borderRadius: "6px" }}
+                        >
+                          <option value="">-- Choose Channel Partner --</option>
+                          {channelPartners.map((cp) => (
+                            <option key={cp.id} value={cp.id}>
+                              {getUserName(cp)} {cp.reraNumber ? `(RERA: ${cp.reraNumber})` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-md-5">
+                        <label className="form-label fw-bold" style={{ fontSize: "13px", color: "#334155" }}>Auto CP RERA ID (Read-only)</label>
+                        <input
+                          type="text"
+                          className="form-control bg-white"
+                          value={tagForm.channelPartnerReraId ? `RERA: ${tagForm.channelPartnerReraId}` : "Auto from CP master"}
+                          readOnly
+                          style={{ height: "42px", borderRadius: "6px", fontWeight: "600", color: "#475569" }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mb-3">
+                    <label className="form-label fw-bold" style={{ fontSize: "13px", color: "#334155" }}>Assign Telecaller / Sales Executive (Optional)</label>
+                    <select
+                      className="form-select"
+                      value={tagForm.teamId}
+                      onChange={(e) => setTagForm((prev) => ({ ...prev, teamId: e.target.value }))}
+                      style={{ height: "42px", borderRadius: "6px" }}
+                    >
+                      <option value="">Leave Unassigned / Round-Robin</option>
+                      {telecallers.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {getUserName(user)} ({user.role})
+                        </option>
+                      ))}
+                    </select>
+                    <small className="text-muted d-block mt-1">
+                      Once released, the lead becomes visible in the selected caller's queue.
+                    </small>
+                  </div>
+
+                  {/* Deliberate Confirmation Checkbox */}
+                  <div className="p-3 bg-danger-subtle rounded border border-danger" style={{ background: "#fee2e2", borderColor: "#fca5a5" }}>
+                    <div className="form-check d-flex align-items-start gap-2">
+                      <input
+                        className="form-check-input mt-1"
+                        type="checkbox"
+                        id="permanentLockConfirmInTable"
+                        checked={isConfirmedLock}
+                        onChange={(e) => setIsConfirmedLock(e.target.checked)}
+                        style={{ width: "18px", height: "18px", cursor: "pointer", flexShrink: 0 }}
+                      />
+                      <label
+                        className="form-check-label fw-bold text-danger"
+                        htmlFor="permanentLockConfirmInTable"
+                        style={{ fontSize: "13px", cursor: "pointer" }}
+                      >
+                        I understand this source tag is PERMANENT and will be LOCKED FOREVER. It cannot be altered or reverted by any user or administrator.
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="modal-footer bg-light" style={{ padding: "14px 20px" }}>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setIsTagModalOpen(false)}
+                    disabled={isSubmittingTag}
+                    style={{ padding: "7px 16px", borderRadius: "6px", fontWeight: 600 }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-danger d-flex align-items-center gap-2"
+                    disabled={!isConfirmedLock || isSubmittingTag}
+                    style={{ padding: "7px 18px", borderRadius: "6px", fontWeight: 600 }}
+                  >
+                    <FaLock /> {isSubmittingTag ? "Locking & Releasing..." : "Confirm & Lock Permanently"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

@@ -26,6 +26,8 @@ const {
   getRecording,
   answerInboundCall,
   rejectInboundCall,
+  dismissInboundCall,
+  endInboundCall,
   getMyMcubeAgentMapping,
   listMcubeAgentMappingsAdmin,
   saveMcubeAgentMappingAdmin,
@@ -46,10 +48,16 @@ router.post("/dispose", authenticate, disposeCall)
 router.put("/disposition/:id", authenticate, updateDisposition)
 router.post("/answer/:id", authenticate, answerInboundCall)
 router.post("/reject/:id", authenticate, rejectInboundCall)
+router.post("/dismiss/:id", authenticate, dismissInboundCall)
+router.post("/end/:id", authenticate, endInboundCall)
 router.post("/answer", authenticate, answerInboundCall)
 router.post("/reject", authenticate, rejectInboundCall)
+router.post("/dismiss", authenticate, dismissInboundCall)
+router.post("/end", authenticate, endInboundCall)
 router.post("/mcube/answer", authenticate, answerInboundCall)
 router.post("/mcube/reject", authenticate, rejectInboundCall)
+router.post("/mcube/dismiss", authenticate, dismissInboundCall)
+router.post("/mcube/end", authenticate, endInboundCall)
 router.get("/inbound", authenticate, getInboundCalls)
 router.get("/active-inbound", authenticate, getActiveInboundCall)
 router.get("/status/:id", authenticate, getCallStatus)
