@@ -89,8 +89,20 @@ const SignInLayer = () => {
         }
 
         const loggedInUser = result.data;
+        const sessionToken = result.sessionToken || result.data?.sessionToken || "";
+        const sessionId = String(result.sessionId || result.data?.sessionId || "");
+
         localStorage.setItem("authToken", result.token);
+        localStorage.setItem("token", result.token);
+        if (sessionToken) localStorage.setItem("sessionToken", sessionToken);
+        if (sessionId) localStorage.setItem("sessionId", sessionId);
         localStorage.setItem("authUser", JSON.stringify(loggedInUser));
+        localStorage.setItem("user", JSON.stringify(loggedInUser));
+
+        if (loggedInUser?.id) {
+          localStorage.removeItem(`swamiAttendanceSessionStartedAt:${loggedInUser.id}`);
+        }
+
         if (isSalesRole) {
           navigate("/user/sales");
         } else {

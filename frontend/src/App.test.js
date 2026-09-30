@@ -37,7 +37,8 @@ test("dashboard filters return canonical new, booked, and drop-off leads", () =>
     { id:4, status:"Unqualified" },
   ];
 
-  expect(filterDashboardRecords("new-leads", { leads }).map((lead) => lead.id)).toEqual([1]);
+  expect(filterDashboardRecords("all-leads", { leads }).map((lead) => lead.id)).toEqual([1, 2, 3, 4]);
+  expect(filterDashboardRecords("new-leads", { leads }).map((lead) => lead.id)).toEqual([1, 2]);
   expect(filterDashboardRecords("booked-leads", { leads }).map((lead) => lead.id)).toEqual([3]);
   expect(filterDashboardRecords("drop-off-leads", { leads }).map((lead) => lead.id)).toEqual([4]);
 });

@@ -246,7 +246,6 @@ const MyReports = () => {
         <div className="telephony-report-section mt-4">
           <div className="section-title-bar d-flex justify-content-between align-items-center mb-3">
             <h5 className="mb-0 fw-bold">📞 Mcube Telephony &amp; IVR Activity</h5>
-            <span className="badge bg-primary text-white px-3 py-1">Live IVR &amp; CDR Data</span>
           </div>
 
           <CallSummaryCards summary={reports.telephonySummary} />
@@ -264,7 +263,7 @@ const MyReports = () => {
         <div className="lead-funnel-report-section mt-4">
           <div className="section-title-bar d-flex justify-content-between align-items-center mb-3">
             <h5 className="mb-0 fw-bold">🎯 Lead Funnel &amp; Sales Conversions</h5>
-            <span className="badge bg-success text-white px-3 py-1">CRM Pipeline</span>
+            {/* <span className="badge bg-success text-white px-3 py-1">CRM Pipeline</span> */}
           </div>
 
           <ReportSummaryCards summary={reports.summary} />

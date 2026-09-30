@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from "react";
+import CompactSearchSelect from "../common/CompactSearchSelect";
 
 const typeOptions = ["Call", "Callback", "WhatsApp", "Email", "Visit", "Other"];
 const priorityOptions = ["Low", "Medium", "High"];
@@ -34,6 +35,25 @@ const CreateFollowupModal = ({
     () => leads.find((lead) => String(getLeadId(lead)) === String(formData.leadId)),
     [formData.leadId, leads]
   );
+
+  const leadOptions = useMemo(() => {
+    return leads.map((lead) => {
+      const leadId = getLeadId(lead);
+      const leadName = getLeadName(lead);
+      const phone = Array.isArray(lead.phones)
+        ? lead.phones[0]?.value || lead.phones[0] || ""
+        : typeof lead.phones === "object"
+        ? lead.phones?.value || ""
+        : lead.phones || "";
+      const stage = lead.status || lead.stage || "";
+
+      return {
+        value: String(leadId),
+        label: leadName,
+        sub: [phone, stage].filter(Boolean).join(" • "),
+      };
+    });
+  }, [leads]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -76,17 +96,13 @@ const CreateFollowupModal = ({
         <div className="sales-visit-form">
           <label>
             <span>Lead</span>
-            <select name="leadId" value={formData.leadId} onChange={handleChange} required>
-              <option value="">Select lead</option>
-              {leads.map((lead) => {
-                const leadId = getLeadId(lead);
-                return (
-                  <option key={leadId || getLeadName(lead)} value={leadId}>
-                    {getLeadName(lead)}
-                  </option>
-                );
-              })}
-            </select>
+            <CompactSearchSelect
+              value={formData.leadId}
+              onChange={(val) => setFormData((current) => ({ ...current, leadId: val }))}
+              options={leadOptions}
+              placeholder="Select lead"
+              searchPlaceholder="Search lead by name, phone or ID..."
+            />
           </label>
 
           <label>

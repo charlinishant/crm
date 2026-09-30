@@ -9,7 +9,7 @@ let overdueScanTimer = null
 const minuteMs = 60 * 1000
 const DEFAULT_REMINDER_OFFSET_MINUTES = 10
 const REMINDER_OFFSET_MINUTES = [30, 10]
-const ADMIN_NOTIFICATION_ROLES = ["ADMIN", "SUPER_ADMIN", "MANAGER"]
+const ADMIN_NOTIFICATION_ROLES = ["ADMIN", "MANAGER"]
 
 const getLeadName = (lead) =>
   [lead?.firstName, lead?.lastName].filter(Boolean).join(" ") ||

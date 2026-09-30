@@ -132,6 +132,7 @@ import AddUnits from "./pages/addunits";
 import SalesUserPanel from "./user/SalesUserPanel";
 import UserDetails from "./user/userDetails";
 import TrashPage from "./pages/TrashPage";
+import BinPage from "./pages/BinPage";
 import AdminReports from "./pages/admin/AdminReports";
 import AdminCallLogs from "./pages/admin/AdminCallLogs";
 import MyCallLogs from "./pages/sales/MyCallLogs";
@@ -257,6 +258,11 @@ const ProtectedAppRoutes = () => {
     if (isPublicPath) {
       setSessionExpired(false);
       return undefined;
+    }
+
+    if (token) {
+      const { startSessionHeartbeat } = require("./services/sessionHeartbeat");
+      startSessionHeartbeat();
     }
 
     const checkSession = () => {
@@ -411,7 +417,8 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/list' element={<ListPage />} />
         <Route exact path='/marketplace-details' element={<MarketplaceDetailsPage />} />
         <Route exact path='/leads' element={<MarketplacePage />} />
-        <Route exact path='/trash' element={<TrashPage />} />
+        <Route exact path='/bin' element={<BinPage />} />
+        <Route exact path='/trash' element={<BinPage />} />
         <Route exact path='/notification-alert' element={<NotificationAlertPage />} />
         <Route exact path='/activity-notifications' element={<ActivityNotificationsPage />} />
          <Route exact path='/add-units' element={<AddUnits />} />

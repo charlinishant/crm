@@ -87,8 +87,7 @@ select.form-control:focus,
 
 /* Fix inline select fields alignment inside specific containers */
 .d-flex select,
-.d-flex .form-select,
-.unit-simple-filters select {
+.d-flex .form-select {
   width: auto !important; /* Allow inline selects to size to content */
   min-width: 150px !important;
   display: inline-block !important;
@@ -131,4 +130,94 @@ button.signin-submit-btn:hover {
 .floorplan-main {
   width: 100% !important;
   max-width: 100% !important;
+}
+
+/* --------------------------------------------------------------------------
+   6. Search Bar Single Border Fix (Remove duplicate inner input border)
+   -------------------------------------------------------------------------- */
+.crm-table-search,
+label.crm-table-search {
+  align-items: center !important;
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  display: flex !important;
+  padding: 0 14px !important;
+  gap: 10px !important;
+  width: 100% !important;
+  min-height: 46px !important;
+}
+
+.crm-table-search:focus-within,
+label.crm-table-search:focus-within {
+  border-color: #487fff !important;
+  box-shadow: 0 0 0 3px rgba(72, 127, 255, 0.15) !important;
+}
+
+.crm-table-search input,
+.crm-table-search input[type="search"],
+.crm-table-search input[type="text"],
+label.crm-table-search input,
+label.crm-table-search input[type="search"],
+label.crm-table-search input[type="text"],
+.sales-performance-search input {
+  border: 0 !important;
+  border-style: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  height: 44px !important;
+  min-height: 44px !important;
+  width: 100% !important;
+  flex: 1 !important;
+  color: #1e293b !important;
+}
+
+/* --------------------------------------------------------------------------
+   7. Fixed Pagination & Isolated Table Horizontal Scrolling
+   -------------------------------------------------------------------------- */
+.table-responsive,
+.open-task-table-wrap,
+.status-task-table-wrap,
+.project-table-container {
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-bottom: 0 !important;
+}
+
+.table-pagination,
+.lead-pagination,
+.admin-users-pagination,
+.sales-table-pagination,
+.open-task-pagination,
+.status-task-pagination {
+  width: 100% !important;
+  max-width: 100% !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding: 14px 20px !important;
+  background: #ffffff !important;
+  border-top: 1px solid #e2e8f0 !important;
+  margin-top: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* --------------------------------------------------------------------------
+   8. Task Module: Outer Container Border Removal
+   -------------------------------------------------------------------------- */
+.open-task-page,
+.completed-task-page,
+.archived-task-page,
+.all-task-page {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  outline: none !important;
 }

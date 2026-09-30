@@ -616,26 +616,15 @@ const callInclude = {
       channelPartner: true,
       tags: true,
       interestedProjects: true,
-      propertyType: true,
-      budget: true,
-      budgetMin: true,
-      budgetMax: true,
-    },
-  },
-  agent: {
-    select: {
-      id: true,
-      username: true,
-      firstName: true,
-      lastName: true,
-      email: true,
-      phone: true,
     },
   },
 }
 
 const buildWhereFromQuery = (query) => {
-  const where = {}
+  const where = {
+    deletedAt: null,
+    AND: [{ OR: [{ leadId: null }, { lead: { is: { is_delete: false, deletedAt: null } } }] }],
+  }
   const leadId = toNumberOrNull(query.leadId)
   const agentId = toNumberOrNull(query.agentId)
   if (leadId) where.leadId = leadId
@@ -789,6 +778,7 @@ const backfillRecoveredRecordings = async (callLogs) => {
     })
   ))
 }
+
 
 const listCalls = async (req, res, where) => {
   const page = Math.max(1, parseInt(req.query.page) || 1)
@@ -1162,8 +1152,8 @@ exports.clickToCallLead = async (req, res) => {
       const activeAt = activeCall.startedAt || activeCall.createdAt
       const activeAgeMs = activeAt ? Date.now() - new Date(activeAt).getTime() : 0
 
-      // If previous call is a non-live inbound call older than 30s, mark it missed and allow new call
-      if (activeCall.direction === "inbound" && !liveCallStatuses.has(activeStatus) && activeAgeMs > 30 * 1000) {
+      // If previous call is a non-live inbound call older than 15s, mark it missed and allow new call
+      if (activeCall.direction === "inbound" && !liveCallStatuses.has(activeStatus) && activeAgeMs > 15 * 1000) {
         await prisma.callLog.update({
           where: { id: activeCall.id },
           data: {
@@ -1172,8 +1162,8 @@ exports.clickToCallLead = async (req, res) => {
             notes: (activeCall.notes ? activeCall.notes + " - " : "") + "Marked missed before outbound call",
           },
         }).catch(() => null)
-      } else if (!liveCallStatuses.has(activeStatus) && activeAgeMs > 45 * 1000) {
-        // Any non-live call (initiating, calling, ringing) older than 45s is stale; cancel and allow new call
+      } else if (!liveCallStatuses.has(activeStatus) && activeAgeMs > 15 * 1000) {
+        // Any non-live call (initiating, calling, ringing) older than 15s is stale; cancel and allow new call
         await prisma.callLog.update({
           where: { id: activeCall.id },
           data: {
@@ -1182,28 +1172,27 @@ exports.clickToCallLead = async (req, res) => {
             notes: activeCall.notes || "Call was canceled after becoming stale.",
           },
         }).catch(() => null)
-      } else if (liveCallStatuses.has(activeStatus) && activeAgeMs > 2 * 60 * 60 * 1000) {
-        // Stale connected call older than 2 hours; mark completed and allow new call
+      } else if (liveCallStatuses.has(activeStatus)) {
+        // Connected call: auto-complete it so agent can move to next lead
         await prisma.callLog.update({
           where: { id: activeCall.id },
           data: {
             status: "completed",
             endedAt: new Date(),
-            notes: activeCall.notes || "Stale active call marked completed.",
+            disconnectedBy: "agent",
+            notes: (activeCall.notes ? activeCall.notes + " - " : "") + "Auto-completed to allow new call.",
           },
         }).catch(() => null)
-      } else if (liveCallStatuses.has(activeStatus)) {
-        return res.status(409).json({
-          success: false,
-          message: "Another call is currently connected. Please complete it before starting a new call.",
-          callLog: activeCall,
-        })
       } else {
-        return res.status(409).json({
-          success: false,
-          message: "Another call is currently connecting. Please wait a few moments or complete it.",
-          callLog: activeCall,
-        })
+        // Non-live but fresh (< 15s): cancel it and proceed
+        await prisma.callLog.update({
+          where: { id: activeCall.id },
+          data: {
+            status: "canceled",
+            endedAt: new Date(),
+            notes: activeCall.notes || "Canceled to allow new call.",
+          },
+        }).catch(() => null)
       }
     }
 
@@ -1423,7 +1412,23 @@ const getDispositionLeadStatus = (disposition) => {
 const buildFollowUpTime = (date) =>
   `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
 
+const logDisposition = (level, event, data = {}) => {
+  const timestamp = new Date().toISOString()
+  const logEntry = `[CALL_DISPOSITION] [${event}] ${JSON.stringify({ timestamp, ...data })}`
+  if (level === "error") {
+    console.error(logEntry)
+  } else if (level === "warn") {
+    console.warn(logEntry)
+  } else {
+    console.info(logEntry)
+  }
+}
+
 exports.disposeCall = async (req, res) => {
+  const authUserId = toNumberOrNull(req.authUser?.id)
+  const authUserRole = String(req.authUser?.role || "").toUpperCase()
+  const attemptStartTime = Date.now()
+
   try {
     let callLogId = toNumberOrNull(req.body.callLogId || req.body.id)
     const leadId = toNumberOrNull(req.body.leadId)
@@ -1436,14 +1441,40 @@ exports.disposeCall = async (req, res) => {
     const budget = String(req.body.budget || "").trim() || null
     const callStatus = normalizeCallStatus(req.body.callStatus || req.body.status || "completed")
 
+    logDisposition("info", "ATTEMPT_START", {
+      userId: authUserId,
+      userRole: authUserRole,
+      callLogId,
+      leadId,
+      disposition,
+      callStatus,
+      direction: req.body.direction,
+      phone: req.body.phone || req.body.leadPhone || req.body.callerNumber,
+      hasFollowUp: Boolean(nextFollowUpAt),
+      hasVisit: Boolean(visitDateTime),
+      hasInterestedProject: Boolean(interestedProjectId || interestedProject),
+    })
+
     if (!allowedDispositions.has(disposition)) {
-      return res.status(400).json({ message: "Invalid disposition" })
+      logDisposition("warn", "VALIDATION_FAILED_DISPOSITION", { disposition, allowed: Array.from(allowedDispositions) })
+      return res.status(400).json({
+        success: false,
+        message: `Invalid disposition "${disposition}". Allowed values: ${Array.from(allowedDispositions).join(", ")}`,
+      })
     }
     if (["Callback Later", "Follow-up Required"].includes(disposition) && !nextFollowUpAt) {
-      return res.status(400).json({ message: "Next follow-up date and time are required" })
+      logDisposition("warn", "VALIDATION_FAILED_FOLLOWUP_DATE", { disposition })
+      return res.status(400).json({
+        success: false,
+        message: "Next follow-up date and time are required for Callback / Follow-up disposition.",
+      })
     }
     if (disposition === "Site Visit Scheduled" && !visitDateTime) {
-      return res.status(400).json({ message: "Visit date and time are required" })
+      logDisposition("warn", "VALIDATION_FAILED_VISIT_DATE", { disposition })
+      return res.status(400).json({
+        success: false,
+        message: "Visit date and time are required for Site Visit Scheduled disposition.",
+      })
     }
 
     if (interestedProjectId) {
@@ -1451,7 +1482,10 @@ exports.disposeCall = async (req, res) => {
         where: { id: interestedProjectId },
         select: { id: true, name: true },
       })
-      if (!project) return res.status(400).json({ message: "Selected interested project is invalid" })
+      if (!project) {
+        logDisposition("warn", "VALIDATION_FAILED_PROJECT_NOT_FOUND", { interestedProjectId })
+        return res.status(400).json({ success: false, message: "Selected interested project is invalid or not found." })
+      }
       interestedProject = project.name
     }
 
@@ -1462,19 +1496,28 @@ exports.disposeCall = async (req, res) => {
         include: { lead: true, agent: true },
       })
     } else {
-      const authUserId = toNumberOrNull(req.authUser?.id)
       const requestedAgentId = toNumberOrNull(req.body.agentId)
       const agentId = isAdminUser(req) ? requestedAgentId || authUserId : authUserId
-      if (!agentId) return res.status(400).json({ message: "agentId is required" })
+      if (!agentId) {
+        logDisposition("warn", "AGENT_REQUIRED", { authUserId, requestedAgentId })
+        return res.status(400).json({ success: false, message: "Agent ID is required to create a call log" })
+      }
 
       const [lead, agent] = await Promise.all([
         leadId ? prisma.lead.findUnique({ where: { id: leadId } }) : Promise.resolve(null),
         prisma.user.findUnique({ where: { id: agentId } }),
       ])
-      if (leadId && !lead) return res.status(404).json({ message: "Lead not found" })
-      if (!agent) return res.status(404).json({ message: "Agent not found" })
+      if (leadId && !lead) {
+        logDisposition("warn", "LEAD_NOT_FOUND", { leadId })
+        return res.status(404).json({ success: false, message: `Lead #${leadId} not found` })
+      }
+      if (!agent) {
+        logDisposition("warn", "AGENT_NOT_FOUND", { agentId })
+        return res.status(404).json({ success: false, message: `Agent #${agentId} not found` })
+      }
       if (!isAdminUser(req) && lead?.teamId && lead.teamId !== agentId) {
-        return res.status(403).json({ message: "You can dispose only your assigned leads" })
+        logDisposition("warn", "LEAD_ACCESS_DENIED", { leadId, leadTeamId: lead.teamId, agentId })
+        return res.status(403).json({ success: false, message: "You can dispose only your assigned leads" })
       }
 
       const isInboundCall = String(req.body.direction || "").toLowerCase() === "inbound"
@@ -1486,10 +1529,10 @@ exports.disposeCall = async (req, res) => {
         const matchedLead = callPhone === "-" ? null : await findLeadByPhone(callPhone)
         callLead = matchedLead || await prisma.lead.create({
           data: {
-            firstName: "Unknown",
+            firstName: "Inbound",
             lastName: "Caller",
             phones: callPhone === "-" ? [] : [{ type: "Mobile", value: callPhone, primary: true }],
-            status: "New",
+            status: getDispositionLeadStatus(disposition) || "New",
             teamId: agentId,
             seats: 0,
             tenure: 0,
@@ -1499,6 +1542,7 @@ exports.disposeCall = async (req, res) => {
           },
         })
         callLeadId = callLead.id
+        logDisposition("info", "AUTO_CREATED_INBOUND_LEAD", { leadId: callLeadId, callPhone, agentId })
       }
 
       existingCall = await prisma.callLog.create({
@@ -1516,13 +1560,46 @@ exports.disposeCall = async (req, res) => {
         include: { lead: true, agent: true },
       })
       callLogId = existingCall.id
-    }
-    if (!existingCall) return res.status(404).json({ message: "Call log not found" })
-    if (!isAdminUser(req) && existingCall.agentId !== toNumberOrNull(req.authUser?.id)) {
-      return res.status(403).json({ message: "You can dispose only your own calls" })
+      logDisposition("info", "CREATED_NEW_CALL_LOG", { callLogId, leadId: callLeadId, agentId })
     }
 
-    if (String(existingCall.direction || req.body.direction || "").toLowerCase() === "inbound" && !existingCall.leadId) {
+    if (!existingCall) {
+      logDisposition("warn", "CALL_LOG_NOT_FOUND", { callLogId })
+      return res.status(404).json({ success: false, message: `Call log #${callLogId} not found` })
+    }
+
+    // Handle agent assignment & ownership:
+    // If call has no agent assigned (common for MCube IVR/inbound webhook calls) or was received as an inbound call,
+    // allow the disposing agent to claim ownership of the call log.
+    const isInboundCall = String(existingCall.direction || req.body.direction || "").toLowerCase() === "inbound"
+    if (!existingCall.agentId) {
+      existingCall.agentId = authUserId
+      logDisposition("info", "ASSIGNED_UNOWNED_CALL_TO_AGENT", { callLogId: existingCall.id, authUserId })
+    } else if (!isAdminUser(req) && existingCall.agentId !== authUserId) {
+      const isLeadOwner = existingCall.lead && (existingCall.lead.teamId === authUserId || !existingCall.lead.teamId)
+      if (isInboundCall || isLeadOwner) {
+        logDisposition("info", "CLAIMED_INBOUND_OR_LEAD_CALL_BY_AGENT", {
+          callLogId: existingCall.id,
+          previousAgentId: existingCall.agentId,
+          newAgentId: authUserId,
+        })
+        existingCall.agentId = authUserId
+      } else {
+        logDisposition("warn", "FORBIDDEN_CALL_OWNERSHIP", {
+          callLogId: existingCall.id,
+          callAgentId: existingCall.agentId,
+          authUserId,
+          authUserRole,
+        })
+        return res.status(403).json({
+          success: false,
+          message: `You can dispose only your own calls or assigned leads (Call #${existingCall.id} belongs to agent #${existingCall.agentId}).`,
+        })
+      }
+    }
+
+    // Auto-resolve or create Lead for inbound/IVR calls if lead is missing:
+    if (!existingCall.leadId) {
       const inboundPhone = cleanPhone(
         existingCall.callerNumber ||
         existingCall.customerNumber ||
@@ -1533,33 +1610,71 @@ exports.disposeCall = async (req, res) => {
         req.body.phone ||
         req.body.leadPhone
       )
-      const matchedLead = inboundPhone ? await findLeadByPhone(inboundPhone) : null
-      const canLinkMatchedLead = matchedLead && (
-        isAdminUser(req) ||
-        !matchedLead.teamId ||
-        matchedLead.teamId === toNumberOrNull(req.authUser?.id)
-      )
-      if (canLinkMatchedLead) {
+      let matchedLead = inboundPhone && inboundPhone !== "-" ? await findLeadByPhone(inboundPhone) : null
+
+      if (!matchedLead && (inboundPhone && inboundPhone !== "-" || req.body.customerName || req.body.leadName)) {
+        const callerPhone = inboundPhone && inboundPhone !== "-" ? inboundPhone : ""
+        const leadName = String(req.body.customerName || req.body.leadName || "Inbound Caller").trim()
+        const nameParts = leadName.split(" ")
+        const firstName = nameParts[0] || "Inbound"
+        const lastName = nameParts.slice(1).join(" ") || "Caller"
+
+        matchedLead = await prisma.lead.create({
+          data: {
+            firstName,
+            lastName,
+            phones: callerPhone ? [{ type: "Mobile", value: callerPhone, primary: true }] : [],
+            status: getDispositionLeadStatus(disposition) || "New",
+            teamId: authUserId || existingCall.agentId || null,
+            interestedProjects: interestedProject || null,
+            budget: budget || null,
+            seats: 0,
+            tenure: 0,
+            industry: "",
+            is_delete: false,
+            is_active: true,
+          },
+        })
+        logDisposition("info", "AUTO_CREATED_LEAD_FOR_DISPOSITION", {
+          callLogId: existingCall.id,
+          leadId: matchedLead.id,
+          phone: callerPhone,
+        })
+      }
+
+      if (matchedLead) {
         existingCall = await prisma.callLog.update({
           where: { id: existingCall.id },
           data: {
             leadId: matchedLead.id,
             leadPhone: inboundPhone || existingCall.leadPhone,
             phone: inboundPhone || existingCall.phone,
-            direction: "inbound",
+            agentId: existingCall.agentId || authUserId || null,
+            direction: existingCall.direction || (isInboundCall ? "inbound" : "outbound"),
           },
           include: { lead: true, agent: true },
         })
+        logDisposition("info", "LINKED_LEAD_TO_CALL", { callLogId: existingCall.id, leadId: matchedLead.id })
       }
     }
 
     const isInboundDisposition = String(existingCall.direction || req.body.direction || "").toLowerCase() === "inbound"
     let callbackFollowUp = null
+
+    logDisposition("info", "TRANSACTION_START", {
+      callLogId,
+      leadId: existingCall.leadId,
+      agentId: existingCall.agentId || authUserId,
+      disposition,
+    })
+
     const result = await prisma.$transaction(async (tx) => {
       const nextLeadStatus = getDispositionLeadStatus(disposition)
       const callLog = await tx.callLog.update({
         where: { id: callLogId },
         data: {
+          leadId: existingCall.leadId || null,
+          agentId: existingCall.agentId || authUserId || null,
           status: callStatus,
           disposition,
           notes,
@@ -1574,82 +1689,100 @@ exports.disposeCall = async (req, res) => {
       })
 
       if (existingCall.leadId) {
-        const leadUpdate = {
-          status: nextLeadStatus,
-          interestedProjects: interestedProject || existingCall.lead?.interestedProjects,
-          budget: budget || existingCall.lead?.budget,
-          callAttemptCount: { increment: 1 },
+        const currentLead = existingCall.lead || await tx.lead.findUnique({ where: { id: existingCall.leadId } })
+        if (currentLead) {
+          const leadUpdate = {
+            status: nextLeadStatus,
+            interestedProjects: interestedProject || currentLead.interestedProjects,
+            budget: budget || currentLead.budget,
+            callAttemptCount: { increment: 1 },
+          }
+          if (nextLeadStatus === "Unqualified") {
+            leadUpdate.unqualifiedReason = disposition
+            leadUpdate.unqualifiedNote = notes
+          }
+          if (disposition === "Site Visit Scheduled") {
+            leadUpdate.conductSiteVisit = interestedProject || currentLead.interestedProjects
+            leadUpdate.conductSiteDate = visitDateTime
+            leadUpdate.siteVisitProject = interestedProject || currentLead.interestedProjects
+            leadUpdate.siteVisitStatus = "Scheduled"
+            leadUpdate.visitStatus = "Scheduled"
+            leadUpdate.conductSiteStatus = "Scheduled"
+            leadUpdate.siteVisitDate = visitDateTime
+            leadUpdate.siteVisitNote = notes
+          }
+          await tx.lead.update({ where: { id: existingCall.leadId }, data: leadUpdate })
         }
-        if (nextLeadStatus === "Unqualified") {
-          leadUpdate.unqualifiedReason = disposition
-          leadUpdate.unqualifiedNote = notes
-        }
-        if (disposition === "Site Visit Scheduled") {
-          leadUpdate.conductSiteVisit = interestedProject || existingCall.lead.interestedProjects
-          leadUpdate.conductSiteDate = visitDateTime
-          leadUpdate.siteVisitProject = interestedProject || existingCall.lead.interestedProjects
-          leadUpdate.siteVisitStatus = "Scheduled"
-          leadUpdate.visitStatus = "Scheduled"
-          leadUpdate.conductSiteStatus = "Scheduled"
-          leadUpdate.siteVisitDate = visitDateTime
-          leadUpdate.siteVisitNote = notes
-        }
-        await tx.lead.update({ where: { id: existingCall.leadId }, data: leadUpdate })
       }
 
       if (existingCall.leadId && ["Callback Later", "Follow-up Required"].includes(disposition)) {
-        callbackFollowUp = await tx.followUp.create({
-          data: {
-            leadId: existingCall.leadId,
-            salesUserId: Number(existingCall.agentId || req.authUser.id),
-            type: disposition === "Callback Later" ? "Callback" : "Call",
-            followUpDate: nextFollowUpAt,
-            followUpTime: buildFollowUpTime(nextFollowUpAt),
-            priority: "Medium",
-            notes: notes || (disposition === "Callback Later" ? "Callback later scheduled from call disposition." : null),
-            status: "Pending",
-          },
-          include: { lead: true },
-        })
+        const followUpUserId = Number(existingCall.agentId || authUserId || req.authUser?.id)
+        if (followUpUserId && nextFollowUpAt) {
+          callbackFollowUp = await tx.followUp.create({
+            data: {
+              leadId: existingCall.leadId,
+              salesUserId: followUpUserId,
+              type: disposition === "Callback Later" ? "Callback" : "Call",
+              followUpDate: nextFollowUpAt,
+              followUpTime: buildFollowUpTime(nextFollowUpAt),
+              priority: "Medium",
+              notes: notes || (disposition === "Callback Later" ? "Callback later scheduled from call disposition." : null),
+              status: "Pending",
+            },
+            include: { lead: true },
+          })
+        }
       }
 
-      if (existingCall.leadId && existingCall.lead && disposition === "Site Visit Scheduled") {
+      if (existingCall.leadId && disposition === "Site Visit Scheduled") {
+        const agentUser = existingCall.agent || (authUserId ? await tx.user.findUnique({ where: { id: authUserId } }) : null)
+        const executiveName = getUserName(agentUser) || getUserName(req.authUser) || "Sales Executive"
+        const projectVal = interestedProject || existingCall.lead?.interestedProjects || "General Inquiry"
         await tx.scheduleVisit.upsert({
           where: { leadId: existingCall.leadId },
           create: {
             leadId: existingCall.leadId,
-            project: interestedProject || existingCall.lead.interestedProjects,
+            project: projectVal,
             status: "Scheduled",
-            salesExecutive: getUserName(existingCall.agent),
+            salesExecutive: executiveName,
             note: notes,
-            initiatedBy: getUserName(existingCall.agent),
+            initiatedBy: executiveName,
             scheduledOn: visitDateTime,
           },
           update: {
-            project: interestedProject || existingCall.lead.interestedProjects,
+            project: projectVal,
             status: "Scheduled",
-            salesExecutive: getUserName(existingCall.agent),
+            salesExecutive: executiveName,
             note: notes,
-            initiatedBy: getUserName(existingCall.agent),
+            initiatedBy: executiveName,
             scheduledOn: visitDateTime,
           },
         })
       }
 
-      if (existingCall.leadId && existingCall.lead) {
+      if (existingCall.leadId) {
+        const currentLead = existingCall.lead || await tx.lead.findUnique({ where: { id: existingCall.leadId } })
         await tx.leadActivity.create({
           data: {
             leadId: existingCall.leadId,
-            userId: existingCall.agentId,
+            userId: existingCall.agentId || authUserId || null,
             type: "CALL_DISPOSITION",
             message: `Call disposed as ${disposition}${notes ? `: ${notes}` : ""}`,
-            oldStatus: String(existingCall.lead.status || "New"),
+            oldStatus: String(currentLead?.status || "New"),
             newStatus: nextLeadStatus,
           },
         })
       }
       return callLog
     })
+
+    logDisposition("info", "TRANSACTION_SUCCESS", {
+      callLogId: result.id,
+      leadId: result.leadId,
+      disposition: result.disposition,
+      durationMs: Date.now() - attemptStartTime,
+    })
+
     if (callbackFollowUp) handleCallbackFollowUpSaved(callbackFollowUp)
 
     let mcubeDisposition = null
@@ -1665,10 +1798,12 @@ exports.disposeCall = async (req, res) => {
             leadName: result.lead ? getLeadName(result.lead) : "",
             callLogId: result.id,
           })
+          logDisposition("info", "MCUBE_DISPOSITION_SYNC_SUCCESS", { callLogId: result.id, mcubeCallId })
         } catch (mcubeError) {
-          console.error("MCube inbound disposition sync error:", {
+          logDisposition("warn", "MCUBE_DISPOSITION_SYNC_FAILED", {
             callLogId: result.id,
-            message: mcubeError.message,
+            mcubeCallId,
+            error: mcubeError.message,
             statusCode: mcubeError.statusCode || 500,
           })
           mcubeDisposition = {
@@ -1677,6 +1812,7 @@ exports.disposeCall = async (req, res) => {
           }
         }
       } else {
+        logDisposition("info", "MCUBE_CALLID_UNAVAILABLE", { callLogId: result.id })
         mcubeDisposition = {
           success: false,
           message: "MCube callid is unavailable for this inbound call.",
@@ -1685,6 +1821,7 @@ exports.disposeCall = async (req, res) => {
     }
 
     res.status(200).json({
+      success: true,
       message: mcubeDisposition?.success === false
         ? "Call disposition saved in CRM. MCube disposition sync failed."
         : "Call disposition saved",
@@ -1692,8 +1829,20 @@ exports.disposeCall = async (req, res) => {
       ...(isInboundDisposition ? { mcubeDisposition } : {}),
     })
   } catch (error) {
-    console.error("Dispose call error:", error)
-    res.status(500).json({ message: error.message || "Unable to save call disposition" })
+    logDisposition("error", "DISPOSITION_FAILED", {
+      message: error.message,
+      stack: error.stack,
+      code: error.code,
+      meta: error.meta,
+      userId: authUserId,
+      body: req.body,
+      durationMs: Date.now() - attemptStartTime,
+    })
+    res.status(500).json({
+      success: false,
+      message: error.message || "Unable to save call disposition",
+      details: error.meta ? JSON.stringify(error.meta) : undefined,
+    })
   }
 }
 
@@ -1855,7 +2004,7 @@ exports.deleteCallLog = async (req, res) => {
     })
     if (!callLog) return res.status(404).json({ message: "Call log not found" })
 
-    await prisma.callLog.delete({ where: { id } })
+    await prisma.callLog.update({ where: { id }, data: { deletedAt: new Date() } })
 
     const adminName = getUserName(req.authUser) || "Admin"
     if (callLog.leadId) {
@@ -1942,7 +2091,7 @@ exports.deleteBulkCallLogs = async (req, res) => {
     })
 
     if (deletedIds.length > 0) {
-      await prisma.callLog.deleteMany({ where: { id: { in: deletedIds } } })
+      await prisma.callLog.updateMany({ where: { id: { in: deletedIds } }, data: { deletedAt: new Date() } })
 
       const adminName = getUserName(req.authUser) || "Admin"
       for (const id of deletedIds) {
@@ -3041,4 +3190,3 @@ exports.endInboundCall = async (req, res) => {
     res.status(500).json({ message: "Unable to end inbound call" })
   }
 }
-

@@ -31,9 +31,11 @@ const ReportFilters = ({ filters, projects, users, leadSources, loading, onChang
       <span>Sales User</span>
       <select name="salesUserId" value={filters.salesUserId} onChange={onChange}>
         <option value="">All Sales Users</option>
-        {users.map((user) => (
-          <option key={user.id} value={user.id}>{getUserName(user)}</option>
-        ))}
+        {users
+          .filter((user) => String(user?.role || "").toUpperCase() !== "CHANNEL_PARTNER")
+          .map((user) => (
+            <option key={user.id} value={user.id}>{getUserName(user)}</option>
+          ))}
       </select>
     </label>
     <label>

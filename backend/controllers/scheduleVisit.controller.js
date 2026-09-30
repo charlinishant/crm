@@ -4,6 +4,7 @@ const {
   normalizeVisitStatus,
   upsertScheduleVisit,
 } = require("../services/scheduleVisit.service")
+const { isAdminUser, maskScheduleVisitData } = require("../utils/phoneMask")
 
 const leadTeamSelect = {
   id: true,
@@ -45,7 +46,9 @@ exports.getScheduleVisits = async (req, res) => {
       },
     })
 
-    res.status(200).json(visits)
+    const isAdmin = isAdminUser(req)
+    const safeVisits = isAdmin ? visits : visits.map((v) => maskScheduleVisitData(v, false))
+    res.status(200).json(safeVisits)
   } catch (error) {
     console.error(error)
     res.status(500).json({ message: error.message || "Unable to load schedule visits" })
@@ -87,6 +90,11 @@ exports.upsertScheduleVisit = async (req, res) => {
       return res.status(400).json({ message: "leadId is required" })
     }
 
+    const invalidProjects = new Set(["no", "yes", "none", "-", "null", "undefined", "n/a", ""]);
+    if (!payload?.project || invalidProjects.has(payload.project.trim().toLowerCase())) {
+      return res.status(400).json({ message: "Project is mandatory for scheduling a site visit" });
+    }
+
     const visit = await upsertScheduleVisit(payload)
 
     await prisma.lead.update({
@@ -108,7 +116,8 @@ exports.upsertScheduleVisit = async (req, res) => {
       },
     })
 
-    res.status(200).json(visit)
+    const isAdmin = isAdminUser(req)
+    res.status(200).json(isAdmin ? visit : maskScheduleVisitData(visit, false))
   } catch (error) {
     console.error(error)
     res.status(500).json({ message: error.message || "Unable to save schedule visit" })

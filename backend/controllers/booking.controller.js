@@ -1,9 +1,10 @@
 const prisma = require("../lib/prisma")
-const { emitReportsUpdate } = require("../socket/socket")
+const { emitReportsUpdate, emitToUser, emitToAdmin, broadcastCRMEvent } = require("../socket/socket")
 const { buildBookingDocumentContext, mergeTemplate } = require("./postSales.utils")
 const { UNIT_STATUS, normalizeUnitStatus, assertUnitStatusTransition } = require("../services/unitStatus.service")
 const { calculateUnitPrice } = require("../utils/unitPricing")
 const { calculateBookingPrice, normalizeOtherExpenses } = require("../utils/bookingPricing")
+const { isAdminUser, maskBookingData } = require("../utils/phoneMask")
 
 const toNumberOrNull = (value) => {
   if (value === "" || value === null || value === undefined) return null
@@ -197,7 +198,12 @@ exports.createBooking = async (req, res) => {
       })
 
       if (existingBooking) {
-        return res.status(200).json({ ...existingBooking, unit: data.unit || null, replayed: true })
+        const isAdmin = isAdminUser(req)
+        return res.status(200).json(
+          isAdmin
+            ? { ...existingBooking, unit: data.unit || null, replayed: true }
+            : { ...maskBookingData(existingBooking, false), unit: data.unit || null, replayed: true }
+        )
       }
     }
 
@@ -586,9 +592,23 @@ exports.createBooking = async (req, res) => {
       });
     }
 
+    const isAdmin = isAdminUser(req)
+    const bookingPayload = createdBooking ? (isAdmin ? createdBooking : maskBookingData(createdBooking, false)) : null
+
+    try {
+      if (bookingPayload) {
+        emitToAdmin("booking:created", { booking: createdBooking })
+        if (createdBooking.salesUserId) {
+          emitToUser(createdBooking.salesUserId, "booking:created", { booking: maskBookingData(createdBooking, false) })
+        }
+      }
+    } catch (socketErr) {
+      console.error("Booking created broadcast error:", socketErr.message)
+    }
+
     res.status(201).json(
       createdBooking
-        ? { ...createdBooking, unit: data.unit || null }
+        ? { ...bookingPayload, unit: data.unit || null }
         : { message: "Booking create successfully", unit: data.unit || null }
     )
     emitReportsUpdate("booking:created")
@@ -604,7 +624,14 @@ exports.createBooking = async (req, res) => {
         where: { idempotencyKey },
         include: bookingInclude,
       })
-      if (existingBooking) return res.status(200).json({ ...existingBooking, unit: data.unit || null, replayed: true })
+      if (existingBooking) {
+        const isAdmin = isAdminUser(req)
+        return res.status(200).json(
+          isAdmin
+            ? { ...existingBooking, unit: data.unit || null, replayed: true }
+            : { ...maskBookingData(existingBooking, false), unit: data.unit || null, replayed: true }
+        )
+      }
     }
     if (
       error.code === "P2002" &&
@@ -625,10 +652,11 @@ exports.getBookings = async (req, res) => {
   try {
     const { id } = req.params
 
+    const isAdmin = isAdminUser(req)
     if (id) {
       const booking = await prisma.booking.findUnique({ where: { id: Number(id) }, include: bookingInclude })
       if (!booking) return res.status(404).json({ message: "Booking not found" })
-      return res.status(200).json(booking)
+      return res.status(200).json(isAdmin ? booking : maskBookingData(booking, false))
     }
 
     const page = parseInt(req.query.page) || 1
@@ -647,7 +675,8 @@ exports.getBookings = async (req, res) => {
       orderBy: { createdAt: "desc" },
     })
 
-    res.status(200).json({ page, limit, totalItems, data })
+    const safeData = isAdmin ? data : data.map((b) => maskBookingData(b, false))
+    res.status(200).json({ page, limit, totalItems, data: safeData })
   } catch (error) {
     console.log(error)
     res.status(500).json({ message: "Something went wrong" })
@@ -780,7 +809,19 @@ exports.updateBooking = async (req, res) => {
       return tx.booking.findUnique({ where: { id }, include: bookingInclude })
     })
 
-    res.status(200).json(result)
+    try {
+      if (result) {
+        emitToAdmin("booking:updated", { booking: result })
+        if (result.salesUserId) {
+          emitToUser(result.salesUserId, "booking:updated", { booking: maskBookingData(result, false) })
+        }
+      }
+    } catch (socketErr) {
+      console.error("Booking updated broadcast error:", socketErr.message)
+    }
+
+    const isAdmin = isAdminUser(req)
+    res.status(200).json(isAdmin ? result : maskBookingData(result, false))
     emitReportsUpdate("booking:updated")
   } catch (error) {
     console.log(error)
@@ -1047,8 +1088,10 @@ exports.getAdminBookingInvoices = async (req, res) => {
       });
     }
 
+    const isAdmin = isAdminUser(req)
+    const safeItems = isAdmin ? items : items.map((b) => maskBookingData(b, false))
     res.status(200).json({
-      data: items,
+      data: safeItems,
       total,
       page: Number(page),
       limit: Number(limit),

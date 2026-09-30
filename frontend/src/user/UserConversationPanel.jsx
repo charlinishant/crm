@@ -13,7 +13,7 @@ import {
   Smartphone,
   X,
 } from "lucide-react";
-import { matchesLeadSearch, matchesPhoneQuery } from "../utils/leadSearch";
+import { matchesPhoneQuery } from "../utils/leadSearch";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 const DEFAULT_SENDER_EMAIL = "morenishant7777@gmail.com";
@@ -44,9 +44,16 @@ const getLeadPhone = (lead) => {
 };
 
 const maskPhone = (phone) => {
-  const digits = String(phone || "").replace(/\D/g, "");
+  if (!phone || phone === "-") return "-";
+  const str = String(phone).trim();
+  if (str.includes("X") || str.includes("x") || str.includes("*")) return str;
+  const digits = str.replace(/\D/g, "");
   if (!digits) return "-";
-  return `${digits.slice(0, 4)}****`;
+  if (digits.length <= 4) return `${digits[0]}${"X".repeat(Math.max(1, digits.length - 1))}`;
+  const visible = digits.slice(0, 4);
+  const maskedCount = Math.max(6, digits.length - 4);
+  const prefix = str.startsWith("+") ? str.split(/\d/)[0] || "" : "";
+  return `${prefix}${visible}${"X".repeat(maskedCount)}`;
 };
 
 const getLeadEmail = (lead) => {

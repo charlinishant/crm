@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import Breadcrumb from "../components/Breadcrumb";
 import MasterLayout from "../masterLayout/MasterLayout";
 import {
@@ -30,10 +30,14 @@ const getSpecificChannel = (lead) =>
   lead?.specificChannel || lead?.walkInPortal || lead?.portal || lead?.campaign || lead?.sourceDetail || "-";
 
 const LeadMergePage = () => {
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const requestedGroupId = searchParams.get("groupId") || location.state?.groupId || "";
+
   const [duplicateGroups, setDuplicateGroups] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [openGroupId, setOpenGroupId] = useState("");
+  const [openGroupId, setOpenGroupId] = useState(requestedGroupId);
   const navigate = useNavigate();
 
   const fetchDuplicateGroups = useCallback(async () => {
@@ -47,7 +51,7 @@ const LeadMergePage = () => {
       if (response.ok) {
         const groups = getList(result, "groups");
         setDuplicateGroups(groups);
-        setOpenGroupId((current) => current || groups[0]?.id || "");
+        setOpenGroupId((current) => requestedGroupId || current || groups[0]?.id || "");
         return;
       }
 
@@ -57,18 +61,30 @@ const LeadMergePage = () => {
 
       const groups = buildDuplicateLeadGroups(getList(fallbackResult, "leads"));
       setDuplicateGroups(groups);
-      setOpenGroupId((current) => current || groups[0]?.id || "");
+      setOpenGroupId((current) => requestedGroupId || current || groups[0]?.id || "");
     } catch (err) {
       setDuplicateGroups([]);
       setError(err.message || "Unable to load duplicate leads");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [requestedGroupId]);
 
   useEffect(() => {
     fetchDuplicateGroups();
   }, [fetchDuplicateGroups]);
+
+  useEffect(() => {
+    if (requestedGroupId && duplicateGroups.length > 0) {
+      setOpenGroupId(requestedGroupId);
+      setTimeout(() => {
+        const el = document.getElementById(`group-${requestedGroupId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 100);
+    }
+  }, [requestedGroupId, duplicateGroups]);
 
   const totals = useMemo(() => {
     const duplicateCopies = duplicateGroups.reduce((sum, group) => sum + Math.max(0, group.records.length - 1), 0);
@@ -128,7 +144,7 @@ const LeadMergePage = () => {
             {duplicateGroups.map((group) => {
               const isOpen = openGroupId === group.id;
               return (
-                <article className="lead-merge-group" key={group.id}>
+                <article className="lead-merge-group" key={group.id} id={`group-${group.id}`}>
                   <button
                     type="button"
                     className="lead-merge-group-head"

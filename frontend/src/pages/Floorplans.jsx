@@ -90,6 +90,16 @@ const Floorplans = () => {
     }, [searchQuery]);
 
     useEffect(() => {
+        const handleOutsideClick = () => setOpenActionId(null);
+        if (openActionId !== null) {
+            window.addEventListener("click", handleOutsideClick);
+        }
+        return () => {
+            window.removeEventListener("click", handleOutsideClick);
+        };
+    }, [openActionId]);
+
+    useEffect(() => {
         if (currentPage > totalPages) {
             setCurrentPage(totalPages);
         }
@@ -129,14 +139,14 @@ const Floorplans = () => {
 
     const handleDelete = async (id) => {
         setOpenActionId(null);
-        const confirmDelete = window.confirm("Delete this floor plan?");
+        const confirmDelete = window.confirm("Move this floor plan to the Bin?");
         if (!confirmDelete) return;
 
         try {
             const response = await fetch(`${API_URL}/floor/${id}`, { method: "DELETE" });
             if (!response.ok) throw new Error("Delete failed");
 
-            alert("Deleted Successfully");
+            alert("Moved to Bin successfully");
             fetchFloorplans();
         } catch (err) {
             alert(err.message || "Delete failed");
@@ -169,7 +179,6 @@ const Floorplans = () => {
 
                     <div className="table-responsive">
                         <label className="crm-table-search">
-                            <span aria-hidden="true">🔍</span>
                             <input
                                 type="search"
                                 value={searchQuery}
@@ -219,17 +228,20 @@ const Floorplans = () => {
                                                 <button
                                                     className="floor-actions-menu-btn"
                                                     type="button"
-                                                    onClick={() => setOpenActionId((current) => (current === plan.id ? null : plan.id))}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setOpenActionId((current) => (current === plan.id ? null : plan.id));
+                                                    }}
                                                     aria-label={`Actions for ${plan.name}`}
                                                 >
                                                     <Icon icon="mdi:dots-vertical" />
                                                 </button>
 
                                                 {openActionId === plan.id && (
-                                                    <div className="floor-actions-dropdown">
+                                                    <div className={`floor-actions-dropdown ${index >= Math.max(0, paginatedFloorplans.length - 3) || index >= 5 ? "floor-actions-dropdown--up" : ""}`} onClick={(e) => e.stopPropagation()}>
                                                         <button type="button" onClick={() => navigate(`/addfloorplan/${plan.id}`)}>Edit</button>
                                                         <button type="button" onClick={() => openViewPlan(plan)}>View</button>
-                                                        <button type="button" className="danger" onClick={() => handleDelete(plan.id)}>Delete</button>
+                                                        <button type="button" className="danger" onClick={() => handleDelete(plan.id)}>Move to Bin</button>
                                                     </div>
                                                 )}
                                             </td>
@@ -238,15 +250,15 @@ const Floorplans = () => {
                                 )}
                             </tbody>
                         </table>
-                        {filteredFloorplans.length > ROWS_PER_PAGE && (
-                            <TablePagination
-                                currentPage={currentPage}
-                                totalPages={totalPages}
-                                onPrevious={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                                onNext={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-                            />
-                        )}
                     </div>
+                    {filteredFloorplans.length > ROWS_PER_PAGE && (
+                        <TablePagination
+                            currentPage={currentPage}
+                            totalPages={totalPages}
+                            onPrevious={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                            onNext={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                        />
+                    )}
                 </div>
 
                 {modalMode === "view" && (

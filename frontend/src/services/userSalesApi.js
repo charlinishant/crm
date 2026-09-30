@@ -56,3 +56,8 @@ export const initiateMcubeClickToCall = ({ leadId, phone, dialedPhone, phoneLabe
       requestId,
     }),
   });
+
+export const endCall = (id) =>
+  request(`/api/calls/end/${id}`, {
+    method: "POST",
+  });

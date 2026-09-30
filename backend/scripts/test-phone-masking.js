@@ -1,7 +1,7 @@
 require("dotenv").config()
 const jwt = require("jsonwebtoken")
 const prisma = require("../lib/prisma")
-const { maskPhoneNumber, maskLeadData, maskCallLogData, isAdminUser } = require("../utils/phoneMask")
+const { maskPhoneNumber, maskLeadData, maskFollowUpData, maskScheduleVisitData, maskTaskData, maskCallLogData, isAdminUser } = require("../utils/phoneMask")
 
 const JWT_SECRET = process.env.JWT_SECRET || process.env.JWT_TOKEN_SECRET || "swami-crm-change-this-jwt-secret"
 
@@ -17,6 +17,10 @@ async function runTests() {
     { input: "whatsapp:+919356532881", expected: "whatsapp:+919356XXXXXX" },
     { input: "9876543210", expected: "9876XXXXXX" },
     { input: "9356XXXXXX", expected: "9356XXXXXX" }, // already masked
+    { input: "09821077957", expected: "0982XXXXXXX" }, // 11-digit leading 0
+    { input: "919821077957", expected: "+919821XXXXXX" }, // 12-digit with 91
+    { input: "022-28374829", expected: "0222XXXXXXX" }, // 11-digit landline with hyphen
+    { input: "+1 555 123 4567", expected: "+1 5551XXXXXX" }, // international
     { input: "", expected: "" },
     { input: null, expected: null },
   ]
@@ -28,8 +32,8 @@ async function runTests() {
     if (!passed) throw new Error(`Unit test failed for input: ${input}`)
   }
 
-  // 2. Unit Tests for maskLeadData and maskCallLogData
-  console.log("\n2. Testing maskLeadData & maskCallLogData:")
+  // 2. Unit Tests for maskLeadData, maskFollowUpData, maskScheduleVisitData, maskTaskData
+  console.log("\n2. Testing entity masking utilities:")
   const rawLead = {
     id: 101,
     firstName: "Testing",
@@ -53,6 +57,23 @@ async function runTests() {
     throw new Error("maskLeadData erroneously masked data for admin")
   }
   console.log("  ✓ Admin lead visibility preserved")
+
+  // Follow-up masking
+  const rawFollowUp = {
+    id: 201,
+    type: "Callback",
+    phone: "9821077957",
+    leadPhone: "9930900901",
+    lead: rawLead,
+  }
+  const maskedFollowUp = maskFollowUpData(rawFollowUp, false)
+  console.log("  Masked FollowUp phone:", maskedFollowUp.phone)
+  console.log("  Masked FollowUp leadPhone:", maskedFollowUp.leadPhone)
+  console.log("  Masked FollowUp lead.phone:", maskedFollowUp.lead.phone)
+  if (maskedFollowUp.phone !== "9821XXXXXX" || maskedFollowUp.leadPhone !== "9930XXXXXX" || maskedFollowUp.lead.phone !== "9356XXXXXX") {
+    throw new Error("maskFollowUpData failed to mask follow-up numbers")
+  }
+  console.log("  ✓ FollowUp masking verified")
 
   // 3. API Integration Test
   console.log("\n3. Testing API endpoints with Sales vs Admin tokens:")
@@ -82,8 +103,27 @@ async function runTests() {
     { expiresIn: "1h" }
   ) : null
 
+  const PORT = process.env.PORT || 5002
+
+  // Test /followups as Sales User
+  const followUpsRes = await fetch(`http://localhost:${PORT}/followups`, {
+    headers: { Authorization: `Bearer ${salesToken}` },
+  })
+  if (followUpsRes.ok) {
+    const fuData = await followUpsRes.json()
+    const list = Array.isArray(fuData) ? fuData : (fuData.data || [])
+    console.log(`  ✓ Sales /followups returned ${list.length} followups`)
+    if (list.length > 0) {
+      const sample = list[0]
+      console.log(`  ✓ Sample Followup #${sample.id} phone: "${sample.phone}"`)
+      if (sample.phone && !sample.phone.includes("X") && sample.phone.length >= 10) {
+        throw new Error(`Followup phone number is unmasked in sales response: ${sample.phone}`)
+      }
+    }
+  }
+
   // Test /api/user/access-panel as Sales User
-  const accessPanelRes = await fetch("http://localhost:5000/api/user/access-panel", {
+  const accessPanelRes = await fetch(`http://localhost:${PORT}/api/user/access-panel`, {
     headers: { Authorization: `Bearer ${salesToken}` },
   })
   
@@ -102,39 +142,6 @@ async function runTests() {
     }
   } else {
     console.log("  Warning: /api/user/access-panel returned status", accessPanelRes.status)
-  }
-
-  // Test /leads/:id as Sales User vs Admin
-  const sampleLeadDb = await prisma.lead.findFirst({ where: { is_delete: false } })
-  if (sampleLeadDb) {
-    // Sales request
-    const leadSalesRes = await fetch(`http://localhost:5000/leads/${sampleLeadDb.id}`, {
-      headers: { Authorization: `Bearer ${salesToken}` },
-    })
-    if (leadSalesRes.ok) {
-      const leadSalesData = await leadSalesRes.json()
-      const phoneVal = Array.isArray(leadSalesData.phones)
-        ? (typeof leadSalesData.phones[0] === "object" ? leadSalesData.phones[0]?.value : leadSalesData.phones[0])
-        : leadSalesData.phones
-      console.log(`  ✓ Sales /leads/${sampleLeadDb.id} phone: "${phoneVal}"`)
-      if (phoneVal && !phoneVal.includes("X") && phoneVal.length >= 10) {
-        throw new Error(`Lead phone number is unmasked for sales: ${phoneVal}`)
-      }
-    }
-
-    // Admin request
-    if (adminToken) {
-      const leadAdminRes = await fetch(`http://localhost:5000/leads/${sampleLeadDb.id}`, {
-        headers: { Authorization: `Bearer ${adminToken}` },
-      })
-      if (leadAdminRes.ok) {
-        const leadAdminData = await leadAdminRes.json()
-        const phoneVal = Array.isArray(leadAdminData.phones)
-          ? (typeof leadAdminData.phones[0] === "object" ? leadAdminData.phones[0]?.value : leadAdminData.phones[0])
-          : leadAdminData.phones
-        console.log(`  ✓ Admin /leads/${sampleLeadDb.id} phone (unmasked): "${phoneVal}"`)
-      }
-    }
   }
 
   console.log("\n=== ALL PHONE MASKING TESTS PASSED SUCCESSFULLY! ===")

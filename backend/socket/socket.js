@@ -1,8 +1,8 @@
-const { getIO } = require("../socket")
+const socketModule = require("../socket")
 
 const emitReportsUpdate = (reason = "reports:update") => {
   try {
-    getIO().emit("reports:update", {
+    socketModule.getIO().emit("reports:update", {
       reason,
       emittedAt: new Date().toISOString(),
     })
@@ -12,5 +12,6 @@ const emitReportsUpdate = (reason = "reports:update") => {
 }
 
 module.exports = {
+  ...socketModule,
   emitReportsUpdate,
 }

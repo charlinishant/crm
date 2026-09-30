@@ -1,15 +1,40 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { MoreVertical } from 'lucide-react';
+import { MoreVertical, Eye } from 'lucide-react';
 import BookingPreviewModal from '../user/BookingPreviewModal';
 import TableSelectionCheckbox from './table/TableSelectionCheckbox';
 import { useTableSelection } from './table/useTableSelection';
 import BulkActionToolbar from './table/BulkActionToolbar';
 
+const cleanSourceForDisplay = (source) => {
+    if (!source || typeof source !== 'string') return "-";
+    const parts = source.split('|').map((s) => s.trim());
+    for (const part of parts) {
+        if (part.startsWith('source:')) {
+            const val = part.replace('source:', '').trim();
+            if (val) return val;
+        }
+    }
+    const filtered = parts.filter(
+        (p) => !p.startsWith('sourceLocked:') && !p.startsWith('taggedAt:') && !p.startsWith('taggedBy:') && !p.startsWith('source:')
+    );
+    if (filtered.length > 0 && filtered[0]) return filtered[0];
+    const firstClean = source.replace(/source:/gi, '').split('|')[0].trim();
+    return firstClean || "-";
+};
+
+const getAuthHeaders = () => {
+    const token = localStorage.getItem("authToken");
+    return {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+};
+
 const Booking = () => {
     const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
     const RECORDS_PER_PAGE = 10;
     const [searchQuery, setSearchQuery] = useState('');
-    const [bookingFilter, setBookingFilter] = useState('Booked');
+    const [bookingFilter, setBookingFilter] = useState('All Bookings');
     const [bookings, setBookings] = useState([]);
     const [loading, setLoading] = useState(true);
     const [updatingBookingId, setUpdatingBookingId] = useState(null);
@@ -19,8 +44,10 @@ const Booking = () => {
     const [previewBooking, setPreviewBooking] = useState(null);
 
     const formatMoney = (value) => {
-        if (value === undefined || value === null || value === "") return "Rs. 0";
-        return `Rs. ${Number(value).toLocaleString("en-IN")}`;
+        if (value === undefined || value === null || value === "") return "-";
+        const amount = Number(value);
+        if (!Number.isFinite(amount) || amount <= 0) return "-";
+        return `₹ ${amount.toLocaleString("en-IN")}`;
     };
 
     const formatDate = (value) => {
@@ -50,49 +77,40 @@ const Booking = () => {
         return "-";
     };
 
+    const fetchBookings = async () => {
+        try {
+            setLoading(true);
+            const response = await fetch(`${API_URL}/bookings?limit=200`, {
+                headers: getAuthHeaders(),
+            });
+            if (!response.ok) throw new Error("Unable to load bookings");
+
+            const result = await response.json();
+            const bookingList = Array.isArray(result) ? result : result?.data || [];
+            setBookings(bookingList);
+        } catch (error) {
+            console.error("Unable to load bookings:", error);
+            setBookings([]);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-        const fetchBookings = async () => {
-            try {
-                setLoading(true);
-                // Fetch all bookings so we can filter and transition them
-                const response = await fetch(`${API_URL}/bookings?limit=100`);
-                if (!response.ok) throw new Error("Unable to load bookings");
-
-                const result = await response.json();
-                const bookingList = Array.isArray(result) ? result : result?.data || [];
-                setBookings(bookingList);
-            } catch (error) {
-                console.error("Unable to load bookings:", error);
-                setBookings([]);
-            } finally {
-                setLoading(false);
-            }
-        };
-
         fetchBookings();
     }, [API_URL]);
 
     const rows = useMemo(() => bookings.map((booking) => ({
         id: booking.id,
-        leadId: booking.leadId ? `$${booking.leadId}` : "-",
-        bookingName: booking.customerName || "Customer",
-        bookingSales: booking.bookedBy || "-",
-        applicantName: booking.customerName || "Customer",
-        applicantSales: booking.bookedBy || "-",
+        leadId: booking.leadId ? `#${booking.leadId}` : "-",
+        customerName: booking.customerName || "Customer",
         project: getBookingProject(booking),
         bookingUnit: getBookingUnit(booking),
-        projectSales: booking.projectDetails || "",
         stage: booking.stage || "Tentative",
-        source: booking.source || "-",
+        source: cleanSourceForDisplay(booking.source),
         bookedBy: booking.bookedBy || "-",
-        bookedOn: formatDate(booking.bookedOn),
-        soldPrice: formatMoney(booking.soldPrice ?? booking.totalPrice ?? booking.agreementValue),
-        agreement: formatMoney(booking.agreementValue ?? booking.basePrice),
-        totalDemanded: "Rs. 0",
-        actualDemanded: "Rs. 0",
-        overdue: "Rs. 0",
-        receipts: "Rs. 0",
-        creditNotes: "Rs. 0",
+        bookedOn: formatDate(booking.bookedOn || booking.createdAt),
+        agreementValue: formatMoney(booking.agreementValue ?? booking.soldPrice ?? booking.totalPrice ?? booking.basePrice),
         rawBooking: booking,
     })), [bookings]);
 
@@ -110,9 +128,7 @@ const Booking = () => {
         try {
             const response = await fetch(`${API_URL}/bookings/${bookingId}`, {
                 method: "PATCH",
-                headers: {
-                    "Content-Type": "application/json",
-                },
+                headers: getAuthHeaders(),
                 body: JSON.stringify({ stage }),
             });
 
@@ -127,7 +143,7 @@ const Booking = () => {
                     booking.id === bookingId ? { ...booking, ...result, stage: result.stage || stage } : booking
                 )
             );
-            setStatusMessage(`Booking #${bookingId} status updated.`);
+            setStatusMessage(`Booking #${bookingId} stage updated to ${stage}.`);
         } catch (error) {
             console.error("Unable to update booking status:", error);
             setBookings(previousBookings);
@@ -184,7 +200,7 @@ const Booking = () => {
         setBulkDeleting(true);
         try {
             const deletePromises = tableSelection.selectedIds.map((id) =>
-                fetch(`${API_URL}/bookings/${id}`, { method: "DELETE" })
+                fetch(`${API_URL}/bookings/${id}`, { method: "DELETE", headers: getAuthHeaders() })
             );
             await Promise.all(deletePromises);
             setBookings((prev) => prev.filter((b) => !tableSelection.selectedIds.includes(b.id)));
@@ -216,11 +232,11 @@ const Booking = () => {
                             value={bookingFilter}
                             onChange={(e) => setBookingFilter(e.target.value)}
                         >
-                            <option>All Bookings</option>
-                            <option>Tentative</option>
-                            <option>Booked</option>
-                            <option>Confirmed</option>
-                            <option>Cancelled</option>
+                            <option value="All Bookings">All Bookings</option>
+                            <option value="Tentative">Tentative</option>
+                            <option value="Booked">Booked</option>
+                            <option value="Confirmed">Confirmed</option>
+                            <option value="Cancelled">Cancelled</option>
                         </select>
                         <span className="item-count">{filteredBookings.length} items.</span>
                     </div>
@@ -274,29 +290,22 @@ const Booking = () => {
                                     />
                                 </th>
                                 <th>Lead Id</th>
-                                <th>Booking Name</th>
-                                <th>Applicant Name</th>
+                                <th>Customer Name</th>
                                 <th>Project</th>
-                                <th>Booking Unit</th>
+                                <th>Unit</th>
+                                <th>Agreement Value</th>
                                 <th>Stage</th>
                                 <th>Source</th>
                                 <th>Booked By</th>
-                                <th>Booked On</th>
-                                <th className="text-right">Sold Price</th>
-                                <th className="text-right">Agreement</th>
-                                <th className="text-right">Total Demanded</th>
-                                <th className="text-right">Actual Demanded</th>
-                                <th className="text-right">Overdue</th>
-                                <th className="text-right">Receipts</th>
-                                <th className="text-right">Credit Notes</th>
-                                <th style={{ borderStartEndRadius: '8px', borderEndEndRadius: '8px' }} className="text-right">Actions</th>
+                                <th>Booked Date</th>
+                                <th style={{ borderStartEndRadius: '8px', borderEndEndRadius: '8px', textAlign: 'center' }}>Actions</th>
                             </tr>
                         </thead>
 
                         <tbody>
                             {filteredBookings.length === 0 ? (
                                 <tr>
-                                    <td colSpan="18" className="text-center py-4">
+                                    <td colSpan="11" className="text-center py-4">
                                         {loading ? "Loading bookings..." : "No bookings found."}
                                     </td>
                                 </tr>
@@ -311,18 +320,20 @@ const Booking = () => {
                                                 disabled={bulkDeleting}
                                             />
                                         </td>
-                                        <td className="text-muted">{item.leadId}</td>
+                                        <td className="text-muted fw-bold">{item.leadId}</td>
                                         <td>
-                                            <strong>{item.bookingName}</strong>
-                                        </td>
-                                        <td>
-                                            <strong>{item.applicantName}</strong>
+                                            <strong>{item.customerName}</strong>
                                         </td>
                                         <td>
                                             {item.project}
                                         </td>
                                         <td>
-                                            {item.bookingUnit}
+                                            <span className="badge bg-light text-dark border px-2 py-1">
+                                                {item.bookingUnit}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <strong>{item.agreementValue}</strong>
                                         </td>
                                         <td>
                                             <select
@@ -338,24 +349,22 @@ const Booking = () => {
                                                 <option value="Cancelled">Cancelled</option>
                                             </select>
                                         </td>
-                                        <td>{item.source}</td>
+                                        <td>
+                                            <span className="badge bg-secondary bg-opacity-10 text-secondary border px-2 py-1">
+                                                {item.source}
+                                            </span>
+                                        </td>
                                         <td>{item.bookedBy}</td>
                                         <td>{item.bookedOn}</td>
-                                        <td className="text-right">{item.soldPrice}</td>
-                                        <td className="text-right">{item.agreement}</td>
-                                        <td className="text-right">{item.totalDemanded}</td>
-                                        <td className="text-right">{item.actualDemanded}</td>
-                                        <td className="text-right">{item.overdue}</td>
-                                        <td className="text-right">{item.receipts}</td>
-                                        <td className="text-right">{item.creditNotes}</td>
-                                        <td className="text-right">
+                                        <td style={{ textAlign: 'center' }}>
                                             <button
                                                 type="button"
-                                                className="booking-action-button"
-                                                aria-label={`Open actions for booking ${item.id}`}
+                                                className="btn btn-sm btn-outline-primary py-1 px-2 d-inline-flex align-items-center gap-1"
+                                                style={{ fontSize: 12, borderRadius: 6 }}
+                                                title="View Booking Details & Cost Sheet"
                                                 onClick={() => setPreviewBooking(item.rawBooking)}
                                             >
-                                                <MoreVertical size={16} strokeWidth={2.2} />
+                                                <Eye size={14} /> View
                                             </button>
                                         </td>
                                     </tr>

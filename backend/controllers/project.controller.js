@@ -8,13 +8,19 @@ const saveMediaFile = (dataOrUrl, subfolder = "projects") => {
     if (!trimmed.startsWith("data:image/")) return trimmed
 
     try {
-        const match = trimmed.match(/^data:image\/([a-zA-Z0-9+]+);base64,(.+)$/)
-        if (!match) return trimmed
+        const commaIndex = trimmed.indexOf(",")
+        if (commaIndex === -1) return trimmed
 
-        let ext = match[1].toLowerCase()
-        if (ext === "jpeg") ext = "jpg"
-        if (ext === "svg+xml") ext = "svg"
-        const base64Data = match[2]
+        const metaPart = trimmed.substring(0, commaIndex)
+        const base64Data = trimmed.substring(commaIndex + 1)
+
+        let ext = "jpg"
+        const typeMatch = metaPart.match(/data:image\/([a-zA-Z0-9+]+)/)
+        if (typeMatch) {
+            ext = typeMatch[1].toLowerCase()
+            if (ext === "jpeg") ext = "jpg"
+            if (ext === "svg+xml") ext = "svg"
+        }
 
         const dirPath = path.join(__dirname, "..", "uploads", subfolder)
         if (!fs.existsSync(dirPath)) {
@@ -37,38 +43,61 @@ const withGeneratedUnitCounts = async (projects) => {
     const projectIds = rows.map((project) => project?.id).filter((id) => Number.isInteger(Number(id)))
     if(!projectIds.length) return projects
 
-    const counts = await prisma.unitModel.groupBy({
-        by:["unitId"],
-        where:{
-            unit:{
-                is:{
-                    projectId:{ in:projectIds.map(Number) }
-                }
-            }
-        },
-        _count:{ id:true },
-    })
-
     const unitGroups = await prisma.unit.findMany({
         where:{ projectId:{ in:projectIds.map(Number) } },
         select:{ id:true, projectId:true },
     })
-    const generatedCountByProject = new Map(projectIds.map((id) => [Number(id), 0]))
     const unitGroupProjectById = new Map(unitGroups.map((unit) => [unit.id, unit.projectId]))
 
-    counts.forEach((count) => {
-        const projectId = unitGroupProjectById.get(count.unitId)
-        if(projectId){
-            generatedCountByProject.set(
-                projectId,
-                (generatedCountByProject.get(projectId) || 0) + count._count.id
-            )
+    const unitModels = await prisma.unitModel.findMany({
+        where: { unitId: { in: unitGroups.map((u) => u.id) } },
+        select: { id: true, unitId: true, status: true, propertyPurpose: true }
+    })
+
+    const statsByProject = new Map(projectIds.map((id) => [Number(id), {
+        generatedUnitCount: 0,
+        availableUnits: 0,
+        soldUnits: 0,
+        rehabUnits: 0,
+        heldUnits: 0,
+        blockedUnits: 0
+    }]))
+
+    unitModels.forEach(model => {
+        const projectId = unitGroupProjectById.get(model.unitId)
+        if (projectId) {
+            const stats = statsByProject.get(projectId)
+            stats.generatedUnitCount += 1
+            
+            const purpose = String(model.propertyPurpose || '').toLowerCase()
+            const status = String(model.status || '').toLowerCase()
+
+            if (purpose.includes('rehab')) {
+                stats.rehabUnits += 1
+            } else {
+                if (status === 'available' || status === 'vacant') {
+                    stats.availableUnits += 1
+                } else if (['booked', 'registered', 'possession_given', 'possession', 'sold'].includes(status)) {
+                    stats.soldUnits += 1
+                } else if (status === 'held') {
+                    stats.heldUnits += 1
+                } else if (['blocked', 'block', 'investor'].includes(status)) {
+                    stats.blockedUnits += 1
+                } else {
+                    stats.availableUnits += 1 // fallback
+                }
+            }
         }
     })
 
     const attachCount = (project) => ({
         ...project,
-        generatedUnitCount: generatedCountByProject.get(Number(project.id)) || 0,
+        generatedUnitCount: statsByProject.get(Number(project.id))?.generatedUnitCount || 0,
+        availableUnits: statsByProject.get(Number(project.id))?.availableUnits || 0,
+        soldUnits: statsByProject.get(Number(project.id))?.soldUnits || 0,
+        rehabUnits: statsByProject.get(Number(project.id))?.rehabUnits || 0,
+        heldUnits: statsByProject.get(Number(project.id))?.heldUnits || 0,
+        blockedUnits: statsByProject.get(Number(project.id))?.blockedUnits || 0,
     })
 
     return Array.isArray(projects) ? rows.map(attachCount) : attachCount(projects)
@@ -127,6 +156,11 @@ const formatProject = (project) => {
         towerCount: project._count?.tower ?? 0,
         floorPlanCount: project._count?.floor ?? 0,
         unitCount,
+        availableUnits: project.availableUnits ?? 0,
+        soldUnits: project.soldUnits ?? 0,
+        rehabUnits: project.rehabUnits ?? 0,
+        heldUnits: project.heldUnits ?? 0,
+        blockedUnits: project.blockedUnits ?? 0,
         inventory: unitCount > 0,
         active: unitCount > 0 ? project.active : false,
         salesIds:assignments.map((assignment) => assignment.userId),
@@ -148,7 +182,11 @@ exports.createProject = async (req, res)=>{
             data.elevationPhoto = saveMediaFile(data.elevationPhoto, "projects");
         }
         if (data.image) {
-            data.image = saveMediaFile(data.image, "projects");
+            if (data.elevationPhoto && (data.image === req.body.elevationPhoto || data.image === data.elevationPhoto)) {
+                data.image = data.elevationPhoto;
+            } else {
+                data.image = saveMediaFile(data.image, "projects");
+            }
         }
         if (data.elevationPhoto && !data.image) data.image = data.elevationPhoto;
         if (data.image && !data.elevationPhoto) data.elevationPhoto = data.image;
@@ -178,7 +216,7 @@ exports.createProject = async (req, res)=>{
 
 exports.getProject = async (req, res)=>{
     try{
-        const projects = await prisma.project.findMany({include:projectSalesInclude});
+        const projects = await prisma.project.findMany({where:{ deletedAt:null }, include:projectSalesInclude});
         const projectsWithUnitCounts = await withGeneratedUnitCounts(projects)
         res.status(200).json(projectsWithUnitCounts.map(formatProject))
     }
@@ -244,7 +282,11 @@ exports.updateProject = async (req, res)=>{
             data.elevationPhoto = saveMediaFile(data.elevationPhoto, "projects");
         }
         if (data.image) {
-            data.image = saveMediaFile(data.image, "projects");
+            if (data.elevationPhoto && (data.image === req.body.elevationPhoto || data.image === data.elevationPhoto)) {
+                data.image = data.elevationPhoto;
+            } else {
+                data.image = saveMediaFile(data.image, "projects");
+            }
         }
         if (data.elevationPhoto !== undefined && data.image === undefined) data.image = data.elevationPhoto;
         if (data.image !== undefined && data.elevationPhoto === undefined) data.elevationPhoto = data.image;
@@ -269,23 +311,17 @@ exports.updateProject = async (req, res)=>{
 exports.deleteProject = async (req, res)=>{
     try{
         const id = req.params.id
-        const project = await prisma.project.findUnique({
-            where:{id:Number(id)},
-            include:{ _count:{ select:{ tower:true, floor:true, unit:true } } }
-        });
+        const project = await prisma.project.findUnique({ where:{id:Number(id)} });
         if(!project)
             return res.status(404).json("Project not found")
 
-        if(project._count.tower || project._count.floor || project._count.unit){
-            return res.status(409).json({
-                message:"Cannot delete project because towers, floor plans, or units exist under it. Delete or remap children first."
-            })
-        }
-        
-        const result = await prisma.project.delete({
-            where:{id:project.id}
+        // Normal delete is recoverable: hide the project from active lists and
+        // keep its inventory tree until the user chooses Delete Forever in Bin.
+        const result = await prisma.project.update({
+            where:{id:project.id},
+            data:{ active:false, deletedAt:new Date() },
         })
-        res.status(200).json(result)
+        res.status(200).json({ ...result, message:"Project moved to Bin" })
     }
     catch(err)
     {
@@ -296,7 +332,7 @@ exports.deleteProject = async (req, res)=>{
 
 exports.listProject = async (req, res)=>{
     
-    const record = await prisma.project.findMany({select:{
+    const record = await prisma.project.findMany({where:{ deletedAt:null }, select:{
         id:true,
         name:true
     }})

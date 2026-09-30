@@ -120,9 +120,23 @@ const getFloorSortValue = (value) => {
   return Number.isNaN(number) ? Number.NEGATIVE_INFINITY : number;
 };
 const getUnitPositionSortValue = (unit) => {
-  const value = unit.unitIndex ?? unit.position ?? unit.name;
-  const number = Number(value);
-  return Number.isNaN(number) ? Number.MAX_SAFE_INTEGER : number;
+  if (!unit) return 0;
+  const explicitIndex = Number(unit.unitIndex ?? unit.position);
+  if (Number.isFinite(explicitIndex) && explicitIndex > 0) {
+    return explicitIndex;
+  }
+  const rawName = String(unit.name || unit.unitNo || "").trim();
+  const match = rawName.match(/(\d+)$/);
+  if (match) {
+    const digitsStr = match[1];
+    if (digitsStr.length >= 2) {
+      const lastTwo = parseInt(digitsStr.slice(-2), 10);
+      if (!Number.isNaN(lastTwo)) return lastTwo;
+    }
+    const val = parseInt(digitsStr, 10);
+    if (!Number.isNaN(val)) return val;
+  }
+  return 0;
 };
 const getRateBasisArea = ({ rateBasis, carpet, builtupArea, saleable }) => {
   if (rateBasis === "On Built-up") return toNumber(builtupArea, 0);
@@ -498,7 +512,8 @@ const normalizeUnitStatus = (status, unit) => {
   if (isRehabUnit(unit)) return "rehab";
 
   const value = String(status || "available").toLowerCase();
-  if (["booked", "sold", "unavailable"].includes(value)) return "booked";
+  if (["booked", "sold", "unavailable", "registered", "possession", "possession_given"].includes(value)) return "booked";
+  if (["held", "hold"].includes(value)) return "held";
   if (["blocked", "block"].includes(value)) return "blocked";
   if (value === "refuge") return "refuge";
   if (value === "investor") return "investor";
@@ -895,7 +910,7 @@ const UserBookingForm = ({
   };
 
   const selectUnit = (unit) => {
-    if (["booked", "blocked", "refuge", "investor", "rehab"].includes(normalizeUnitStatus(unit.status, unit))) return;
+    if (["booked", "blocked", "refuge", "investor", "rehab", "held"].includes(normalizeUnitStatus(unit.status, unit))) return;
     setUnitBookingDetails(null);
     setUnitDetailsMessage("");
     updateField("unit", unit.name);
@@ -970,7 +985,7 @@ const UserBookingForm = ({
         units: group.units.slice().sort((a, b) => {
           const positionDiff = getUnitPositionSortValue(a) - getUnitPositionSortValue(b);
           if (positionDiff) return positionDiff;
-          return String(a.name || "").localeCompare(String(b.name || ""));
+          return String(a.name || "").localeCompare(String(b.name || ""), undefined, { numeric: true });
         }),
       }));
   }, [filteredCatalogUnits]);
@@ -1110,7 +1125,7 @@ const UserBookingForm = ({
       counts[status] = (counts[status] || 0) + 1;
       return counts;
     },
-    { all: filteredCatalogUnits.length, available: 0, booked: 0, blocked: 0, refuge: 0, investor: 0, rehab: 0 }
+    { all: filteredCatalogUnits.length, available: 0, booked: 0, held: 0, blocked: 0, refuge: 0, investor: 0, rehab: 0 }
   );
   const selectedProject = bookingProjects.find((project) => String(project.id) === selectedProjectId);
   const leadProjectDetails = isPlaceholderProjectName(bookingForm.projectDetails) ? "" : bookingForm.projectDetails;
@@ -1400,16 +1415,45 @@ const UserBookingForm = ({
           {[
             ["all", "All"],
             ["available", "Available"],
-            ["booked", "Booked"],
-            ["blocked", "Blocked"],
-            ["refuge", "Refuge"],
-            ["investor", "Investor"],
+            ["booked", "Booked / Sold"],
             ["rehab", "Rehab"],
+            ["held", "Held"],
+            ["blocked", "Blocked"],
+            ["investor", "Investor"],
+            ["refuge", "Refuge"],
           ].map(([key, label]) => (
             <span key={key}>
               <b>{unitStatusCounts[key] || 0}</b> {label}
             </span>
           ))}
+        </div>
+
+        {/* Status Color Scheme Legend */}
+        <div className="ubf-legend-bar" aria-label="Status colour legend">
+          <strong>Legend:</strong>
+          <div className="ubf-legend-bar-items">
+            <span className="ubf-legend-bar-item">
+              <span className="ubf-legend-swatch" style={{ background: "#24b36b" }} /> Available
+            </span>
+            <span className="ubf-legend-bar-item">
+              <span className="ubf-legend-swatch" style={{ background: "#e65258" }} /> Sold / Booked
+            </span>
+            <span className="ubf-legend-bar-item">
+              <span className="ubf-legend-swatch" style={{ background: "#111827" }} /> Rehab
+            </span>
+            <span className="ubf-legend-bar-item">
+              <span className="ubf-legend-swatch" style={{ background: "#facc15" }} /> Held
+            </span>
+            <span className="ubf-legend-bar-item">
+              <span className="ubf-legend-swatch" style={{ background: "#64748b" }} /> Blocked
+            </span>
+            <span className="ubf-legend-bar-item">
+              <span className="ubf-legend-swatch" style={{ background: "#8b5cf6" }} /> Investor
+            </span>
+            <span className="ubf-legend-bar-item">
+              <span className="ubf-legend-swatch" style={{ background: "#378add" }} /> Selected
+            </span>
+          </div>
         </div>
 
         <div className="ubf-floor-grid">
@@ -1423,7 +1467,7 @@ const UserBookingForm = ({
                 {units.map((unit) => {
                   const status = normalizeUnitStatus(unit.status, unit);
                   const tone = bookingForm.unit === unit.name ? "selected" : interestedUnits.has(unit.name) ? "interested" : status;
-                  const isLocked = ["booked", "blocked", "refuge", "investor", "rehab"].includes(status);
+                  const isLocked = ["booked", "blocked", "refuge", "investor", "rehab", "held"].includes(status);
                   const isShop = String(unit.name || "").startsWith("SH-") || String(unit.unitType || "").toLowerCase().includes("commercial") || String(unit.configurationLabel || "").toLowerCase().includes("shop");
                   return (
                     <button

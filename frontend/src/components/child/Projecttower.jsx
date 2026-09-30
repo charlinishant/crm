@@ -41,6 +41,8 @@ export default function Projecttower() {
   const [activeMenuId, setActiveMenuId] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [projectSearch, setProjectSearch] = useState('');
+  const [projectDropdownOpen, setProjectDropdownOpen] = useState(false);
 
   const isEditing = editingTowerId !== null;
   const filteredTowers = useMemo(() => {
@@ -96,6 +98,19 @@ export default function Projecttower() {
       setLoadingProjects(false);
     }
   }, [API_URL]);
+
+  // Close project dropdown when clicking outside
+  useEffect(() => {
+    if (!projectDropdownOpen) return;
+    const handleOutsideClick = (e) => {
+      if (!e.target.closest('[data-project-dropdown]')) {
+        setProjectDropdownOpen(false);
+        setProjectSearch('');
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [projectDropdownOpen]);
 
   const fetchTowers = useCallback(async () => {
     const response = await fetch(`${API_URL}/tower/list`);
@@ -421,21 +436,150 @@ export default function Projecttower() {
           </div>
           
           <form onSubmit={handleSubmit}>
-            <div className="form-group">
+            <div className="form-group" style={{ position: "relative" }}>
               <label>Project *</label>
-              <select
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-                disabled={loadingProjects}
-                required
+              {/* Searchable Project Dropdown */}
+              <div
+                data-project-dropdown="true"
+                style={{
+                  border: "1px solid #d1d5db",
+                  borderRadius: "8px",
+                  background: loadingProjects ? "#f9fafb" : "#fff",
+                  cursor: loadingProjects ? "not-allowed" : "pointer",
+                  userSelect: "none",
+                }}
               >
-                <option value="">{loadingProjects ? "Loading projects..." : "Select Project"}</option>
-                {projects.map((project) => (
-                  <option key={getProjectId(project)} value={getProjectId(project)}>
-                    {getProjectName(project)}
-                  </option>
-                ))}
-              </select>
+                {/* Trigger Button */}
+                <div
+                  onClick={() => !loadingProjects && setProjectDropdownOpen((o) => !o)}
+                  style={{
+                    padding: "9px 12px",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "8px",
+                    fontSize: "14px",
+                    color: projectId ? "#111827" : "#9ca3af",
+                  }}
+                >
+                  <span>
+                    {loadingProjects
+                      ? "Loading projects..."
+                      : projectId
+                      ? getProjectName(projects.find((p) => String(getProjectId(p)) === String(projectId)) || {})
+                      : "Select Project"}
+                  </span>
+                  <svg width="16" height="16" viewBox="0 0 20 20" fill="#6b7280" style={{ flexShrink: 0, transform: projectDropdownOpen ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.15s" }}>
+                    <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+                  </svg>
+                </div>
+
+                {/* Dropdown Panel */}
+                {projectDropdownOpen && (
+                  <div
+                    style={{
+                      position: "absolute",
+                      top: "calc(100% + 4px)",
+                      left: 0,
+                      right: 0,
+                      background: "#fff",
+                      border: "1px solid #d1d5db",
+                      borderRadius: "8px",
+                      boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+                      zIndex: 1000,
+                      overflow: "hidden",
+                    }}
+                  >
+                    {/* Search Input */}
+                    <div style={{ padding: "8px", borderBottom: "1px solid #f1f5f9" }}>
+                      <input
+                        type="search"
+                        autoFocus
+                        value={projectSearch}
+                        onChange={(e) => setProjectSearch(e.target.value)}
+                        placeholder="Search project..."
+                        style={{
+                          width: "100%",
+                          border: "1px solid #e2e8f0",
+                          borderRadius: "6px",
+                          padding: "6px 10px",
+                          fontSize: "13px",
+                          outline: "none",
+                          background: "#f8fafc",
+                          color: "#1e293b",
+                        }}
+                      />
+                    </div>
+
+                    {/* Options List */}
+                    <div style={{ maxHeight: "220px", overflowY: "auto" }}>
+                      {/* Clear option */}
+                      <div
+                        onClick={() => { setProjectId(""); setProjectDropdownOpen(false); setProjectSearch(""); }}
+                        style={{
+                          padding: "8px 12px",
+                          fontSize: "13px",
+                          color: "#9ca3af",
+                          cursor: "pointer",
+                          background: !projectId ? "#f0f7ff" : "transparent",
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.background = "#f0f7ff"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.background = !projectId ? "#f0f7ff" : "transparent"; }}
+                      >
+                        Select Project
+                      </div>
+
+                      {projects
+                        .filter((p) =>
+                          !projectSearch.trim() ||
+                          getProjectName(p).toLowerCase().includes(projectSearch.trim().toLowerCase())
+                        )
+                        .map((project) => {
+                          const pid = String(getProjectId(project));
+                          const pname = getProjectName(project);
+                          const isSelected = String(projectId) === pid;
+                          return (
+                            <div
+                              key={pid}
+                              onClick={() => { setProjectId(pid); setProjectDropdownOpen(false); setProjectSearch(""); }}
+                              style={{
+                                padding: "8px 12px",
+                                fontSize: "13px",
+                                color: isSelected ? "#487fff" : "#1e293b",
+                                fontWeight: isSelected ? 600 : 400,
+                                background: isSelected ? "#eff6ff" : "transparent",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                              }}
+                              onMouseEnter={(e) => { if (!isSelected) e.currentTarget.style.background = "#f8fafc"; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = isSelected ? "#eff6ff" : "transparent"; }}
+                            >
+                              {pname}
+                              {isSelected && (
+                                <svg width="14" height="14" viewBox="0 0 20 20" fill="#487fff">
+                                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                </svg>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                      {projects.filter((p) =>
+                        !projectSearch.trim() ||
+                        getProjectName(p).toLowerCase().includes(projectSearch.trim().toLowerCase())
+                      ).length === 0 && (
+                        <div style={{ padding: "12px", fontSize: "13px", color: "#9ca3af", textAlign: "center" }}>
+                          No projects found
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Hidden required input for form validation */}
+              <input type="hidden" value={projectId} required />
             </div>
 
             <div className="form-group">

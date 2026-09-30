@@ -50,21 +50,20 @@ const SalesPerformanceTable = ({ data = [], onSegmentClick }) => {
     });
   };
 
-  const renderClickableCount = (row, metric, metricLabel, count, badgeClass = "badge-info") => {
+  const renderClickableCount = (row, metric, metricLabel, count) => {
+    const value = count ?? 0;
     if (!onSegmentClick || !count || count <= 0) {
-      return <span>{count ?? 0}</span>;
+      return <span>{value}</span>;
     }
     return (
       <button
         type="button"
-        className="btn btn-sm btn-link p-0 text-decoration-none fw-bold"
-        style={{ cursor: "pointer", color: "inherit" }}
+        className="btn btn-link p-0 text-decoration-none fw-semibold"
+        style={{ cursor: "pointer", color: "inherit", fontSize: "inherit" }}
         onClick={() => handleCellClick(row, metric, metricLabel, count)}
         title={`Click to view ${count} ${metricLabel.toLowerCase()}`}
       >
-        <span className={`badge ${badgeClass} text-primary bg-light border`}>
-          {count} 🔍
-        </span>
+        {value}
       </button>
     );
   };
@@ -73,18 +72,15 @@ const SalesPerformanceTable = ({ data = [], onSegmentClick }) => {
     <div className="admin-report-table-card sales-performance-table-card">
       <div className="d-flex justify-content-between align-items-center mb-2">
         <h6 className="mb-0">Sales User Performance</h6>
-        {onSegmentClick && (
-          <small className="text-muted" style={{ fontSize: "11px" }}>💡 Click any count badge to drill into leads</small>
-        )}
       </div>
       <label className="crm-table-search sales-performance-search">
-        <span aria-hidden="true">🔍</span>
         <input
           type="search"
           value={searchQuery}
           onChange={handleSearchChange}
           placeholder="Search sales performance..."
           aria-label="Search sales performance"
+          style={{ border: "none", outline: "none", boxShadow: "none", background: "transparent", width: "100%", padding: 0 }}
         />
       </label>
       <div className="table-responsive">

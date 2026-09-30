@@ -137,7 +137,6 @@ const CallDetailRecordsTable = ({ records = [] }) => {
 
           {/* Search */}
           <label className="crm-table-search sales-performance-search" style={{ maxWidth: "240px", margin: 0 }}>
-            <span aria-hidden="true">🔍</span>
             <input
               type="search"
               value={searchQuery}
@@ -147,6 +146,7 @@ const CallDetailRecordsTable = ({ records = [] }) => {
               }}
               placeholder="Search CDR..."
               aria-label="Search CDR"
+              style={{ border: "none", outline: "none", boxShadow: "none", background: "transparent", width: "100%", padding: 0 }}
             />
           </label>
         </div>

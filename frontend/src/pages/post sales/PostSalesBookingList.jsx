@@ -20,9 +20,10 @@ const getCustomerName = (item) =>
   item.lead?.firstName || "Customer";
 
 const getPhone = (item) => {
-  const p = item.lead?.phones;
+  const p = item.lead?.phones || item.customerPhone;
   if (!p) return "—";
-  try { const a = JSON.parse(p); return Array.isArray(a) ? a[0] || "—" : String(p); } catch { return String(p); }
+  if (typeof p === 'object' || (typeof p === 'string' && p.startsWith('[object'))) return "—";
+  try { const a = JSON.parse(p); return Array.isArray(a) ? a[0] || "—" : String(p); } catch { return typeof p === 'string' && !p.startsWith('[object') ? p : "—"; }
 };
 
 const DOC_TYPES = ["WELCOME_LETTER","ALLOTMENT_LETTER","AGREEMENT","PARKING_LETTER","DEMAND_LETTER","RECEIPT","POSSESSION_LETTER","NOC","CANCELLATION_LETTER"];
@@ -36,6 +37,7 @@ const PostSalesBookingList = () => {
   const [projectFilter, setProjectFilter] = useState('All');
   const [page, setPage] = useState(1);
   const [generating, setGenerating] = useState(null); // bookingId being acted on
+  const [selectedBookings, setSelectedBookings] = useState([]);
   const PER_PAGE = 12;
 
   useEffect(() => {
@@ -97,6 +99,41 @@ const PostSalesBookingList = () => {
     } finally { setGenerating(null); }
   };
 
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedBookings(current.map(b => b.id));
+    } else {
+      setSelectedBookings([]);
+    }
+  };
+
+  const handleSelect = (id) => {
+    setSelectedBookings(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const handleDeleteSelected = async () => {
+    if (!selectedBookings.length) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedBookings.length} selected bookings?`)) return;
+
+    setLoading(true);
+    try {
+      for (const id of selectedBookings) {
+        await fetch(`${API_URL}/api/bookings/${id}`, { method: 'DELETE', headers: authHeaders() });
+      }
+      // Refetch
+      const r = await fetch(`${API_URL}/post-sales/bookings?limit=200`, { headers: authHeaders() });
+      if (r.ok) {
+        const result = await r.json();
+        setBookings(result.data || []);
+      }
+      setSelectedBookings([]);
+    } catch (err) {
+      alert("Error deleting some bookings.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const docGeneratedCount = (item) => (item.generatedDocuments || []).length;
 
   return (
@@ -139,6 +176,14 @@ const PostSalesBookingList = () => {
           <div style={{ fontSize: 13, color: "#64748b", whiteSpace: "nowrap" }}>
             <strong style={{ color: "#3b82f6" }}>{filtered.length}</strong> bookings found
           </div>
+          {selectedBookings.length > 0 && (
+            <button
+              onClick={handleDeleteSelected}
+              style={{ padding: "8px 16px", marginLeft: "auto", background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+            >
+              🗑️ Delete Selected ({selectedBookings.length})
+            </button>
+          )}
         </div>
 
         {/* ── Table ── */}
@@ -148,6 +193,14 @@ const PostSalesBookingList = () => {
             <table className="ps-booking-list-table" style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
                 <tr style={{ background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>
+                  <th style={{ padding: "12px 16px", width: 40 }}>
+                    <input 
+                      type="checkbox" 
+                      onChange={handleSelectAll} 
+                      checked={current.length > 0 && selectedBookings.length === current.length} 
+                      style={{ cursor: "pointer" }}
+                    />
+                  </th>
                   {["Booking No","Customer","Project","Tower","Unit","Date","Sold Price","Agreement Value","Docs","Status","Actions"].map(h => (
                     <th key={h} style={{ padding: "12px 16px", textAlign: ["Sold Price", "Agreement Value"].includes(h) ? "right" : "left", color: "#475569", fontWeight: 700, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
@@ -155,11 +208,11 @@ const PostSalesBookingList = () => {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={11} style={{ textAlign: "center", padding: "60px 20px", color: "#94a3b8" }}>
+                  <tr><td colSpan={12} style={{ textAlign: "center", padding: "60px 20px", color: "#94a3b8" }}>
                     <div className="spinner-border spinner-border-sm text-primary me-2" />Loading confirmed bookings…
                   </td></tr>
                 ) : current.length === 0 ? (
-                  <tr><td colSpan={11} style={{ textAlign: "center", padding: "60px 20px" }}>
+                  <tr><td colSpan={12} style={{ textAlign: "center", padding: "60px 20px" }}>
                     <div style={{ fontSize: 40, marginBottom: 12 }}>🏠</div>
                     <div style={{ color: "#64748b", fontSize: 14, fontWeight: 600 }}>No confirmed bookings found</div>
                     <div style={{ color: "#94a3b8", fontSize: 12, marginTop: 4 }}>Change a booking status to "Confirmed" to see it here</div>
@@ -173,7 +226,15 @@ const PostSalesBookingList = () => {
                   const docCount = docGeneratedCount(item);
                   const isGenerating = generating === item.id;
                   return (
-                    <tr key={item.id} style={{ borderBottom: "1px solid #f1f5f9", transition: "background 0.1s" }}>
+                    <tr key={item.id} style={{ borderBottom: "1px solid #f1f5f9", transition: "background 0.1s", background: selectedBookings.includes(item.id) ? "#f0f9ff" : "transparent" }}>
+                      <td style={{ padding: "12px 16px" }}>
+                        <input 
+                          type="checkbox" 
+                          checked={selectedBookings.includes(item.id)}
+                          onChange={() => handleSelect(item.id)}
+                          style={{ cursor: "pointer" }}
+                        />
+                      </td>
                       <td style={{ padding: "12px 16px" }}>
                         <span style={{ fontWeight: 700, color: "#1d4ed8", fontFamily: "monospace", fontSize: 12 }}>BKG-{item.id}</span>
                       </td>

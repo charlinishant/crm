@@ -93,6 +93,7 @@ const createEmptyLeadForm = () => ({
   age: 0,
   birthday: null,
   maritalStatus: false,
+  married: false,
   anniversary: null,
   industry: "",
   personalAddress: [{
@@ -109,6 +110,8 @@ const createEmptyLeadForm = () => ({
   income: "",
   basiComment: "",
   purpose: "",
+  enduse: false,
+  investor: false,
   nri: false,
   budgetMin: 0,
   budgetMax: 0,
@@ -216,7 +219,10 @@ const buildLeadFormData = (lead) => {
     anniversary: formatDateInput(lead?.anniversary),
     conductSiteDate: formatDateInput(lead?.conductSiteDate),
     teamId: lead?.teamId ? String(lead.teamId) : "",
-    maritalStatus: Boolean(lead?.maritalStatus),
+    maritalStatus: Boolean(lead?.maritalStatus || lead?.married),
+    married: Boolean(lead?.maritalStatus || lead?.married),
+    enduse: String(lead?.purpose || "").toLowerCase().includes("end use") || Boolean(lead?.enduse),
+    investor: String(lead?.purpose || "").toLowerCase().includes("investor") || Boolean(lead?.investor),
     nri: Boolean(lead?.nri),
   };
 };
@@ -253,7 +259,7 @@ const buildLeadPayload = (data, mode = "create") => {
     education: data.education,
     companyTitle: data.companyTitle,
     income: data.income,
-    purpose: data.purpose,
+    purpose: data.enduse && data.investor ? "End use, Investor" : data.enduse ? "End use" : data.investor ? "Investor" : data.purpose || "",
     nri: normalizeBoolean(data.nri),
     budgetMin: Number(data.budgetMin) || 0,
     budgetMax: Number(data.budgetMax) || 0,
@@ -333,6 +339,11 @@ const ADDLEAD = () => {
   const channelPartners = users.filter(
     (user) => String(user?.role || "").toUpperCase() === "CHANNEL_PARTNER"
   );
+
+  const salesUsers = users.filter((user) => {
+    const role = String(user?.role || "").toUpperCase();
+    return role !== "CHANNEL_PARTNER" && role !== "AGENCY_USER";
+  });
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -433,9 +444,31 @@ const ADDLEAD = () => {
     fetchLeadForEdit();
   }, [API_URL, location.search, location.state]);
 
+  const handleCheckboxToggle = (name, forceVal) => {
+    setFormData((prev) => {
+      const nextVal = typeof forceVal === "boolean" ? forceVal : !prev[name];
+      const updates = { [name]: nextVal };
+      if (name === "maritalStatus") {
+        updates.married = nextVal;
+      }
+      return { ...prev, ...updates };
+    });
+    setFormErrors((current) => ({ ...current, [name]: "" }));
+  };
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData({ ...formData, [name]: type === "checkbox" ? checked : value });
+    const resolvedValue = type === "checkbox" ? checked : value;
+    setFormData((prev) => {
+      const updates = { [name]: resolvedValue };
+      if (name === "maritalStatus") {
+        updates.married = resolvedValue;
+      }
+      return {
+        ...prev,
+        ...updates,
+      };
+    });
     setFormErrors((current) => ({ ...current, [name]: "" }));
   };
 
@@ -755,7 +788,7 @@ const ADDLEAD = () => {
                     <option value="">
                       {loadingUsers ? "Loading users..." : "Select sales executive"}
                     </option>
-                    {users.map((user) => (
+                    {salesUsers.map((user) => (
                       <option key={user.id || user.email} value={user.id}>
                         {getUserName(user)}
                         {user.role ? ` (${user.role})` : ""}
@@ -939,11 +972,17 @@ const ADDLEAD = () => {
                       <input
                         type="checkbox"
                         name="maritalStatus"
-                        id="married"
+                        id="maritalStatus"
                         checked={Boolean(formData.maritalStatus)}
-                        onChange={handleChange}
+                        onChange={(e) =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            maritalStatus: e.target.checked,
+                            married: e.target.checked,
+                          }))
+                        }
                       />
-                      <label htmlFor="married">Married</label>
+                      <label htmlFor="maritalStatus">Married</label>
                     </div>
                   </div>
 
@@ -1061,11 +1100,33 @@ const ADDLEAD = () => {
         <label>PURPOSE</label>
         <div style={{ display: "flex", gap: "20px", marginTop: "5px" }}>
           <div className="married-row">
-            <input type="checkbox" id="enduse" name="enduse" checked={Boolean(formData.enduse)} onChange={handleChange} />
+            <input
+              type="checkbox"
+              id="enduse"
+              name="enduse"
+              checked={Boolean(formData.enduse)}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  enduse: e.target.checked,
+                }))
+              }
+            />
             <label htmlFor="enduse">End use</label>
           </div>
           <div className="married-row">
-            <input type="checkbox" id="investor" name="investor" checked={Boolean(formData.investor)} onChange={handleChange} />
+            <input
+              type="checkbox"
+              id="investor"
+              name="investor"
+              checked={Boolean(formData.investor)}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  investor: e.target.checked,
+                }))
+              }
+            />
             <label htmlFor="investor">Investor</label>
           </div>
         </div>
@@ -1073,9 +1134,22 @@ const ADDLEAD = () => {
 
       <div className="lead-group">
         <label>NRI</label>
-        <div className="married-row" style={{ marginTop: "5px" }}>
-          <input type="checkbox" id="nri" name="nri" checked={Boolean(formData.nri)} onChange={handleChange} />
-          <label htmlFor="nri">Yes</label>
+        <div style={{ marginTop: "5px" }}>
+          <div className="married-row">
+            <input
+              type="checkbox"
+              id="nri"
+              name="nri"
+              checked={Boolean(formData.nri)}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  nri: e.target.checked,
+                }))
+              }
+            />
+            <label htmlFor="nri">Yes</label>
+          </div>
         </div>
       </div>
     </div>

@@ -2,7 +2,7 @@ const bcrypt = require("bcryptjs")
 const prisma = require("../lib/prisma")
 const mcubeAgentService = require("../services/mcubeAgent.service")
 const { emitReportsUpdate } = require("../socket/socket")
-const { isAdminUser, maskLeadData, maskBookingData } = require("../utils/phoneMask")
+const { isAdminUser, maskLeadData, maskBookingData, maskTaskData } = require("../utils/phoneMask")
 
 const normalizeLeadStageText = (value) =>
     String(value || "")
@@ -13,6 +13,25 @@ const normalizeLeadStageText = (value) =>
 const isNewAssignedLead = (lead) => {
     const status = normalizeLeadStageText(lead?.status || lead?.stage || lead?.leadStage || lead?.tags)
     return !status || status === "new" || status === "fresh lead" || status.includes("fresh")
+}
+
+const getISTDateString = (date = new Date()) => {
+    if (!date) return ""
+    const d = date instanceof Date ? date : new Date(date)
+    if (Number.isNaN(d.getTime())) return ""
+    return new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).format(d)
+}
+
+const getISTDayBoundaries = (date = new Date()) => {
+    const istDateStr = getISTDateString(date)
+    const start = new Date(`${istDateStr}T00:00:00+05:30`)
+    const nextDayStart = new Date(start.getTime() + 24 * 60 * 60 * 1000)
+    return { istDateStr, start, nextDayStart }
 }
 
 const validUserRoles = new Set([
@@ -240,7 +259,7 @@ exports.getUser  = async (req, res)=>{
         const {id}  = req.params
 
         if(id){
-            const result = await prisma.user.findUnique({where:{id:Number(id)}})
+            const result = await prisma.user.findUnique({where:{id:Number(id)}, include:{team:true}})
             if(!result)
                 res.status(200).json("User not found")
             else{
@@ -249,8 +268,45 @@ exports.getUser  = async (req, res)=>{
         }
         else{
             let conditions = {}
+
+            const roleParam = req.query.role || req.query.roles
+            if (roleParam) {
+                const roles = String(roleParam).split(",").map(r => r.trim().toUpperCase()).filter(Boolean)
+                if (roles.length === 1) {
+                    conditions.role = roles[0]
+                } else if (roles.length > 1) {
+                    conditions.role = { in: roles }
+                }
+            }
+
+            const excludeRoleParam = req.query.excludeRole || req.query.excludeRoles
+            if (excludeRoleParam) {
+                const excluded = String(excludeRoleParam).split(",").map(r => r.trim().toUpperCase()).filter(Boolean)
+                if (excluded.length > 0) {
+                    if (conditions.role && typeof conditions.role === "object" && conditions.role.in) {
+                        conditions.role.in = conditions.role.in.filter(r => !excluded.includes(r))
+                    } else {
+                        conditions.role = { notIn: excluded }
+                    }
+                }
+            }
+
+            if (req.query.type === "sales" || req.query.scope === "sales") {
+                conditions.role = { in: ["SALES", "PRE_SALES", "POST_SALES", "MANAGER", "ADMIN", "AGENT"] }
+            } else if (req.query.type === "channel_partner" || req.query.scope === "channel_partner" || req.query.type === "cp") {
+                conditions.role = "CHANNEL_PARTNER"
+            }
+
+            if (req.query.department) {
+                conditions.department = String(req.query.department).trim().toUpperCase()
+            }
+
+            if (req.query.isActive !== undefined) {
+                conditions.isActive = req.query.isActive === "true" || req.query.isActive === true
+            }
+
             const page = parseInt(req.query.page) || 1
-            const limit = parseInt(req.query.limit) || 10
+            const limit = parseInt(req.query.limit) || 1000
             
             const skip = (page-1)*limit
 
@@ -259,7 +315,9 @@ exports.getUser  = async (req, res)=>{
             const result = await prisma.user.findMany({
                 where:conditions,
                 skip:skip,
-                take:limit
+                take:limit,
+                include:{team:true},
+                orderBy:{firstName:"asc"}
             })
 
             let context = {
@@ -273,7 +331,7 @@ exports.getUser  = async (req, res)=>{
     }
     catch(error){
         console.log(error);
-        res.status(500).json("")
+        res.status(500).json({message:"Error fetching users"})
     }
 }
 
@@ -463,10 +521,20 @@ exports.getAccessPanel = async (req, res)=>{
             return res.status(404).json({message:"User not found"})
         }
 
+        const authRole = String(user.role || "").toUpperCase()
+        const isAdminOrManager = ["ADMIN", "SUPER_ADMIN", "MANAGER"].includes(authRole)
+
         const getAssignedLeads = async () => {
+            let leadWhere = { teamId: user.id, is_delete: false }
+            if (isAdminOrManager) {
+                const assignedCount = await prisma.lead.count({ where: leadWhere })
+                if (assignedCount === 0) {
+                    leadWhere = { is_delete: false }
+                }
+            }
+
             const baseQuery = {
-                where:{teamId:user.id, is_delete:false},
-                take:100,
+                where: leadWhere,
                 orderBy:{id:"desc"},
                 select:{
                     id:true,
@@ -530,6 +598,23 @@ exports.getAccessPanel = async (req, res)=>{
                             totalPrice:true,
                         }
                     },
+                    scheduleVisits:{
+                        select:{
+                            id:true,
+                            status:true,
+                            scheduledOn:true,
+                            conductedOn:true,
+                            project:true
+                        }
+                    },
+                    activities:{
+                        where:{type:{in:["LEAD_CREATED", "LEAD_ASSIGNED"]}},
+                        orderBy:{createdAt:"desc"},
+                        take:1,
+                        select:{
+                            createdAt:true
+                        }
+                    },
                     callLogs:{
                         orderBy:{createdAt:"desc"},
                         take:1,
@@ -585,32 +670,32 @@ exports.getAccessPanel = async (req, res)=>{
 
         let newLeadsToday = 0
         try {
-            const now = new Date()
-            const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-            const endToday = new Date(startToday)
-            endToday.setDate(endToday.getDate() + 1)
+            const todayIST = getISTDateString(new Date())
+
+            // Leads assigned/created today in IST
+            const createdTodayLeads = unfilteredLeads.filter(lead => {
+                const leadDateIST = getISTDateString(lead.createdAt || lead.received_on)
+                return leadDateIST === todayIST
+            })
 
             const assignedToday = await prisma.leadActivity.findMany({
                 where:{
                     type:"LEAD_ASSIGNED",
                     newStatus:String(authUserId),
-                    createdAt:{gte:startToday, lt:endToday},
                     lead:{
                         teamId:authUserId,
                         is_delete:false,
                     },
                 },
                 distinct:["leadId"],
-                select:{leadId:true},
+                select:{leadId:true, createdAt:true},
             })
-            newLeadsToday = assignedToday.length
+            const assignedTodayCount = assignedToday.filter(a => getISTDateString(a.createdAt) === todayIST).length
 
-            if (newLeadsToday === 0) {
-                newLeadsToday = unfilteredLeads.filter(isNewAssignedLead).length
-            }
+            newLeadsToday = Math.max(createdTodayLeads.length, assignedTodayCount)
         } catch (error) {
             console.log("Unable to load new assigned lead stats", error)
-            newLeadsToday = unfilteredLeads.filter(isNewAssignedLead).length
+            newLeadsToday = 0
         }
 
         let bookings = []
@@ -700,6 +785,7 @@ exports.getAccessPanel = async (req, res)=>{
         }
 
         let followupStats = {
+            all: 0,
             today: 0,
             missed: 0,
             upcoming: 0,
@@ -707,12 +793,10 @@ exports.getAccessPanel = async (req, res)=>{
             due: 0,
         }
         try {
+            const { start: startToday, nextDayStart: endToday } = getISTDayBoundaries(new Date())
             const now = new Date()
-            const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-            const endToday = new Date(startToday)
-            endToday.setDate(endToday.getDate() + 1)
 
-            const [today, missed, upcoming, highPriority, callbacksDue] = await Promise.all([
+            const [today, missed, upcoming, highPriority, callbacksDue, allCount] = await Promise.all([
                 prisma.followUp.count({
                     where:{
                         salesUserId:authUserId,
@@ -749,19 +833,150 @@ exports.getAccessPanel = async (req, res)=>{
                         followUpDate:{lte:endToday}
                     }
                 }),
+                prisma.followUp.count({
+                    where:{
+                        salesUserId:authUserId,
+                    }
+                }),
             ])
 
             followupStats = {
+                all: allCount,
                 today,
                 missed,
                 upcoming,
                 highPriority,
                 callbacksDue,
-                due:today + missed,
+                due: allCount,
             }
         } catch (error) {
             console.log("Unable to load follow-up stats", error)
         }
+
+        let siteVisitStats = {
+            today: 0,
+            done: 0,
+            upcoming: 0,
+        }
+        try {
+            const todayIST = getISTDateString(new Date())
+            const authUserName = [user.firstName, user.lastName].filter(Boolean).join(" ").trim()
+            const leadIds = unfilteredLeads.map(l => l.id)
+
+            const visitConditions = []
+            if (leadIds.length > 0) {
+                visitConditions.push({ leadId: { in: leadIds } })
+            }
+            if (authUserName) {
+                visitConditions.push({ salesExecutive: { contains: authUserName } })
+            }
+            if (user.username) {
+                visitConditions.push({ salesExecutive: { contains: user.username } })
+            }
+            if (user.email) {
+                visitConditions.push({ salesExecutive: { contains: user.email } })
+            }
+
+            if (visitConditions.length > 0) {
+                const scheduleVisits = await prisma.scheduleVisit.findMany({
+                    where: {
+                        OR: visitConditions,
+                    },
+                    select: {
+                        id: true,
+                        status: true,
+                        scheduledOn: true,
+                        conductedOn: true,
+                    }
+                })
+
+                let doneCount = 0
+                let upcomingCount = 0
+                let scheduledTotal = 0
+
+                for (const visit of scheduleVisits) {
+                    const scheduledIST = getISTDateString(visit.scheduledOn)
+                    const conductedIST = getISTDateString(visit.conductedOn)
+                    const isToday = scheduledIST === todayIST || conductedIST === todayIST
+
+                    const normStatus = String(visit.status || "").trim().toLowerCase()
+                    const isDone = ["done", "completed", "visit done", "conducted"].includes(normStatus) || (conductedIST === todayIST && visit.conductedOn)
+                    const isCancelled = ["cancelled", "canceled", "visit missed", "missed"].includes(normStatus)
+
+                    if (!isCancelled && !isDone) {
+                        scheduledTotal++
+                    }
+
+                    if (isToday) {
+                        if (isDone) {
+                            doneCount++
+                        } else if (!isCancelled) {
+                            upcomingCount++
+                        }
+                    }
+                }
+
+                siteVisitStats = {
+                    today: doneCount + upcomingCount,
+                    done: doneCount,
+                    upcoming: upcomingCount,
+                    scheduledTotal,
+                }
+            }
+        } catch (error) {
+            console.log("Unable to load site visit stats", error)
+        }
+
+        let whatsappConversations = 0
+        try {
+            const leadIds = unfilteredLeads.map(l => l.id)
+            if (leadIds.length > 0) {
+                const distinctWALeads = await prisma.whatsAppMessage.findMany({
+                    where: {
+                        OR: [
+                            { userId: authUserId },
+                            { leadId: { in: leadIds } }
+                        ]
+                    },
+                    distinct: ["leadId"],
+                    select: { leadId: true }
+                })
+                whatsappConversations = distinctWALeads.length
+            }
+        } catch (error) {
+            console.log("Unable to load whatsapp conversation count", error)
+        }
+
+        let callLogsCount = 0
+        try {
+            const leadIds = unfilteredLeads.map(l => l.id)
+            callLogsCount = await prisma.callLog.count({
+                where: {
+                    OR: [
+                        { agentId: authUserId },
+                        ...(leadIds.length > 0 ? [{ leadId: { in: leadIds } }] : [])
+                    ]
+                }
+            })
+        } catch (error) {
+            console.log("Unable to load call log count", error)
+        }
+
+        let unreadNotificationsCount = 0
+        try {
+            unreadNotificationsCount = await prisma.notification.count({
+                where: {
+                    userId: authUserId,
+                    isRead: false
+                }
+            })
+        } catch (error) {
+            console.log("Unable to load unread notifications count", error)
+        }
+
+        const activeConversations = unfilteredLeads.filter(lead => {
+            return (lead._count?.callLogs > 0) || (lead.emails && Array.isArray(lead.emails) && lead.emails.length > 0)
+        }).length
 
         const displayUser = {
             id:user.id,
@@ -778,33 +993,35 @@ exports.getAccessPanel = async (req, res)=>{
         const isAdmin = isAdminUser(req)
         const maskedLeads = isAdmin ? leads : leads.map((l) => maskLeadData(l, false))
         const maskedBookings = isAdmin ? bookings : bookings.map((b) => maskBookingData(b, false))
+        const maskedTasks = isAdmin ? tasks : tasks.map((t) => maskTaskData(t, false))
 
         res.status(200).json({
             user:displayUser,
             stats:{
                 assignedLeads:unfilteredLeads.length,
                 newLeadsToday,
-                followupsDue:followupStats.due,
+                followupsAll:followupStats.all,
+                followupsDue:followupStats.all,
                 followupsToday:followupStats.today,
                 missedFollowups:followupStats.missed,
                 upcomingFollowups:followupStats.upcoming,
                 highPriorityFollowups:followupStats.highPriority,
                 callbacksDue:followupStats.callbacksDue || 0,
-                siteVisits:unfilteredLeads.filter(lead =>
-                    lead.conductSiteVisit ||
-                    lead.conductSiteDate ||
-                    lead.siteVisitProject ||
-                    lead.siteVisitDate ||
-                    lead.siteVisitStatus ||
-                    lead.visitStatus ||
-                    lead.conductSiteStatus
-                ).length,
+                siteVisits:siteVisitStats.today,
+                siteVisitsToday:siteVisitStats.today,
+                siteVisitsDone:siteVisitStats.done,
+                siteVisitsUpcoming:siteVisitStats.upcoming,
+                scheduledVisits:siteVisitStats.scheduledTotal || 0,
+                whatsappConversations,
+                conversations:activeConversations,
+                callLogs:callLogsCount,
+                unreadNotifications:unreadNotificationsCount,
                 bookings:maskedBookings.length,
-                tasks:tasks.length
+                tasks:maskedTasks.length
             },
             leads:maskedLeads,
             bookings:maskedBookings,
-            tasks:tasks
+            tasks:maskedTasks
         })
     } catch (error) {
         console.log(error)
@@ -813,12 +1030,49 @@ exports.getAccessPanel = async (req, res)=>{
 }
 exports.getAllUser = async (req, res) => {
     try {
+        let conditions = {}
+
+        const roleParam = req.query.role || req.query.roles
+        if (roleParam) {
+            const roles = String(roleParam).split(",").map(r => r.trim().toUpperCase()).filter(Boolean)
+            if (roles.length === 1) {
+                conditions.role = roles[0]
+            } else if (roles.length > 1) {
+                conditions.role = { in: roles }
+            }
+        }
+
+        const excludeRoleParam = req.query.excludeRole || req.query.excludeRoles
+        if (excludeRoleParam) {
+            const excluded = String(excludeRoleParam).split(",").map(r => r.trim().toUpperCase()).filter(Boolean)
+            if (excluded.length > 0) {
+                if (conditions.role && typeof conditions.role === "object" && conditions.role.in) {
+                    conditions.role.in = conditions.role.in.filter(r => !excluded.includes(r))
+                } else {
+                    conditions.role = { notIn: excluded }
+                }
+            }
+        }
+
+        if (req.query.type === "sales" || req.query.scope === "sales") {
+            conditions.role = { in: ["SALES", "PRE_SALES", "POST_SALES", "MANAGER", "ADMIN", "AGENT"] }
+        } else if (req.query.type === "channel_partner" || req.query.scope === "channel_partner" || req.query.type === "cp") {
+            conditions.role = "CHANNEL_PARTNER"
+        }
+
+        if (req.query.department) {
+            conditions.department = String(req.query.department).trim().toUpperCase()
+        }
+
+        if (req.query.isActive !== undefined) {
+            conditions.isActive = req.query.isActive === "true" || req.query.isActive === true
+        }
+
         const users = await prisma.user.findMany({
-          
+            where: conditions,
             include: {
                 team: true
             },
-          
             select: {
                 id: true,
                 username: true,
@@ -831,12 +1085,9 @@ exports.getAllUser = async (req, res) => {
                 isActive: true,
                 team: true,
                 createdAt: true 
-            }
+            },
+            orderBy: { firstName: "asc" }
         });
-
-        if (users.length === 0) {
-            return res.status(200).json({ message: "No users found", data: [] });
-        }
 
         res.status(200).json({
             count: users.length,

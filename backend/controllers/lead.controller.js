@@ -104,6 +104,8 @@ const createLeadAssignmentActivity = async ({ leadId, assignedToId, assignedById
   })
 }
 
+const { emitToUser, emitToAdmin, broadcastCRMEvent } = require("../socket")
+
 const createLeadAssignmentNotification = async ({ lead, assignedToId, assignedById, previousTeamId }) => {
   if (!lead?.id || !assignedToId) return null
   const assignedBy = assignedById
@@ -117,8 +119,19 @@ const createLeadAssignmentNotification = async ({ lead, assignedToId, assignedBy
     assignedBy?.username ||
     assignedBy?.email ||
     "Admin"
-  const leadName = getLeadNameValue(lead)
+  const leadName = getLeadNameValue ? getLeadNameValue(lead) : `${lead.firstName || ""} ${lead.lastName || ""}`.trim() || `Lead #${lead.id}`
   const dedupeKey = `LEAD_ASSIGNED:${lead.id}:${assignedToId}:${previousTeamId || ""}`
+
+  try {
+    const maskedLead = maskLeadData(lead, false)
+    emitToUser(Number(assignedToId), "lead:assigned", { lead: maskedLead, leadId: lead.id, assignedBy: assignedByName })
+    emitToUser(Number(assignedToId), "LeadAssigned", { lead: maskedLead, leadId: lead.id, assignedBy: assignedByName })
+    emitToAdmin("lead:assigned", { lead, leadId: lead.id, assignedToId: Number(assignedToId), assignedBy: assignedByName })
+    emitToAdmin("LeadAssigned", { lead, leadId: lead.id, assignedToId: Number(assignedToId), assignedBy: assignedByName })
+  } catch (socketErr) {
+    console.error("Lead assignment broadcast error:", socketErr.message)
+  }
+
   return sendNotification(
     assignedToId,
     previousTeamId ? "Lead reassigned to you" : "New lead assigned to you",
@@ -288,7 +301,13 @@ const buildBulkLeadResult = (ids, processedIds, failures, message) => ({
 })
 
 const normalizeEmailValue = (value) => String(value || "").trim().toLowerCase()
-const normalizePhoneValue = (value) => String(value || "").replace(/\D/g, "")
+const normalizePhoneValue = (value) => {
+  const str = String(value || "").trim()
+  if (!str || str.includes("X") || str.includes("x") || str.includes("*")) return ""
+  const digits = str.replace(/\D/g, "")
+  if (digits.length < 10) return ""
+  return digits.slice(-10)
+}
 const toRequiredPhone = (value) => normalizePhoneValue(value)
 
 const getPhoneDigitVariants = (raw) => {
@@ -434,12 +453,20 @@ const extractJsonValues = (items) => {
 }
 
 const getLeadDuplicateKeys = (lead) => {
-  const emails = extractJsonValues(lead.emails)
-    .map(normalizeEmailValue)
-    .filter(Boolean)
-  const phones = extractJsonValues(lead.phones)
-    .map(normalizePhoneValue)
-    .filter(Boolean)
+  const rawEmails = [
+    ...extractJsonValues(lead.emails),
+    ...(lead.email ? [lead.email] : []),
+  ]
+  const rawPhones = [
+    ...extractJsonValues(lead.phones),
+    ...(lead.phone ? [lead.phone] : []),
+    ...(lead.mobile ? [lead.mobile] : []),
+    ...(lead.secondaryPhone ? [lead.secondaryPhone] : []),
+    ...(lead.alternatePhone ? [lead.alternatePhone] : []),
+  ]
+
+  const emails = Array.from(new Set(rawEmails.map(normalizeEmailValue).filter(Boolean)))
+  const phones = Array.from(new Set(rawPhones.map(normalizePhoneValue).filter(Boolean)))
 
   return {
     emails,
@@ -1460,6 +1487,18 @@ exports.updateLead = async (req, res) => {
 
     const isAdmin = isAdminUser(req)
     const scoredResult = withLeadStageScore(result)
+
+    try {
+      emitToAdmin("lead:updated", { lead: scoredResult, leadId: result.id })
+      emitToAdmin("LeadUpdated", { lead: scoredResult, leadId: result.id })
+      if (result.teamId) {
+        emitToUser(Number(result.teamId), "lead:updated", { lead: maskLeadData(scoredResult, false), leadId: result.id })
+        emitToUser(Number(result.teamId), "LeadUpdated", { lead: maskLeadData(scoredResult, false), leadId: result.id })
+      }
+    } catch (socketErr) {
+      console.error("Lead update broadcast error:", socketErr.message)
+    }
+
     res.status(200).json(isAdmin ? scoredResult : maskLeadData(scoredResult, false))
   } catch (err) {
     console.log(err)
@@ -1473,40 +1512,17 @@ exports.deleteLead = async (req, res) => {
     const lead = await prisma.lead.findUnique({ where: { id: Number(id) } })
     if (!lead) return res.status(404).json("Lead not found")
 
-    const result = await prisma.$transaction(async (tx) => {
-      const followUps = await tx.followUp.findMany({
-        where: { leadId: lead.id },
-        select: { id: true },
-      })
-      const followUpIds = followUps.map((followUp) => followUp.id)
-
-      if (followUpIds.length) {
-        await tx.followUp.updateMany({
-          where: { rescheduledFromId: { in: followUpIds } },
-          data: { rescheduledFromId: null },
-        })
-      }
-
-      await tx.callLog.deleteMany({ where: { leadId: lead.id } })
-      await tx.booking.updateMany({
-        where: { leadId: lead.id },
-        data: { leadId: null },
-      })
-      await tx.scheduleVisit.deleteMany({ where: { leadId: lead.id } })
-      await tx.whatsAppMessage.deleteMany({ where: { leadId: lead.id } })
-      await tx.followUp.deleteMany({ where: { leadId: lead.id } })
-      await tx.leadActivity.deleteMany({ where: { leadId: lead.id } })
-      await tx.leadNote.deleteMany({ where: { leadId: lead.id } })
-      await tx.leadAddress.deleteMany({ where: { leadId: lead.id } })
-      await tx.personalAddress.deleteMany({ where: { leadId: lead.id } })
-
-      return tx.lead.delete({ where: { id: lead.id } })
+    // A normal delete moves the lead to the Bin. Keep all related records,
+    // especially call logs, so restoring the lead restores its complete history.
+    const result = await prisma.lead.update({
+      where: { id: lead.id },
+      data: { deletedAt: new Date(), is_delete: true },
     })
-    emitReportsUpdate("lead:permanently-deleted")
+    emitReportsUpdate("lead:deleted")
     res.status(200).json(result)
   } catch (err) {
     console.log(err)
-    res.status(500).json({ message: err.message || "Unable to delete lead from database" })
+    res.status(500).json({ message: err.message || "Unable to move lead to Bin" })
   }
 }
 

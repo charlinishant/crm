@@ -785,7 +785,11 @@ exports.getFloor  = async (req, res)=>{
             }
         }
         else{
-            let conditions = {}
+            let conditions = {
+                status: "Active",
+                project: { deletedAt: null },
+                OR: [{ towerId: null }, { tower: { deletedAt: null } }],
+            }
             const page = parseInt(req.query.page) || 1
             const limit = parseInt(req.query.limit) || 10
             
@@ -949,6 +953,9 @@ exports.deleteFloor = async (req, res)=>{
         if(!record) {
             return res.status(400).json("Floor plan not found")
         }
+
+        await prisma.floorPlan.update({ where:{ id:record.id }, data:{ status:"Trash" } })
+        return res.status(200).json({ message:"Floor plan moved to Bin" })
 
         const unitGroups = record.units || []
         const unitGroupWithBookings = unitGroups.find((unitGroup) => unitGroup._count.bookings > 0)

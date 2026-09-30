@@ -10,10 +10,14 @@ const {initSocket} = require("./socket")
 const { initializeCallbackReminders } = require("./services/callbackReminder.service")
 const { initializeSiteVisitReminders } = require("./services/siteVisitNotification.service")
 const { initializeUnitHoldReleaseJob } = require("./services/unitHold.service")
+const { cleanupStaleSessions } = require("./services/session.service")
 const mcubeConfig = require("./services/mcubeConfig.service")
 
 initializeCallbackReminders()
 initializeSiteVisitReminders()
+
+// Periodic stale session cleanup every 60 seconds
+setInterval(cleanupStaleSessions, 60 * 1000)
 
 const app = express()
 const BODY_LIMIT = process.env.BODY_LIMIT || "250mb"
@@ -47,6 +51,7 @@ const demandRouter = require("./controllers/demands")
 const postSalesRouter = require("./routes/postSales.routes")
 const leadRouter = require("./routes/lead.routes")
 const emailRouetr = require("./routes/email.routes")
+const binRouter = require("./routes/bin.routes")
 
 
 app.use(cors({ origin: "*" }))
@@ -115,6 +120,8 @@ app.use("/api/demands", demandRouter)
 app.use("/notification", notifiactionRouter)
 app.use("/post-sales", postSalesRouter)
 app.use("/api/post-sales", postSalesRouter)
+app.use("/bin", binRouter)
+app.use("/api/bin", binRouter)
 
 app.use((error, req, res, next) => {
   if (error instanceof SyntaxError && error.status === 400 && "body" in error) {

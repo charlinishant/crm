@@ -25,17 +25,15 @@ const nextActionOptions = [
   { value: "", label: "Choose option" },
   { value: "call", label: "Call" },
   { value: "whatsapp", label: "WhatsApp" },
-  { value: "create-next-follow-up", label: "Create next follow-up" },
-  { value: "Qualified", label: "Mark Qualified" },
-  { value: "In Sourcing", label: "Move to In Sourcing" },
-  { value: "Visit Scheduled", label: "Schedule Visit" },
-  { value: "In Closing", label: "Move to In Closing" },
-  { value: "Booked", label: "Mark Booked" },
-  { value: "Unqualified", label: "Mark Unqualified" },
+  { value: "email", label: "Send Email" },
+  { value: "visit", label: "Schedule Visit" },
+  { value: "booked", label: "Booked" },
+  { value: "not-interested", label: "Not Interested" },
   { value: "mark-done", label: "Mark Done" },
   { value: "reschedule", label: "Reschedule" },
   { value: "cancel", label: "Cancel" },
   { value: "open-lead", label: "Open Lead" },
+  { value: "create-next-follow-up", label: "Create next follow-up" },
 ];
 
 const getLeadId = (lead) => lead?.id || lead?._id || lead?.lead_id || "";
@@ -336,16 +334,32 @@ const SalesFollowupsTable = () => {
       return;
     }
 
-    if (action === "Visit Scheduled") {
-      await handleMarkDone(row, { nextAction: action, note: "Follow-up completed. Schedule visit selected." });
+    if (action === "email") {
+      const leadId = row.rawLeadId || row.lead?.id || row.leadId;
+      navigate(leadId ? `/user/sales/conversation?tab=emails&leadId=${leadId}` : "/user/sales/conversation?tab=emails", {
+        state: row.lead ? { lead: row.lead, refreshPanel: true } : { refreshPanel: true },
+      });
+      return;
+    }
+
+    if (action === "visit" || action === "Visit Scheduled") {
+      await handleMarkDone(row, { nextAction: "Visit Scheduled", note: "Follow-up completed. Schedule visit selected." });
       navigate(row.rawLeadId ? `/user/sales/site-visit?leadId=${row.rawLeadId}` : "/user/sales/site-visit", {
         state: row.lead ? { lead: row.lead, status: "Scheduled", refreshPanel: true } : { status: "Scheduled", refreshPanel: true },
       });
       return;
     }
 
-    if (action === "Unqualified") {
-      const reason = window.prompt("Reason required: Not Answering / Not Interested / Wrong Number / Budget Issue / Other", "");
+    if (action === "booked" || action === "Booked") {
+      await handleMarkDone(row, { nextAction: "Booked", note: "Follow-up completed. Booking selected." });
+      navigate(row.rawLeadId ? `/user/sales/bookings?leadId=${row.rawLeadId}` : "/user/sales/bookings", {
+        state: row.lead ? { lead: row.lead, refreshPanel: true } : { refreshPanel: true },
+      });
+      return;
+    }
+
+    if (action === "not-interested" || action === "Unqualified") {
+      const reason = window.prompt("Reason required: Not Answering / Not Interested / Wrong Number / Budget Issue / Other", "Not Interested");
       if (!reason) return;
       await handleMarkDone(row, {
         nextAction: "Unqualified",

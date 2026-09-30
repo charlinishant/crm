@@ -120,35 +120,138 @@ const DashboardResultsPage = () => {
           <div className="table-responsive">
             <table border="1" cellPadding="0" cellSpacing="0">
               <thead>
-                <tr>
-                  <th style={{ borderStartStartRadius:"8px", borderEndStartRadius:"8px" }}>Type</th>
-                  <th>ID</th>
-                  <th>Name / Title</th>
-                  <th>Status</th>
-                  <th>Owner</th>
-                  <th>Source / Priority</th>
-                  <th>Date</th>
-                  <th style={{ borderStartEndRadius:"8px", borderEndEndRadius:"8px" }}>Action</th>
-                </tr>
+                {card.recordType === "duplicate" ? (
+                  <tr>
+                    <th style={{ borderStartStartRadius:"8px", borderEndStartRadius:"8px" }}>Type</th>
+                    <th>Group ID</th>
+                    <th>Match Criteria</th>
+                    <th>Records</th>
+                    <th>Original Source</th>
+                    <th>Assigned Caller</th>
+                    <th>First Received</th>
+                    <th style={{ borderStartEndRadius:"8px", borderEndEndRadius:"8px" }}>Action</th>
+                  </tr>
+                ) : (
+                  <tr>
+                    <th style={{ borderStartStartRadius:"8px", borderEndStartRadius:"8px" }}>Type</th>
+                    <th>ID</th>
+                    <th>Name / Title</th>
+                    <th>Status</th>
+                    <th>Owner</th>
+                    <th>Source / Priority</th>
+                    <th>Date</th>
+                    <th style={{ borderStartEndRadius:"8px", borderEndEndRadius:"8px" }}>Action</th>
+                  </tr>
+                )}
               </thead>
               <tbody>
                 {records.map((record, index) => {
-                  const type = record.resultType || (card.recordType === "task" ? "Task" : card.recordType === "duplicate" ? "Duplicate Group" : "Lead");
-                  const id = record.id || record.leadId || record.groupId || record.matchValue || index + 1;
+                  if (card.recordType === "duplicate") {
+                    const originalLead = record.original || record.records?.[0] || {};
+                    const groupId = record.id || record.matchValue || `group-${index}`;
+                    const originalSource =
+                      originalLead.source ||
+                      originalLead.channelPartner ||
+                      originalLead.fundingSource ||
+                      "-";
+                    const owners = Array.from(
+                      new Set(
+                        (record.records || [])
+                          .map(getOwner)
+                          .filter((o) => o && o !== "Unassigned")
+                      )
+                    );
+                    const ownerDisplay =
+                      owners.length === 0
+                        ? "Unassigned"
+                        : owners.length === 1
+                        ? owners[0]
+                        : `${owners[0]} (+${owners.length - 1})`;
+                    const firstReceived =
+                      originalLead.createdAt ||
+                      originalLead.created_at ||
+                      originalLead.received_on ||
+                      originalLead.receivedOn;
+
+                    return (
+                      <tr key={`dup-${groupId}-${index}`}>
+                        <td style={{ verticalAlign: "middle" }}>
+                          <span
+                            className="duplicate-type-pill"
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              padding: "4px 10px",
+                              borderRadius: "6px",
+                              fontWeight: 600,
+                              fontSize: "12px",
+                              background: "#eff6ff",
+                              color: "#2563eb",
+                              border: "1px solid #bfdbfe",
+                              whiteSpace: "nowrap",
+                              position: "static",
+                            }}
+                          >
+                            Duplicate Group
+                          </span>
+                        </td>
+                        <td style={{ fontWeight: 700, color: "#1e293b", verticalAlign: "middle" }}>#{groupId}</td>
+                        <td style={{ verticalAlign: "middle" }}>
+                          <strong>{record.matchedOn || "Match"}:</strong> {record.matchValue}
+                        </td>
+                        <td style={{ verticalAlign: "middle" }}>
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              padding: "3px 10px",
+                              borderRadius: "12px",
+                              background: "#fef3c7",
+                              color: "#92400e",
+                              fontWeight: 700,
+                              fontSize: "12px",
+                              position: "static",
+                            }}
+                          >
+                            {record.records?.length || 0} records
+                          </span>
+                        </td>
+                        <td style={{ verticalAlign: "middle" }}>{originalSource}</td>
+                        <td style={{ verticalAlign: "middle" }}>{ownerDisplay}</td>
+                        <td style={{ verticalAlign: "middle" }}>{formatDate(firstReceived)}</td>
+                        <td style={{ verticalAlign: "middle" }}>
+                          <button
+                            type="button"
+                            className="lead-merge-view-btn"
+                            onClick={() =>
+                              navigate(`/lead-merge?groupId=${encodeURIComponent(groupId)}`, {
+                                state: { groupId },
+                              })
+                            }
+                          >
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  const type = record.resultType || (card.recordType === "task" ? "Task" : "Lead");
+                  const id = record.id || record.leadId || index + 1;
                   return (
                     <tr key={`${type}-${id}-${index}`}>
                       <td>{type}</td>
-                      <td>{record.id ? `#${record.id}` : record.matchValue || "-"}</td>
-                      <td>{record.records ? `${record.matchedOn}: ${record.matchValue}` : getName(record)}</td>
+                      <td>{record.id ? `#${record.id}` : "-"}</td>
+                      <td>{getName(record)}</td>
                       <td>{record.status || record.stage || "-"}</td>
-                      <td>{record.records ? `${record.records.length} records` : getOwner(record)}</td>
-                      <td>{record.tags || record.channelPartner || record.priority || record.type || "-"}</td>
+                      <td>{getOwner(record)}</td>
+                      <td>{record.tags || record.channelPartner || record.fundingSource || record.priority || record.type || "-"}</td>
                       <td>{formatDate(record.dueDate || record.conductSiteDate || record.siteVisitDate || record.createdAt)}</td>
                       <td>
                         <button
                           type="button"
                           className="lead-merge-view-btn"
-                          onClick={() => record.records ? navigate("/lead-merge") : openRecord(record)}
+                          onClick={() => openRecord(record)}
                         >
                           View
                         </button>

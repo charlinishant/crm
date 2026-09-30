@@ -948,12 +948,26 @@ exports.getUnit = async (req, res) => {
       }, new Map()).values()).map((group) => ({
         ...group,
         unitList: group.unitList.sort((a, b) => {
-          const positionA = Number(a.unitIndex)
-          const positionB = Number(b.unitIndex)
-          if (!Number.isNaN(positionA) && !Number.isNaN(positionB) && positionA !== positionB) {
-            return positionA - positionB
+          const getPosVal = (item) => {
+            const explicitIndex = Number(item.unitIndex)
+            if (Number.isFinite(explicitIndex) && explicitIndex > 0) return explicitIndex
+            const match = String(item.name || "").trim().match(/(\d+)$/)
+            if (match) {
+              if (match[1].length >= 2) {
+                const lastTwo = parseInt(match[1].slice(-2), 10)
+                if (!Number.isNaN(lastTwo)) return lastTwo
+              }
+              const val = parseInt(match[1], 10)
+              if (!Number.isNaN(val)) return val
+            }
+            return 0
           }
-          return String(a.name || "").localeCompare(String(b.name || ""))
+          const posA = getPosVal(a)
+          const posB = getPosVal(b)
+          if (posA !== posB) {
+            return posA - posB
+          }
+          return String(a.name || "").localeCompare(String(b.name || ""), undefined, { numeric: true })
         }),
       })).sort((a, b) => {
         const floorDiff = getFloorSortValue(b.floorNumber) - getFloorSortValue(a.floorNumber)
@@ -1302,37 +1316,8 @@ exports.deleteUnitItem = async (req, res) => {
 
     if (!unitItem) return res.status(404).json({ message: "Unit not found" })
 
-    if (unitItem._count.bookings > 0) {
-      return res.status(409).json({ message: "Cannot delete unit because booking history exists for it." })
-    }
-
-    const unitStatus = normalizeUnitStatus(unitItem.status)
-    if (unitStatus !== UNIT_STATUS.Available) {
-      return res.status(409).json({
-        message: `Cannot delete unit because its status is ${unitStatus}. Only Available units can be deleted.`,
-      })
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.unitModel.delete({ where: { id: unitItem.id } })
-
-      const remainingUnits = await tx.unitModel.count({
-        where: { unitId: unitItem.unitId },
-      })
-
-      if (remainingUnits === 0) {
-        const unitGroup = await tx.unit.findUnique({
-          where: { id: unitItem.unitId },
-          select: { _count: { select: { bookings: true } } },
-        })
-
-        if (unitGroup && unitGroup._count.bookings === 0) {
-          await tx.unit.delete({ where: { id: unitItem.unitId } })
-        }
-      }
-    })
-
-    res.status(200).json({ message: "Unit deleted successfully" })
+    await prisma.unitModel.update({ where: { id: unitItem.id }, data: { status: "Cancelled" } })
+    res.status(200).json({ message: "Unit moved to Bin" })
   } catch (error) {
     console.log(error)
     res.status(500).json({ message: "Something went wrong" })
@@ -1342,6 +1327,12 @@ exports.deleteUnitItem = async (req, res) => {
 exports.listUnit = async (req, res) => {
 
     const record = await prisma.unit.findMany({
+      where: {
+        project: { deletedAt: null },
+        OR: [{ towerId: null }, { tower: { deletedAt: null } }],
+        floor: { status: "Active", project: { deletedAt: null } },
+        unitList: { some: { status: { notIn: ["Cancelled", "Refuge"] } } },
+      },
       select: {
         id: true,
         floorId: true,
@@ -1353,6 +1344,7 @@ exports.listUnit = async (req, res) => {
           },
         },
         unitList: {
+          where: { status: { notIn: ["Cancelled", "Refuge"] } },
           select: {
             id: true,
             name: true,

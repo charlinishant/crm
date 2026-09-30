@@ -158,7 +158,6 @@ const OpenTask = () => {
         <div className="open-task-table-wrap">
           {/* <p>Open Task Data</p> */}
           <label className="crm-table-search">
-            <span aria-hidden="true">🔍</span>
             <input
               type="search"
               value={searchQuery}

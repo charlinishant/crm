@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { CalendarDays, MoreVertical } from "lucide-react";
 import CreateFollowupModal from "../../components/sales/CreateFollowupModal";
 import FollowupFilters from "../../components/sales/FollowupFilters";
@@ -81,6 +82,15 @@ const SalesFollowups = ({
   const [editTarget, setEditTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [globalCounts, setGlobalCounts] = useState({
+    all: 0,
+    today: 0,
+    upcoming: 0,
+    due: 0,
+    overdue: 0,
+    completed: 0,
+    cancelled: 0,
+  });
   const [page, setPage] = useState(1);
   const [pageMeta, setPageMeta] = useState({ totalItems:0, totalPages:1 });
   const recordsPerPage = 10;
@@ -96,6 +106,9 @@ const SalesFollowups = ({
       const result = await getFollowups(filter, { page:nextPage, limit:recordsPerPage });
       const rows = Array.isArray(result) ? result : result?.data || [];
       setFollowups(rows);
+      if (result?.counts) {
+        setGlobalCounts(result.counts);
+      }
       setPageMeta({
         totalItems:Number(result?.totalItems) || rows.length,
         totalPages:Math.max(1, Number(result?.totalPages) || 1),
@@ -115,32 +128,7 @@ const SalesFollowups = ({
     setPage(1);
   }, [filter]);
 
-  const counts = useMemo(() => {
-    const nextCounts = { all: 0, today: 0, upcoming: 0, due: 0, overdue: 0, completed: 0, cancelled: 0 };
-    followups.forEach((followup) => {
-      nextCounts.all += 1;
-      const status = followup.effectiveStatus || followup.status;
-      if (status === "Done") {
-        nextCounts.completed += 1;
-      } else if (status === "Cancelled") {
-        nextCounts.cancelled += 1;
-      } else {
-        const datePart = String(followup.followUpDate || "").slice(0, 10);
-        const today = new Date().toISOString().slice(0, 10);
-        if (datePart === today) {
-          nextCounts.today += 1;
-          nextCounts.due += 1; // "Due Soon" includes today
-        } else if (datePart > today) {
-          nextCounts.upcoming += 1;
-          nextCounts.due += 1; // "Due Soon" includes upcoming
-        } else {
-          // Past due
-          nextCounts.overdue += 1;
-        }
-      }
-    });
-    return nextCounts;
-  }, [followups]);
+  const counts = globalCounts;
 
   const visibleFollowups = followups;
 
@@ -156,13 +144,41 @@ const SalesFollowups = ({
     if (onRefreshPanel) onRefreshPanel();
   };
 
+  const navigate = useNavigate();
+
+  const resolveTargetLead = (followup) => {
+    if (!followup) return null;
+    const directLead = followup.lead;
+    const leadId = directLead?.id || followup.leadId || (typeof directLead === "number" || typeof directLead === "string" ? directLead : null);
+    if (leadId && Array.isArray(leads) && leads.length > 0) {
+      const found = leads.find((l) => String(getLeadId(l)) === String(leadId));
+      if (found) return found;
+    }
+    if (directLead && typeof directLead === "object") {
+      return directLead;
+    }
+    return {
+      id: leadId,
+      name: followup.leadName,
+      firstName: followup.leadName,
+      phone: followup.phone,
+      phones: followup.phone ? [{ type: "Mobile", value: followup.phone }] : [],
+      status: followup.leadStatus,
+    };
+  };
+
   const updateLeadStatus = async (followup, status, extraPayload = {}) => {
-    const leadId = getLeadId(followup.lead);
+    const target = resolveTargetLead(followup);
+    const leadId = getLeadId(target) || getLeadId(followup.lead) || followup.leadId;
     if (!leadId) return;
+
+    const token = localStorage.getItem("authToken");
+    const headers = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
 
     const response = await fetch(`${process.env.REACT_APP_API_URL || "http://localhost:5000"}/leads/${leadId}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ status, ...extraPayload }),
     });
     const result = await response.json().catch(() => ({}));
@@ -190,12 +206,20 @@ const SalesFollowups = ({
 
   const handleBooked = async (followup) => {
     try {
+      const targetLead = resolveTargetLead(followup);
       await updateLeadStatus(followup, "Booked");
       await handleMarkDone(followup, {
         nextAction: "Booked",
         note: "Follow-up completed. Booking selected.",
       });
-      onBookLead?.(followup.lead);
+      if (onBookLead) {
+        onBookLead(targetLead);
+      } else {
+        const leadId = getLeadId(targetLead);
+        navigate(`/user/sales/bookings${leadId ? `?leadId=${leadId}` : ""}`, {
+          state: targetLead ? { lead: targetLead } : undefined,
+        });
+      }
     } catch (err) {
       setError(err.message || "Unable to mark lead as booked");
     }
@@ -285,17 +309,61 @@ const SalesFollowups = ({
     const action = selectedActions[followup.id] || "";
     if (!action || isActionDisabled(followup, action)) return;
 
+    const targetLead = resolveTargetLead(followup);
+    const leadId = getLeadId(targetLead) || getLeadId(followup.lead) || followup.leadId;
+
     try {
-      if (action === "call") onOpenCallLead?.(followup.lead);
-      if (action === "whatsapp") onOpenWhatsAppLead?.(followup.lead);
-      if (action === "email") onSendEmailLead?.(followup.lead);
-      if (action === "visit") onScheduleVisitLead?.(followup.lead);
-      if (action === "booked") await handleBooked(followup);
-      if (action === "not-interested") await handleNotInterested(followup);
-      if (action === "done") await handleMarkDone(followup);
-      if (action === "reschedule") setRescheduleTarget(followup);
-      if (action === "cancel") await handleCancel(followup);
-      if (action === "open-lead") onOpenLead?.(followup.lead);
+      if (action === "call") {
+        if (onOpenCallLead) {
+          onOpenCallLead(targetLead);
+        } else {
+          navigate(`/user/sales/calls${leadId ? `?leadId=${leadId}` : ""}`, {
+            state: targetLead ? { lead: targetLead } : undefined,
+          });
+        }
+      } else if (action === "whatsapp") {
+        if (onOpenWhatsAppLead) {
+          onOpenWhatsAppLead(targetLead);
+        } else {
+          navigate(`/user/sales/whatsapp${leadId ? `?leadId=${leadId}` : ""}`, {
+            state: targetLead ? { lead: targetLead } : undefined,
+          });
+        }
+      } else if (action === "email") {
+        if (onSendEmailLead) {
+          onSendEmailLead(targetLead);
+        } else {
+          navigate(`/user/sales/conversation?tab=emails${leadId ? `&leadId=${leadId}` : ""}`, {
+            state: targetLead ? { lead: targetLead } : undefined,
+          });
+        }
+      } else if (action === "visit") {
+        if (onScheduleVisitLead) {
+          onScheduleVisitLead(targetLead);
+        } else {
+          navigate(`/user/sales/site-visit${leadId ? `?leadId=${leadId}` : ""}`, {
+            state: targetLead ? { lead: targetLead } : undefined,
+          });
+        }
+      } else if (action === "booked") {
+        await handleBooked(followup);
+      } else if (action === "not-interested") {
+        await handleNotInterested(followup);
+      } else if (action === "done") {
+        await handleMarkDone(followup);
+      } else if (action === "reschedule") {
+        setRescheduleTarget(followup);
+      } else if (action === "cancel") {
+        await handleCancel(followup);
+      } else if (action === "open-lead") {
+        if (onOpenLead) {
+          onOpenLead(targetLead);
+        } else {
+          navigate(`/user/sales/details${leadId ? `?leadId=${leadId}` : ""}`, {
+            state: targetLead ? { lead: targetLead } : undefined,
+          });
+        }
+      }
       clearSelectedAction(followup.id);
     } catch (err) {
       setError(err.message || "Unable to complete selected action");

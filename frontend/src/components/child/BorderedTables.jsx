@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import CompactSearchSelect from '../common/CompactSearchSelect';
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
@@ -270,23 +271,18 @@ const BorderedTables = () => {
                         <label htmlFor="taskAssignee">
                             ASSIGNEE <span>*</span>
                         </label>
-                        <select
-                            id="taskAssignee"
-                            name="assigneeId"
-                            value={formData.assigneeId}
-                            onChange={handleChange}
+                        <CompactSearchSelect
+                            value={formData.assigneeId ? String(formData.assigneeId) : ""}
+                            onChange={(val) => setFormData((prev) => ({ ...prev, assigneeId: val }))}
+                            options={users.map((user) => ({
+                                value: String(user.id),
+                                label: getUserName(user),
+                                sub: user.role ? `(${user.role})` : "",
+                            }))}
+                            placeholder={isLoadingUsers ? "Loading users..." : "Select user"}
+                            searchPlaceholder="Search user..."
                             disabled={isLoadingUsers}
-                        >
-                            <option value="">
-                                {isLoadingUsers ? "Loading users..." : "Select user"}
-                            </option>
-                            {users.map((user) => (
-                                <option key={user.id || user.email} value={user.id}>
-                                    {getUserName(user)}
-                                    {user.role ? ` (${user.role})` : ""}
-                                </option>
-                            ))}
-                        </select>
+                        />
                                     </div>
 
                                     <div className="lead-group">

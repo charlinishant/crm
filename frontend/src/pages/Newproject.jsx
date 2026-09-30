@@ -76,6 +76,51 @@ const normalizeProjectType = (value) => {
   return value || "";
 };
 
+const compressImageFile = (file, maxWidth = 1280, maxHeight = 960, quality = 0.82) => {
+  return new Promise((resolve) => {
+    if (!file || !file.type.startsWith("image/")) {
+      return resolve(null);
+    }
+    // If SVG or gif, don't re-compress with canvas
+    if (file.type === "image/svg+xml" || file.type === "image/gif") {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxWidth || height > maxHeight) {
+          const ratio = Math.min(maxWidth / width, maxHeight / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const mimeType = file.type === "image/png" ? "image/png" : "image/jpeg";
+          const dataUrl = canvas.toDataURL(mimeType, quality);
+          resolve(dataUrl);
+        } else {
+          resolve(event.target?.result);
+        }
+      };
+      img.onerror = () => resolve(event.target?.result);
+      img.src = event.target?.result;
+    };
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(file);
+  });
+};
+
 const NEWPROJECT = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -88,6 +133,7 @@ const NEWPROJECT = () => {
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [isLoadingProject, setIsLoadingProject] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCompressingImage, setIsCompressingImage] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [isSalesOpen, setIsSalesOpen] = useState(false);
   const [salesSearch, setSalesSearch] = useState("");
@@ -377,28 +423,38 @@ const NEWPROJECT = () => {
                     }}
                     disabled={isLoadingProject}
                   />
-                  <label className="np-file-upload-btn" style={{ cursor: "pointer", background: "#f1f5f9", padding: "8px 16px", borderRadius: "6px", border: "1px solid #cbd5e1", whiteSpace: "nowrap", fontWeight: "500", fontSize: "13px" }}>
-                    📁 Browse
+                  <label className="np-file-upload-btn" style={{ cursor: isCompressingImage ? "wait" : "pointer", background: isCompressingImage ? "#e2e8f0" : "#f1f5f9", padding: "8px 16px", borderRadius: "6px", border: "1px solid #cbd5e1", whiteSpace: "nowrap", fontWeight: "500", fontSize: "13px", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    {isCompressingImage ? "⏳ Optimizing..." : "📁 Browse"}
                     <input
                       type="file"
                       accept="image/*"
                       style={{ display: "none" }}
-                      onChange={(e) => {
+                      disabled={isCompressingImage || isLoadingProject}
+                      onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (event) => {
-                            const dataUrl = event.target?.result;
+                          setIsCompressingImage(true);
+                          try {
+                            const dataUrl = await compressImageFile(file);
                             if (dataUrl) {
                               setFormData((prev) => ({ ...prev, elevationPhoto: dataUrl, image: dataUrl }));
                             }
-                          };
-                          reader.readAsDataURL(file);
+                          } catch (err) {
+                            console.error("Image optimization failed:", err);
+                          } finally {
+                            setIsCompressingImage(false);
+                            e.target.value = "";
+                          }
                         }
                       }}
                     />
                   </label>
                 </div>
+                {isCompressingImage && (
+                  <div style={{ marginTop: "6px", fontSize: "12px", color: "#64748b" }}>
+                    ⚡ Optimizing image for instant upload...
+                  </div>
+                )}
                 {(formData.elevationPhoto || formData.image) && (
                   <div style={{ marginTop: "10px", position: "relative", display: "inline-block" }}>
                     <img
@@ -631,8 +687,8 @@ const NEWPROJECT = () => {
                 <p className="np-save-error">{saveError}</p>
               )}
               <div className="np-buttons">
-                <button type="submit" className="np-btn-save" disabled={isSaving || isLoadingProject}>
-                  {isSaving ? "Saving..." : isEditMode ? "Update" : "Save"}
+                <button type="submit" className="np-btn-save" disabled={isSaving || isLoadingProject || isCompressingImage}>
+                  {isSaving ? "Saving..." : isCompressingImage ? "Optimizing Image..." : isEditMode ? "Update" : "Save"}
                 </button>
                 <button type="button" className="np-btn-cancel" onClick={() => navigate("/projects")}>Cancel</button>
               </div>

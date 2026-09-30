@@ -22,6 +22,11 @@ import {
   FaTrash,
   FaUserTie,
   FaWhatsapp,
+  FaFilePdf,
+  FaFileExcel,
+  FaPrint,
+  FaEye,
+  FaExternalLinkAlt,
 } from "react-icons/fa";
 import {
   getLeadFollowupContext,
@@ -1303,6 +1308,116 @@ const UserDetails = ({
       state: { lead, booking: existingBooking, returnTo: `${location.pathname}${location.search || ""}` },
     });
   };
+  const getBrandedDocumentHtml = (html = "") => {
+    const logoUrl = `${window.location.origin}/assets/images/logo.png`;
+    return String(html)
+      .replace(
+        /<div class="brand-name">Insite<span>Arc<\/span><\/div>/g,
+        `<img class="brand-logo" src="${logoUrl}" alt="SWAMI" />`
+      )
+      .replace(
+        /<\/style>/,
+        `.brand-logo{display:block;height:auto;max-height:92px;object-fit:contain;width:92px;}</style>`
+      )
+      .replace(/src="\/assets\/images\/logo\.png"/g, `src="${logoUrl}"`)
+      .replace(/Insite Arc Developers Pvt\. Ltd\./g, "SWAMI Developers Pvt. Ltd.")
+      .replace(/Insite Arc CRM\s*·\s*Premium Post-Sales Housing Solutions/g, "SWAMI CRM - Premium Post-Sales Housing Solutions")
+      .replace(/Insite Arc/g, "SWAMI");
+  };
+
+  const [previewDoc, setPreviewDoc] = useState(null);
+
+  const handlePreviewCostSheet = async () => {
+    if (!latestBooking?.id) return;
+    try {
+      const res = await fetch(`${API_URL}/api/bookings/${latestBooking.id}/cost-sheet/pdf`, { headers: authHeaders });
+      if (res.ok) {
+        const html = await res.text();
+        setPreviewDoc({
+          title: `Cost Sheet & Schedule — ${latestBooking.customerName || leadName} (BKG-${latestBooking.id})`,
+          htmlContent: html,
+        });
+        return;
+      }
+    } catch (e) {}
+    window.open(`${API_URL}/api/bookings/${latestBooking.id}/cost-sheet/pdf`, "_blank");
+  };
+
+  const handleDownloadExcel = async () => {
+    if (!latestBooking?.id) return;
+    try {
+      const res = await fetch(`${API_URL}/api/bookings/${latestBooking.id}/cost-sheet`, { headers: authHeaders });
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `cost-sheet-${latestBooking.id}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      window.open(`${API_URL}/api/bookings/${latestBooking.id}/cost-sheet`, "_blank");
+    }
+  };
+
+  const handlePrintCostSheet = async () => {
+    if (!latestBooking?.id) return;
+    try {
+      const res = await fetch(`${API_URL}/api/bookings/${latestBooking.id}/cost-sheet/pdf`, { headers: authHeaders });
+      if (res.ok) {
+        const html = await res.text();
+        const w = window.open("", "_blank");
+        w.document.write(getBrandedDocumentHtml(html));
+        w.document.close();
+        setTimeout(() => {
+          w.focus();
+          w.print();
+        }, 500);
+        return;
+      }
+    } catch (e) {}
+    window.open(`${API_URL}/api/bookings/${latestBooking.id}/cost-sheet/pdf?action=print`, "_blank");
+  };
+
+  const agreementValueNumber = Number(
+    latestBooking?.agreementValue ||
+    latestBooking?.soldPrice ||
+    latestBooking?.totalPrice ||
+    latestBooking?.basePrice ||
+    0
+  );
+  const stampDutyNumber = Number(latestBooking?.stampDutyAmount || latestBooking?.stampDuty || (agreementValueNumber * 0.06).toFixed(2));
+  const registrationNumber = Number(latestBooking?.registrationAmount || latestBooking?.registrationCharges || 30000);
+  const gstNumber = Number(latestBooking?.gstAmount || (agreementValueNumber * 0.05).toFixed(2));
+  const legalNumber = Number(latestBooking?.legalCharges || latestBooking?.legalDocumentationCharges || 10000);
+  const parkingChargesNumber = Number(latestBooking?.parkingCharges || latestBooking?.parkingAmount || 0);
+  const allInclusiveNumber = Number(
+    latestBooking?.totalPrice ||
+    (agreementValueNumber + stampDutyNumber + registrationNumber + gstNumber + legalNumber).toFixed(2)
+  );
+
+  const paymentMilestones = useMemo(() => {
+    if (!latestBooking) return [];
+    const milestones = [
+      { name: "EOI / Booking Token", pct: 10, milestone: "Booking" },
+      { name: "On Registration of Sales Agreement", pct: 20, milestone: "Registration" },
+      { name: "On Completion of Plinth", pct: 15, milestone: "Plinth" },
+      { name: "On Slab wise upto 14th Floor (due as per slab)", pct: 25, milestone: "Slab" },
+      { name: "On Execution of Internal Amenities of Flat", pct: 10, milestone: "Internal Amenities" },
+      { name: "On Execution of External Amenities of Flat", pct: 10, milestone: "External Amenities" },
+      { name: "On Execution of Lift & Paint", pct: 5, milestone: "Lift & Paint" },
+      { name: "Before handing over / On receipt of OC", pct: 5, milestone: "Possession" },
+    ];
+    return milestones.map((m) => {
+      const amount = Number(((agreementValueNumber * m.pct) / 100).toFixed(2));
+      const gst = Number((amount * 0.05).toFixed(2));
+      const grandTotal = Number((amount + gst).toFixed(2));
+      return { ...m, amount, gst, grandTotal };
+    });
+  }, [agreementValueNumber, latestBooking]);
+
   const bookingUnitFields = latestBooking
     ? [
         ["Name", valueOf(latestBooking, ["unit", "unitName", "name"], "-")],
@@ -2476,29 +2591,213 @@ const UserDetails = ({
 
           {latestBooking && (
             <section className="crm-booking-confirmation">
-              <h2 className="crm-booking-title">Booking Confirmation</h2>
-
-              <div className="crm-booking-card">
-                <div className="crm-booking-card-head">Unit Details</div>
-                <div className="crm-booking-grid">
-                  {bookingUnitFields.map(([label, value]) => (
-                    <div className="crm-booking-field" key={label}>
-                      <span>{label}</span>
-                      <strong>{value || "-"}</strong>
+              {/* Header Bar */}
+              <div className="crm-booking-summary-banner" style={{ background: "linear-gradient(135deg, #1d4ed8, #3b82f6)", borderRadius: 12, padding: "18px 22px", color: "#fff", marginBottom: 18 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 14 }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                      <h3 style={{ fontSize: 20, fontWeight: 800, margin: 0, color: "#ffffff" }}>
+                        {latestBooking.customerName || leadName}
+                      </h3>
+                      <span style={{ background: "rgba(255,255,255,0.25)", color: "#fff", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700 }}>
+                        BKG-{latestBooking.id}
+                      </span>
+                      <span style={{ background: "#10b981", color: "#fff", padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700 }}>
+                        {latestBooking.stage || latestBooking.status || "Booked"}
+                      </span>
                     </div>
-                  ))}
+                    <div style={{ fontSize: 13, opacity: 0.9, marginTop: 4 }}>
+                      {latestBooking.projectDetails || latestBooking.unit?.project?.name || projectInterest} · Unit {latestBooking.unit?.unitNo || latestBooking.unit?.name || latestBooking.name || "—"} · Floor {valueOf(latestBooking, ["floor", "floorName"], "-")} · Tower {valueOf(latestBooking, ["towerName", "tower"], "-")}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      onClick={handlePreviewCostSheet}
+                      style={{ padding: "7px 14px", background: "#ffffff", color: "#1d4ed8", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}
+                    >
+                      <FaEye /> Preview Cost Sheet
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadExcel}
+                      style={{ padding: "7px 14px", background: "#10b981", color: "#ffffff", border: "none", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}
+                    >
+                      <FaFileExcel /> Excel Master
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handlePrintCostSheet}
+                      style={{ padding: "7px 14px", background: "rgba(255,255,255,0.2)", color: "#ffffff", border: "1px solid rgba(255,255,255,0.4)", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}
+                    >
+                      <FaPrint /> Print
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/post-sales/details/${latestBooking.id}`)}
+                      style={{ padding: "7px 14px", background: "rgba(255,255,255,0.2)", color: "#ffffff", border: "1px solid rgba(255,255,255,0.4)", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 6 }}
+                    >
+                      <FaExternalLinkAlt /> Post-Sales Details
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div className="crm-booking-card">
-                <div className="crm-booking-card-head">Applicant Details</div>
-                <div className="crm-applicant-grid">
+              {/* Grid of Cards: Unit & Pricing Details, Taxes & Total, Applicant Details */}
+              <div className="row g-3 mb-3">
+                {/* 1. Unit & Pricing Master */}
+                <div className="col-12 col-lg-6">
+                  <div className="crm-booking-card" style={{ height: "100%", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+                    <div className="crm-booking-card-head" style={{ background: "#487fff", color: "#fff", padding: "12px 16px", fontWeight: 700, fontSize: 14 }}>
+                      🏠 Unit &amp; Pricing Master
+                    </div>
+                    <div style={{ padding: 16 }}>
+                      <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+                        <tbody>
+                          <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "8px 0", color: "#64748b", fontWeight: 600 }}>Project / Tower</td>
+                            <td style={{ padding: "8px 0", textAlign: "right", fontWeight: 700, color: "#1e293b" }}>{latestBooking.projectDetails || latestBooking.unit?.project?.name || projectInterest} ({valueOf(latestBooking, ["towerName", "tower"], "-")})</td>
+                          </tr>
+                          <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "8px 0", color: "#64748b", fontWeight: 600 }}>Unit No / Floor</td>
+                            <td style={{ padding: "8px 0", textAlign: "right", fontWeight: 700, color: "#1e293b" }}>Unit {latestBooking.unit?.unitNo || latestBooking.unit?.name || latestBooking.name || "—"} (Floor {valueOf(latestBooking, ["floor", "floorName"], "-")})</td>
+                          </tr>
+                          <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "8px 0", color: "#64748b", fontWeight: 600 }}>Configuration</td>
+                            <td style={{ padding: "8px 0", textAlign: "right", fontWeight: 700, color: "#1e293b" }}>{valueOf(latestBooking, ["config", "configurationLabel", "bedrooms"], "2 BHK")}</td>
+                          </tr>
+                          <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "8px 0", color: "#64748b", fontWeight: 600 }}>Carpet Area</td>
+                            <td style={{ padding: "8px 0", textAlign: "right", fontWeight: 700, color: "#1e293b" }}>{formatNumber(valueOf(latestBooking, ["carpetArea", "carpet"], ""))} Sq. Ft.</td>
+                          </tr>
+                          <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "8px 0", color: "#64748b", fontWeight: 600 }}>Saleable Area</td>
+                            <td style={{ padding: "8px 0", textAlign: "right", fontWeight: 700, color: "#1e293b" }}>{formatArea(valueOf(latestBooking, ["saleableArea", "saleable"], ""))}</td>
+                          </tr>
+                          <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "8px 0", color: "#64748b", fontWeight: 600 }}>Base Rate</td>
+                            <td style={{ padding: "8px 0", textAlign: "right", fontWeight: 700, color: "#1e293b" }}>{formatMoney(valueOf(latestBooking, ["baseRate"], ""))} / sq.ft</td>
+                          </tr>
+                          <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "8px 0", color: "#64748b", fontWeight: 600 }}>Floor Rise</td>
+                            <td style={{ padding: "8px 0", textAlign: "right", fontWeight: 700, color: "#1e293b" }}>{valueOf(latestBooking, ["floorRise"], "0")}</td>
+                          </tr>
+                          <tr style={{ background: "#eff6ff" }}>
+                            <td style={{ padding: "10px 8px", color: "#1d4ed8", fontWeight: 800, fontSize: 14 }}>Agreement Value (AV)</td>
+                            <td style={{ padding: "10px 8px", textAlign: "right", fontWeight: 800, fontSize: 15, color: "#1d4ed8" }}>{formatMoney(agreementValueNumber)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Taxes, Charges & Total Package */}
+                <div className="col-12 col-lg-6">
+                  <div className="crm-booking-card" style={{ height: "100%", background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+                    <div className="crm-booking-card-head" style={{ background: "#10b981", color: "#fff", padding: "12px 16px", fontWeight: 700, fontSize: 14 }}>
+                      💰 Statutory Taxes &amp; Total Cost
+                    </div>
+                    <div style={{ padding: 16 }}>
+                      <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+                        <tbody>
+                          <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "8px 0", color: "#64748b", fontWeight: 600 }}>Agreement Value</td>
+                            <td style={{ padding: "8px 0", textAlign: "right", fontWeight: 700, color: "#1e293b" }}>{formatMoney(agreementValueNumber)}</td>
+                          </tr>
+                          <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "8px 0", color: "#64748b", fontWeight: 600 }}>Stamp Duty (6% on AV)</td>
+                            <td style={{ padding: "8px 0", textAlign: "right", fontWeight: 700, color: "#1e293b" }}>{formatMoney(stampDutyNumber)}</td>
+                          </tr>
+                          <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "8px 0", color: "#64748b", fontWeight: 600 }}>Registration Charges</td>
+                            <td style={{ padding: "8px 0", textAlign: "right", fontWeight: 700, color: "#1e293b" }}>{formatMoney(registrationNumber)}</td>
+                          </tr>
+                          <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "8px 0", color: "#64748b", fontWeight: 600 }}>GST (5% on AV)</td>
+                            <td style={{ padding: "8px 0", textAlign: "right", fontWeight: 700, color: "#1e293b" }}>{formatMoney(gstNumber)}</td>
+                          </tr>
+                          <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "8px 0", color: "#64748b", fontWeight: 600 }}>Legal &amp; Documentation</td>
+                            <td style={{ padding: "8px 0", textAlign: "right", fontWeight: 700, color: "#1e293b" }}>{formatMoney(legalNumber)}</td>
+                          </tr>
+                          {parkingChargesNumber > 0 && (
+                            <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                              <td style={{ padding: "8px 0", color: "#64748b", fontWeight: 600 }}>Parking Slot Charges</td>
+                              <td style={{ padding: "8px 0", textAlign: "right", fontWeight: 700, color: "#1e293b" }}>{formatMoney(parkingChargesNumber)}</td>
+                            </tr>
+                          )}
+                          <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
+                            <td style={{ padding: "8px 0", color: "#64748b", fontWeight: 600 }}>Booking Date</td>
+                            <td style={{ padding: "8px 0", textAlign: "right", fontWeight: 700, color: "#1e293b" }}>{formatDateOnly(valueOf(latestBooking, ["bookingDate", "bookedOn", "createdAt"], ""))}</td>
+                          </tr>
+                          <tr style={{ background: "#f0fdf4" }}>
+                            <td style={{ padding: "10px 8px", color: "#15803d", fontWeight: 800, fontSize: 14 }}>All-Inclusive Total Price</td>
+                            <td style={{ padding: "10px 8px", textAlign: "right", fontWeight: 800, fontSize: 15, color: "#15803d" }}>{formatMoney(allInclusiveNumber)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. Payment Milestone Schedule Table */}
+              <div className="crm-booking-card mb-3" style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+                <div className="crm-booking-card-head" style={{ background: "#6366f1", color: "#fff", padding: "12px 16px", fontWeight: 700, fontSize: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span>📅 Payment Milestone Schedule</span>
+                  <span style={{ fontSize: 12, opacity: 0.9 }}>Agreement Value: {formatMoney(agreementValueNumber)}</span>
+                </div>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ width: "100%", fontSize: 12.5, borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ background: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>
+                        <th style={{ padding: "10px 14px", textAlign: "left", fontWeight: 700, color: "#475569" }}>Milestone Description</th>
+                        <th style={{ padding: "10px 14px", textAlign: "center", fontWeight: 700, color: "#475569" }}>Value %</th>
+                        <th style={{ padding: "10px 14px", textAlign: "right", fontWeight: 700, color: "#475569" }}>Amount (₹)</th>
+                        <th style={{ padding: "10px 14px", textAlign: "right", fontWeight: 700, color: "#475569" }}>GST (5%)</th>
+                        <th style={{ padding: "10px 14px", textAlign: "right", fontWeight: 700, color: "#475569" }}>Total Due (₹)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paymentMilestones.map((m, idx) => (
+                        <tr key={idx} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                          <td style={{ padding: "10px 14px", fontWeight: 600, color: "#1e293b" }}>{m.name}</td>
+                          <td style={{ padding: "10px 14px", textAlign: "center", fontWeight: 700, color: "#487fff" }}>{m.pct}%</td>
+                          <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 600, color: "#1e293b" }}>{formatMoney(m.amount)}</td>
+                          <td style={{ padding: "10px 14px", textAlign: "right", color: "#64748b" }}>{formatMoney(m.gst)}</td>
+                          <td style={{ padding: "10px 14px", textAlign: "right", fontWeight: 700, color: "#1d4ed8" }}>{formatMoney(m.grandTotal)}</td>
+                        </tr>
+                      ))}
+                      <tr style={{ background: "#eff6ff", fontWeight: 800, borderTop: "2px solid #bfdbfe" }}>
+                        <td style={{ padding: "12px 14px", color: "#1d4ed8" }}>Total Agreement Value Schedule</td>
+                        <td style={{ padding: "12px 14px", textAlign: "center", color: "#1d4ed8" }}>100%</td>
+                        <td style={{ padding: "12px 14px", textAlign: "right", color: "#1d4ed8" }}>{formatMoney(agreementValueNumber)}</td>
+                        <td style={{ padding: "12px 14px", textAlign: "right", color: "#1d4ed8" }}>{formatMoney(gstNumber)}</td>
+                        <td style={{ padding: "12px 14px", textAlign: "right", color: "#1d4ed8" }}>{formatMoney(Number(agreementValueNumber + gstNumber))}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* 4. Applicant Details */}
+              <div className="crm-booking-card" style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+                <div className="crm-booking-card-head" style={{ background: "#8b5cf6", color: "#fff", padding: "12px 16px", fontWeight: 700, fontSize: 14 }}>
+                  👤 Applicant &amp; Booking Details
+                </div>
+                <div className="crm-applicant-grid" style={{ padding: "16px 20px" }}>
                   {bookingApplicantFields.map(([label, value]) => (
                     <div className="crm-booking-field" key={label}>
                       <span>{label}</span>
                       <strong>{value || "-"}</strong>
                     </div>
                   ))}
+                  <div className="crm-booking-field">
+                    <span>Source / Channel Partner</span>
+                    <strong>{valueOf(latestBooking, ["channelPartner", "source"], source)}</strong>
+                  </div>
                 </div>
               </div>
             </section>
@@ -2582,6 +2881,88 @@ const UserDetails = ({
           )}
         </div>
       </div>
+
+      {/* Document Preview Modal */}
+      {previewDoc && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.65)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 24,
+          }}
+          onClick={() => setPreviewDoc(null)}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: 14,
+              width: "min(920px, 100%)",
+              maxHeight: "90vh",
+              overflow: "hidden",
+              display: "flex",
+              flexDirection: "column",
+              boxShadow: "0 24px 60px rgba(0,0,0,.4)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "16px 24px",
+                borderBottom: "1px solid #e2e8f0",
+              }}
+            >
+              <div style={{ fontWeight: 800, fontSize: 15, color: "#1e293b" }}>{previewDoc.title}</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={handlePrintCostSheet}
+                  style={{
+                    padding: "7px 16px",
+                    background: "#1d4ed8",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  <FaPrint /> Print
+                </button>
+                <button
+                  onClick={() => setPreviewDoc(null)}
+                  style={{
+                    padding: "7px 16px",
+                    background: "#f1f5f9",
+                    color: "#475569",
+                    border: "none",
+                    borderRadius: 8,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  ✕ Close
+                </button>
+              </div>
+            </div>
+            <div style={{ flex: 1, overflow: "auto" }}>
+              <iframe
+                srcDoc={getBrandedDocumentHtml(previewDoc.htmlContent)}
+                style={{ width: "100%", height: "100%", minHeight: "70vh", border: "none" }}
+                title="Document Preview"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

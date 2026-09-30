@@ -58,6 +58,7 @@ const requireRoles = (allowedRoles = []) => (req, res, next) => {
 }
 
 module.exports = authenticate
+module.exports.authenticate = authenticate
 module.exports.optionalAuthenticate = optionalAuthenticate
 module.exports.requireAdmin = requireAdmin
 module.exports.requireRoles = requireRoles

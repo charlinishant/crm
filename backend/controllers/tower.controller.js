@@ -358,51 +358,8 @@ exports.deleteTower = async (req, res)=>{
         if(!record)
             return res.status(404).json({ success:false, message:"Tower not found" })
 
-        const bookingCount = await prisma.booking.count({
-            where: {
-                OR: [
-                    { unit: { is: { towerId: record.id } } },
-                    { unitItem: { is: { unit: { is: { towerId: record.id } } } } },
-                ],
-            },
-        })
-        if(bookingCount){
-            return res.status(409).json({
-                success:false,
-                message:`Cannot delete tower because ${bookingCount} booking${bookingCount === 1 ? "" : "s"} exist under it.`
-            })
-        }
-
-        const unitModels = record.units.flatMap((unit) => unit.unitList || [])
-        const nonAvailableUnit = unitModels.find((unit) => unit.status && unit.status !== "Available")
-        if(nonAvailableUnit){
-            return res.status(409).json({
-                success:false,
-                message:`Cannot delete tower because unit ${nonAvailableUnit.name || nonAvailableUnit.id} is ${nonAvailableUnit.status}. Only available generated units can be deleted with the tower.`
-            })
-        }
-
-        const unitIds = record.units.map((unit) => unit.id)
-        const unitModelIds = unitModels.map((unit) => unit.id)
-        const floorPlanIds = record.floors.map((floor) => floor.id)
-        const projectId = record.projectId
-
-        await prisma.$transaction(async (tx) => {
-            if(unitModelIds.length){
-                await tx.unitModel.deleteMany({ where:{ id:{ in:unitModelIds } } })
-            }
-            if(unitIds.length){
-                await tx.unit.deleteMany({ where:{ id:{ in:unitIds } } })
-            }
-            await tx.floorPlanSlot.deleteMany({ where:{ towerId:record.id } })
-            if(floorPlanIds.length){
-                await tx.floorPlan.deleteMany({ where:{ id:{ in:floorPlanIds } } })
-            }
-            await tx.tower.delete({ where:{ id:record.id } })
-            await syncProjectTowerCount(projectId, tx)
-        })
-
-        res.status(200).json({ success:true, message:"Tower deleted successfully" })
+        await prisma.tower.update({ where:{ id:record.id }, data:{ deletedAt:new Date() } })
+        res.status(200).json({ success:true, message:"Tower moved to Bin" })
         
     } catch (error) {
         console.error("Delete tower error:", error);
@@ -412,7 +369,7 @@ exports.deleteTower = async (req, res)=>{
 
 exports.listTower = async (req, res)=>{
     try {
-        const where = {}
+        const where = { deletedAt: null, project: { deletedAt: null } }
         if(req.query.projectId){
             const projectId = toPositiveInt(req.query.projectId)
             if(!projectId){

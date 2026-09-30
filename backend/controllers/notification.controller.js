@@ -1,6 +1,6 @@
 const prisma = require("../lib/prisma")
 const { sendNotification } = require("../services/notification.service")
-
+const { isAdminUser, maskNotificationData } = require("../utils/phoneMask")
 
 exports.getNotifications = async (req, res)=>{
   try {
@@ -13,7 +13,9 @@ exports.getNotifications = async (req, res)=>{
 
     if(!notifiactions) res.status(404).json({message:"Notifications not found!"})
     
-    res.status(200).json(notifiactions)
+    const isAdmin = isAdminUser(req)
+    const safeData = isAdmin ? notifiactions : notifiactions.map((n) => maskNotificationData(n, false))
+    res.status(200).json(safeData)
     
   } catch (error) {
     console.log(error);
@@ -41,8 +43,11 @@ exports.getMyNotifications = async (req, res) => {
       prisma.notification.count({ where:{ userId, isRead:false } }),
     ])
 
+    const isAdmin = isAdminUser(req)
+    const safeData = isAdmin ? data : data.map((n) => maskNotificationData(n, false))
+
     res.status(200).json({
-      data,
+      data: safeData,
       page,
       limit,
       totalItems,
@@ -73,6 +78,10 @@ exports.readMyNotification = async (req, res) => {
     })
     const unreadCount = await prisma.notification.count({ where:{ userId, isRead:false } })
 
+    const { emitToUser } = require("../socket")
+    emitToUser(userId, "notification:read", { notificationId: updated.id, unreadCount })
+    emitToUser(userId, "notification:count", unreadCount)
+
     res.status(200).json({ message:"Notification marked as read", notification:updated, unreadCount })
   } catch (error) {
     console.log(error)
@@ -89,6 +98,11 @@ exports.readAllMyNotifications = async (req, res) => {
       where:{ userId, isRead:false },
       data:{ isRead:true },
     })
+
+    const { emitToUser } = require("../socket")
+    emitToUser(userId, "notification:readAll", { unreadCount: 0 })
+    emitToUser(userId, "notification:count", 0)
+
     res.status(200).json({ message:"All notifications marked as read", unreadCount:0 })
   } catch (error) {
     console.log(error)

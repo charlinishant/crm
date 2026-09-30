@@ -4,7 +4,9 @@ const isAdminUser = (req) => {
 }
 
 /**
- * Masks a phone number string (e.g. "9356532881" -> "9356XXXXXX" or "+91 9356532881" -> "+91 9356XXXXXX")
+ * Masks a phone number string dynamically (e.g. "9356532881" -> "9356XXXXXX" or "+91 9356532881" -> "+91 9356XXXXXX")
+ * Handles standard 10-digit mobiles, 11-digit numbers with leading 0, 12-digit numbers with country codes,
+ * landlines, WhatsApp prefixes, and international formats.
  */
 const maskPhoneNumber = (phone) => {
   if (phone === undefined || phone === null || phone === "") return phone
@@ -20,19 +22,22 @@ const maskPhoneNumber = (phone) => {
   const isWhatsApp = str.toLowerCase().startsWith("whatsapp:")
   const rawValue = isWhatsApp ? str.slice(9).trim() : str
 
-  // Check for leading + or 0
-  let prefix = ""
+  // Extract country code or leading plus
+  let prefix = isWhatsApp ? "whatsapp:" : ""
   let nationalNumber = rawValue
 
   if (rawValue.startsWith("+91")) {
-    prefix = rawValue.startsWith("+91 ") ? "+91 " : "+91"
+    prefix += rawValue.startsWith("+91 ") ? "+91 " : "+91"
     nationalNumber = rawValue.slice(3).trim()
   } else if (rawValue.startsWith("+")) {
     const match = rawValue.match(/^(\+\d{1,3}\s*)/)
     if (match) {
-      prefix = match[1]
-      nationalNumber = rawValue.slice(prefix.length).trim()
+      prefix += match[1]
+      nationalNumber = rawValue.slice(match[1].length).trim()
     }
+  } else if (rawValue.length === 12 && rawValue.startsWith("91") && /^\d+$/.test(rawValue)) {
+    prefix += "+91"
+    nationalNumber = rawValue.slice(2)
   }
 
   const digits = nationalNumber.replace(/\D/g, "")
@@ -48,15 +53,15 @@ const maskPhoneNumber = (phone) => {
   }
 
   if (digits.length <= 4) {
-    return `${isWhatsApp ? "whatsapp:" : ""}${prefix}${digits[0]}${"X".repeat(Math.max(1, digits.length - 1))}`
+    return `${prefix}${digits[0]}${"X".repeat(Math.max(1, digits.length - 1))}`
   }
 
-  // Standard local/national number -> first 4 digits + min 6 X's (e.g. 9356XXXXXX)
+  // Dynamic masking: first 4 digits visible, remaining digits masked with X
   const visible = digits.slice(0, 4)
   const maskedCount = Math.max(6, digits.length - 4)
   const maskedDigits = `${visible}${"X".repeat(maskedCount)}`
 
-  return `${isWhatsApp ? "whatsapp:" : ""}${prefix}${maskedDigits}`
+  return `${prefix}${maskedDigits}`
 }
 
 /**
@@ -177,12 +182,92 @@ const maskWhatsAppMessageData = (msg, isAdmin = false) => {
   return masked
 }
 
+const maskFollowUpData = (followUp, isAdmin = false) => {
+  if (!followUp || isAdmin) return followUp
+  const masked = { ...followUp }
+  if (masked.phone !== undefined) {
+    masked.phone = maskPhoneNumber(masked.phone)
+  }
+  if (masked.leadPhone !== undefined) {
+    masked.leadPhone = maskPhoneNumber(masked.leadPhone)
+  }
+  if (masked.customerPhone !== undefined) {
+    masked.customerPhone = maskPhoneNumber(masked.customerPhone)
+  }
+  if (masked.lead) {
+    masked.lead = maskLeadData(masked.lead, false)
+  }
+  return masked
+}
+
+const maskScheduleVisitData = (visit, isAdmin = false) => {
+  if (!visit || isAdmin) return visit
+  const masked = { ...visit }
+  if (masked.phone !== undefined) {
+    masked.phone = maskPhoneNumber(masked.phone)
+  }
+  if (masked.leadPhone !== undefined) {
+    masked.leadPhone = maskPhoneNumber(masked.leadPhone)
+  }
+  if (masked.visitorPhone !== undefined) {
+    masked.visitorPhone = maskPhoneNumber(masked.visitorPhone)
+  }
+  if (masked.customerPhone !== undefined) {
+    masked.customerPhone = maskPhoneNumber(masked.customerPhone)
+  }
+  if (masked.lead) {
+    masked.lead = maskLeadData(masked.lead, false)
+  }
+  return masked
+}
+
+const maskTaskData = (task, isAdmin = false) => {
+  if (!task || isAdmin) return task
+  const masked = { ...task }
+  if (masked.phone !== undefined) {
+    masked.phone = maskPhoneNumber(masked.phone)
+  }
+  if (masked.lead) {
+    masked.lead = maskLeadData(masked.lead, false)
+  }
+  return masked
+}
+
+const maskTextWithPhone = (text) => {
+  if (!text || typeof text !== "string") return text
+  return text.replace(/(?:\+?91[\s-]?)?([6-9]\d{9})/g, (match) => {
+    return maskPhoneNumber(match)
+  })
+}
+
+const maskNotificationData = (notification, isAdmin = false) => {
+  if (!notification || isAdmin) return notification
+  const masked = { ...notification }
+  if (masked.phone !== undefined) {
+    masked.phone = maskPhoneNumber(masked.phone)
+  }
+  if (masked.description) {
+    masked.description = maskTextWithPhone(masked.description)
+  }
+  if (masked.message) {
+    masked.message = maskTextWithPhone(masked.message)
+  }
+  if (masked.lead) {
+    masked.lead = maskLeadData(masked.lead, false)
+  }
+  return masked
+}
+
 module.exports = {
   isAdminUser,
   maskPhoneNumber,
   maskPhoneList,
   maskLeadData,
+  maskFollowUpData,
+  maskScheduleVisitData,
   maskBookingData,
   maskCallLogData,
   maskWhatsAppMessageData,
+  maskTaskData,
+  maskNotificationData,
 }

@@ -153,8 +153,17 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
   }, [getLastSourceInfo]);
 
   const getStage = useCallback((lead) => {
-    const stage = lead.lead_status || lead.status || lead.stage || "New";
-    return String(stage).replace(/_/g, " ");
+    const rawStage = lead.lead_status || lead.status || lead.stage || "New";
+    let stage = String(rawStage).replace(/_/g, " ").trim();
+    
+    const lowerStage = stage.toLowerCase();
+    if (lowerStage === "booking" || lowerStage === "booked") {
+      stage = "Booked";
+    } else if (lowerStage === "qualified" || lowerStage === "quified") {
+      stage = "Qualified";
+    }
+
+    return stage;
   }, []);
 
   const getReceivedOn = useCallback((lead) => {
@@ -304,6 +313,7 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
     }
 
     const columns = [
+      ["srNo", "Sr. No"],
       ["id", "Lead ID"],
       ["name", "Name"],
       ["owner", "Owner"],
@@ -314,7 +324,8 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
       ["tags", "Tags"],
     ];
 
-    const rows = leads.map((lead) => ({
+    const rows = leads.map((lead, index) => ({
+      srNo: index + 1,
       id: getLeadId(lead),
       name: getLeadName(lead),
       owner: getLeadOwner(lead),
@@ -558,20 +569,20 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
   const handleDelete = async (lead) => {
     const leadId = lead.id || lead._id || lead.lead_id;
     if (!leadId) return;
-    if (!window.confirm("Permanently delete this lead from database? This cannot be undone.")) return;
+    if (!window.confirm("Move this lead to the Bin? Its call logs and history will be kept and can be restored.")) return;
 
     setOpenMenu(null);
     setMenuPosition(null);
 
     try {
       const token = localStorage.getItem("authToken");
-      const response = await fetch(`${API_URL}/leads/${leadId}/permanent`, {
+      const response = await fetch(`${API_URL}/leads/${leadId}`, {
         method: "DELETE",
         headers:token ? { Authorization:`Bearer ${token}` } : {},
       });
 
       const result = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(result?.message || result || "Unable to delete lead");
+      if (!response.ok) throw new Error(result?.message || result || "Unable to move lead to Bin");
       setLeadData((current) =>
         current.filter((item) => (item.id || item._id || item.lead_id) !== leadId)
       );
@@ -1045,7 +1056,7 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
               setBulkError("");
             }}
             onDelete={() => setBulkAction(trashMode ? "permanent" : "trash")}
-            deleteLabel={trashMode ? "Delete forever" : "Delete selected"}
+            deleteLabel={trashMode ? "Delete forever" : "Move selected to Bin"}
           />
         )}
         {trashMode && tableSelection.selectedCount > 0 && (
@@ -1069,7 +1080,8 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
           </div>
         )}
 
-        <table border="1" cellPadding="0" cellSpacing="0">
+        <div className="table-responsive">
+          <table border="1" cellPadding="0" cellSpacing="0">
           <thead>
             <tr>
               <th style={{ borderStartStartRadius: '8px', borderEndStartRadius: '8px' }}>
@@ -1081,6 +1093,7 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
                   disabled={bulkBusy || paginatedLeadData.length === 0}
                 />
               </th>
+              <th>Sr. No</th>
               <th>Lead ID</th>
               <th>Name</th>
               <th>Last Source</th>
@@ -1095,7 +1108,7 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
           <tbody>
             {filteredLeadData.length === 0 ? (
               <tr>
-                <td colSpan="9" className="empty-state">
+                <td colSpan="10" className="empty-state">
                   {searchQuery ? "No matching leads found" : trashMode ? "Trash is empty" : "No Data Available"}
                 </td>
               </tr>
@@ -1110,7 +1123,12 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
                       disabled={bulkBusy}
                     />
                   </td>
-                  <td>{getLeadId(lead)}</td>
+                  <td style={{ color: '#64748b', fontWeight: 600, fontSize: '13px', width: '60px' }}>
+                    {pageStartIndex + i + 1}
+                  </td>
+                  <td style={{ fontWeight: 700, color: '#1e293b' }}>
+                    {getLeadId(lead) ? `#${getLeadId(lead)}` : '-'}
+                  </td>
                   <td>
                     <div className="lead-name-main" style={{ fontSize: '14px' }}>{getLeadName(lead)}</div>
                     {/* <div className="lead-name-owner">{getLeadOwner(lead)}</div> */}
@@ -1277,7 +1295,7 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
                               type="button"
                               onClick={() => handleDelete(lead)}
                             >
-                              Delete
+                              Move to Bin
                             </button>
                           </>
                         )}
@@ -1289,6 +1307,7 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
             )}
           </tbody>
         </table>
+      </div>
 
         {filteredLeadData.length > 0 && (
           <div className="lead-pagination">
@@ -1332,7 +1351,7 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
             count={tableSelection.selectedCount}
             entityLabel="leads"
             isDeleting={bulkBusy}
-            confirmLabel={bulkAction === "restore" ? "Restore selected" : bulkAction === "permanent" ? "Permanently delete" : "Delete selected"}
+              confirmLabel={bulkAction === "restore" ? "Restore selected" : bulkAction === "permanent" ? "Permanently delete" : "Move selected to Bin"}
             title={
               bulkAction === "restore"
                 ? `Restore ${getBulkEntityText("lead")}?`

@@ -110,6 +110,16 @@ const ColumnChartLayer = () => {
   }, [searchQuery]);
 
   useEffect(() => {
+    const handleOutsideClick = () => setOpenMenuId(null);
+    if (openMenuId !== null) {
+      window.addEventListener("click", handleOutsideClick);
+    }
+    return () => {
+      window.removeEventListener("click", handleOutsideClick);
+    };
+  }, [openMenuId]);
+
+  useEffect(() => {
     if (currentPage > totalPages) {
       setCurrentPage(totalPages);
     }
@@ -207,7 +217,6 @@ const ColumnChartLayer = () => {
 
         <div className="project-table-container">
           <label className="crm-table-search">
-            <span aria-hidden="true">🔍</span>
             <input
               type="search"
               value={searchQuery}
@@ -241,31 +250,38 @@ const ColumnChartLayer = () => {
                   <td colSpan="9" className="project-empty">{searchQuery ? "No matching projects found" : "No Data Available"}</td>
                 </tr>
               ) : (
-                paginatedProjects.map((project, index) => (
-                  <ProjectRow
-                    key={project.id}
-                    project={project}
-                    serialNumber={pageStartIndex + index + 1}
-                    isOpen={openMenuId === project.id}
-                    onToggleMenu={() => setOpenMenuId((current) => (current === project.id ? null : project.id))}
-                    onInventory={() => navigate(`/preview-inventory?projectId=${project.id}`)}
-                    onEdit={() => openEditProject(project)}
-                    onView={() => openViewProject(project)}
-                    onDelete={() => deleteProject(project)}
-                  />
-                ))
+                paginatedProjects.map((project, index) => {
+                  const isDropup = index >= Math.max(0, paginatedProjects.length - 3) || index >= 5;
+                  return (
+                    <ProjectRow
+                      key={project.id}
+                      project={project}
+                      serialNumber={pageStartIndex + index + 1}
+                      isOpen={openMenuId === project.id}
+                      isDropup={isDropup}
+                      onToggleMenu={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuId((current) => (current === project.id ? null : project.id));
+                      }}
+                      onInventory={() => navigate(`/preview-inventory?projectId=${project.id}`)}
+                      onEdit={() => openEditProject(project)}
+                      onView={() => openViewProject(project)}
+                      onDelete={() => deleteProject(project)}
+                    />
+                  );
+                })
               )}
             </tbody>
           </table>
-          {filteredProjects.length > ROWS_PER_PAGE && (
-            <TablePagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPrevious={() => setCurrentPage((page) => Math.max(1, page - 1))}
-              onNext={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-            />
-          )}
         </div>
+        {filteredProjects.length > ROWS_PER_PAGE && (
+          <TablePagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPrevious={() => setCurrentPage((page) => Math.max(1, page - 1))}
+            onNext={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+          />
+        )}
       </div>
 
       {modalMode === "view" && selectedProject && (
@@ -280,7 +296,7 @@ const ColumnChartLayer = () => {
   );
 };
 
-const ProjectRow = ({ project, serialNumber, isOpen, onToggleMenu, onEdit, onView, onInventory, onDelete }) => (
+const ProjectRow = ({ project, serialNumber, isOpen, isDropup, onToggleMenu, onEdit, onView, onInventory, onDelete }) => (
   <tr>
     <td className="fw-bold">{serialNumber}</td>
     <td>
@@ -304,7 +320,7 @@ const ProjectRow = ({ project, serialNumber, isOpen, onToggleMenu, onEdit, onVie
       </button>
 
       {isOpen && (
-        <div className="actions-dropdown">
+        <div className={`actions-dropdown ${isDropup ? "actions-dropdown--up" : ""}`} onClick={(e) => e.stopPropagation()}>
           <button type="button" onClick={onInventory}>Visual Inventory</button>
           <button type="button" onClick={onView}>View Details</button>
           <button type="button" onClick={onEdit}>Edit</button>

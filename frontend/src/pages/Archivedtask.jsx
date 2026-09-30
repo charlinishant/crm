@@ -158,7 +158,6 @@ const Archivedtask = () => {
         <div className="status-task-table-wrap">
           {/* <p>Archived Task Data</p> */}
           <label className="crm-table-search">
-            <span aria-hidden="true">🔍</span>
             <input
               type="search"
               value={searchQuery}

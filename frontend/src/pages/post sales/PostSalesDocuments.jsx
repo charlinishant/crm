@@ -119,13 +119,37 @@ const PostSalesDocuments = () => {
     finally { setGenerating(null); }
   };
 
-  const handlePreview = (doc) => {
+  const handlePreview = async (doc) => {
     if (doc.type === "BOOKING_COST_SHEET_XLSX") {
       const generatedDocsList = bookingDetails?.generatedDocuments || [];
       const pdfDoc = generatedDocsList.find(d => d.type === "BOOKING_COST_SHEET_PDF");
-      if (pdfDoc && pdfDoc.htmlContent) {
+      if (pdfDoc && pdfDoc.htmlContent && !pdfDoc.htmlContent.endsWith(".xlsx")) {
         setPreviewDoc(pdfDoc);
+        return;
+      }
+      try {
+        const res = await fetch(`${API_URL}/api/bookings/${selectedBookingId}/cost-sheet/pdf`, { headers: authHeaders() });
+        if (res.ok) {
+          const html = await res.text();
+          setPreviewDoc({ title: `Cost Sheet Preview — BKG-${selectedBookingId}`, htmlContent: html, type: "BOOKING_COST_SHEET_PDF" });
+          return;
+        }
+      } catch (e) {}
+      window.open(`${API_URL}/api/bookings/${selectedBookingId}/cost-sheet/pdf`, "_blank");
+      return;
+    }
+    if (doc.type === "BOOKING_COST_SHEET_PDF") {
+      if (doc.htmlContent && (doc.htmlContent.includes("<html") || doc.htmlContent.includes("<div"))) {
+        setPreviewDoc(doc);
       } else {
+        try {
+          const res = await fetch(`${API_URL}/api/bookings/${selectedBookingId}/cost-sheet/pdf`, { headers: authHeaders() });
+          if (res.ok) {
+            const html = await res.text();
+            setPreviewDoc({ ...doc, htmlContent: html });
+            return;
+          }
+        } catch (e) {}
         window.open(`${API_URL}/api/bookings/${selectedBookingId}/cost-sheet/pdf`, "_blank");
       }
       return;
@@ -133,24 +157,29 @@ const PostSalesDocuments = () => {
     setPreviewDoc(doc);
   };
 
-  const handlePrint = (doc) => {
-    if (doc.type === "BOOKING_COST_SHEET_XLSX") {
-      const generatedDocsList = bookingDetails?.generatedDocuments || [];
-      const pdfDoc = generatedDocsList.find(d => d.type === "BOOKING_COST_SHEET_PDF");
-      if (pdfDoc && pdfDoc.htmlContent) {
-        const w = window.open("", "_blank");
-        w.document.write(getBrandedDocumentHtml(pdfDoc.htmlContent));
-        w.document.close();
-        setTimeout(() => w.print(), 500);
-      } else {
-        window.open(`${API_URL}/api/bookings/${selectedBookingId}/cost-sheet/pdf?action=print`, "_blank");
+  const handlePrint = async (doc) => {
+    let content = doc?.htmlContent;
+    if (doc.type === "BOOKING_COST_SHEET_XLSX" || doc.type === "BOOKING_COST_SHEET_PDF") {
+      if (!content || !content.includes("<html")) {
+        try {
+          const res = await fetch(`${API_URL}/api/bookings/${selectedBookingId}/cost-sheet/pdf`, { headers: authHeaders() });
+          if (res.ok) {
+            content = await res.text();
+          }
+        } catch (e) {}
       }
-      return;
     }
-    const w = window.open("", "_blank");
-    w.document.write(getBrandedDocumentHtml(doc.htmlContent));
-    w.document.close();
-    setTimeout(() => w.print(), 500);
+    if (content) {
+      const w = window.open("", "_blank");
+      w.document.write(getBrandedDocumentHtml(content));
+      w.document.close();
+      setTimeout(() => {
+        w.focus();
+        w.print();
+      }, 500);
+    } else {
+      window.open(`${API_URL}/api/bookings/${selectedBookingId}/cost-sheet/pdf?action=print`, "_blank");
+    }
   };
 
   const handleDownload = async (doc) => {
@@ -177,7 +206,25 @@ const PostSalesDocuments = () => {
       }).catch(() => {});
       return;
     }
-    const blob = new Blob([getBrandedDocumentHtml(doc.htmlContent)], { type: "text/html" });
+    if (doc.type === "BOOKING_COST_SHEET_PDF") {
+      try {
+        const r = await fetch(`${API_URL}/api/bookings/${selectedBookingId}/cost-sheet/pdf`, { headers: authHeaders() });
+        if (r.ok) {
+          const html = await r.text();
+          const blob = new Blob([getBrandedDocumentHtml(html)], { type: "text/html" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `cost-sheet-${selectedBookingId}.html`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+          return;
+        }
+      } catch (e) {}
+    }
+    const blob = new Blob([getBrandedDocumentHtml(doc.htmlContent || "")], { type: "text/html" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

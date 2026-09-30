@@ -187,7 +187,7 @@ const Alltask = () => {
 
   const handleDeleteTask = async (taskId) => {
     setOpenActionId(null);
-    if (!window.confirm("Delete this task?")) return;
+    if (!window.confirm("Move this task to the Bin?")) return;
 
     const previousTasks = tasks;
     setTasks((current) => current.filter((task) => task.id !== taskId));
@@ -261,30 +261,7 @@ const Alltask = () => {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
-                <span className="search-icon">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                  </svg>
-                </span>
               </div>
-              <button
-                type="button"
-                className="btn btn-outline-primary d-inline-flex align-items-center gap-2 flex-shrink-0"
-                style={{ height: "40px", borderRadius: "8px", fontWeight: 600, fontSize: "14px", padding: "0 16px", whiteSpace: "nowrap" }}
-                onClick={() => fetchTasks(true)}
-                disabled={isLoading}
-                title="Refresh tasks"
-              >
-                <Icon icon="tabler:refresh" className={isLoading ? "spin" : ""} /> Refresh
-              </button>
-              <Link
-                to="/new-task"
-                className="btn btn-primary d-inline-flex align-items-center gap-2 flex-shrink-0"
-                style={{ height: "40px", borderRadius: "8px", fontWeight: 600, fontSize: "14px", padding: "0 18px", whiteSpace: "nowrap" }}
-              >
-                <Icon icon="solar:add-circle-linear" width={18} /> Add Task
-              </Link>
             </div>
           </div>
 
@@ -307,7 +284,7 @@ const Alltask = () => {
                 setStatusMessage("");
               }}
               onDelete={handleBulkDelete}
-              deleteLabel="Delete selected"
+              deleteLabel="Move selected to Bin"
             />
           )}
 
@@ -459,7 +436,7 @@ const Alltask = () => {
                                 style={{ width: "100%", textAlign: "left", padding: "8px 16px", border: "none", background: "none", fontSize: "13px", color: "#ef4444" }}
                                 onClick={() => handleDeleteTask(task.id)}
                               >
-                                Delete
+                                Move to Bin
                               </button>
                             </div>
                           )}

@@ -31,7 +31,7 @@ import LeadTableToolbar from "../components/common/LeadTableToolbar";
 import { getReportsSocket } from "../services/socketClient";
 import UserSalesNotifications from "./UserSalesNotifications";
 import UserSalesProfile from "./UserSalesProfile";
-import { getMcubeWidget, getMyNotifications, initiateMcubeClickToCall } from "../services/userSalesApi";
+import { getMcubeWidget, getMyNotifications, initiateMcubeClickToCall, endCall } from "../services/userSalesApi";
 import FollowupReminderModal from "../components/sales/FollowupReminderModal";
 import CreateFollowupModal from "../components/sales/CreateFollowupModal";
 import { createFollowup } from "../services/followupApi";
@@ -51,6 +51,7 @@ const fallbackPanel = {
   stats: {
     assignedLeads: 0,
     newLeadsToday: 0,
+    followupsAll: 0,
     followupsDue: 0,
     followupsToday: 0,
     missedFollowups: 0,
@@ -122,7 +123,7 @@ const leadStageFilters = [
   { key: "sourcing", label: "In sourcing" },
   { key: "closing", label: "In closing" },
   { key: "booked", label: "Booked" },
-  { key: "Unqualified", label: "Unqualified" },
+  { key: "unqualified", label: "Unqualified" },
 ];
 
 const dispositionLeadFilters = [
@@ -352,22 +353,77 @@ const normalizeStageText = (value) =>
     .trim();
 
 const getLeadStage = (lead) => {
-  const values = [
-    lead?.stage,
-    lead?.leadStage,
-    lead?.pipelineStage,
-    lead?.status,
-    lead?.tags,
-  ]
-    .map(normalizeStageText)
-    .filter(Boolean);
+  const rawStatus = String(lead?.status || lead?.lead_status || "").trim().toLowerCase().replace(/[_-]/g, " ");
+  const rawStage = String(lead?.stage || lead?.leadStage || lead?.pipelineStage || "").trim().toLowerCase().replace(/[_-]/g, " ");
 
-  if (values.some((value) => value.includes("book"))) return "booked";
-  if (values.some((value) => value.includes("closing") || value.includes("close") || value.includes("registered"))) return "closing";
-  if (values.some((value) => value.includes("sourcing") || value.includes("source"))) return "sourcing";
-  if (values.some((value) => value.includes("qualified") || value.includes("prospect"))) return "qualified";
-  if (values.some((value) => value.includes("nurture") || value.includes("follow"))) return "nurture";
+  // 1. Unqualified
+  if (
+    rawStatus === "unqualified" ||
+    rawStage === "unqualified" ||
+    Boolean(lead?.unqualifiedReason) ||
+    Boolean(lead?.unqualifiedNote)
+  ) {
+    return "unqualified";
+  }
+
+  // 2. Booked
+  if (
+    rawStatus === "booked" ||
+    rawStage === "booked" ||
+    (Array.isArray(lead?.bookings) && lead.bookings.some(isConfirmedBooking))
+  ) {
+    return "booked";
+  }
+
+  // 3. In Closing
+  if (
+    rawStatus === "in closing" ||
+    rawStatus === "closing" ||
+    rawStage === "in closing" ||
+    rawStage === "closing"
+  ) {
+    return "closing";
+  }
+
+  // 4. In Sourcing
+  if (
+    rawStatus === "in sourcing" ||
+    rawStatus === "sourcing" ||
+    rawStage === "in sourcing" ||
+    rawStage === "sourcing"
+  ) {
+    return "sourcing";
+  }
+
+  // 5. Qualified
+  if (
+    rawStatus === "qualified" ||
+    rawStatus === "prospect" ||
+    rawStage === "qualified" ||
+    rawStage === "prospect"
+  ) {
+    return "qualified";
+  }
+
+  // 6. Nurture
+  if (
+    rawStatus === "nurture" ||
+    rawStage === "nurture"
+  ) {
+    return "nurture";
+  }
+
+  // 7. New / Default
   return "new";
+};
+
+const matchesLeadStage = (lead, targetStage) => {
+  if (!targetStage || targetStage === "all") return true;
+
+  const target = targetStage.toLowerCase();
+  const leadStage = getLeadStage(lead);
+
+  return leadStage === target;
 };
 
 const isConfirmedBooking = (booking) => {
@@ -559,6 +615,12 @@ const getPercent = (value, total) => {
   return `${Math.round((value / total) * 100)}%`;
 };
 
+const getBarHeight = (value, total) => {
+  if (!value || !total) return 32;
+  const ratio = Math.min(Math.max(value / total, 0), 1);
+  return Math.round(32 + ratio * 68);
+};
+
 const formatTaskDate = (value) => {
   if (!value) return "-";
   const date = new Date(value);
@@ -615,9 +677,18 @@ const getLeadSiteVisitDetail = (lead) => {
 
 const getDateKey = (value) => {
   if (!value) return "";
-  const date = new Date(value);
+  const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "";
-  return date.toISOString().slice(0, 10);
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(date);
+  } catch (e) {
+    return date.toISOString().slice(0, 10);
+  }
 };
 
 const formatDashboardDate = () =>
@@ -1238,7 +1309,7 @@ const SalesUserPanel = () => {
   }, [activeScreen]);
 
   const updateAttendance = useCallback(async (action) => {
-    const token = localStorage.getItem("authToken");
+    const token = localStorage.getItem("authToken") || localStorage.getItem("token");
     if (!token) return null;
 
     setAttendanceBusy(true);
@@ -1247,7 +1318,9 @@ const SalesUserPanel = () => {
       const response = await fetch(`${API_URL}/attendance/${action}`, {
         method: "POST",
         headers: {
+          "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
+          ...(localStorage.getItem("sessionToken") ? { "x-session-token": localStorage.getItem("sessionToken") } : {}),
         },
       });
       const result = await response.json().catch(() => ({}));
@@ -1626,13 +1699,15 @@ const SalesUserPanel = () => {
   const salesExecutiveOptions = useMemo(() => {
     const salesUsers = users.filter((user) => {
       if (user?.isActive === false) return false;
+      const role = String(user?.role || "").toUpperCase();
+      if (role === "CHANNEL_PARTNER" || role === "AGENCY_USER") return false;
 
       const roleText = [user?.role, user?.department, user?.designation]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
 
-      return roleText.includes("sales");
+      return roleText.includes("sales") || role === "MANAGER" || role === "ADMIN" || role === "SUPER_ADMIN" || role === "PRE_SALES" || role === "POST_SALES" || role === "AGENT";
     });
     const candidates = salesUsers.length ? salesUsers : [panel.user].filter(Boolean);
     const seen = new Set();
@@ -1768,7 +1843,7 @@ const SalesUserPanel = () => {
       } else if (activeLeadStage === "visited") {
         leads = leads.filter((lead) => lead.conductSiteVisit || lead.conductSiteDate);
       } else if (activeLeadStage !== "all") {
-        leads = leads.filter((lead) => getLeadStage(lead) === activeLeadStage);
+        leads = leads.filter((lead) => matchesLeadStage(lead, activeLeadStage));
       }
     }
 
@@ -1854,7 +1929,84 @@ const SalesUserPanel = () => {
           });
         };
 
+        const handleLeadAssignedEvent = (data) => {
+          if (!data?.lead) return;
+          const newLead = data.lead;
+          setPanel((prev) => {
+            const existingIndex = (prev.leads || []).findIndex((l) => String(getLeadId(l)) === String(getLeadId(newLead)));
+            let updatedLeads;
+            if (existingIndex >= 0) {
+              updatedLeads = [...prev.leads];
+              updatedLeads[existingIndex] = { ...updatedLeads[existingIndex], ...newLead };
+            } else {
+              updatedLeads = [newLead, ...(prev.leads || [])];
+            }
+            return {
+              ...prev,
+              leads: updatedLeads,
+              leadCount: updatedLeads.length,
+            };
+          });
+          loadPanel(false);
+        };
+
+        const handleLeadUpdatedEvent = (data) => {
+          if (!data?.lead && !data?.leadId) return;
+          const updatedLead = data.lead;
+          const leadId = data.leadId || getLeadId(updatedLead);
+          setPanel((prev) => {
+            const updatedLeads = (prev.leads || []).map((l) => {
+              if (String(getLeadId(l)) === String(leadId)) {
+                return { ...l, ...(updatedLead || {}) };
+              }
+              return l;
+            });
+            return { ...prev, leads: updatedLeads };
+          });
+          loadPanel(false);
+        };
+
+        const handleTaskAssignedEvent = (task) => {
+          if (!task) return;
+          setPanel((prev) => {
+            const existingIndex = (prev.tasks || []).findIndex((t) => String(t.id) === String(task.id));
+            let updatedTasks;
+            if (existingIndex >= 0) {
+              updatedTasks = [...prev.tasks];
+              updatedTasks[existingIndex] = { ...updatedTasks[existingIndex], ...task };
+            } else {
+              updatedTasks = [task, ...(prev.tasks || [])];
+            }
+            return { ...prev, tasks: updatedTasks };
+          });
+          loadPanel(false);
+        };
+
+        const handleBookingEvent = (booking) => {
+          if (!booking) return;
+          setPanel((prev) => {
+            const existingIndex = (prev.bookings || []).findIndex((b) => String(b.id) === String(booking.id));
+            let updatedBookings;
+            if (existingIndex >= 0) {
+              updatedBookings = [...prev.bookings];
+              updatedBookings[existingIndex] = { ...updatedBookings[existingIndex], ...booking };
+            } else {
+              updatedBookings = [booking, ...(prev.bookings || [])];
+            }
+            return { ...prev, bookings: updatedBookings };
+          });
+          loadPanel(false);
+        };
+
         activeSocket.on("followup-reminder", handleFollowupReminder);
+        activeSocket.on("lead:assigned", handleLeadAssignedEvent);
+        activeSocket.on("LeadAssigned", handleLeadAssignedEvent);
+        activeSocket.on("lead:updated", handleLeadUpdatedEvent);
+        activeSocket.on("LeadUpdated", handleLeadUpdatedEvent);
+        activeSocket.on("task:assigned", handleTaskAssignedEvent);
+        activeSocket.on("booking:created", handleBookingEvent);
+        activeSocket.on("booking:updated", handleBookingEvent);
+
         if (authUserId) {
           activeSocket.on(`followup-reminder-${authUserId}`, handleFollowupReminder);
           activeSocket.on(`newNotification-${authUserId}`, () => {
@@ -1872,16 +2024,33 @@ const SalesUserPanel = () => {
       isSubscribed = false;
       if (activeSocket) {
         activeSocket.off("followup-reminder");
+        activeSocket.off("lead:assigned");
+        activeSocket.off("LeadAssigned");
+        activeSocket.off("lead:updated");
+        activeSocket.off("LeadUpdated");
+        activeSocket.off("task:assigned");
+        activeSocket.off("booking:created");
+        activeSocket.off("booking:updated");
       }
     };
   }, [panel.user?.id]);
 
   const funnelData = useMemo(() => {
-    const leads = (panel.leads || []).filter((lead) => !lead.is_delete && !lead.deletedAt);
+    const currentMonthKey = getDateKey(new Date()).slice(0, 7);
+    const leads = (panel.leads || []).filter((lead) => {
+      if (lead.is_delete || lead.deletedAt) return false;
+      const leadDate = getDateKey(lead.createdAt || lead.received_on || lead.date || lead.updatedAt);
+      return !leadDate || leadDate.startsWith(currentMonthKey);
+    });
+
     const totalLeads = leads.length;
     const qualified = leads.filter((lead) => getLeadStage(lead) === "qualified").length;
     const sourced = leads.filter((lead) => getLeadStage(lead) === "sourcing").length;
-    const visited = leads.filter((lead) => Boolean(lead.conductSiteVisit || lead.conductSiteDate || (lead.scheduleVisits && lead.scheduleVisits.length > 0))).length;
+    const visited = leads.filter((lead) => Boolean(
+      lead.conductSiteVisit ||
+      lead.conductSiteDate ||
+      (Array.isArray(lead.scheduleVisits) && lead.scheduleVisits.length > 0)
+    )).length;
     const booked = leads.filter(isBookedLead).length;
 
     return [
@@ -1892,7 +2061,7 @@ const SalesUserPanel = () => {
         detail: "Leads",
         color: "#e6f1fb",
         textColor: "#0c447c",
-        height: 100,
+        height: getBarHeight(totalLeads, totalLeads),
       },
       {
         key: "qualified",
@@ -1901,7 +2070,7 @@ const SalesUserPanel = () => {
         detail: "Qualified",
         color: "#b5d4f4",
         textColor: "#0c447c",
-        height: 74,
+        height: getBarHeight(qualified, totalLeads),
       },
       {
         key: "sourcing",
@@ -1910,7 +2079,7 @@ const SalesUserPanel = () => {
         detail: "In Sourcing",
         color: "#85b7eb",
         textColor: "#042c53",
-        height: 54,
+        height: getBarHeight(sourced, totalLeads),
       },
       {
         key: "visited",
@@ -1919,16 +2088,16 @@ const SalesUserPanel = () => {
         detail: "Visited",
         color: "#378add",
         textColor: "#ffffff",
-        height: 36,
+        height: getBarHeight(visited, totalLeads),
       },
       {
         key: "booked",
-        label: `Booked - ${getPercent(booked, visited || sourced || qualified || totalLeads)}`,
+        label: `Booked - ${getPercent(booked, totalLeads)}`,
         value: booked,
         detail: "Booked",
         color: "#185fa5",
         textColor: "#ffffff",
-        height: 24,
+        height: getBarHeight(booked, totalLeads),
       },
     ];
   }, [panel.leads]);
@@ -1977,26 +2146,39 @@ const SalesUserPanel = () => {
       status: visitData.siteVisitStatus || visitData.visitStatus || visitData.conductSiteStatus || "Scheduled",
     });
     setActiveScreen("scheduleVisit");
-  }, [getExecutiveIdFromValue, getExecutiveNameFromId, getSalesExecutiveName, isAdminOrManager, panel.leads, panel.user]);
+  }, [getExecutiveIdFromValue, getExecutiveNameFromId, isAdminOrManager, panel.leads, panel.user]);
 
   const homeMetrics = useMemo(() => {
     const todayKey = getDateKey(new Date());
     const currentMonthKey = todayKey.slice(0, 7);
     const todayLeads = panel.leads.filter((lead) => getDateKey(lead.createdAt || lead.received_on) === todayKey);
-    const assignedNewLeads = panel.leads.filter((lead) => getLeadStage(lead) === "new");
     const backendNewLeadsToday = Number(panel.stats.newLeadsToday);
-    const newLeadsTodayCount = Number.isFinite(backendNewLeadsToday) && backendNewLeadsToday > 0
+    const newLeadsTodayCount = Number.isFinite(backendNewLeadsToday)
       ? backendNewLeadsToday
-      : todayLeads.length || assignedNewLeads.length;
+      : todayLeads.length;
+
+    const backendVisitsToday = Number(panel.stats.siteVisitsToday ?? panel.stats.siteVisits);
+    const backendVisitsDone = Number(panel.stats.siteVisitsDone);
+    const backendVisitsUpcoming = Number(panel.stats.siteVisitsUpcoming);
+
     const todaysVisits = panel.leads.filter((lead) =>
       getDateKey(lead.conductSiteDate || lead.siteVisitDate || lead.siteVisitConductedOn) === todayKey
     );
-    const completedVisitCount = todaysVisits.filter((lead) =>
-      ["done", "completed", "conducted", "visit done"].some((status) =>
-        normalizeStageText(lead.siteVisitStatus || lead.visitStatus || lead.conductSiteStatus).includes(status)
-      )
-    ).length;
-    const upcomingVisitCount = Math.max(todaysVisits.length - completedVisitCount, 0);
+    const completedVisitCount = Number.isFinite(backendVisitsDone)
+      ? backendVisitsDone
+      : todaysVisits.filter((lead) =>
+          ["done", "completed", "conducted", "visit done"].some((status) =>
+            normalizeStageText(lead.siteVisitStatus || lead.visitStatus || lead.conductSiteStatus).includes(status)
+          )
+        ).length;
+    const upcomingVisitCount = Number.isFinite(backendVisitsUpcoming)
+      ? backendVisitsUpcoming
+      : Math.max(todaysVisits.length - completedVisitCount, 0);
+
+    const siteVisitsTodayCount = Number.isFinite(backendVisitsToday)
+      ? backendVisitsToday
+      : (completedVisitCount + upcomingVisitCount);
+
     const monthBookings = (panel.bookings || []).filter((booking) =>
       getDateKey(booking.bookedOn || booking.createdAt).startsWith(currentMonthKey)
     );
@@ -2022,7 +2204,7 @@ const SalesUserPanel = () => {
       {
         key: "site-visits",
         label: "Site visits today",
-        value: todaysVisits.length || panel.stats.siteVisits || 0,
+        value: siteVisitsTodayCount,
         detail: `${completedVisitCount} done - ${upcomingVisitCount} upcoming`,
         onClick: () => {
           openScheduleVisit();
@@ -2053,7 +2235,19 @@ const SalesUserPanel = () => {
         },
       },
     ];
-  }, [navigate, openScheduleVisit, panel.bookings, panel.leads, panel.stats.bookings, panel.stats.missedFollowups, panel.stats.newLeadsToday, panel.stats.siteVisits]);
+  }, [
+    navigate,
+    openScheduleVisit,
+    panel.bookings,
+    panel.leads,
+    panel.stats.bookings,
+    panel.stats.missedFollowups,
+    panel.stats.newLeadsToday,
+    panel.stats.siteVisits,
+    panel.stats.siteVisitsToday,
+    panel.stats.siteVisitsDone,
+    panel.stats.siteVisitsUpcoming,
+  ]);
 
   const handleFunnelClick = (key) => {
     setActiveScreen("leads");
@@ -2320,6 +2514,19 @@ const SalesUserPanel = () => {
       lead,
       callLog: activeBlockedCall,
     });
+  };
+
+  const forceKillActiveCall = async () => {
+    if (!activeBlockedCall?.id) return;
+    try {
+      await endCall(activeBlockedCall.id);
+      setCallError("");
+      setActiveBlockedCall(null);
+      setOutboundCallStatus("idle");
+    } catch (err) {
+      console.error("Failed to kill stuck call:", err);
+      setCallError("Failed to force kill call: " + err.message);
+    }
   };
 
   const updateTaskStatus = async (taskId, status) => {
@@ -2727,27 +2934,38 @@ const SalesUserPanel = () => {
     setOpenActionLeadId((current) => (current === leadId ? null : leadId));
   };
 
-  const attendanceStatus = attendance?.status || "Available";
-  const isOnBreak = attendanceStatus === "On Break";
+  const attendanceStatus = attendance?.status === "On Break" ? "On Break" : attendance?.status === "Logged Out" ? "Logged Out" : "Online";
+  const isOnBreak = attendance?.status === "On Break";
+  const isLoggedOut = attendance?.status === "Logged Out";
   const attendanceLoadedElapsedSeconds = attendance ? secondsSince(attendance.loadedAt, attendanceNow) : 0;
-  const liveTodayLoginSeconds =
-    attendance?.sessionStartedAt && !attendance?.logoutAt
-      ? secondsSince(attendance.sessionStartedAt, attendanceNow)
-      : attendanceSecondsValue(attendance?.todayLoginSeconds, attendance?.currentSessionSeconds) +
-      (attendance && !attendance.logoutAt ? attendanceLoadedElapsedSeconds : 0);
-  const liveTodayBreakSeconds =
-    attendanceSecondsValue(attendance?.todayBreakSeconds, attendance?.currentBreakSeconds) +
-    (attendance?.breakStartedAt && !attendance?.breakEndedAt ? attendanceLoadedElapsedSeconds : 0);
+
+  const baseLoginSeconds = Number(attendance?.todayLoginSeconds) || 0;
+  const liveTodayLoginSeconds = baseLoginSeconds + (!isOnBreak && !isLoggedOut ? attendanceLoadedElapsedSeconds : 0);
+
+  const baseBreakSeconds = Number(attendance?.todayBreakSeconds) || 0;
+  const liveTodayBreakSeconds = baseBreakSeconds + (isOnBreak ? attendanceLoadedElapsedSeconds : 0);
 
   const toggleBreak = () => {
     updateAttendance(isOnBreak ? "break/end" : "break/start");
   };
 
   const logout = async () => {
-    await updateAttendance("logout");
+    try {
+      await updateAttendance("logout");
+    } catch (e) {}
+
+    try {
+      const { stopSessionHeartbeat } = require("../services/sessionHeartbeat");
+      stopSessionHeartbeat();
+    } catch (e) {}
+
     clearAttendanceSessionStart(getUserId(panel.user) || attendance?.userId);
     localStorage.removeItem("authToken");
+    localStorage.removeItem("token");
+    localStorage.removeItem("sessionToken");
+    localStorage.removeItem("sessionId");
     localStorage.removeItem("authUser");
+    localStorage.removeItem("user");
     window.location.href = "/sign-in";
   };
 
@@ -2861,8 +3079,18 @@ const SalesUserPanel = () => {
     }
 
     if (isLiveOutboundStatus(outboundCallStatus)) {
-      setCallError("Another call is currently active.");
-      return;
+      // Auto-kill the stuck active call and proceed to new call
+      if (activeBlockedCall?.id) {
+        try {
+          await endCall(activeBlockedCall.id);
+        } catch (e) {
+          console.warn("Could not end stuck call via API:", e);
+        }
+      }
+      setActiveBlockedCall(null);
+      setOutboundCallStatus("idle");
+      setCallError("");
+      setActiveCallId(null);
     }
 
     const requestId =
@@ -2962,40 +3190,64 @@ const SalesUserPanel = () => {
   const sidebarCounts = useMemo(() => {
     const leads = panel.leads || [];
     const tasks = panel.tasks || [];
-    const leadsWithWhatsApp = leads.filter((lead) => getActionPhone(lead).replace(/\D/g, "")).length;
-    const scheduledVisits = leads.filter(leadHasScheduledSiteVisit).length;
-    const bookedLeads = bookingLeadRows.length || leads.filter(isBookedLead).length;
-    const followupLeads = leads.filter((lead) => {
-      return (
-        callbackLeadIds.has(String(getLeadId(lead))) ||
-        Boolean(lead.nextFollowUpAt || lead.followUpDate || lead.followupDate || lead.followUpTime)
-      );
+    const openTasks = tasks.filter((task) => String(task.status || "").toLowerCase() !== "completed");
+
+    const activeScheduledVisits = leads.filter((lead) => {
+      const visitStatus = String(lead.siteVisitStatus || lead.visitStatus || lead.conductSiteStatus || "").toLowerCase();
+      const hasVisits = Array.isArray(lead.scheduleVisits) && lead.scheduleVisits.some((v) => {
+        const st = String(v.status || "").toLowerCase();
+        return st === "scheduled" || st === "confirmed" || st === "rescheduled";
+      });
+      return hasVisits || visitStatus === "scheduled" || visitStatus === "confirmed" || visitStatus === "rescheduled";
     }).length;
 
+    const scheduledVisitsCount = Number.isFinite(Number(panel.stats.scheduledVisits))
+      ? Number(panel.stats.scheduledVisits)
+      : activeScheduledVisits;
+
+    const whatsappCount = Number.isFinite(Number(panel.stats.whatsappConversations))
+      ? Number(panel.stats.whatsappConversations)
+      : 0;
+
+    const conversationCount = Number.isFinite(Number(panel.stats.conversations))
+      ? Number(panel.stats.conversations)
+      : leads.filter((lead) => (lead._count?.callLogs > 0) || (Array.isArray(lead.emails) && lead.emails.length > 0)).length;
+
+    const bookedLeads = bookingLeadRows.length || leads.filter(isBookedLead).length;
+    const allFollowupsCount = Number.isFinite(Number(panel.stats.followupsAll))
+      ? Number(panel.stats.followupsAll)
+      : Number.isFinite(Number(panel.stats.followupsDue))
+        ? Number(panel.stats.followupsDue)
+        : callbackLeadIds.size || 0;
+
     return {
-      home: leads.length,
+      home: null,
       leads: leads.length,
-      conversation: leads.length,
+      conversation: conversationCount,
       calls: callQueue.length + inboundCallCount,
-      callLogs: callLogCount,
-      followups: followupLeads || Number(panel.stats.followupsDue) || 0,
-      scheduleVisit: scheduledVisits || Number(panel.stats.siteVisits) || 0,
+      callLogs: Number.isFinite(Number(panel.stats.callLogs)) ? Number(panel.stats.callLogs) : callLogCount,
+      followups: allFollowupsCount,
+      scheduleVisit: scheduledVisitsCount,
       bookings: bookedLeads || Number(panel.stats.bookings) || 0,
-      whatsapp: leadsWithWhatsApp,
-      tasks: tasks.length || Number(panel.stats.tasks) || 0,
+      whatsapp: whatsappCount,
+      tasks: openTasks.length || Number(panel.stats.tasks) || 0,
       notifications: salesUnreadCount,
     };
   }, [
-    bookingLeadRows,
+    bookingLeadRows.length,
+    callbackLeadIds.size,
     callLogCount,
     callQueue.length,
-    callbackLeadIds,
     inboundCallCount,
     panel.leads,
     panel.stats.bookings,
+    panel.stats.callLogs,
+    panel.stats.conversations,
+    panel.stats.followupsAll,
     panel.stats.followupsDue,
-    panel.stats.siteVisits,
+    panel.stats.scheduledVisits,
     panel.stats.tasks,
+    panel.stats.whatsappConversations,
     panel.tasks,
     salesUnreadCount,
   ]);
@@ -3013,7 +3265,7 @@ const SalesUserPanel = () => {
     { key: "whatsapp", label: "WhatsApp", icon: Smartphone, count: sidebarCounts.whatsapp },
     { key: "tasks", label: "Tasks", icon: LayoutDashboard, count: sidebarCounts.tasks },
     { key: "notifications", label: "Notifications", icon: Bell, count: sidebarCounts.notifications },
-    { key: "profile", label: "Profile", icon: UserCircle, count: 0 },
+    { key: "profile", label: "Profile", icon: UserCircle, count: null },
   ];
 
   const visibleLeadStageFilters =
@@ -3413,7 +3665,7 @@ const SalesUserPanel = () => {
           </button>
           <div className="sales-topbar-spacer" />
           <div className="sales-call-presence sales-header-presence">
-            <span>{attendanceStatus}</span>
+            <span className={isOnBreak ? "presence-break" : ""}>{attendanceStatus}</span>
             <small>Login {formatDuration(liveTodayLoginSeconds)} | Break {formatDuration(liveTodayBreakSeconds)}</small>
             <button type="button" onClick={toggleBreak} disabled={attendanceBusy}>
               {isOnBreak ? "Return" : "Take break"}
@@ -3823,9 +4075,14 @@ const SalesUserPanel = () => {
                     <div className="sales-inline-error">
                       <span>{callError}</span>
                       {activeBlockedCall?.id && (
-                        <button type="button" onClick={completeActiveBlockedCall}>
-                          Complete active call
-                        </button>
+                        <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
+                          <button type="button" onClick={completeActiveBlockedCall}>
+                            Complete active call
+                          </button>
+                          <button type="button" onClick={forceKillActiveCall} style={{ backgroundColor: "#ef4444", color: "white", border: "none", padding: "4px 8px", borderRadius: "4px" }}>
+                            Force Kill Call
+                          </button>
+                        </div>
                       )}
                     </div>
                   )}
@@ -4427,7 +4684,14 @@ const SalesUserPanel = () => {
                   !disposedLeadIds.includes(itemLeadId) &&
                   !isLeadDisposedFromCalling(item, callLogsByLead[itemLeadId]);
               });
-              setFocusedCallLeadId(nextLead ? getLeadId(nextLead) : null);
+              const nextLeadId = nextLead ? String(getLeadId(nextLead)) : null;
+              setFocusedCallLeadId(nextLeadId || null);
+              // Navigate URL to next lead so the Calls view auto-advances
+              if (nextLeadId) {
+                navigate(`/user/sales/calls?leadId=${nextLeadId}`, { replace: true });
+              } else {
+                navigate("/user/sales/calls", { replace: true });
+              }
             }
             if (String(savedCallLog?.direction || "").toLowerCase() === "inbound") {
               setInboundCall((current) => current ? {

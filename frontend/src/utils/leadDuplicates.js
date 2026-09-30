@@ -45,7 +45,13 @@ export const formatLeadDateTime = (value) => {
   })}`;
 };
 
-const normalizePhone = (value) => String(value || "").replace(/\D/g, "");
+const normalizePhone = (value) => {
+  const str = String(value || "").trim();
+  if (!str || str.includes("X") || str.includes("x") || str.includes("*")) return "";
+  const digits = str.replace(/\D/g, "");
+  if (digits.length < 10) return "";
+  return digits.slice(-10);
+};
 const normalizeEmail = (value) => String(value || "").trim().toLowerCase();
 const normalizeName = (value) => String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 
@@ -68,12 +74,20 @@ const getLeadSortTime = (lead) => {
 };
 
 const getLeadMatchKeys = (lead) => {
-  const phones = extractContactValues(lead?.phones || lead?.phone)
-    .map(normalizePhone)
-    .filter(Boolean);
-  const emails = extractContactValues(lead?.emails || lead?.email)
-    .map(normalizeEmail)
-    .filter(Boolean);
+  const rawPhones = [
+    ...extractContactValues(lead?.phones),
+    ...extractContactValues(lead?.phone),
+    lead?.mobile,
+    lead?.secondaryPhone,
+    lead?.alternatePhone,
+  ].filter(Boolean);
+  const rawEmails = [
+    ...extractContactValues(lead?.emails),
+    ...extractContactValues(lead?.email),
+  ].filter(Boolean);
+
+  const phones = Array.from(new Set(rawPhones.map(normalizePhone).filter(Boolean)));
+  const emails = Array.from(new Set(rawEmails.map(normalizeEmail).filter(Boolean)));
   const name = normalizeName(getLeadNameValue(lead));
 
   return [

@@ -112,6 +112,8 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
       income:"",
       basiComment:"",
       purpose:"",
+      enduse:false,
+      investor:false,
       nri:false,
       budgetMin:0,
       budgetMax:0,
@@ -160,6 +162,11 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
   const channelPartners = users.filter(
     (user) => String(user?.role || "").toUpperCase() === "CHANNEL_PARTNER"
   );
+
+  const salesUsers = users.filter((user) => {
+    const role = String(user?.role || "").toUpperCase();
+    return role !== "CHANNEL_PARTNER" && role !== "AGENCY_USER";
+  });
 
   useEffect(() => {
     if (!savedUserId) return;
@@ -217,9 +224,20 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
     fetchUsers();
   }, [API_URL]);
 
+  
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData({ ...formData, [name]: type === "checkbox" ? checked : value });
+    const resolvedValue = type === "checkbox" ? checked : value;
+    setFormData((prev) => {
+      const updates = { [name]: resolvedValue };
+      if (name === "maritalStatus") {
+        updates.married = resolvedValue;
+      }
+      return {
+        ...prev,
+        ...updates,
+      };
+    });
     setFormErrors((current) => ({ ...current, [name]: "" }));
   };
 
@@ -315,6 +333,8 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
 
     const payload = {
       ...formData,
+      purpose: formData.enduse && formData.investor ? "End use, Investor" : formData.enduse ? "End use" : formData.investor ? "Investor" : formData.purpose || "",
+      maritalStatus: Boolean(formData.maritalStatus || formData.married),
       teamId: Number(savedUserId || formData.teamId) || undefined,
       fundingSource: formData.fundingSource || formData.source || "Direct Entry",
       source: formData.source || formData.fundingSource || "Direct Entry",
@@ -549,12 +569,12 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                     <option value="">
                       {loadingUsers ? "Loading users..." : "Select sales executive"}
                     </option>
-                    {savedUserId && !users.some((u) => String(u.id) === String(savedUserId)) && (
+                    {savedUserId && !salesUsers.some((u) => String(u.id) === String(savedUserId)) && (
                       <option value={savedUserId}>
                         {getUserName(savedUser)}{savedUser?.role ? ` (${savedUser.role})` : " (Sales)"}
                       </option>
                     )}
-                    {users.map((user) => (
+                    {salesUsers.map((user) => (
                       <option key={user.id || user.email} value={user.id}>
                         {getUserName(user)}
                         {user.role ? ` (${user.role})` : ""}
@@ -737,12 +757,17 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
                       <input
                         type="checkbox"
                         name="maritalStatus"
-                        id="married"
+                        id="userMaritalStatus"
+                        checked={Boolean(formData.maritalStatus)}
                         onChange={(e) =>
-                          setFormData({ ...formData, married: e.target.checked })
+                          setFormData((prev) => ({
+                            ...prev,
+                            maritalStatus: e.target.checked,
+                            married: e.target.checked,
+                          }))
                         }
                       />
-                      <label htmlFor="married">Married</label>
+                      <label htmlFor="userMaritalStatus">Married</label>
                     </div>
                   </div>
 
@@ -860,21 +885,56 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
         <label>PURPOSE</label>
         <div style={{ display: "flex", gap: "20px", marginTop: "5px" }}>
           <div className="married-row">
-            <input type="checkbox" id="enduse" name="enduse" onChange={handleChange} />
-            <label htmlFor="enduse">End use</label>
+            <input
+              type="checkbox"
+              id="userEnduse"
+              name="enduse"
+              checked={Boolean(formData.enduse)}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  enduse: e.target.checked,
+                }))
+              }
+            />
+            <label htmlFor="userEnduse">End use</label>
           </div>
           <div className="married-row">
-            <input type="checkbox" id="investor" name="investor" onChange={handleChange} />
-            <label htmlFor="investor">Investor</label>
+            <input
+              type="checkbox"
+              id="userInvestor"
+              name="investor"
+              checked={Boolean(formData.investor)}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  investor: e.target.checked,
+                }))
+              }
+            />
+            <label htmlFor="userInvestor">Investor</label>
           </div>
         </div>
       </div>
 
       <div className="lead-group">
         <label>NRI</label>
-        <div className="married-row" style={{ marginTop: "5px" }}>
-          <input type="checkbox" id="nri" name="nri" onChange={handleChange} />
-          <label htmlFor="nri">Yes</label>
+        <div style={{ marginTop: "5px" }}>
+          <div className="married-row">
+            <input
+              type="checkbox"
+              id="userNri"
+              name="nri"
+              checked={Boolean(formData.nri)}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  nri: e.target.checked,
+                }))
+              }
+            />
+            <label htmlFor="userNri">Yes</label>
+          </div>
         </div>
       </div>
     </div>

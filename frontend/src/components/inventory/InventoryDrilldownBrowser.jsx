@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import {
   FaBuilding,
   FaArrowLeft,
-  FaSearch,
   FaEllipsisV,
   FaMapMarkerAlt,
   FaLayerGroup,
@@ -67,18 +66,162 @@ const formatPrice = (value) => {
   return `₹ ${amount.toLocaleString("en-IN")}`;
 };
 
-const normalizeUnitStatus = (status, unit) => {
+export const normalizeUnitStatus = (status, unit) => {
   const rawPurpose = String(
-    unit?.propertyPurpose || unit?.unitStream || unit?.floorPlanUnitStream || ""
+    unit?.propertyPurpose ||
+      unit?.unitStream ||
+      unit?.floorPlanUnitStream ||
+      unit?.floor?.unitStream ||
+      ""
   ).toLowerCase();
   if (rawPurpose.includes("rehab")) return "rehab";
 
   const val = String(status || "available").toLowerCase();
-  if (["booked", "sold", "unavailable"].includes(val)) return "booked";
-  if (["blocked", "block"].includes(val)) return "blocked";
-  if (val === "refuge") return "refuge";
-  if (val === "investor") return "investor";
+  if (
+    [
+      "booked",
+      "sold",
+      "registered",
+      "possession_given",
+      "possession",
+      "unavailable",
+    ].includes(val)
+  ) {
+    return "sold";
+  }
+  if (val === "held") return "held";
+  if (
+    [
+      "blocked",
+      "block",
+      "investor",
+      "refuge",
+      "cancelled",
+    ].includes(val)
+  ) {
+    return "blocked";
+  }
+  if (["available", "vacant"].includes(val)) {
+    return "available";
+  }
   return "available";
+};
+
+export const getTowerDisplayName = (tower, project) => {
+  if (!tower) return "";
+  const tName = String(tower.name || "").trim();
+  const pName = String(project?.name || "").trim();
+  if (tower.wingCode && String(tower.wingCode).trim()) {
+    return `Wing ${String(tower.wingCode).trim()}`;
+  }
+  if (tName && pName && tName.toLowerCase() === pName.toLowerCase()) {
+    return "Tower A";
+  }
+  if (/^[A-Z0-9]$/i.test(tName)) {
+    return `Tower ${tName}`;
+  }
+  return tName || `Tower #${tower.id}`;
+};
+
+export const getUnitConfiguration = (unit) => {
+  const name = String(unit?.name || "").trim().toUpperCase();
+  const rawConfig = String(unit?.configurationLabel || "").trim();
+  const rawFpName = String(unit?.floorPlanName || "").trim();
+  const rawType = String(unit?.unitType || "").trim();
+  const rawBedrooms = unit?.bedrooms;
+
+  // Check for Shop / Commercial
+  if (
+    name.startsWith("SH-") ||
+    name.startsWith("SHOP") ||
+    rawType.toLowerCase().includes("commercial") ||
+    rawType.toLowerCase().includes("retail") ||
+    rawConfig.toLowerCase().includes("shop") ||
+    rawFpName.toLowerCase().includes("shop")
+  ) {
+    return "Shop";
+  }
+
+  // Check for Office
+  if (
+    name.startsWith("OFC") ||
+    name.startsWith("OFFICE") ||
+    rawConfig.toLowerCase().includes("office") ||
+    rawFpName.toLowerCase().includes("office")
+  ) {
+    return "Office";
+  }
+
+  // If configurationLabel is explicit like "1 BHK", "2 BHK", "3 BHK", "4 BHK", "1 RK", "Penthouse", "Studio", "Duplex"
+  if (rawConfig && !rawConfig.toUpperCase().startsWith("FP-")) {
+    return rawConfig;
+  }
+
+  // If bedrooms is known
+  if (rawBedrooms && Number(rawBedrooms) > 0) {
+    return `${rawBedrooms} BHK`;
+  }
+
+  // Check floorPlanName
+  if (rawFpName) {
+    const bhkMatch = rawFpName.match(/(\d+)\s*(?:BHK|bhk)/i);
+    if (bhkMatch) {
+      return `${bhkMatch[1]} BHK`;
+    }
+    const rkMatch = rawFpName.match(/(\d+)\s*(?:RK|rk)/i);
+    if (rkMatch) {
+      return `${rkMatch[1]} RK`;
+    }
+    if (rawFpName.toLowerCase().includes("shop")) return "Shop";
+    if (rawFpName.toLowerCase().includes("office")) return "Office";
+    if (!rawFpName.toUpperCase().startsWith("FP-")) {
+      return rawFpName;
+    }
+  }
+
+  // Check unit name for BHK / RK if any
+  const nameBhkMatch = name.match(/(\d+)\s*(?:BHK|bhk)/i);
+  if (nameBhkMatch) return `${nameBhkMatch[1]} BHK`;
+
+  return rawConfig || "Standard Unit";
+};
+
+export const getUnitPositionSortValue = (unit) => {
+  if (!unit) return 0;
+
+  // 1. If explicit unitIndex is present as a valid number
+  const explicitIndex = Number(unit.unitIndex ?? unit.position);
+  if (Number.isFinite(explicitIndex) && explicitIndex > 0) {
+    return explicitIndex;
+  }
+
+  // 2. Parse trailing unit-position number (e.g. 1301 -> 1, 1104 -> 4, SH-02 -> 2)
+  const rawName = String(unit.name || unit.unitNo || "").trim();
+  const match = rawName.match(/(\d+)$/);
+  if (match) {
+    const digitsStr = match[1];
+    if (digitsStr.length >= 2) {
+      const lastTwo = parseInt(digitsStr.slice(-2), 10);
+      if (!Number.isNaN(lastTwo)) return lastTwo;
+    }
+    const val = parseInt(digitsStr, 10);
+    if (!Number.isNaN(val)) return val;
+  }
+
+  return 0;
+};
+
+export const sortUnitsAscending = (unitsList = []) => {
+  return [...unitsList].sort((a, b) => {
+    const posA = getUnitPositionSortValue(a);
+    const posB = getUnitPositionSortValue(b);
+    if (posA !== posB) {
+      return posA - posB;
+    }
+    return String(a.name || "").localeCompare(String(b.name || ""), undefined, {
+      numeric: true,
+    });
+  });
 };
 
 const flattenUnits = (unitGroups = []) =>
@@ -277,6 +420,7 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
   // Filter & Search State
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStatusFilter, setActiveStatusFilter] = useState("all");
+  const [selectedConfigFilter, setSelectedConfigFilter] = useState("all");
   const [selectedFloorPlanFilter, setSelectedFloorPlanFilter] = useState("all");
 
   // Read-only modal preview state
@@ -386,6 +530,8 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
     setSelectedTower(null);
     setCurrentLevel(2);
     setSearchQuery("");
+    setActiveStatusFilter("all");
+    setSelectedConfigFilter("all");
     loadTowersForProject(project);
     loadUnitsForTower(project, null);
   };
@@ -394,6 +540,7 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
     setSelectedTower(tower);
     setCurrentLevel(3);
     setActiveStatusFilter("all");
+    setSelectedConfigFilter("all");
     setSelectedFloorPlanFilter("all");
     loadUnitsForTower(selectedProject, tower);
   };
@@ -403,12 +550,16 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
     setSelectedProject(null);
     setSelectedTower(null);
     setSearchQuery("");
+    setActiveStatusFilter("all");
+    setSelectedConfigFilter("all");
     setUnits([]);
   };
 
   const handleBackToTowers = () => {
     setCurrentLevel(2);
     setSelectedTower(null);
+    setActiveStatusFilter("all");
+    setSelectedConfigFilter("all");
     setSelectedFloorPlanFilter("all");
     if (selectedProject) {
       loadTowersForProject(selectedProject);
@@ -575,24 +726,53 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
     );
   }, [leadsList, leadSearchQuery]);
 
-  // Status Counts for Level 3
-  const statusCounts = useMemo(() => {
-    const counts = {
-      all: units.length,
-      available: 0,
-      booked: 0,
-      blocked: 0,
-      refuge: 0,
-      investor: 0,
-      rehab: 0,
-    };
+  // Available Configurations (BHK / Type) dynamically driven from project units
+  const availableConfigurations = useMemo(() => {
+    const map = new Map();
     units.forEach((u) => {
+      const config = getUnitConfiguration(u);
+      if (!map.has(config)) {
+        map.set(config, {
+          config,
+          totalCount: 0,
+          activeStatusCount: 0,
+        });
+      }
+      const item = map.get(config);
+      item.totalCount += 1;
+      if (activeStatusFilter === "all" || u.status === activeStatusFilter) {
+        item.activeStatusCount += 1;
+      }
+    });
+    return Array.from(map.values()).sort((a, b) =>
+      a.config.localeCompare(b.config, undefined, { numeric: true })
+    );
+  }, [units, activeStatusFilter]);
+
+  // Status Counts for Level 3 (Respecting selectedConfigFilter if set)
+  const statusCounts = useMemo(() => {
+    const scopedUnits =
+      selectedConfigFilter === "all"
+        ? units
+        : units.filter((u) => getUnitConfiguration(u) === selectedConfigFilter);
+
+    const counts = {
+      all: scopedUnits.length,
+      available: 0,
+      sold: 0,
+      rehab: 0,
+      held: 0,
+      blocked: 0,
+    };
+    scopedUnits.forEach((u) => {
       if (counts[u.status] !== undefined) {
         counts[u.status] += 1;
+      } else {
+        counts.available += 1;
       }
     });
     return counts;
-  }, [units]);
+  }, [units, selectedConfigFilter]);
 
   // Phase 18 Project Dashboard Statistics
   const dashboardStats = useMemo(() => {
@@ -604,7 +784,7 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
 
     units.forEach((u) => {
       const st = String(u.status || "").toLowerCase();
-      if (st === "available" || st === "rehab" || st === "vacant") {
+      if (st === "available") {
         availableUnits += 1;
       }
       if (st === "booked" || st === "sold") {
@@ -615,8 +795,8 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
       }
       if (Array.isArray(u.bookings)) {
         u.bookings.forEach((b) => {
-          if (b.stage === "Confirmed" || b.status === "Approved") {
-            const amt = Number(b.finalAmount || b.tokenAmount || 0);
+          if (b.stage === "Confirmed" || b.status === "Approved" || b.stage === "Booked") {
+            const amt = Number(b.finalAmount || b.tokenAmount || b.agreementValue || b.soldPrice || 0);
             if (!Number.isNaN(amt)) totalBookingAmount += amt;
           }
         });
@@ -653,11 +833,16 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
     );
   }, [units]);
 
-  // Group units by Floor in descending order
+  // Group units by Floor in descending order (Combining status AND config filters)
   const floorGroups = useMemo(() => {
     let filtered = units;
     if (activeStatusFilter !== "all") {
       filtered = filtered.filter((u) => u.status === activeStatusFilter);
+    }
+    if (selectedConfigFilter !== "all") {
+      filtered = filtered.filter(
+        (u) => getUnitConfiguration(u) === selectedConfigFilter
+      );
     }
     if (selectedFloorPlanFilter !== "all") {
       filtered = filtered.filter(
@@ -681,9 +866,19 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
       map.get(floorKey).units.push(unit);
     });
 
-    // If a tower has specified totalFloors, include all floors descending
+    // Sort units ascending by position inside each floor
+    map.forEach((floorGroup) => {
+      floorGroup.units = sortUnitsAscending(floorGroup.units);
+    });
+
+    // If a tower has specified totalFloors, include all floors descending when no filter is active
     const totalFloors = selectedTower?.totalFloor || selectedTower?.totalFloors || 0;
-    if (totalFloors > 0 && activeStatusFilter === "all" && selectedFloorPlanFilter === "all") {
+    if (
+      totalFloors > 0 &&
+      activeStatusFilter === "all" &&
+      selectedConfigFilter === "all" &&
+      selectedFloorPlanFilter === "all"
+    ) {
       for (let f = 1; f <= totalFloors; f++) {
         if (!map.has(f)) {
           map.set(f, {
@@ -696,7 +891,7 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
     }
 
     return Array.from(map.values()).sort((a, b) => b.floorNumber - a.floorNumber);
-  }, [units, activeStatusFilter, selectedFloorPlanFilter, selectedTower]);
+  }, [units, activeStatusFilter, selectedConfigFilter, selectedFloorPlanFilter, selectedTower]);
 
   // Filtered Projects for Level 1 Search
   const filteredProjects = useMemo(() => {
@@ -726,7 +921,6 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
         <div className="inv-header-actions">
           {currentLevel === 1 && (
             <div className="inv-search-box">
-              <FaSearch className="inv-search-icon" />
               <input
                 type="text"
                 className="inv-search-input"
@@ -774,7 +968,7 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
             <>
               <span className="inv-breadcrumb-separator">/</span>
               <span className="inv-breadcrumb-item active">
-                <FaDoorOpen /> {selectedTower.name || `Tower #${selectedTower.id}`}
+                <FaDoorOpen /> {getTowerDisplayName(selectedTower, selectedProject)}
               </span>
             </>
           )}
@@ -881,7 +1075,7 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                         <span>
                           {[project.address, project.city, project.state]
                             .filter(Boolean)
-                            .join(", ") || "Location specified in master record"}
+                            .join(", ") || "-"}
                         </span>
                       </div>
                     </div>
@@ -893,13 +1087,31 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                       </div>
                       <div className="inv-stat-item">
                         <span className="inv-stat-value">{unitCount || "--"}</span>
-                        <span className="inv-stat-label">Total Units</span>
+                        <span className="inv-stat-label">Total</span>
                       </div>
                       <div className="inv-stat-item">
                         <span className="inv-stat-value available">
-                          {availableCount || "--"}
+                          {project.availableUnits || "0"}
                         </span>
-                        <span className="inv-stat-label">Available</span>
+                        <span className="inv-stat-label">Avail</span>
+                      </div>
+                      <div className="inv-stat-item">
+                        <span className="inv-stat-value" style={{ color: "#dc2626" }}>
+                          {project.soldUnits || "0"}
+                        </span>
+                        <span className="inv-stat-label">Sold</span>
+                      </div>
+                      <div className="inv-stat-item">
+                        <span className="inv-stat-value" style={{ color: "#3b82f6" }}>
+                          {project.rehabUnits || "0"}
+                        </span>
+                        <span className="inv-stat-label">Rehab</span>
+                      </div>
+                      <div className="inv-stat-item">
+                        <span className="inv-stat-value" style={{ color: "#d97706" }}>
+                          {project.heldUnits || "0"}
+                        </span>
+                        <span className="inv-stat-label">Held</span>
                       </div>
                     </div>
 
@@ -949,7 +1161,7 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                     {selectedProject.projectType || "Residential"}
                   </span>
                   <span>
-                    <FaMapMarkerAlt /> {[selectedProject.address, selectedProject.city].filter(Boolean).join(", ")}
+                    <FaMapMarkerAlt /> {[selectedProject.address, selectedProject.city].filter(Boolean).join(", ") || "-"}
                   </span>
                 </p>
               </div>
@@ -1092,7 +1304,7 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
             <div>
               <h5 className="mb-1 fw-bold text-dark">
-                {selectedProject?.name} — {selectedTower.name}
+                {selectedProject?.name} — {getTowerDisplayName(selectedTower, selectedProject)}
               </h5>
               <p className="text-muted mb-0" style={{ fontSize: 12.5 }}>
                 Floor-wise real-time unit status &amp; area breakdown (Read-Only Preview)
@@ -1116,7 +1328,7 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                 >
                   {towers.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.name}
+                      {getTowerDisplayName(t, selectedProject)}
                     </option>
                   ))}
                 </select>
@@ -1124,105 +1336,236 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
             )}
           </div>
 
-          {/* Phase 18 Project Dashboard Statistics */}
-          <div className="inv-dashboard-stats-grid">
-            <div className="inv-stat-card">
-              <div className="inv-stat-content">
-                <span className="inv-stat-title">Total Units</span>
-                <span className="inv-stat-value">{dashboardStats.totalUnits}</span>
+          {/* Filter 1: Status Counter / Filter Bar (Item 1 & Item 3 Live Queries & Filtering) */}
+          <div className="inv-status-filter-bar">
+            <button
+              type="button"
+              className={`inv-status-filter-card status-total ${activeStatusFilter === "all" ? "active" : ""}`}
+              onClick={() => setActiveStatusFilter("all")}
+              title="Show all unit statuses"
+            >
+              <div className="inv-status-filter-content">
+                <span className="inv-status-filter-label">Total Units</span>
+                <span className="inv-status-filter-val">{statusCounts.all}</span>
               </div>
-              <FaBuilding className="inv-stat-icon text-primary" />
-            </div>
-            <div className="inv-stat-card">
-              <div className="inv-stat-content">
-                <span className="inv-stat-title">Available Units</span>
-                <span className="inv-stat-value" style={{ color: "#10b981" }}>
-                  {dashboardStats.availableUnits}
+              <FaBuilding className="inv-status-filter-icon text-secondary" />
+            </button>
+
+            <button
+              type="button"
+              className={`inv-status-filter-card status-available ${activeStatusFilter === "available" ? "active" : ""}`}
+              onClick={() => setActiveStatusFilter(activeStatusFilter === "available" ? "all" : "available")}
+              title="Filter to Available units"
+            >
+              <div className="inv-status-filter-content">
+                <span className="inv-status-filter-label">Available</span>
+                <span className="inv-status-filter-val" style={{ color: "#16a34a" }}>
+                  {statusCounts.available}
                 </span>
               </div>
-              <FaDoorOpen className="inv-stat-icon" style={{ color: "#10b981" }} />
-            </div>
-            <div className="inv-stat-card">
-              <div className="inv-stat-content">
-                <span className="inv-stat-title">Booked Units</span>
-                <span className="inv-stat-value" style={{ color: "#ef4444" }}>
-                  {dashboardStats.bookedUnits}
+              <FaDoorOpen className="inv-status-filter-icon" style={{ color: "#16a34a" }} />
+            </button>
+
+            <button
+              type="button"
+              className={`inv-status-filter-card status-sold ${activeStatusFilter === "sold" ? "active" : ""}`}
+              onClick={() => setActiveStatusFilter(activeStatusFilter === "sold" ? "all" : "sold")}
+              title="Filter to Sold / Booked units"
+            >
+              <div className="inv-status-filter-content">
+                <span className="inv-status-filter-label">Sold</span>
+                <span className="inv-status-filter-val" style={{ color: "#dc2626" }}>
+                  {statusCounts.sold}
                 </span>
               </div>
-              <FaCheckCircle className="inv-stat-icon" style={{ color: "#ef4444" }} />
-            </div>
-            <div className="inv-stat-card">
-              <div className="inv-stat-content">
-                <span className="inv-stat-title">Units With Leads</span>
-                <span className="inv-stat-value" style={{ color: "#3b82f6" }}>
-                  {dashboardStats.unitsWithLeads}
+              <FaCheckCircle className="inv-status-filter-icon" style={{ color: "#dc2626" }} />
+            </button>
+
+            <button
+              type="button"
+              className={`inv-status-filter-card status-rehab ${activeStatusFilter === "rehab" ? "active" : ""}`}
+              onClick={() => setActiveStatusFilter(activeStatusFilter === "rehab" ? "all" : "rehab")}
+              title="Filter to Rehab units"
+            >
+              <div className="inv-status-filter-content">
+                <span className="inv-status-filter-label">Rehab</span>
+                <span className="inv-status-filter-val" style={{ color: "#2563eb" }}>
+                  {statusCounts.rehab}
                 </span>
               </div>
-              <FaUserFriends className="inv-stat-icon" style={{ color: "#3b82f6" }} />
-            </div>
-            <div className="inv-stat-card">
-              <div className="inv-stat-content">
-                <span className="inv-stat-title">Total Booking Amount</span>
-                <span className="inv-stat-value" style={{ color: "#8b5cf6" }}>
-                  {dashboardStats.totalBookingAmount}
+              <FaLayerGroup className="inv-status-filter-icon" style={{ color: "#2563eb" }} />
+            </button>
+
+            <button
+              type="button"
+              className={`inv-status-filter-card status-held ${activeStatusFilter === "held" ? "active" : ""}`}
+              onClick={() => setActiveStatusFilter(activeStatusFilter === "held" ? "all" : "held")}
+              title="Filter to Held units"
+            >
+              <div className="inv-status-filter-content">
+                <span className="inv-status-filter-label">Held</span>
+                <span className="inv-status-filter-val" style={{ color: "#d97706" }}>
+                  {statusCounts.held}
                 </span>
               </div>
-              <FaTag className="inv-stat-icon" style={{ color: "#8b5cf6" }} />
-            </div>
+              <FaTag className="inv-status-filter-icon" style={{ color: "#d97706" }} />
+            </button>
+
+            <button
+              type="button"
+              className={`inv-status-filter-card status-blocked ${activeStatusFilter === "blocked" ? "active" : ""}`}
+              onClick={() => setActiveStatusFilter(activeStatusFilter === "blocked" ? "all" : "blocked")}
+              title="Filter to Blocked / Investor units"
+            >
+              <div className="inv-status-filter-content">
+                <span className="inv-status-filter-label">Blocked</span>
+                <span className="inv-status-filter-val" style={{ color: "#64748b" }}>
+                  {statusCounts.blocked}
+                </span>
+              </div>
+              <FaTimes className="inv-status-filter-icon" style={{ color: "#64748b" }} />
+            </button>
           </div>
 
-          {/* Phase 17 Floor Plan Pills Navigation & Filter */}
-          {availableFloorPlans.length > 0 && (
-            <div className="inv-fp-filter-wrapper">
-              <div className="inv-fp-filter-header">
-                <span>
-                  <FaLayerGroup className="me-1 text-primary" /> Floor Plans ({availableFloorPlans.length})
-                </span>
-                {selectedFloorPlanFilter !== "all" && (
+          {/* Filter 2: Dynamic Configuration (BHK / Type) Filter */}
+          {availableConfigurations.length > 0 && (
+            <div className="inv-config-filter-wrapper">
+              <div className="inv-config-filter-header">
+                <div className="d-flex align-items-center gap-2">
+                  <FaTag className="text-primary" />
+                  <span className="fw-bold">Configuration Filter ({availableConfigurations.length} types):</span>
+                </div>
+                {selectedConfigFilter !== "all" && (
                   <button
+                    type="button"
                     className="btn btn-sm btn-link text-decoration-none p-0 text-primary"
-                    onClick={() => setSelectedFloorPlanFilter("all")}
+                    onClick={() => setSelectedConfigFilter("all")}
                     style={{ fontSize: 12, fontWeight: 600 }}
                   >
-                    Clear Filter (Show All Floor Plans)
+                    Clear Config Filter
                   </button>
                 )}
               </div>
-              <div className="inv-fp-pills-list">
+              <div className="inv-config-pills-list">
                 <button
                   type="button"
-                  className={`inv-fp-pill ${selectedFloorPlanFilter === "all" ? "active" : ""}`}
-                  onClick={() => setSelectedFloorPlanFilter("all")}
+                  className={`inv-config-pill ${selectedConfigFilter === "all" ? "active" : ""}`}
+                  onClick={() => setSelectedConfigFilter("all")}
                 >
-                  All Floor Plans ({units.length})
+                  All Configurations ({units.length})
                 </button>
-                {availableFloorPlans.map((fp) => (
+                {availableConfigurations.map((item) => (
                   <button
-                    key={fp.name}
+                    key={item.config}
                     type="button"
-                    className={`inv-fp-pill ${selectedFloorPlanFilter === fp.name ? "active" : ""}`}
-                    onClick={() => setSelectedFloorPlanFilter(fp.name)}
+                    className={`inv-config-pill ${selectedConfigFilter === item.config ? "active" : ""}`}
+                    onClick={() =>
+                      setSelectedConfigFilter(
+                        selectedConfigFilter === item.config ? "all" : item.config
+                      )
+                    }
                   >
-                    {fp.name} ({fp.count})
+                    {item.config} (
+                    {activeStatusFilter === "all" ? item.totalCount : item.activeStatusCount}
+                    )
                   </button>
                 ))}
               </div>
             </div>
           )}
 
+          {/* Active Combined Filter Tag Banner */}
+          {(activeStatusFilter !== "all" || selectedConfigFilter !== "all") && (
+            <div className="inv-active-filter-alert">
+              <div className="d-flex align-items-center gap-2 flex-wrap">
+                <span style={{ fontSize: 13, color: "#334155", fontWeight: 600 }}>Active Filters:</span>
+                {activeStatusFilter !== "all" && (
+                  <span
+                    className="badge text-uppercase px-2 py-1"
+                    style={{
+                      backgroundColor:
+                        activeStatusFilter === "available"
+                          ? "#16a34a"
+                          : activeStatusFilter === "sold"
+                          ? "#dc2626"
+                          : activeStatusFilter === "rehab"
+                          ? "#2563eb"
+                          : activeStatusFilter === "held"
+                          ? "#d97706"
+                          : "#64748b",
+                    }}
+                  >
+                    Status: {activeStatusFilter}
+                  </span>
+                )}
+                {selectedConfigFilter !== "all" && (
+                  <span className="badge bg-primary px-2 py-1">
+                    Config: {selectedConfigFilter}
+                  </span>
+                )}
+                <span className="text-muted ms-1" style={{ fontSize: 12.5 }}>
+                  ({floorGroups.reduce((acc, f) => acc + f.units.length, 0)} units match)
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-secondary py-1 px-3"
+                style={{ fontSize: 12, borderRadius: 6 }}
+                onClick={() => {
+                  setActiveStatusFilter("all");
+                  setSelectedConfigFilter("all");
+                }}
+              >
+                Clear All Filters
+              </button>
+            </div>
+          )}
+
+          {/* Status Color Scheme Legend */}
+          <div className="inv-legend-bar" aria-label="Status colour legend">
+            <span className="inv-legend-title">Legend:</span>
+            <div className="inv-legend-items">
+              <span className="inv-legend-item">
+                <span className="inv-legend-swatch available" /> Available
+              </span>
+              <span className="inv-legend-item">
+                <span className="inv-legend-swatch sold" /> Sold / Booked
+              </span>
+              <span className="inv-legend-item">
+                <span className="inv-legend-swatch rehab" /> Rehab
+              </span>
+              <span className="inv-legend-item">
+                <span className="inv-legend-swatch held" /> Held
+              </span>
+              <span className="inv-legend-item">
+                <span className="inv-legend-swatch blocked" /> Blocked
+              </span>
+              <span className="inv-legend-item">
+                <span className="inv-legend-swatch investor" /> Investor
+              </span>
+            </div>
+          </div>
+
           {/* Floor-wise Unit Grid (Reusing Booking Layout) */}
           <div className="inv-grid-wrapper">
             {floorGroups.length === 0 ? (
               <div className="text-center py-5 col-12 text-muted" style={{ gridColumn: "1 / -1" }}>
-                <h6>No units found matching &apos;{activeStatusFilter}&apos; filter.</h6>
+                <h6>
+                  No units found matching &apos;
+                  {[activeStatusFilter !== "all" ? activeStatusFilter : "", selectedConfigFilter !== "all" ? selectedConfigFilter : ""]
+                    .filter(Boolean)
+                    .join(" + ")}
+                  &apos; filter.
+                </h6>
                 <button
                   className="btn btn-sm btn-outline-primary mt-2"
                   onClick={() => {
                     setActiveStatusFilter("all");
+                    setSelectedConfigFilter("all");
                     setSelectedFloorPlanFilter("all");
                   }}
                 >
-                  Clear Filter
+                  Clear Filters
                 </button>
               </div>
             ) : (
@@ -1237,14 +1580,20 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                     ) : (
                       floorUnits.map((unit) => {
                         const areaText = unit.areaDisplay ? `${unit.areaDisplay} sq.ft` : "";
-                        const isShop = String(unit.name).startsWith("SH-") || String(unit.unitType || "").toLowerCase().includes("commercial") || String(unit.configurationLabel || "").toLowerCase().includes("shop");
+                        const isShop =
+                          String(unit.name).startsWith("SH-") ||
+                          String(unit.unitType || "").toLowerCase().includes("commercial") ||
+                          String(unit.configurationLabel || "").toLowerCase().includes("shop");
+                        const isOffice =
+                          String(unit.name).startsWith("OFC") ||
+                          String(unit.configurationLabel || "").toLowerCase().includes("office");
 
                         return (
                           <div
                             key={unit.id}
                             className={`inv-unit-box ${unit.status}`}
                             onClick={() => setPreviewUnit(unit)}
-                            title={`Click to view specs: ${isShop ? "Shop" : "Flat"} ${unit.name} · ${areaText || "Area not set"}`}
+                            title={`Click to view specs: ${isShop ? "Shop" : isOffice ? "Office" : "Flat"} ${unit.name} · ${areaText || "Area not set"}`}
                           >
                             {/* Plan 4-pane icon or thumbnail */}
                             {unit.image ? (
@@ -1258,24 +1607,36 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                               </span>
                             )}
 
-                            {/* Flat/Shop Number AND Area Together */}
+                            {/* Flat/Shop/Office Number AND Area Together */}
                             <div className="inv-unit-info">
                               <span className="inv-unit-name-text">
-                                {isShop ? "Shop no" : "Flat no"} : {unit.name}
+                                {isShop ? "Shop no" : isOffice ? "Office no" : "Flat no"} : {unit.name}
                               </span>
                               {areaText && (
                                 <span className="inv-unit-area-text">
                                   {areaText}
                                 </span>
                               )}
-                              {unit.floorPlanName && (
-                                <span style={{ fontSize: 10.5, color: "#64748b", fontWeight: 600 }}>
-                                  {unit.floorPlanName} · {unit.unitType}
+                              {unit.configurationLabel && (
+                                <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.9)", fontWeight: 600 }}>
+                                  {unit.configurationLabel}
                                 </span>
                               )}
-                              {unit.status === "booked" ? (
+                              {unit.status === "sold" || unit.status === "booked" ? (
                                 <span className="inv-unit-lead-pill" style={{ background: "#fee2e2", color: "#991b1b" }}>
-                                  🔒 BOOKED {unit.leadName ? `(${unit.leadName})` : ""}
+                                  🔒 SOLD {unit.leadName ? `(${unit.leadName})` : ""}
+                                </span>
+                              ) : unit.status === "rehab" ? (
+                                <span className="inv-unit-lead-pill" style={{ background: "#dbeafe", color: "#1e40af" }}>
+                                  🏢 REHAB
+                                </span>
+                              ) : unit.status === "held" ? (
+                                <span className="inv-unit-lead-pill" style={{ background: "#fef3c7", color: "#92400e" }}>
+                                  ⏳ HELD
+                                </span>
+                              ) : unit.status === "blocked" ? (
+                                <span className="inv-unit-lead-pill" style={{ background: "#f1f5f9", color: "#475569" }}>
+                                  🚫 BLOCKED
                                 </span>
                               ) : unit.leadName ? (
                                 <span className="inv-unit-lead-pill" title={`Lead: ${unit.leadName}`}>
@@ -1286,8 +1647,6 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                                   AVAILABLE
                                 </span>
                               )}
-
-                              {/* Book button removed from preview inventory grid per request */}
                             </div>
 
                             {/* 3-Dots Preview Popup Trigger */}
@@ -1301,7 +1660,7 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                               <FaEllipsisV />
                               <span className="inv-unit-popup">
                                 <span className="inv-popup-header">
-                                  {isShop ? "SHOP" : "FLAT"} {unit.name}
+                                  {isShop ? "SHOP" : isOffice ? "OFFICE" : "FLAT"} {unit.name}
                                 </span>
                                 <span className="inv-popup-price">
                                   {formatPrice(unit.basePrice)}
@@ -1312,9 +1671,9 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                                   ) : null}
                                 </span>
 
-                                {unit.floorPlanName && (
+                                {unit.configurationLabel && (
                                   <span className="inv-popup-meta">
-                                    Floor Plan: <strong>{unit.floorPlanName}</strong>
+                                    Config: <strong>{unit.configurationLabel}</strong>
                                   </span>
                                 )}
                                 {unit.carpet && (
@@ -1333,18 +1692,6 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                                 <span className="inv-popup-meta">
                                   Lead: <strong>{unit.leadName || "None (Vacant)"}</strong>
                                 </span>
-                                {/* {unit.status === "available" && (
-                                  <button
-                                    type="button"
-                                    className="btn btn-sm btn-primary w-100 mt-2 py-1 fw-bold"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleOpenBookingForUnit(unit);
-                                    }}
-                                  >
-                                    Book Now
-                                  </button>
-                                )} */}
                               </span>
                             </span>
                           </div>

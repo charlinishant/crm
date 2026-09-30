@@ -257,7 +257,6 @@ const UsersListLayer = () => {
         {statusMessage && <div className="admin-user-message">{statusMessage}</div>}
 
         <label className="crm-table-search">
-          <span aria-hidden="true">🔍</span>
           <input
             type="search"
             value={searchTerm}

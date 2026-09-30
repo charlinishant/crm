@@ -17,6 +17,8 @@ const UnitCountEight = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
+
     const fetchList = async (endpoint) => {
       try {
         const response = await fetch(`${API_URL}${endpoint}`);
@@ -31,32 +33,50 @@ const UnitCountEight = () => {
     };
 
     const loadCounts = async () => {
-      setLoading(true);
-      const [leads, tasks, duplicateGroupsResult] = await Promise.all([
-        fetchList("/leads"),
-        fetchList("/tasks"),
-        fetchList("/leads/duplicates"),
-      ]);
-      const duplicateGroups = duplicateGroupsResult.length ? duplicateGroupsResult : buildDuplicateLeadGroups(leads);
+      try {
+        const [leads, tasks, duplicateGroupsResult] = await Promise.all([
+          fetchList("/leads"),
+          fetchList("/tasks"),
+          fetchList("/leads/duplicates"),
+        ]);
+        if (!isMounted) return;
+        const duplicateGroups = duplicateGroupsResult.length ? duplicateGroupsResult : buildDuplicateLeadGroups(leads);
 
-      setDashboardData({ leads, tasks, duplicateGroups });
-      setLoading(false);
+        setDashboardData({ leads, tasks, duplicateGroups });
+      } finally {
+        if (isMounted) setLoading(false);
+      }
     };
 
     loadCounts();
+
+    const intervalId = window.setInterval(loadCounts, 15000);
+    window.addEventListener("focus", loadCounts);
+    window.addEventListener("storage", loadCounts);
+    window.addEventListener("crmLeadsChanged", loadCounts);
+    window.addEventListener("crmActivityNotificationsChanged", loadCounts);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", loadCounts);
+      window.removeEventListener("storage", loadCounts);
+      window.removeEventListener("crmLeadsChanged", loadCounts);
+      window.removeEventListener("crmActivityNotificationsChanged", loadCounts);
+    };
   }, [API_URL]);
 
   const counts = useMemo(() => {
     return DASHBOARD_RESULT_CARDS.reduce((items, card) => ({
       ...items,
-      [card.key]:filterDashboardRecords(card.key, dashboardData).length,
+      [card.key]: filterDashboardRecords(card.key, dashboardData).length,
     }), {});
   }, [dashboardData]);
 
   const cards = DASHBOARD_RESULT_CARDS.map((card) => ({
     ...card,
-    count:counts[card.key] || 0,
-    path:`/dashboard-results?card=${card.key}`,
+    count: counts[card.key] || 0,
+    path: card.path || `/dashboard-results?card=${card.key}`,
   }));
 
   return (

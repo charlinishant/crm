@@ -5,6 +5,7 @@ import { FaEllipsisV } from "react-icons/fa";
 import TableSelectionCheckbox from "../components/table/TableSelectionCheckbox";
 import { useTableSelection } from "../components/table/useTableSelection";
 import BulkActionToolbar from "../components/table/BulkActionToolbar";
+import CompactSearchSelect from "../components/common/CompactSearchSelect";
 
 const emptyEditForm = {
   name: "",
@@ -194,6 +195,16 @@ const Units = () => {
       : data;
     return getUniqueOptions(source, "tower");
   }, [data, projectFilter]);
+
+  useEffect(() => {
+    const handleOutsideClick = () => setOpenActionId(null);
+    if (openActionId !== null) {
+      window.addEventListener("click", handleOutsideClick);
+    }
+    return () => {
+      window.removeEventListener("click", handleOutsideClick);
+    };
+  }, [openActionId]);
 
   useEffect(() => {
     if (towerFilter && !towerOptions.includes(towerFilter)) {
@@ -407,7 +418,7 @@ const Units = () => {
 
   const handleDelete = async (unit) => {
     setOpenActionId(null);
-    const confirmDelete = window.confirm(`Delete unit ${unit.name || unit.unitIndex}?`);
+    const confirmDelete = window.confirm(`Move unit ${unit.name || unit.unitIndex} to the Bin?`);
     if (!confirmDelete) return;
 
     try {
@@ -415,7 +426,7 @@ const Units = () => {
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.message || "Delete failed");
 
-      alert("Deleted Successfully");
+      alert("Moved to Bin successfully");
       fetchUnits();
     } catch (err) {
       alert(err.message || "Delete failed");
@@ -479,40 +490,46 @@ const Units = () => {
       <div className="floor-dashboard">
 
         <div className="floor-card">
-          <div className="floor-header d-flex flex-wrap justify-content-between align-items-center gap-3">
-            <div className="d-flex align-items-center gap-3 flex-wrap">
-              <div className="item-count m-0">
-                <span>{displayedItemCount} {displayedItemCount === 1 ? "item" : "items"}.</span>
-              </div>
-              <div className="inv-unit-counters-bar mb-0" style={{ padding: 0, background: "transparent", border: "none" }}>
-                {[
-                  ["All", "All", statusCounts["All"]],
-                  ["Available", "Available", statusCounts["Available"]],
-                  ["Booked", "Booked", statusCounts["Booked"]],
-                  ["Blocked", "Blocked", statusCounts["Blocked"]],
-                  ["Refuge", "Refuge", statusCounts["Refuge"]],
-                  ["Investor", "Investor", statusCounts["Investor"]],
-                  ["Rehab", "Rehab", statusCounts["Rehab"]],
-                ].map(([key, label, count]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    className={`inv-counter-pill ${key.toLowerCase()} ${statusFilter === key ? "active" : ""}`}
-                    onClick={() => setStatusFilter(key)}
-                    style={{ margin: 0, marginRight: "8px" }}
-                  >
-                    <span className="inv-counter-badge">{count || 0}</span>
-                    <span>{label}</span>
-                  </button>
-                ))}
-              </div>
+          {/* Header Row: Count on Left, Add Units on Far Right */}
+          <div className="unit-header-bar">
+            <div className="item-count m-0">
+              <span>{displayedItemCount} {displayedItemCount === 1 ? "item" : "items"}.</span>
             </div>
-
             <div className="action-wrapper">
               <Link className="unit-add-link" to="/add-units">
                 <button className="btn-new-plan">Add Units</button>
               </Link>
             </div>
+          </div>
+
+          {/* Right-aligned Selection Controls: Project | Tower */}
+          <div className="unit-filter-toolbar" aria-label="Filter units">
+            <CompactSearchSelect
+              label="PROJECT"
+              value={projectFilter}
+              onChange={setProjectFilter}
+              options={projectOptions}
+              placeholder="All Projects"
+              searchPlaceholder="Search project..."
+            />
+            <CompactSearchSelect
+              label="TOWER"
+              value={towerFilter}
+              onChange={setTowerFilter}
+              options={towerOptions}
+              placeholder="All Towers"
+              searchPlaceholder="Search tower..."
+              disabled={!towerOptions.length}
+            />
+            <label className="crm-table-search unit-inline-search">
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search unit..."
+                aria-label="Search units"
+              />
+            </label>
           </div>
 
           <div className="table-responsive">
@@ -529,49 +546,9 @@ const Units = () => {
                   setStatusMessage("");
                 }}
                 onDelete={handleBulkDelete}
-                deleteLabel="Delete selected"
+                deleteLabel="Move selected to Bin"
               />
             )}
-            <label className="crm-table-search">
-              <span aria-hidden="true">🔍</span>
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="Search unit..."
-                aria-label="Search units"
-              />
-            </label>
-            <div className="unit-simple-filters" aria-label="Filter units">
-              <label>
-                <span>Project</span>
-                <select
-                  value={projectFilter}
-                  onChange={(event) => setProjectFilter(event.target.value)}
-                  aria-label="Filter units by project"
-                >
-                  <option value="">All Projects</option>
-                  {projectOptions.map((project) => (
-                    <option key={project} value={project}>{project}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label>
-                <span>Tower</span>
-                <select
-                  value={towerFilter}
-                  onChange={(event) => setTowerFilter(event.target.value)}
-                  disabled={!towerOptions.length}
-                  aria-label="Filter units by tower"
-                >
-                  <option value="">All Towers</option>
-                  {towerOptions.map((tower) => (
-                    <option key={tower} value={tower}>{tower}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
             <table className="floor-table">
               <thead>
                 <tr>
@@ -662,17 +639,20 @@ const Units = () => {
                         <button
                           className="unit-actions-menu-btn"
                           type="button"
-                          onClick={() => setOpenActionId((current) => (current === item.id ? null : item.id))}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenActionId((current) => (current === item.id ? null : item.id));
+                          }}
                           aria-label={`Actions for ${item.name}`}
                         >
                           <FaEllipsisV />
                         </button>
 
                         {openActionId === item.id && (
-                          <div className="unit-actions-dropdown">
+                          <div className={`unit-actions-dropdown ${index >= Math.max(0, paginatedData.length - 3) || index >= 5 ? "unit-actions-dropdown--up" : ""}`} onClick={(e) => e.stopPropagation()}>
                             <button type="button" onClick={() => openEditUnit(item)}>Edit</button>
                             <button type="button" onClick={() => openViewUnit(item)}>View</button>
-                            <button type="button" className="danger" onClick={() => handleDelete(item)}>Delete</button>
+                            <button type="button" className="danger" onClick={() => handleDelete(item)}>Move to Bin</button>
                           </div>
                         )}
                       </td>
@@ -681,18 +661,18 @@ const Units = () => {
                 )}
               </tbody>
             </table>
-            {orderedData.length > UNITS_PER_PAGE && (
-              <TablePagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                pageStartRow={pageStartRow}
-                pageEndRow={pageEndRow}
-                totalCount={displayedItemCount}
-                onPrevious={() => setCurrentPage((page) => Math.max(1, page - 1))}
-                onNext={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
-              />
-            )}
           </div>
+          {orderedData.length > UNITS_PER_PAGE && (
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              pageStartRow={pageStartRow}
+              pageEndRow={pageEndRow}
+              totalCount={displayedItemCount}
+              onPrevious={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              onNext={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+            />
+          )}
         </div>
 
         {modalMode === "view" && selectedUnit && (

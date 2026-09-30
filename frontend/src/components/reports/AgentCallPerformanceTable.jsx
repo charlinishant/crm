@@ -50,13 +50,13 @@ const AgentCallPerformanceTable = ({ data = [] }) => {
           <small className="text-muted">Agent-wise call volume, talk time, and response rates</small>
         </div>
         <label className="crm-table-search sales-performance-search" style={{ maxWidth: "280px" }}>
-          <span aria-hidden="true">🔍</span>
           <input
             type="search"
             value={searchQuery}
             onChange={handleSearchChange}
             placeholder="Search agent performance..."
             aria-label="Search agent performance"
+            style={{ border: "none", outline: "none", boxShadow: "none", background: "transparent", width: "100%", padding: 0 }}
           />
         </label>
       </div>

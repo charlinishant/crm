@@ -57,33 +57,37 @@ const getContactValue = (value, keys = ["value", "phone", "number", "email"]) =>
   return ""
 }
 
+const getISTDateString = (date = new Date()) => {
+  if (!date) return ""
+  const d = date instanceof Date ? date : new Date(date)
+  if (Number.isNaN(d.getTime())) return ""
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(d)
+}
+
+const getScheduledAtIST = (followUp) => {
+  if (!followUp?.followUpDate) return null
+  const rawDate = followUp.followUpDate instanceof Date
+    ? followUp.followUpDate
+    : new Date(followUp.followUpDate)
+  if (Number.isNaN(rawDate.getTime())) return null
+
+  const istDatePart = getISTDateString(rawDate)
+  const timePart = String(followUp.followUpTime || "00:00").slice(0, 5)
+  const date = new Date(`${istDatePart}T${timePart}:00+05:30`)
+  return Number.isNaN(date.getTime()) ? rawDate : date
+}
+
 const combineDateAndTime = (dateValue, timeValue) => {
   if (!dateValue) return null
   const datePart = String(dateValue).slice(0, 10)
   const timePart = String(timeValue || "00:00").slice(0, 5)
-  const date = new Date(`${datePart}T${timePart}:00`)
-  return Number.isNaN(date.getTime()) ? null : date
-}
-
-const getDateRange = (filter) => {
-  const now = new Date()
-  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const endToday = new Date(startToday)
-  endToday.setDate(endToday.getDate() + 1)
-
-  if (filter === "today") {
-    return { gte: startToday, lt: endToday }
-  }
-
-  if (filter === "upcoming") {
-    return { gte: endToday }
-  }
-
-  if (filter === "missed" || filter === "overdue") {
-    return { lt: now }
-  }
-
-  return null
+  const date = new Date(`${datePart}T${timePart}:00+05:30`)
+  return Number.isNaN(date.getTime()) ? new Date(`${datePart}T${timePart}:00`) : date
 }
 
 const getScopedLead = async (leadId, user, tx = prisma) => {
@@ -132,29 +136,34 @@ const getFollowUpWhere = (user, id) => {
 }
 
 const serializeFollowUp = (followUp) => {
-  const scheduledAt = getScheduledAt(followUp)
-  const isOverdue =
-    (followUp.status === "Pending" || followUp.status === "Scheduled") &&
-    scheduledAt &&
-    scheduledAt.getTime() < Date.now()
+  const scheduledAt = getScheduledAtIST(followUp)
+  const now = new Date()
+  const todayIST = getISTDateString(now)
+  const itemDateIST = scheduledAt ? getISTDateString(scheduledAt) : (followUp.followUpDate ? getISTDateString(new Date(followUp.followUpDate)) : "")
 
-  const lead = followUp.lead || {}
+  const isCompleted = followUp.status === "Done" || followUp.status === "Completed"
+  const isCancelled = followUp.status === "Cancelled"
 
-  let effectiveStatus = followUp.status
-  if (effectiveStatus === "Done" || effectiveStatus === "Completed") {
+  let effectiveStatus = followUp.status || "Pending"
+  if (isCompleted) {
     effectiveStatus = "Completed"
-  } else if (effectiveStatus === "Pending" || effectiveStatus === "Scheduled") {
-    if (isOverdue) {
-      effectiveStatus = "Overdue"
+  } else if (isCancelled) {
+    effectiveStatus = "Cancelled"
+  } else if (scheduledAt && scheduledAt.getTime() < now.getTime()) {
+    effectiveStatus = "Overdue"
+  } else if (itemDateIST === todayIST) {
+    effectiveStatus = "Due Soon"
+  } else {
+    const msUntilDue = scheduledAt ? scheduledAt.getTime() - now.getTime() : Infinity
+    if (msUntilDue > 0 && msUntilDue <= 3 * 24 * 60 * 60 * 1000) {
+      effectiveStatus = "Due Soon"
     } else {
-      const msUntilDue = scheduledAt ? scheduledAt.getTime() - Date.now() : Infinity
-      if (msUntilDue > 0 && msUntilDue <= 30 * 60 * 1000) {
-        effectiveStatus = "Due Soon"
-      }
+      effectiveStatus = "Scheduled"
     }
   }
 
   const reminderAt = scheduledAt ? new Date(scheduledAt.getTime() - 10 * 60 * 1000) : null
+  const lead = followUp.lead || {}
 
   return {
     ...followUp,
@@ -170,69 +179,93 @@ const serializeFollowUp = (followUp) => {
   }
 }
 
-const buildFollowUpWhere = (user, filter = "all") => {
+const matchesFollowUpFilter = (followUp, filter = "all") => {
+  const normalized = String(filter || "all").toLowerCase().replace(/[\s_-]/g, "")
+  if (normalized === "all") return true
+
+  const isCompleted = followUp.status === "Done" || followUp.status === "Completed"
+  const isCancelled = followUp.status === "Cancelled"
+  const isActive = !isCompleted && !isCancelled
+
+  if (normalized === "completed" || normalized === "done") {
+    return isCompleted
+  }
+  if (normalized === "cancelled") {
+    return isCancelled
+  }
+  if (normalized === "callbacks") {
+    return isActive && String(followUp.type || "").toLowerCase() === "callback"
+  }
+
+  if (!isActive) return false
+
+  const scheduledAt = getScheduledAtIST(followUp)
+  const now = new Date()
+  const todayIST = getISTDateString(now)
+  const itemDateIST = scheduledAt ? getISTDateString(scheduledAt) : (followUp.followUpDate ? getISTDateString(new Date(followUp.followUpDate)) : "")
+
+  const isOverdue = scheduledAt ? scheduledAt.getTime() < now.getTime() : false
+
+  if (normalized === "overdue" || normalized === "missed") {
+    return isOverdue
+  }
+  if (normalized === "today") {
+    return itemDateIST === todayIST
+  }
+  if (normalized === "upcoming") {
+    return itemDateIST > todayIST
+  }
+  if (normalized === "due" || normalized === "duesoon") {
+    const threeDaysLater = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
+    const threeDaysDateIST = getISTDateString(threeDaysLater)
+    return itemDateIST >= todayIST && itemDateIST <= threeDaysDateIST
+  }
+
+  return true
+}
+
+const getFollowUps = async (user, filter = "all", options = {}) => {
   const isAdmin = String(user?.role || "").toUpperCase() === "ADMIN"
   const where = {
     ...(isAdmin ? {} : { salesUserId: Number(user.id) }),
   }
 
-  const normalizedFilter = String(filter).toLowerCase()
+  const allRows = await prisma.followUp.findMany({
+    where,
+    include: { lead: true },
+    orderBy: [{ followUpDate: "asc" }, { followUpTime: "asc" }],
+  })
 
-  if (normalizedFilter === "today") {
-    where.status = { in: ["Pending", "Scheduled"] }
-    const range = getDateRange("today")
-    if (range) where.followUpDate = range
-  } else if (normalizedFilter === "upcoming") {
-    where.status = { in: ["Pending", "Scheduled"] }
-    const range = getDateRange("upcoming")
-    if (range) where.followUpDate = range
-  } else if (normalizedFilter === "overdue" || normalizedFilter === "missed") {
-    where.status = { in: ["Pending", "Scheduled"] }
-    where.followUpDate = { lt: new Date() }
-  } else if (normalizedFilter === "due" || normalizedFilter === "due soon" || normalizedFilter === "duesoon") {
-    where.status = { in: ["Pending", "Scheduled"] }
-    const now = new Date()
-    const thirtyMin = new Date(now.getTime() + 30 * 60 * 1000)
-    where.followUpDate = { gte: now, lte: thirtyMin }
-  } else if (normalizedFilter === "completed" || normalizedFilter === "done") {
-    where.status = { in: ["Done", "Completed"] }
-  } else if (normalizedFilter === "cancelled") {
-    where.status = "Cancelled"
-  } else if (normalizedFilter === "callbacks") {
-    where.type = "Callback"
-    where.status = { in: ["Pending", "Scheduled"] }
+  const allFollowUps = allRows.map(serializeFollowUp)
+
+  const counts = { all: 0, today: 0, upcoming: 0, due: 0, overdue: 0, completed: 0, cancelled: 0 }
+  for (const f of allFollowUps) {
+    counts.all += 1
+    if (matchesFollowUpFilter(f, "today")) counts.today += 1
+    if (matchesFollowUpFilter(f, "upcoming")) counts.upcoming += 1
+    if (matchesFollowUpFilter(f, "due")) counts.due += 1
+    if (matchesFollowUpFilter(f, "overdue")) counts.overdue += 1
+    if (matchesFollowUpFilter(f, "completed")) counts.completed += 1
+    if (matchesFollowUpFilter(f, "cancelled")) counts.cancelled += 1
   }
 
-  return where
-}
+  const filtered = allFollowUps.filter((f) => matchesFollowUpFilter(f, filter))
+  const totalItems = filtered.length
 
-const getFollowUps = async (user, filter = "all", options = {}) => {
-  const where = buildFollowUpWhere(user, filter)
   const page = Math.max(1, Number(options.page) || 1)
   const limit = Math.max(1, Number(options.limit) || 20)
   const skip = (page - 1) * limit
   const usePagination = options.page !== undefined || options.limit !== undefined
+  const data = usePagination ? filtered.slice(skip, skip + limit) : filtered
 
-  const [totalItems, rows] = await Promise.all([
-    prisma.followUp.count({ where }),
-    prisma.followUp.findMany({
-      where,
-      include: { lead: true },
-      orderBy: [{ followUpDate: "asc" }, { followUpTime: "asc" }],
-      ...(usePagination ? { skip, take: limit } : {}),
-    }),
-  ])
-
-  const data = rows.map(serializeFollowUp)
-  return usePagination
-    ? {
-        data,
-        totalItems,
-        totalPages: Math.max(1, Math.ceil(totalItems / limit)),
-        page,
-        limit,
-      }
-    : data
+  return {
+    data,
+    totalItems,
+    totalPages: Math.max(1, Math.ceil(totalItems / limit)),
+    page,
+    limit,
+    counts,
+  }
 }
 
 const createFollowUp = async (user, body) => {

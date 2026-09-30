@@ -13,6 +13,7 @@ datasource db {
 
 model Project {
   id                 Int                @id @default(autoincrement())
+  deletedAt          DateTime?
   name               String
   description        String?            @db.Text
   reraProjectId      Int?
@@ -57,6 +58,7 @@ model ProjectSalesUser {
 
 model Tower {
   id                       Int             @id @default(autoincrement())
+  deletedAt                DateTime?
   name                     String
   projectId                Int
   project                  Project         @relation("Project", fields: [projectId], references: [id], onDelete: Restrict)
@@ -288,6 +290,7 @@ model User {
   tasks            Task[]             @relation("AssignedTo")
   assignedTasks    Task[]             @relation("AssignedBy")
   attendanceLogs   UserAttendance[]
+  sessions         UserSession[]
   followUps        FollowUp[]         @relation("SalesUserFollowUps")
   leadActivities   LeadActivity[]     @relation("UserLeadActivities")
   notifications    Notification[]     @relation("UserId")
@@ -475,6 +478,33 @@ model UserAttendance {
   @@index([loginAt])
 }
 
+model UserSession {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionToken    String    @unique @db.VarChar(255)
+  sessionStatus   String    @default("active") // "active", "logged_out", "expired", "forced_logout"
+  loginAt         DateTime  @default(now())
+  logoutAt        DateTime?
+  lastActivityAt  DateTime  @default(now())
+  expiresAt       DateTime?
+  ipAddress       String?   @db.VarChar(100)
+  userAgent       String?   @db.Text
+  deviceType      String?   @db.VarChar(100)
+  browser         String?   @db.VarChar(100)
+  operatingSystem String?   @db.VarChar(100)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([sessionStatus])
+  @@index([loginAt])
+  @@index([logoutAt])
+  @@index([lastActivityAt])
+  @@index([userId, loginAt])
+  @@index([userId, sessionStatus])
+}
+
 model ScheduleVisit {
   id             Int       @id @default(autoincrement())
   leadId         Int       @unique
@@ -497,6 +527,7 @@ model ScheduleVisit {
 
 model CallLog {
   id                   Int       @id @default(autoincrement())
+  deletedAt            DateTime?
   leadId               Int?
   lead                 Lead?     @relation(fields: [leadId], references: [id])
   agentId              Int?

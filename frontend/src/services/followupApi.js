@@ -18,6 +18,9 @@ const request = async (path, options = {}) => {
     throw new Error(result?.message || "Unable to complete follow-up request");
   }
 
+  if (result && (result.counts !== undefined || result.totalItems !== undefined)) {
+    return result;
+  }
   return result?.data ?? result;
 };
 

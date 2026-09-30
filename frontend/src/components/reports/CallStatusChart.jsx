@@ -18,9 +18,9 @@ const CallStatusChart = ({ data = [] }) => {
 
   return (
     <div className="admin-report-chart-card">
-      <div className="d-flex justify-content-between align-items-center mb-2">
+      <div className="d-flex justify-content-between align-items-center mb-3">
         <h6>Call Status Breakdown</h6>
-        {totalCalls > 0 && <span className="badge bg-light text-dark">{totalCalls} Total Calls</span>}
+        {totalCalls > 0 && <span className="text-muted small fw-semibold">{totalCalls} Calls</span>}
       </div>
       {rows.length ? (
         <ResponsiveContainer width="100%" height={280}>
@@ -30,9 +30,8 @@ const CallStatusChart = ({ data = [] }) => {
               dataKey="value"
               nameKey="name"
               innerRadius={55}
-              outerRadius={95}
+              outerRadius={92}
               paddingAngle={3}
-              label={({ name, percent }) => `${name} (${(percent * 100).toFixed(0)}%)`}
             >
               {rows.map((entry, index) => (
                 <Cell

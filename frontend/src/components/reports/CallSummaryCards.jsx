@@ -28,7 +28,6 @@ const CallSummaryCards = ({ summary = {} }) => {
           <div
             className="admin-report-summary-card telephony-card"
             key={card.key}
-            style={{ borderTop: `3px solid ${card.color}` }}
           >
             <div className="telephony-card-header">
               <span>{card.label}</span>
@@ -36,7 +35,7 @@ const CallSummaryCards = ({ summary = {} }) => {
                 {card.icon}
               </span>
             </div>
-            <strong style={{ color: card.color }}>{value}</strong>
+            <strong>{value}</strong>
           </div>
         );
       })}

@@ -71,6 +71,14 @@ const SmartImport = () => {
     return () => document.removeEventListener("mousedown", closePicker);
   }, []);
 
+  const salesUsers = useMemo(
+    () => users.filter((user) => {
+      const role = String(user?.role || "").toUpperCase();
+      return role !== "CHANNEL_PARTNER" && role !== "AGENCY_USER";
+    }),
+    [users]
+  );
+
   const channelPartners = useMemo(
     () => users.filter((user) => String(user?.role || "").toUpperCase() === "CHANNEL_PARTNER"),
     [users]
@@ -78,9 +86,9 @@ const SmartImport = () => {
 
   const filteredUsers = useMemo(() => {
     const query = userSearch.trim().toLowerCase();
-    if (!query) return users;
+    if (!query) return salesUsers;
 
-    return users.filter((user) =>
+    return salesUsers.filter((user) =>
       [
         getUserName(user),
         user?.role,
@@ -93,11 +101,11 @@ const SmartImport = () => {
         .toLowerCase()
         .includes(query)
     );
-  }, [userSearch, users]);
+  }, [salesUsers, userSearch]);
 
   const selectedUsers = useMemo(
-    () => users.filter((user) => selectedUserIds.includes(String(user.id))),
-    [selectedUserIds, users]
+    () => salesUsers.filter((user) => selectedUserIds.includes(String(user.id))),
+    [salesUsers, selectedUserIds]
   );
 
   const selectedUserLabel = isLoadingUsers
@@ -509,22 +517,42 @@ const SmartImport = () => {
                   )}
                 </div>
 
-                <div className="form-check p-3 bg-primary-subtle rounded border border-primary">
+                <label
+                  className="p-3 bg-primary-subtle rounded border border-primary d-flex align-items-center justify-content-center gap-2 text-center w-100"
+                  style={{ cursor: "pointer", userSelect: "none", margin: 0 }}
+                  htmlFor="importPermanentLockConfirm"
+                >
                   <input
-                    className="form-check-input"
                     type="checkbox"
                     id="importPermanentLockConfirm"
                     checked={isConfirmedLock}
                     onChange={(e) => setIsConfirmedLock(e.target.checked)}
+                    style={{ position: "absolute", opacity: 0, width: 0, height: 0 }}
                   />
-                  <label
-                    className="form-check-label fw-bold text-primary"
-                    htmlFor="importPermanentLockConfirm"
-                    style={{ fontSize: "13px" }}
+                  <div
+                    style={{
+                      width: "22px",
+                      height: "22px",
+                      border: "2px solid #0d6efd",
+                      borderRadius: "4px",
+                      backgroundColor: isConfirmedLock ? "#0d6efd" : "#fff",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                      transition: "all 0.2s"
+                    }}
                   >
+                    {isConfirmedLock && (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                      </svg>
+                    )}
+                  </div>
+                  <span className="fw-bold text-primary m-0" style={{ fontSize: "14px", lineHeight: "1.4" }}>
                     Source will be locked permanently and cannot be changed — confirm?
-                  </label>
-                </div>
+                  </span>
+                </label>
               </div>
 
               <div className="modal-footer bg-light">

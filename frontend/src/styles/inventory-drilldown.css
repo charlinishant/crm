@@ -129,7 +129,7 @@
 
 .inv-search-input {
   width: 100%;
-  padding: 8px 14px 8px 36px;
+  padding: 8px 14px;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
   font-size: 13px;
@@ -323,7 +323,7 @@
 
 .inv-project-stats-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 8px;
   background: #f8fafc;
   padding: 10px 12px;
@@ -749,13 +749,38 @@
   color: #ffffff;
 }
 
-.inv-unit-box.booked {
+.inv-unit-box.booked,
+.inv-unit-box.sold {
   background: #e65258;
   color: #ffffff;
 }
 
+.inv-unit-box.rehab {
+  background: #111827;
+  color: #ffffff;
+}
+
+.inv-unit-box.held {
+  background: #facc15;
+  color: #0f172a;
+}
+
+.inv-unit-box.held .inv-unit-name-text,
+.inv-unit-box.held .inv-unit-area-text,
+.inv-unit-box.held .inv-unit-dots-btn {
+  color: #0f172a;
+}
+
+.inv-unit-box.held .inv-unit-plan-icon {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.inv-unit-box.held .inv-unit-plan-icon i {
+  background: rgba(0, 0, 0, 0.6);
+}
+
 .inv-unit-box.blocked {
-  background: #94a3b8;
+  background: #64748b;
   color: #ffffff;
 }
 
@@ -769,9 +794,82 @@
   color: #ffffff;
 }
 
-.inv-unit-box.rehab {
+/* Status Legend Bar */
+.inv-legend-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: #334155;
+}
+
+.inv-legend-title {
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inv-legend-items {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.inv-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: #334155;
+}
+
+.inv-legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  display: inline-block;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.inv-legend-swatch.available {
+  background: #24b36b;
+}
+
+.inv-legend-swatch.sold {
+  background: #e65258;
+}
+
+.inv-legend-swatch.rehab {
+  background: #111827;
+}
+
+.inv-legend-swatch.held {
+  background: #facc15;
+}
+
+.inv-legend-swatch.blocked {
   background: #64748b;
-  color: #ffffff;
+}
+
+.inv-legend-swatch.investor {
+  background: #8b5cf6;
+}
+
+.inv-legend-swatch.refuge {
+  background: #14b8a6;
 }
 
 /* Plan thumbnail in unit cell */
@@ -1275,4 +1373,223 @@
   margin-top: 3px;
   display: inline-block;
 }
+
+/* ==========================================================================
+   LEVEL 3: Status Filter Bar & BHK Configuration Filter
+   ========================================================================== */
+.inv-status-filter-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.inv-status-filter-card {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.18s ease;
+  outline: none;
+  width: 100%;
+}
+
+.inv-status-filter-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.07);
+  border-color: #cbd5e1;
+}
+
+.inv-status-filter-card.active {
+  box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+  transform: translateY(-2px);
+}
+
+.inv-status-filter-card.status-total.active {
+  border-color: #0f172a;
+  background: #f8fafc;
+}
+
+.inv-status-filter-card.status-available.active {
+  border-color: #16a34a;
+  background: #f0fdf4;
+}
+
+.inv-status-filter-card.status-sold.active {
+  border-color: #dc2626;
+  background: #fef2f2;
+}
+
+.inv-status-filter-card.status-rehab.active {
+  border-color: #111827;
+  background: #f4f4f5;
+}
+
+.inv-status-filter-card.status-held.active {
+  border-color: #eab308;
+  background: #fefce8;
+}
+
+.inv-status-filter-card.status-blocked.active {
+  border-color: #64748b;
+  background: #f8fafc;
+}
+
+.inv-status-filter-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.inv-status-filter-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+.inv-status-filter-val {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+.inv-status-filter-icon {
+  font-size: 22px;
+  opacity: 0.9;
+}
+
+/* Configuration BHK Filter Bar */
+.inv-config-filter-wrapper {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.inv-config-filter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 12.5px;
+  color: #334155;
+}
+
+.inv-config-pills-list {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.inv-config-pill {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid #cbd5e1;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.inv-config-pill:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.inv-config-pill.active {
+  background: #0284c7;
+  border-color: #0284c7;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(2, 132, 199, 0.35);
+}
+
+/* Active Filter Alert Strip */
+.inv-active-filter-alert {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 14px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ==========================================================================
+   Visible Status Legend / Key (Level 3 Inventory Preview)
+   ========================================================================== */
+.inv-legend-bar {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 16px;
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.inv-legend-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.inv-legend-items {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.inv-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.inv-legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  display: inline-block;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  flex-shrink: 0;
+}
+
+.inv-legend-swatch.available { background: #24b36b; }
+.inv-legend-swatch.sold { background: #e65258; }
+.inv-legend-swatch.rehab { background: #111827; }
+.inv-legend-swatch.held { background: #facc15; border: 1px solid #eab308; }
+.inv-legend-swatch.blocked { background: #64748b; }
+.inv-legend-swatch.investor { background: #8b5cf6; }
+
+
 

@@ -200,6 +200,34 @@ const MasterLayout = ({ children }) => {
         socket.emit("register", String(savedUser.id));
         socket.on(`notification-${savedUser.id}`, replaceAdminNotifications);
         socket.on(`newNotification-${savedUser.id}`, mergeAdminNotification);
+        socket.on("notification:new", mergeAdminNotification);
+        socket.on("notification:count", (count) => {
+          if (isMounted) setAdminUnreadCount(Number(count) || 0);
+        });
+        socket.on("notification:read", ({ unreadCount }) => {
+          if (isMounted && typeof unreadCount === "number") setAdminUnreadCount(unreadCount);
+        });
+        socket.on("notification:readAll", () => {
+          if (isMounted) setAdminUnreadCount(0);
+        });
+        socket.on("lead:assigned", (data) => {
+          if (!isMounted || !data) return;
+          setAdminNotificationToast({
+            title: "Lead Assigned",
+            description: data?.lead?.firstName ? `Lead "${data.lead.firstName} ${data.lead.lastName || ""}" assigned` : "New lead assigned",
+            actorName: data?.assignedBy || "Admin",
+          });
+          window.setTimeout(() => setAdminNotificationToast(null), 6000);
+        });
+        socket.on("task:assigned", (data) => {
+          if (!isMounted || !data) return;
+          setAdminNotificationToast({
+            title: "Task Assigned",
+            description: data?.task?.title || "New task assigned",
+            actorName: data?.assignedBy || "Admin",
+          });
+          window.setTimeout(() => setAdminNotificationToast(null), 6000);
+        });
       })
       .catch((socketError) => {
         console.error("Unable to connect admin notification socket:", socketError);
@@ -212,6 +240,12 @@ const MasterLayout = ({ children }) => {
         .then((socket) => {
           socket.off(`notification-${savedUser.id}`, replaceAdminNotifications);
           socket.off(`newNotification-${savedUser.id}`, mergeAdminNotification);
+          socket.off("notification:new", mergeAdminNotification);
+          socket.off("notification:count");
+          socket.off("notification:read");
+          socket.off("notification:readAll");
+          socket.off("lead:assigned");
+          socket.off("task:assigned");
         })
         .catch(() => { });
     };
@@ -220,12 +254,29 @@ const MasterLayout = ({ children }) => {
   useEffect(() => {
     if (!adminNotificationToast) return;
 
-    const sound = notificationSoundRef.current || new Audio(adminNotificationSoundSrc);
-    notificationSoundRef.current = sound;
-    sound.currentTime = 0;
-    sound.play().catch((error) => {
-      console.warn("Unable to play notification sound:", error);
-    });
+    try {
+      const sound = notificationSoundRef.current || new Audio(adminNotificationSoundSrc);
+      notificationSoundRef.current = sound;
+      sound.currentTime = 0;
+      sound.play().catch(() => {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.5);
+      });
+    } catch (e) {
+      console.warn("Unable to play admin notification sound:", e);
+    }
   }, [adminNotificationToast]);
 
   useEffect(() => {
@@ -310,22 +361,36 @@ const MasterLayout = ({ children }) => {
     adminNotifications.length ? adminNotifications : activityNotifications
   ).slice(0, 5);
   const handleLogout = async () => {
-    const token = localStorage.getItem("authToken");
+    const token = localStorage.getItem("authToken") || localStorage.getItem("token");
+    const sessionToken = localStorage.getItem("sessionToken");
 
     if (token) {
       try {
         await fetch(`${process.env.REACT_APP_API_URL || "http://localhost:5000"}/attendance/logout`, {
           method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            ...(sessionToken ? { "x-session-token": sessionToken } : {}),
+          },
         });
       } catch (error) {
         console.error("Unable to update attendance logout:", error);
       }
     }
 
+    try {
+      const { stopSessionHeartbeat } = require("../services/sessionHeartbeat");
+      stopSessionHeartbeat();
+    } catch (e) {}
+
     localStorage.removeItem("authToken");
-    if (savedUser?.id) localStorage.removeItem(`swamiAttendanceSessionStartedAt:${savedUser.id}`);
+    localStorage.removeItem("token");
+    localStorage.removeItem("sessionToken");
+    localStorage.removeItem("sessionId");
     localStorage.removeItem("authUser");
+    localStorage.removeItem("user");
+    if (savedUser?.id) localStorage.removeItem(`swamiAttendanceSessionStartedAt:${savedUser.id}`);
     navigate("/sign-in");
   };
 
@@ -709,13 +774,13 @@ const MasterLayout = ({ children }) => {
                 </li> */}
                 <li>
                   <NavLink
-                    to='/trash'
+                    to='/bin'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-danger-main w-auto' />{" "}
-                    Trash Lead
+                    Bin
                   </NavLink>
                 </li>
                 {/* <li>
@@ -1919,7 +1984,7 @@ const MasterLayout = ({ children }) => {
                 >
                   <Icon icon='heroicons:bars-3-solid' className='icon' />
                 </button>
-                <form className='navbar-search' onSubmit={handleNavbarSearch}>
+                {/* <form className='navbar-search' onSubmit={handleNavbarSearch}>
                   <input
                     type='text'
                     name='search'
@@ -1927,8 +1992,7 @@ const MasterLayout = ({ children }) => {
                     value={navbarSearch}
                     onChange={(event) => setNavbarSearch(event.target.value)}
                   />
-                  <Icon icon='ion:search-outline' className='icon' />
-                </form>
+                </form> */}
               </div>
             </div>
             <div className='col-auto'>

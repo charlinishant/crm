@@ -1,5 +1,7 @@
 const prisma = require("../lib/prisma")
 const { sendNotification } = require("../services/notification.service")
+const { isAdminUser, maskTaskData } = require("../utils/phoneMask")
+const { emitToUser, emitToAdmin } = require("../socket")
 
 const allowedStatuses = ["Open", "Completed", "Archived"]
 
@@ -47,6 +49,16 @@ const notifyTaskAssigned = async (task, assignedBy) => {
     "Admin"
   const dedupeKey = `TASK_ASSIGNED:${task.id}:${task.assigneeId}`
   const due = task.dueDate ? ` Due: ${new Date(task.dueDate).toISOString().slice(0, 10)}${task.dueTime ? ` ${task.dueTime}` : ""}.` : ""
+
+  try {
+    const maskedTask = maskTaskData(task, false)
+    emitToUser(task.assigneeId, "task:assigned", { task: maskedTask, assignedBy: assignedByName })
+    emitToUser(task.assigneeId, "TaskAssigned", { task: maskedTask, assignedBy: assignedByName })
+    emitToAdmin("task:assigned", { task, assignedBy: assignedByName })
+  } catch (socketErr) {
+    console.error("Task assignment socket error:", socketErr.message)
+  }
+
   return sendNotification(
     task.assigneeId,
     "Task assigned to you",
@@ -106,7 +118,8 @@ exports.createTask = async (req, res) => {
     })
     await notifyTaskAssigned(task, assignedBy)
 
-    res.status(201).json(task)
+    const isAdmin = isAdminUser(req)
+    res.status(201).json(isAdmin ? task : maskTaskData(task, false))
   } catch (error) {
     console.error("Create task error:", error)
     res.status(500).json({ message: "Unable to create task" })
@@ -118,6 +131,8 @@ exports.getTasks = async (req, res) => {
     const where = {}
     const status = req.query.status
     const assigneeId = toNumberOrNull(req.query.assigneeId || req.query.assignId)
+
+    if (!status) where.status = { notIn: ["Archived", "Deleted", "Trash", "Cancelled"] }
 
     if (status && status !== "All") {
       if (!allowedStatuses.includes(status)) {
@@ -132,7 +147,9 @@ exports.getTasks = async (req, res) => {
       include: taskInclude,
       orderBy: { createdAt: "desc" },
     })
-    res.status(200).json({ data: data })
+    const isAdmin = isAdminUser(req)
+    const safeData = isAdmin ? data : data.map((t) => maskTaskData(t, false))
+    res.status(200).json({ data: safeData })
   } catch (error) {
     console.error("Get tasks error:", error)
     res.status(500).json({ message: "Unable to load tasks" })
@@ -211,7 +228,25 @@ exports.updateTask = async (req, res) => {
     ) {
       await notifyTaskAssigned(updatedTask, updatedTask.assignedBy)
     }
-    res.status(200).json(updatedTask)
+
+    try {
+      const maskedTask = maskTaskData(updatedTask, false)
+      emitToAdmin("task:updated", { task: updatedTask })
+      if (updatedTask.assigneeId) {
+        emitToUser(updatedTask.assigneeId, "task:updated", { task: maskedTask })
+      }
+      if (updatedTask.status === "Completed") {
+        emitToAdmin("task:completed", { task: updatedTask })
+        if (updatedTask.assigneeId) {
+          emitToUser(updatedTask.assigneeId, "task:completed", { task: maskedTask })
+        }
+      }
+    } catch (socketErr) {
+      console.error("Task update socket error:", socketErr.message)
+    }
+
+    const isAdmin = isAdminUser(req)
+    res.status(200).json(isAdmin ? updatedTask : maskTaskData(updatedTask, false))
   } catch (error) {
     console.error("Update task error:", error)
     res.status(500).json({ message: "Unable to update task" })
@@ -226,8 +261,8 @@ exports.deleteTask = async (req, res) => {
     const task = await prisma.task.findUnique({ where: { id } })
     if (!task) return res.status(404).json({ message: "Task not found" })
 
-    await prisma.task.delete({ where: { id } })
-    res.status(200).json({ message: "Task deleted successfully" })
+    await prisma.task.update({ where: { id }, data: { status: "Trash" } })
+    res.status(200).json({ message: "Task moved to Bin" })
   } catch (error) {
     console.error("Delete task error:", error)
     res.status(500).json({ message: "Unable to delete task" })

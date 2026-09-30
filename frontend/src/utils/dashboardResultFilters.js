@@ -1,12 +1,13 @@
 export const DASHBOARD_RESULT_CARDS = [
-  { key:"active-tasks", title:"Active Tasks", subtitle:"Open Tasks", recordType:"task" },
-  { key:"mfa", title:"MFA", subtitle:"Missed Future Activity", recordType:"mixed" },
-  { key:"visit-expiry", title:"Visit Expiry", subtitle:"Soon", recordType:"lead" },
-  { key:"lead-merge", title:"Lead Merge", subtitle:"Duplicates", recordType:"duplicate" },
-  { key:"hot-leads", title:"Hot Leads", subtitle:"Priority", recordType:"lead" },
-  { key:"new-leads", title:"New Leads", subtitle:"Fresh", recordType:"lead" },
-  { key:"booked-leads", title:"Booked Leads", subtitle:"Confirmed", recordType:"lead" },
-  { key:"drop-off-leads", title:"Drop Off Leads", subtitle:"Closed", recordType:"lead" },
+  { key: "all-leads", title: "All Leads", subtitle: "Total Leads", recordType: "lead", path: "/leads" },
+  { key: "active-tasks", title: "Active Tasks", subtitle: "Open Tasks", recordType: "task" },
+  { key: "mfa", title: "MFA", subtitle: "Missed Future Activity", recordType: "mixed" },
+  { key: "visit-expiry", title: "Visit Expiry", subtitle: "Soon", recordType: "lead" },
+  { key: "lead-merge", title: "Lead Merge", subtitle: "Duplicates", recordType: "duplicate" },
+  { key: "hot-leads", title: "Hot Leads", subtitle: "Priority", recordType: "lead" },
+  { key: "new-leads", title: "New Leads", subtitle: "Fresh", recordType: "lead" },
+  { key: "booked-leads", title: "Booked Leads", subtitle: "Confirmed", recordType: "lead" },
+  { key: "drop-off-leads", title: "Drop Off Leads", subtitle: "Closed", recordType: "lead" },
 ];
 
 export const getDashboardCard = (key) =>
@@ -59,34 +60,67 @@ export const hasVisitExpiringSoon = (lead, now = new Date(), windowDays = 7) => 
 };
 
 export const isHotLead = (lead) => {
-  const value = `${lead?.tags || ""} ${lead?.priority || ""} ${lead?.status || ""}`.toLowerCase();
-  return value.includes("hot") || value.includes("priority");
+  const status = String(lead?.status || lead?.lead_status || lead?.stage || "").trim().toLowerCase();
+  const tags = String(lead?.tags || "").toLowerCase();
+  const priority = String(lead?.priority || lead?.leadPriority || "").toLowerCase();
+  return (
+    tags.includes("hot") ||
+    tags.includes("priority") ||
+    priority.includes("hot") ||
+    priority.includes("high") ||
+    priority.includes("priority") ||
+    status.includes("hot") ||
+    status.includes("priority") ||
+    status === "qualified" ||
+    status === "in_sourcing" ||
+    status === "in sourcing" ||
+    status === "in_closing" ||
+    status === "in closing" ||
+    status === "nurture"
+  );
 };
 
-export const isBookedLead = (lead) =>
-  String(lead?.status || "").toLowerCase() === "booked" ||
-  (Array.isArray(lead?.bookings) && lead.bookings.length > 0);
+export const isNewLead = (lead) => {
+  const status = String(lead?.status || lead?.lead_status || "").trim().toLowerCase();
+  return status === "new" || status === "fresh" || status === "fresh_lead";
+};
+
+export const isBookedLead = (lead) => {
+  const status = String(lead?.status || lead?.lead_status || "").trim().toLowerCase();
+  return (
+    status === "booked" ||
+    status.includes("book") ||
+    (Array.isArray(lead?.bookings) && lead.bookings.length > 0)
+  );
+};
 
 export const isDropOffLead = (lead) => {
-  const value = String(lead?.status || lead?.stage || "").toLowerCase();
-  return value.includes("lost") || value.includes("drop") || value.includes("closed") || value.includes("unqualified");
+  const status = String(lead?.status || lead?.lead_status || lead?.stage || "").trim().toLowerCase();
+  return (
+    status === "unqualified" ||
+    status.includes("lost") ||
+    status.includes("drop") ||
+    status.includes("closed") ||
+    status.includes("cancel")
+  );
 };
 
 export const filterDashboardRecords = (key, { leads = [], tasks = [], duplicateGroups = [] } = {}) => {
   const now = new Date();
+  if (key === "all-leads") return leads;
   if (key === "active-tasks") {
     return tasks.filter((task) => isIncompleteStatus(task?.status));
   }
   if (key === "mfa") {
     return [
-      ...tasks.filter((task) => isMissedFutureActivity(task, now)).map((item) => ({ ...item, resultType:"Task" })),
-      ...leads.filter((lead) => isMissedFutureActivity(lead, now)).map((item) => ({ ...item, resultType:"Lead" })),
+      ...tasks.filter((task) => isMissedFutureActivity(task, now)).map((item) => ({ ...item, resultType: "Task" })),
+      ...leads.filter((lead) => isMissedFutureActivity(lead, now)).map((item) => ({ ...item, resultType: "Lead" })),
     ];
   }
   if (key === "visit-expiry") return leads.filter((lead) => hasVisitExpiringSoon(lead, now));
   if (key === "lead-merge") return duplicateGroups;
   if (key === "hot-leads") return leads.filter(isHotLead);
-  if (key === "new-leads") return leads.filter((lead) => String(lead?.status || "").toLowerCase() === "new");
+  if (key === "new-leads") return leads.filter(isNewLead);
   if (key === "booked-leads") return leads.filter(isBookedLead);
   if (key === "drop-off-leads") return leads.filter(isDropOffLead);
   return [];
