@@ -93,8 +93,16 @@ const DashboardResultsPage = () => {
       navigate("/all-tasks");
       return;
     }
-    const leadId = record?.id || record?.leadId;
-    if (leadId) navigate(`/details?leadId=${leadId}`, { state:{ lead:record } });
+    const leadId = record?.id || record?.leadId || record?._id || record?.lead_id;
+    if (leadId) {
+      try {
+        window.sessionStorage.setItem("selectedLeadPreview", JSON.stringify(record));
+        window.sessionStorage.setItem("selectedLeadDetails", JSON.stringify(record));
+      } catch (_) {}
+      navigate(`/details?leadId=${leadId}`, { state: { lead: record } });
+    } else {
+      navigate("/");
+    }
   };
 
   return (

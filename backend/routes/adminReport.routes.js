@@ -25,6 +25,7 @@ router.get("/call-daily", authenticate, controller.getCallDaily)
 router.get("/did-breakup", authenticate, controller.getDidBreakup)
 router.get("/agent-call-performance", authenticate, controller.getAgentCallPerformance)
 router.get("/call-logs", authenticate, controller.getCallLogs)
+router.get("/drilldown-calls", authenticate, controller.getDrilldownCalls)
 router.post("/sync-mcube-cdr", authenticate, controller.syncMcubeCdr)
 
 module.exports = router

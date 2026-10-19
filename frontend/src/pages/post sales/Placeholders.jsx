@@ -462,8 +462,15 @@ export const PostSalesLedger = () => {
       <div className="floor-dashboard p-4">
         <div className="d-flex justify-content-between align-items-center mb-4">
           <div>
-            <h4 style={{ fontWeight: 800, color: "#1e293b", marginBottom: 4 }}>Customer Ledger</h4>
-            <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>Statement of account — debit & credit per booking</p>
+            <div className="d-flex align-items-center gap-2">
+              <h4 style={{ fontWeight: 800, color: "#1e293b", marginBottom: 0 }}>Customer Ledger</h4>
+              <span style={{ background: "#dbeafe", color: "#1d4ed8", padding: "2px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700 }}>
+                ⚖️ Single Source of Truth · Section 8
+              </span>
+            </div>
+            <p style={{ color: "#64748b", fontSize: 13, marginTop: 4, marginBottom: 0 }}>
+              Statement of account — debits (+demands) and credits (−receipts) reconcile to drive outstanding across all dashboard tiles
+            </p>
           </div>
         </div>
 

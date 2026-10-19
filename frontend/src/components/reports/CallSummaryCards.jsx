@@ -11,7 +11,7 @@ const cards = [
   { label: "Average Duration", key: "avgDurationClock", icon: "⏳", isText: true, color: "#ec4899" },
 ];
 
-const CallSummaryCards = ({ summary = {} }) => {
+const CallSummaryCards = ({ summary = {}, onCardClick }) => {
   return (
     <div className="admin-report-summary telephony-summary-cards">
       {cards.map((card) => {
@@ -26,8 +26,21 @@ const CallSummaryCards = ({ summary = {} }) => {
 
         return (
           <div
-            className="admin-report-summary-card telephony-card"
+            className="admin-report-summary-card telephony-card clickable-telephony-card"
             key={card.key}
+            style={{
+              cursor: "pointer",
+              transition: "transform 0.15s ease, box-shadow 0.15s ease",
+            }}
+            onClick={() => onCardClick?.({ metric: card.key, title: card.label })}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                onCardClick?.({ metric: card.key, title: card.label });
+              }
+            }}
+            title={`Click to view ${card.label} drilldown`}
           >
             <div className="telephony-card-header">
               <span>{card.label}</span>
@@ -36,6 +49,12 @@ const CallSummaryCards = ({ summary = {} }) => {
               </span>
             </div>
             <strong>{value}</strong>
+            <small
+              className="text-primary mt-1 d-flex align-items-center gap-1"
+              style={{ fontSize: "11px", fontWeight: 500, opacity: 0.85 }}
+            >
+              <span>View calls</span> <span>→</span>
+            </small>
           </div>
         );
       })}

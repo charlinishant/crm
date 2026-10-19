@@ -47,6 +47,7 @@ export const reportApi = {
   getDidBreakup: (filters) => request("/api/admin/reports/did-breakup", filters),
   getAgentCallPerformance: (filters) => request("/api/admin/reports/agent-call-performance", filters),
   getCallLogs: (filters) => request("/api/admin/reports/call-logs", filters),
+  getDrilldownCalls: (filters) => request("/api/admin/reports/drilldown-calls", filters),
   getProjects: () => request("/projects/list"),
   getUsers: () => request("/api/admin/reports/sales-users"),
 };

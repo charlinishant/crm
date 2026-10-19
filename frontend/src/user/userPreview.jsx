@@ -18,7 +18,7 @@ import {
 import UserBookingForm from "./UserBookingForm";
 
 const getAuthHeaders = () => {
-  const token = localStorage.getItem("authToken");
+  const token = localStorage.getItem("token") || localStorage.getItem("authToken") || sessionStorage.getItem("token");
   return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
@@ -108,7 +108,16 @@ const getUserName = (user) =>
   user?.email ||
   `User #${user?.id}`;
 
-const bookingSourceOptions = ["Direct", "Bulk Marketing", "Referral", "Channel Partner"];
+const bookingSourceOptions = [
+  "Channel Partner",
+  "Walk-in",
+  "Website",
+  "Portal",
+  "Reference",
+  "Direct",
+  "Bulk Marketing",
+  "Referral",
+];
 
 const normalizeBookingSource = (value) => {
   const source = String(value || "").trim();

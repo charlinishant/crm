@@ -35,17 +35,13 @@ const getBrandedDocumentHtml = (html = "") => {
 };
 
 const DOC_TYPES = [
-  { type: "BOOKING_COST_SHEET_PDF", icon: "📊", label: "Cost Sheet & Schedule (PDF)", desc: "Authoritative Jaiganga-style Cost Sheet & Payment Schedule", color: "#2563eb", bg: "#eff6ff" },
-  { type: "BOOKING_COST_SHEET_XLSX", icon: "📑", label: "Cost Sheet Excel Master", desc: "Editable XLSX Master with live formulas", color: "#16a34a", bg: "#f0fdf4" },
-  { type: "WELCOME_LETTER",      icon: "🏠", label: "Welcome Letter",          desc: "First letter sent on booking confirmation",     color: "#3b82f6", bg: "#eff6ff" },
-  { type: "ALLOTMENT_LETTER",    icon: "📋", label: "Allotment Letter",         desc: "Formal unit allotment confirmation letter",     color: "#10b981", bg: "#f0fdf4" },
-  { type: "AGREEMENT",           icon: "📝", label: "Agreement for Sale",       desc: "Full ATS summary with all terms",               color: "#8b5cf6", bg: "#f5f3ff" },
-  { type: "PARKING_LETTER",      icon: "🚗", label: "Parking Allotment",        desc: "Dedicated parking slot assignment letter",      color: "#f59e0b", bg: "#fffbeb" },
-  { type: "DEMAND_LETTER",       icon: "🧾", label: "Demand / Payment Notice",  desc: "Milestone billing notice with GST breakup",    color: "#ef4444", bg: "#fef2f2" },
-  { type: "RECEIPT",             icon: "💰", label: "Payment Receipt",          desc: "Acknowledgement for payment received",          color: "#10b981", bg: "#f0fdf4" },
-  { type: "POSSESSION_LETTER",   icon: "🔑", label: "Possession Offer Letter",  desc: "Handover offer on OC and zero dues clearance",  color: "#1d4ed8", bg: "#eff6ff" },
-  { type: "NOC",                 icon: "✅", label: "No Objection Certificate", desc: "NOC for bank loan / property registration",    color: "#0ea5e9", bg: "#f0f9ff" },
-  { type: "CANCELLATION_LETTER", icon: "❌", label: "Cancellation Letter",      desc: "Booking termination and refund statement",      color: "#dc2626", bg: "#fff1f2" },
+  { num: 1, type: "WELCOME_LETTER",          icon: "🏠", label: "Welcome Letter",                   desc: "First letter sent on booking confirmation",                       trigger: "On booking confirmed",                         color: "#3b82f6", bg: "#eff6ff", requiresKyc: false, isGatedPossession: false },
+  { num: 2, type: "BOOKING_COST_SHEET_PDF",  icon: "📊", label: "Cost Sheet (sendable)",            desc: "Full A–G cost block + payment schedule frozen sheet",             trigger: "On demand / any time",                         color: "#2563eb", bg: "#eff6ff", requiresKyc: false, isGatedPossession: false },
+  { num: 3, type: "TOKEN_RECEIPT",           icon: "💰", label: "Token Receipt",                    desc: "Official statutory token / booking advance receipt",              trigger: "On booking token / advance received",           color: "#059669", bg: "#f0fdf4", requiresKyc: false, isGatedPossession: false },
+  { num: 4, type: "ALLOTMENT_LETTER",        icon: "📋", label: "Allotment Letter",                 desc: "Unit, area, agreement value, payment summary & all applicants",  trigger: "On allotment approved",                        color: "#0d9488", bg: "#f0fdf4", requiresKyc: true,  isGatedPossession: false },
+  { num: 5, type: "AGREEMENT",               icon: "📝", label: "Draft of AFS (Agreement for Sale)", desc: "Full terms, all applicants + PAN/Aadhaar, cost A-G, plan",         trigger: "Agreement stage",                              color: "#7c3aed", bg: "#f5f3ff", requiresKyc: true,  isGatedPossession: false },
+  { num: 6, type: "DEMAND_LETTER",           icon: "🧾", label: "Demands",                          desc: "Milestone installment billing notice with GST & delay interest", trigger: "Per milestone (Section 6)",                    color: "#ea580c", bg: "#fff7ed", requiresKyc: false, isGatedPossession: false },
+  { num: 7, type: "POSSESSION_LETTER",       icon: "🔑", label: "Soft Possession + Key Handling",  desc: "Handover certificate with dues NIL confirmation & snag checklist", trigger: "On OC + dues NIL (GATED)",                    color: "#dc2626", bg: "#fef2f2", requiresKyc: true,  isGatedPossession: true  },
 ];
 
 const PostSalesDocuments = () => {

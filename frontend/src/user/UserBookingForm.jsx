@@ -212,7 +212,16 @@ const getUserName = (user) =>
   user?.email ||
   `User #${user?.id}`;
 
-const sourceOptions = ["Walk-in", "Digital", "Channel Partner", "Meta"];
+const sourceOptions = [
+  "Channel Partner",
+  "Walk-in",
+  "Website",
+  "Portal",
+  "Reference",
+  "Direct",
+  "Digital",
+  "Meta",
+];
 
 const normalizeBookingSource = (value) => {
   const source = String(value || "").trim();

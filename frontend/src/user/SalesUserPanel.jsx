@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import UserAddlead from "./UserAddlead";
+import SalesSmartImport from "../pages/SalesSmartImport";
 import UserConversationPanel from "./UserConversationPanel";
 import UserDetails from "./userDetails";
 import UserWhatsAppPage from "./UserWhatsAppPage";
@@ -70,6 +71,8 @@ const fallbackPanel = {
 const getScreenFromPath = (pathname) =>
   pathname === "/user/sales"
     ? "home"
+    : pathname.endsWith("/import-leads")
+      ? "smartImport"
     : pathname.endsWith("/leads")
       ? "leads"
       : pathname.endsWith("/bookings")
@@ -1529,10 +1532,10 @@ const SalesUserPanel = () => {
       setFocusedCallLeadId(focusedLeadId);
     }
 
-    if (location.state?.refreshPanel) {
+    if (location.state?.refreshPanel || location.state?.refreshLeads) {
       loadPanel(false);
     }
-  }, [loadPanel, location.pathname, location.search, location.state?.refreshPanel]);
+  }, [loadPanel, location.pathname, location.search, location.state?.refreshPanel, location.state?.refreshLeads]);
 
   // Dashboard detail pages auto-collapse the existing sidebar; other routes restore normal behavior.
   useEffect(() => {
@@ -2007,6 +2010,15 @@ const SalesUserPanel = () => {
         activeSocket.on("booking:created", handleBookingEvent);
         activeSocket.on("booking:updated", handleBookingEvent);
 
+        const handleRealtimeLeadSync = () => {
+          loadPanel(false);
+        };
+        activeSocket.on("reports:update", handleRealtimeLeadSync);
+        activeSocket.on("lead:created", handleRealtimeLeadSync);
+        activeSocket.on("lead:imported", handleRealtimeLeadSync);
+        activeSocket.on("leads:imported", handleRealtimeLeadSync);
+        activeSocket.on("crm:leads-changed", handleRealtimeLeadSync);
+
         if (authUserId) {
           activeSocket.on(`followup-reminder-${authUserId}`, handleFollowupReminder);
           activeSocket.on(`newNotification-${authUserId}`, () => {
@@ -2031,6 +2043,11 @@ const SalesUserPanel = () => {
         activeSocket.off("task:assigned");
         activeSocket.off("booking:created");
         activeSocket.off("booking:updated");
+        activeSocket.off("reports:update");
+        activeSocket.off("lead:created");
+        activeSocket.off("lead:imported");
+        activeSocket.off("leads:imported");
+        activeSocket.off("crm:leads-changed");
       }
     };
   }, [panel.user?.id]);
@@ -3255,6 +3272,7 @@ const SalesUserPanel = () => {
   const navItems = [
     { key: "home", label: "Home", icon: Home, count: sidebarCounts.home },
     { key: "leads", label: "My Leads", icon: Users, count: sidebarCounts.leads },
+    { key: "smartImport", label: "Smart Import", icon: Users, count: null },
     { key: "conversation", label: "Conversation", icon: MessageSquare, count: sidebarCounts.conversation },
     { key: "calls", label: "Calls", icon: Phone, count: sidebarCounts.calls },
     { key: "callLogs", label: "My Call Logs", icon: History, count: sidebarCounts.callLogs },
@@ -3626,6 +3644,7 @@ const SalesUserPanel = () => {
                   setActiveScreen(item.key);
                   if (item.key === "home") navigate("/user/sales");
                   if (item.key === "leads") navigate("/user/sales/leads");
+                  if (item.key === "smartImport") navigate("/user/sales/import-leads");
                   if (item.key === "conversation") navigate("/user/sales/conversation");
                   if (item.key === "calls") navigate("/user/sales/calls");
                   if (item.key === "callLogs") navigate("/my-call-logs");
@@ -3968,6 +3987,8 @@ const SalesUserPanel = () => {
               onUnreadCountChange={setSalesUnreadCount}
               onOpenLink={openSalesNotificationLink}
             />
+          ) : activeScreen === "smartImport" ? (
+            <SalesSmartImport onImportComplete={() => loadPanel(false)} />
           ) : activeScreen === "addLead" ? (
             <div className="sales-user-add-lead">
               <UserAddlead

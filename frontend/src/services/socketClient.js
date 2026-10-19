@@ -23,7 +23,7 @@ const loadSocketIoScript = () => {
 };
 
 export const getCRMSocket = async () => {
-  const token = localStorage.getItem("authToken") || "";
+  const token = localStorage.getItem("token") || localStorage.getItem("authToken") || sessionStorage.getItem("token") || "";
   const userJson = localStorage.getItem("user") || localStorage.getItem("authUser") || "{}";
   let userId = null;
   try {

@@ -2,6 +2,7 @@ const prisma = require("../lib/prisma")
 const axios = require("axios")
 const mcubeConfig = require("./mcubeConfig.service")
 const { normalizePhoneNumber } = require("../utils/phone")
+const { isAdminUser, maskPhoneNumber } = require("../utils/phoneMask")
 
 const callStatuses = ["connected", "completed", "ringing", "missed", "busy", "no-answer", "rejected", "failed", "initiated"]
 
@@ -577,6 +578,227 @@ const syncMcubeCdr = async (filters = {}) => {
   }
 }
 
+const getDrilldownCalls = async (filters = {}, req = null) => {
+  const where = await buildCallWhere(filters)
+  const isAdmin = req ? isAdminUser(req) : false
+
+  // Fetch all call logs matching active global filters
+  const callLogs = await prisma.callLog.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    include: {
+      lead: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          companyName: true,
+          phones: true,
+          status: true,
+          budget: true,
+          interestedProjects: true,
+          siteVisitProject: true,
+          channelPartner: true,
+          fundingSource: true,
+          teamId: true,
+        },
+      },
+      agent: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          username: true,
+          email: true,
+          phone: true,
+        },
+      },
+      interestedProjectRef: {
+        select: { id: true, name: true },
+      },
+    },
+  })
+
+  let title = "Calls Drilldown"
+  const metric = String(filters.metric || "").trim().toLowerCase()
+  const statusSegment = String(filters.statusSegment || filters.status || "").trim()
+  const hourParam = filters.hour !== undefined && filters.hour !== null && filters.hour !== "" ? String(filters.hour).trim() : null
+  const dateParam = filters.date ? String(filters.date).trim() : null
+  const channelParam = filters.channel ? String(filters.channel).trim().toLowerCase() : null
+
+  let filtered = callLogs
+
+  // 1. Stat cards filter
+  if (metric === "totalcalls") {
+    title = "Total Calls"
+  } else if (metric === "inboundcalls" || metric === "inbound") {
+    title = "Inbound Calls"
+    filtered = filtered.filter((c) => String(c.direction || "outbound").toLowerCase() === "inbound")
+  } else if (metric === "outboundcalls" || metric === "outbound") {
+    title = "Outbound Calls"
+    filtered = filtered.filter((c) => String(c.direction || "outbound").toLowerCase() !== "inbound")
+  } else if (metric === "answeredcalls" || metric === "answered" || metric === "connected") {
+    title = "Answered / Connected Calls"
+    filtered = filtered.filter((c) => isAnsweredCall(c.status))
+  } else if (metric === "missedcalls" || metric === "missed" || metric === "busy") {
+    title = "Missed / Busy Calls"
+    filtered = filtered.filter((c) => !isAnsweredCall(c.status))
+  } else if (metric === "answeredratio" || metric === "answerrate") {
+    title = "Calls — Answer Rate (All Activity)"
+  } else if (metric === "totaltalktimeformatted" || metric === "totaltalktime" || metric === "talktime") {
+    title = "Calls with Talk Time (Duration > 0)"
+    filtered = filtered.filter((c) => (Number(c.duration) || 0) > 0)
+  } else if (metric === "avgdurationclock" || metric === "avgdurationseconds" || metric === "avgduration") {
+    title = "Calls Contributing to Average Duration"
+    filtered = filtered.filter((c) => (Number(c.duration) || 0) > 0)
+  }
+
+  // 2. Status segment filter (Call Status Breakdown donut chart)
+  if (statusSegment) {
+    const raw = statusSegment.toLowerCase()
+    if (raw === "connected" || raw === "completed" || raw === "answered") {
+      title = "Calls — Connected"
+      filtered = filtered.filter((c) => ["connected", "completed", "answered"].includes(String(c.status || "").toLowerCase()))
+    } else if (raw === "missed") {
+      title = "Calls — Missed"
+      filtered = filtered.filter((c) => String(c.status || "").toLowerCase() === "missed")
+    } else if (raw === "busy") {
+      title = "Calls — Busy"
+      filtered = filtered.filter((c) => String(c.status || "").toLowerCase() === "busy")
+    } else if (raw === "no answer" || raw === "no-answer" || raw === "noanswer") {
+      title = "Calls — No Answer"
+      filtered = filtered.filter((c) => ["no-answer", "noanswer"].includes(String(c.status || "").toLowerCase()))
+    } else if (raw === "failed" || raw === "rejected" || raw === "canceled" || raw === "cancelled") {
+      title = "Calls — Failed"
+      filtered = filtered.filter((c) => ["failed", "rejected", "canceled", "cancelled"].includes(String(c.status || "").toLowerCase()))
+    } else if (raw === "initiated") {
+      title = "Calls — Initiated"
+      const known = ["connected", "completed", "answered", "missed", "busy", "no-answer", "noanswer", "failed", "rejected", "canceled", "cancelled"]
+      filtered = filtered.filter((c) => !known.includes(String(c.status || "").toLowerCase()))
+    }
+  }
+
+  // 3. Hourly filter (Hourly Call Distribution bar chart)
+  if (hourParam !== null) {
+    const targetHour = parseInt(hourParam, 10)
+    if (!Number.isNaN(targetHour)) {
+      const hourLabel = `${String(targetHour).padStart(2, "0")}:00`
+      title = `Calls at ${hourLabel}`
+      filtered = filtered.filter((c) => {
+        const d = new Date(c.createdAt)
+        return d.getHours() === targetHour
+      })
+    }
+  }
+
+  // 4. Daily filter (Daily Call Trend line chart)
+  if (dateParam) {
+    title = `Calls on ${dateParam}`
+    filtered = filtered.filter((c) => {
+      const d = new Date(c.createdAt)
+      const key = d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" })
+      return key.toLowerCase() === dateParam.toLowerCase() || d.toISOString().startsWith(dateParam)
+    })
+  }
+
+  // 5. Channel filter (e.g. Inbound / Outbound / Missed bar/legend/series click)
+  if (channelParam) {
+    if (channelParam === "inbound") {
+      title = `${title} (Inbound)`
+      filtered = filtered.filter((c) => String(c.direction || "outbound").toLowerCase() === "inbound")
+    } else if (channelParam === "outbound") {
+      title = `${title} (Outbound)`
+      filtered = filtered.filter((c) => String(c.direction || "outbound").toLowerCase() !== "inbound")
+    } else if (channelParam === "missed") {
+      title = `${title} (Missed)`
+      filtered = filtered.filter((c) => !isAnsweredCall(c.status))
+    } else if (channelParam === "answered") {
+      title = `${title} (Answered)`
+      filtered = filtered.filter((c) => isAnsweredCall(c.status))
+    }
+  }
+
+  // Map and sanitize call records for presentation
+  const calls = filtered.map((log) => {
+    const rawNumber = log.callerNumber || log.customerNumber || log.leadPhone || log.phone || "-"
+    const displayPhone = isAdmin ? rawNumber : maskPhoneNumber(rawNumber)
+
+    let leadPrimaryPhone = "-"
+    if (log.lead) {
+      if (Array.isArray(log.lead.phones) && log.lead.phones.length > 0) {
+        leadPrimaryPhone = typeof log.lead.phones[0] === "object" ? (log.lead.phones[0].value || log.lead.phones[0].phone || log.lead.phones[0].number || "-") : log.lead.phones[0]
+      } else if (typeof log.lead.phones === "string") {
+        leadPrimaryPhone = log.lead.phones
+      }
+    }
+    const safeLeadPhone = isAdmin ? leadPrimaryPhone : maskPhoneNumber(leadPrimaryPhone)
+
+    const leadName = log.lead
+      ? [log.lead.firstName, log.lead.lastName].filter(Boolean).join(" ") || log.lead.companyName || `Lead #${log.lead.id}`
+      : null
+
+    const agentName = log.agent
+      ? [log.agent.firstName, log.agent.lastName].filter(Boolean).join(" ") || log.agent.username || log.agent.email
+      : (log.providerAgentName || "-")
+
+    const dur = Number(log.duration) || 0
+
+    return {
+      id: log.id,
+      callId: log.callId || log.providerCallId || `CDR-${log.id}`,
+      phone: displayPhone,
+      direction: log.direction || "outbound",
+      status: log.status || "initiated",
+      duration: dur,
+      durationFormatted: formatDuration(dur),
+      durationClock: formatDurationClock(dur),
+      agentId: log.agentId || null,
+      agentName,
+      agentPhone: isAdmin ? (log.agentPhone || log.agentNumber || "-") : maskPhoneNumber(log.agentPhone || log.agentNumber || "-"),
+      time: log.createdAt,
+      createdAt: log.createdAt,
+      disposition: log.disposition || "-",
+      recordingUrl: isAdmin ? (log.recordingUrl || null) : null,
+      notes: log.notes || "",
+      virtualNumber: log.virtualNumber || "-",
+      projectName: log.interestedProjectRef?.name || log.interestedProject || log.lead?.interestedProjects || log.lead?.siteVisitProject || "-",
+      leadId: log.leadId || null,
+      leadName,
+      lead: log.lead ? {
+        id: log.lead.id,
+        firstName: log.lead.firstName,
+        lastName: log.lead.lastName,
+        name: leadName,
+        phone: safeLeadPhone,
+        status: log.lead.status,
+        budget: log.lead.budget,
+        channelPartner: log.lead.channelPartner,
+        fundingSource: log.lead.fundingSource,
+        interestedProjects: log.lead.interestedProjects || log.lead.siteVisitProject || "-",
+      } : null,
+    }
+  })
+
+  return {
+    title,
+    count: calls.length,
+    calls,
+    filters: {
+      salesUserId: filters.salesUserId || null,
+      projectId: filters.projectId || null,
+      fromDate: filters.fromDate || null,
+      toDate: filters.toDate || null,
+      leadSource: filters.leadSource || null,
+      leadStatus: filters.leadStatus || null,
+      metric: filters.metric || null,
+      statusSegment: statusSegment || null,
+      hour: hourParam,
+      date: dateParam,
+      channel: channelParam,
+    },
+  }
+}
+
 module.exports = {
   getCallSummary,
   getCallStatusDistribution,
@@ -585,5 +807,6 @@ module.exports = {
   getDidBreakup,
   getAgentCallPerformance,
   getCallDetailRecords,
+  getDrilldownCalls,
   syncMcubeCdr,
 }

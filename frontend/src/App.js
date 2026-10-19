@@ -172,6 +172,7 @@ const salesAllowedExactPaths = new Set([
   "/my-call-logs",
   "/tasks",
   "/user/tasks",
+  "/user/sales/import-leads",
 ]);
 const adminAllowedExactPaths = new Set([
   "/user-attendance",
@@ -336,6 +337,7 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/lead-merge' element={<LeadMergePage />} />
         <Route exact path='/user/sales' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/leads' element={<SalesUserPanel />} />
+        <Route exact path='/user/sales/import-leads' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/calls' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/calls/outbound' element={<SalesUserPanel />} />
         <Route exact path='/user/sales/calls/inbound' element={<SalesUserPanel />} />
@@ -382,7 +384,8 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/chat-profile' element={<ChatProfilePage />} />
         <Route exact path='/code-generator' element={<CodeGeneratorPage />} />
         <Route exact path='/code-generator-new' element={<CodeGeneratorNewPage />} />
-        <Route exact path='/brokrage-invoices' element={<ColorsPage />} />
+        <Route exact path='/brokrage-invoices' element={<BookingInvoicesPage />} />
+        <Route exact path='/booking-invoices' element={<BookingInvoicesPage />} />
         <Route exact path='/company' element={<CompanyPage />} />
         <Route exact path='/currencies' element={<CurrenciesPage />} />
         <Route exact path='/dropdown' element={<DropdownPage />} />
@@ -458,10 +461,11 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/bookings' element={<TypographyPage />} />
         
         {/* Admin Post-Sales Routes */}
+        <Route exact path='/post-sales' element={<PostSalesDashboard />} />
         <Route exact path='/post-sales/dashboard' element={<PostSalesDashboard />} />
         <Route exact path='/post-sales/booking-list' element={<PostSalesBookingList />} />
-        {/* <Route exact path='/post-sales/booking-invoices' element={<BookingInvoicesPage />} />
-        <Route exact path='/booking-invoices' element={<BookingInvoicesPage />} /> */}
+        <Route exact path='/post-sales/booking-invoices' element={<BookingInvoicesPage />} />
+        <Route exact path='/booking-invoices' element={<BookingInvoicesPage />} />
         <Route exact path='/post-sales/documents' element={<PostSalesDocuments />} />
         <Route exact path='/post-sales/details/:bookingId' element={<PostSalesDetailsPage />} />
         <Route exact path='/post-sales/payment-plans' element={<PostSalesPaymentPlans />} />
@@ -567,7 +571,8 @@ function App() {
           path='/code-generator-new'
           element={<CodeGeneratorNewPage />}
         />
-        <Route exact path='/brokrage-invoices' element={<ColorsPage />} />
+        <Route exact path='/brokrage-invoices' element={<BookingInvoicesPage />} />
+        <Route exact path='/booking-invoices' element={<BookingInvoicesPage />} />
         
         <Route exact path='/company' element={<CompanyPage />} />
         <Route exact path='/currencies' element={<CurrenciesPage />} />
@@ -659,6 +664,7 @@ function App() {
         <Route exact path='/theme' element={<ThemePage />} />
         <Route exact path='/tooltip' element={<TooltipPage />} />
         <Route exact path='/bookings' element={<TypographyPage />} />
+        <Route exact path='/post-sales/details/:bookingId' element={<PostSalesDetailsPage />} />
         <Route exact path='/users-grid' element={<UsersGridPage />} />
         <Route exact path='/all-users' element={<UsersListPage />} />
         <Route exact path='/view-details' element={<ViewDetailsPage />} />

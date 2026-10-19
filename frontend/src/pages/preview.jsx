@@ -575,7 +575,7 @@ const Preview = () => {
                         <select name="stage" value={bookingForm.stage} onChange={handleBookingChange}>
                           <option>Tentative</option>
                           <option>Booked</option>
-                          <option>Cancelled</option>
+                          <option disabled value="Cancelled">Cancelled (Use Cancellation Gate)</option>
                         </select>
                       </label>
                       <label>

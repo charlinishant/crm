@@ -19,6 +19,18 @@ console.log(`[BinPage] Using API URL: ${API_URL}`);
 
 const ITEMS_PER_PAGE = 15;
 
+const CATEGORIES = [
+  { id: "all", label: "All Items" },
+  { id: "leads", label: "Leads" },
+  { id: "projects", label: "Projects" },
+  { id: "towers", label: "Towers" },
+  { id: "calllogs", label: "Call Logs" },
+  { id: "floorplans", label: "Floor Plans" },
+  { id: "units", label: "Units" },
+  { id: "tasks", label: "Tasks" },
+  { id: "users", label: "Users" },
+];
+
 const formatSafeDate = (value) => {
   if (!value) return "-";
   try {
@@ -223,7 +235,7 @@ const BinPage = () => {
       setLoading(false);
       console.log("[BinPage] Fetch completed, loading:", false);
     }
-  }, [activeCategory, projectFilter, searchQuery, API_URL]);
+  }, [activeCategory, projectFilter, searchQuery]);
 
   // Initial fetch
   useEffect(() => {
@@ -277,7 +289,7 @@ const BinPage = () => {
         }
       }
     };
-  }, [fetchBinItems, getReportsSocket]);
+  }, [fetchBinItems]);
 
   // Selection handlers
   const handleToggleSelectAll = () => {
@@ -744,6 +756,10 @@ const BinPage = () => {
                                 ? "#dbeafe"
                                 : itemCat === "projects"
                                 ? "#e0e7ff"
+                                : itemCat === "towers"
+                                ? "#e0f2fe"
+                                : itemCat === "calllogs"
+                                ? "#fef9c3"
                                 : itemCat === "floorplans"
                                 ? "#dcfce7"
                                 : itemCat === "units"
@@ -758,6 +774,10 @@ const BinPage = () => {
                                 ? "#1e40af"
                                 : itemCat === "projects"
                                 ? "#3730a3"
+                                : itemCat === "towers"
+                                ? "#0369a1"
+                                : itemCat === "calllogs"
+                                ? "#854d0e"
                                 : itemCat === "floorplans"
                                 ? "#15803d"
                                 : itemCat === "units"

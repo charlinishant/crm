@@ -7,6 +7,7 @@ import TableSelectionCheckbox from "../table/TableSelectionCheckbox";
 import { useTableSelection } from "../table/useTableSelection";
 import LeadTableToolbar from "../common/LeadTableToolbar";
 import { matchesLeadSearch } from "../../utils/leadSearch";
+import { getReportsSocket } from "../../services/socketClient";
 
 const SOURCE_OPTIONS = [
   "Channel Partner",
@@ -75,6 +76,49 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
       fetchLeadData();
     }
   }, [fetchLeadData, location.state?.refreshLeads]);
+
+  useEffect(() => {
+    let socketRef = null;
+    let debounceTimer = null;
+
+    const debouncedFetch = () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        fetchLeadData();
+      }, 300);
+    };
+
+    const setupSocket = async () => {
+      try {
+        const socket = await getReportsSocket();
+        if (!socket || typeof socket.on !== "function") return;
+        socketRef = socket;
+
+        socket.on("reports:update", debouncedFetch);
+        socket.on("lead:created", debouncedFetch);
+        socket.on("lead:updated", debouncedFetch);
+        socket.on("lead:assigned", debouncedFetch);
+        socket.on("leads:imported", debouncedFetch);
+        socket.on("crm:leads-changed", debouncedFetch);
+      } catch (err) {
+        console.warn("[PaymentHistoryOne] Socket connection error:", err);
+      }
+    };
+
+    setupSocket();
+
+    return () => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      if (socketRef && typeof socketRef.off === "function") {
+        socketRef.off("reports:update", debouncedFetch);
+        socketRef.off("lead:created", debouncedFetch);
+        socketRef.off("lead:updated", debouncedFetch);
+        socketRef.off("lead:assigned", debouncedFetch);
+        socketRef.off("leads:imported", debouncedFetch);
+        socketRef.off("crm:leads-changed", debouncedFetch);
+      }
+    };
+  }, [fetchLeadData]);
 
   useEffect(() => {
     const fetchUsers = async () => {

@@ -186,7 +186,10 @@ const SmartImport = () => {
       setMessage("");
       setImportSummary(null);
 
-      const token = localStorage.getItem("authToken");
+      const token =
+        localStorage.getItem("token") ||
+        localStorage.getItem("authToken") ||
+        sessionStorage.getItem("token");
       const response = await fetch(`${API_URL}/leads/import`, {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},

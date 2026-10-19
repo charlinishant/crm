@@ -21,9 +21,26 @@ const buildBookingDocumentContext = (booking, documentType) => {
 };
 
 const mergeTemplate = (template, context) => {
-  return String(template || '').replace(/\{\{(\w+)\}\}/g, (_, key) => {
-    const value = context?.[key];
-    return value === undefined || value === null ? '' : String(value);
+  return String(template || '').replace(/\{\{([\w.\[\]]+)\}\}/g, (match, key) => {
+    if (context?.[key] !== undefined && context?.[key] !== null) {
+      return String(context[key]);
+    }
+    const normalizedKey = key.replace(/\[0\]/g, "[1]").replace(/\[1\]/g, "");
+    if (context?.[normalizedKey] !== undefined && context?.[normalizedKey] !== null) {
+      return String(context[normalizedKey]);
+    }
+    try {
+      const parts = key.replace(/\[(\w+)\]/g, ".$1").split(".");
+      let val = context;
+      for (const p of parts) {
+        if (val === undefined || val === null) break;
+        val = val[p];
+      }
+      if (val !== undefined && val !== null) {
+        return String(val);
+      }
+    } catch (e) {}
+    return '';
   });
 };
 

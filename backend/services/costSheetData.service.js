@@ -343,10 +343,12 @@ async function buildBookingCostSheetData(bookingId, options = {}) {
     lead?.name ||
     "Customer";
 
-  const customerPhone =
+  const { maskPhoneNumber } = require("../utils/phoneMask");
+  const rawCustomerPhone =
     (Array.isArray(lead?.phones) ? lead.phones[0]?.value || lead.phones[0] : null) ||
     lead?.phone ||
     "";
+  const customerPhone = options.maskPhone ? maskPhoneNumber(rawCustomerPhone) : rawCustomerPhone;
 
   const customerEmail =
     (Array.isArray(lead?.emails) ? lead.emails[0]?.value || lead.emails[0] : null) ||

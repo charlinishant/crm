@@ -879,11 +879,14 @@ exports.getUnit = async (req, res) => {
         const primaryBooking = (item.bookings || [])[0]
         const leadName = primaryBooking?.customerName || (primaryBooking?.lead ? [primaryBooking.lead.firstName, primaryBooking.lead.lastName].filter(Boolean).join(" ") || primaryBooking.lead.companyName : null) || null
         const leadId = primaryBooking?.leadId || primaryBooking?.lead?.id || null
+        const bookingId = primaryBooking?.id || null
 
         return {
           ...item,
           leadName,
           leadId,
+          bookingId,
+          booking: primaryBooking || null,
           bedrooms,
           bathrooms,
           configurationLabel: item.unit?.floor?.configurationLabel || (bedrooms ? `${bedrooms} BHK` : ""),

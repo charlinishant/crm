@@ -64,6 +64,8 @@ const MyReports = () => {
     loading: false,
     title: "",
     leads: [],
+    calls: [],
+    mode: "leads",
     filters: {},
     error: "",
   });
@@ -153,6 +155,8 @@ const MyReports = () => {
       loading: true,
       title: initialTitle,
       leads: [],
+      calls: [],
+      mode: "leads",
       filters: segment,
       error: "",
     });
@@ -172,6 +176,8 @@ const MyReports = () => {
         loading: false,
         title: result?.title || initialTitle,
         leads: result?.leads || [],
+        calls: [],
+        mode: "leads",
         filters: result?.filters || queryParams,
         error: "",
       });
@@ -181,6 +187,53 @@ const MyReports = () => {
         ...prev,
         loading: false,
         error: err.message || "Failed to load drilldown records",
+      }));
+    }
+  };
+
+  const handleCallDrilldown = async (segment) => {
+    if (!segment) return;
+    const initialTitle = segment.title || "Call Records Drilldown";
+    setDrilldown({
+      isOpen: true,
+      loading: true,
+      title: initialTitle,
+      leads: [],
+      calls: [],
+      mode: "calls",
+      filters: segment,
+      error: "",
+    });
+
+    try {
+      // Respect all active filters: From/To, Project, Sales User, Lead Source, Lead Status
+      const queryParams = {
+        fromDate: filters.fromDate || undefined,
+        toDate: filters.toDate || undefined,
+        projectId: filters.projectId || undefined,
+        salesUserId: filters.salesUserId || undefined,
+        leadSource: filters.leadSource || undefined,
+        leadStatus: filters.leadStatus || undefined,
+        ...segment,
+      };
+
+      const result = await reportApi.getDrilldownCalls(queryParams);
+      setDrilldown({
+        isOpen: true,
+        loading: false,
+        title: result?.title || initialTitle,
+        leads: [],
+        calls: result?.calls || [],
+        mode: "calls",
+        filters: result?.filters || queryParams,
+        error: "",
+      });
+    } catch (err) {
+      console.error("Error fetching drilldown calls:", err);
+      setDrilldown((prev) => ({
+        ...prev,
+        loading: false,
+        error: err.message || "Failed to load drilldown calls",
       }));
     }
   };
@@ -248,11 +301,15 @@ const MyReports = () => {
             <h5 className="mb-0 fw-bold">📞 Mcube Telephony &amp; IVR Activity</h5>
           </div>
 
-          <CallSummaryCards summary={reports.telephonySummary} />
+          <CallSummaryCards summary={reports.telephonySummary} onCardClick={handleCallDrilldown} />
 
           <div className="admin-report-chart-grid mt-4">
-            <CallStatusChart data={reports.callStatus} />
-            <CallHourlyChart hourlyData={reports.callHourly} dailyData={reports.callDaily} />
+            <CallStatusChart data={reports.callStatus} onSegmentClick={handleCallDrilldown} />
+            <CallHourlyChart
+              hourlyData={reports.callHourly}
+              dailyData={reports.callDaily}
+              onBarClick={handleCallDrilldown}
+            />
             <DidBreakupChart data={reports.didBreakup} />
           </div>
         </div>
@@ -290,6 +347,8 @@ const MyReports = () => {
         onClose={closeDrilldown}
         title={drilldown.title}
         leads={drilldown.leads}
+        calls={drilldown.calls}
+        mode={drilldown.mode}
         loading={drilldown.loading}
         filterContext={drilldown.filters}
       />

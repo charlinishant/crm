@@ -155,31 +155,77 @@ const PostSalesBookingList = () => {
         </div>
 
         {/* ── Filters ── */}
-        <div style={{ background: "#fff", borderRadius: 12, padding: "16px 20px", marginBottom: 20, boxShadow: "0 1px 6px rgba(0,0,0,.07)", display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <div style={{ position: "relative", flex: "1 1 240px" }}>
+        <div
+          className="d-flex align-items-center gap-3"
+          style={{
+            background: "#ffffff",
+            borderRadius: 12,
+            padding: "14px 20px",
+            marginBottom: 20,
+            boxShadow: "0 4px 16px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.03)",
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            flexWrap: "nowrap",
+          }}
+        >
+          <div style={{ position: "relative", flex: 1, minWidth: 0 }}>
             <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 14, color: "#94a3b8" }}>🔍</span>
             <input
               type="text"
               placeholder="Search customer, project, unit..."
               value={search}
               onChange={e => setSearch(e.target.value)}
-              style={{ width: "100%", padding: "9px 12px 9px 34px", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, outline: "none", color: "#1e293b" }}
+              style={{
+                width: "100%",
+                padding: "9px 12px 9px 34px",
+                border: "1px solid #e2e8f0",
+                borderRadius: 8,
+                fontSize: 13,
+                outline: "none",
+                color: "#1e293b",
+                background: "#ffffff",
+              }}
             />
           </div>
           <select
             value={projectFilter}
             onChange={e => setProjectFilter(e.target.value)}
-            style={{ padding: "9px 14px", border: "1px solid #e2e8f0", borderRadius: 8, fontSize: 13, color: "#1e293b", background: "#fff", cursor: "pointer" }}
+            style={{
+              width: "auto",
+              minWidth: 160,
+              maxWidth: 240,
+              flexShrink: 0,
+              padding: "9px 14px",
+              border: "1px solid #e2e8f0",
+              borderRadius: 8,
+              fontSize: 13,
+              color: "#1e293b",
+              background: "#ffffff",
+              cursor: "pointer",
+            }}
           >
             {projects.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
-          <div style={{ fontSize: 13, color: "#64748b", whiteSpace: "nowrap" }}>
+          <div style={{ fontSize: 13, color: "#64748b", whiteSpace: "nowrap", flexShrink: 0 }}>
             <strong style={{ color: "#3b82f6" }}>{filtered.length}</strong> bookings found
           </div>
           {selectedBookings.length > 0 && (
             <button
               onClick={handleDeleteSelected}
-              style={{ padding: "8px 16px", marginLeft: "auto", background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+              style={{
+                padding: "8px 16px",
+                marginLeft: "auto",
+                background: "#fee2e2",
+                color: "#dc2626",
+                border: "none",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                flexShrink: 0,
+                whiteSpace: "nowrap",
+              }}
             >
               🗑️ Delete Selected ({selectedBookings.length})
             </button>

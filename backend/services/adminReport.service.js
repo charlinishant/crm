@@ -578,6 +578,7 @@ const getDrilldownLeads = async (filters = {}, req = null) => {
       latestCallDisposition: latestCall?.disposition || latestCall?.status || null,
       latestCallDate: latestCall?.createdAt || null,
       bookingStage: latestBooking?.stage || null,
+      bookingId: latestBooking?.id || null,
       visitStatus: latestVisit?.status || null,
     }
   })

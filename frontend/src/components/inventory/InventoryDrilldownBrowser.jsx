@@ -1155,13 +1155,13 @@ export const InventoryDrilldownBrowser = ({ initialProjectId = null }) => {
                 </div>
               )}
               <div>
-                <h3 className="inv-banner-name" style={{ color: "#ffffff", fontWeight: "bold", margin: "0 0 4px 0", fontSize: "24px" }}>{selectedProject.name}</h3>
-                <p className="inv-banner-sub" style={{ color: "#e2e8f0" }}>
+                <h3 className="inv-banner-name">{selectedProject.name}</h3>
+                <p className="inv-banner-sub">
                   <span className="badge bg-primary">
                     {selectedProject.projectType || "Residential"}
                   </span>
-                  <span>
-                    <FaMapMarkerAlt /> {[selectedProject.address, selectedProject.city].filter(Boolean).join(", ") || "-"}
+                  <span className="d-inline-flex align-items-center gap-1">
+                    <FaMapMarkerAlt className="text-danger" /> {[selectedProject.address, selectedProject.city].filter(Boolean).join(", ") || "-"}
                   </span>
                 </p>
               </div>

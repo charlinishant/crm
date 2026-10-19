@@ -1753,8 +1753,13 @@ exports.importExcel = async (req, res) => {
       return res.status(400).json({ message: "Please upload an Excel file" })
     }
 
-    const selectedTeamId = toNullableInt(req.body.teamId)
-    const selectedTeamIds = toNullableIntList(req.body.teamIds)
+    const salesImporterId = req.authUser?.id ? Number(req.authUser.id) : null
+    const importerRoles = [req.authUser?.role, req.authUser?.department]
+      .map((value) => String(value || "").toUpperCase())
+      .filter(Boolean)
+    const isSalesImporter = importerRoles.some((role) => ["SALES", "PRE_SALES", "AGENT", "AGENCY_USER", "CHANNEL_PARTNER"].includes(role)) && Number.isInteger(salesImporterId)
+    const selectedTeamId = isSalesImporter ? salesImporterId : toNullableInt(req.body.teamId)
+    const selectedTeamIds = isSalesImporter ? (salesImporterId ? [salesImporterId] : []) : toNullableIntList(req.body.teamIds)
     const bulkFundingSource = toNullableString(req.body.fundingSource || req.body.source)
     const bulkChannelPartner = toNullableString(req.body.channelPartner)
     const bulkReraId = toNullableString(req.body.channelPartnerReraId || req.body.reraId)
@@ -1829,12 +1834,30 @@ exports.importExcel = async (req, res) => {
       const rowFundingSource = toNullableString(row["Funding source"] || row["Source"]) || bulkFundingSource
       const rowChannelPartner = toNullableString(row["Channel partner"] || row["Channel Partner"]) || bulkChannelPartner
       const rowRera = toNullableString(row["Channel partner RERA"] || row["RERA ID"] || row["Rera"]) || bulkReraId
-      const hasSource = Boolean(rowFundingSource && rowFundingSource !== "Untagged") || Boolean(rowChannelPartner && rowChannelPartner !== "Untagged")
+      let effectiveSource = rowFundingSource
+      let effectiveChannelPartner = rowChannelPartner
+      let effectiveRera = rowRera
+      let hasSource = Boolean(effectiveSource && effectiveSource !== "Untagged") || Boolean(effectiveChannelPartner && effectiveChannelPartner !== "Untagged")
 
       let assignedTeamId = null
       let rowTags = row["Tags"] ? String(row["Tags"]).trim() : ""
 
-      if (hasSource) {
+      if (isSalesImporter) {
+        assignedTeamId = salesImporterId
+        if (!hasSource) {
+          effectiveSource = "Direct"
+          hasSource = true
+        }
+
+        const lockedTagString = buildLockedSourceTags({
+          source: effectiveSource,
+          channelPartner: effectiveChannelPartner,
+          channelPartnerReraId: effectiveRera,
+          userId: salesImporterId,
+          userName: (salesImporterId && userNameMap[salesImporterId]) || authUserName,
+        })
+        rowTags = [rowTags, lockedTagString].filter(Boolean).join(" | ")
+      } else if (hasSource) {
         assignedTeamId = selectedUsers.length
           ? selectedUsers[index % selectedUsers.length].id
           : selectedTeamId ||
@@ -1842,9 +1865,9 @@ exports.importExcel = async (req, res) => {
             (assignableUsers.length ? assignableUsers[index % assignableUsers.length].id : null)
 
         const lockedTagString = buildLockedSourceTags({
-          source: rowFundingSource,
-          channelPartner: rowChannelPartner,
-          channelPartnerReraId: rowRera,
+          source: effectiveSource,
+          channelPartner: effectiveChannelPartner,
+          channelPartnerReraId: effectiveRera,
           userId: req.authUser?.id,
           userName: authUserName,
         })
@@ -1857,9 +1880,9 @@ exports.importExcel = async (req, res) => {
 
       return {
         hasSource,
-        rowFundingSource,
-        rowChannelPartner,
-        rowRera,
+        rowFundingSource: effectiveSource,
+        rowChannelPartner: effectiveChannelPartner,
+        rowRera: effectiveRera,
         salutation: row["Salutation"] || null,
         firstName,
         lastName,
@@ -1870,7 +1893,7 @@ exports.importExcel = async (req, res) => {
           { type: row["Phone Type"] || null, value: phone },
         ],
         status: normalizeImportStatus(row["Status"]),
-        timeZone: row["Timezone"] || null,
+        timeZone: toNullableString(row["Timezone"]),
         tags: rowTags,
         interestedProjects: projectId,
         teamId: assignedTeamId,
@@ -1881,20 +1904,20 @@ exports.importExcel = async (req, res) => {
             ? new Date(row["Conduct site date"])
             : null,
         leadAddress: {
-          address: row["Aaddress"] || null,
-          street: row["Street"] || null,
-          city: row["City"] || null,
-          state: row["State"] || null,
-          country: row["Country"] || null,
-          zip: row["Zip"] || null,
+          address: toNullableString(row["Aaddress"]),
+          street: toNullableString(row["Street"]),
+          city: toNullableString(row["City"]),
+          state: toNullableString(row["State"]),
+          country: toNullableString(row["Country"]),
+          zip: toNullableString(row["Zip"]),
         },
-        companyName: row["Company name"] || null,
-        type: row["Type"] || null,
-        carpetArea: row["Carpet area"] || null,
+        companyName: toNullableString(row["Company name"]),
+        type: toNullableString(row["Type"]),
+        carpetArea: toNullableString(row["Carpet area"]),
         seats: toImportInt(row["Seats"], 0),
         tenure: toImportFloat(row["Tenure"], 0),
         gender: row["Gender"] || null,
-        occupations: row["Occupations"] || null,
+        occupations: toNullableString(row["Occupations"]),
         age: toImportInt(row["Age"]),
         birthday:
           row["Birthday"] && row["Birthday"] !== ""
@@ -1908,14 +1931,14 @@ exports.importExcel = async (req, res) => {
           row["Anniversary"] && row["Anniversary"] !== ""
             ? new Date(row["Anniversary"])
             : null,
-        industry: row["Industry"] || "",
+        industry: toNullableString(row["Industry"]) || "",
         personalAddress: {
-          address: row["Personal address"] || null,
-          street: row["Personal street"] || null,
-          city: row["Personal city"] || null,
-          state: row["Personal state"] || null,
-          country: row["Personal country"] || null,
-          zip: row["Personal zip"] || null,
+          address: toNullableString(row["Personal address"]),
+          street: toNullableString(row["Personal street"]),
+          city: toNullableString(row["Personal city"]),
+          state: toNullableString(row["Personal state"]),
+          country: toNullableString(row["Personal country"]),
+          zip: toNullableString(row["Personal zip"]),
         },
         url: toNullableJsonString(row["Url"]),
         education: toNullableJsonString(row["Education"]),
@@ -1925,17 +1948,17 @@ exports.importExcel = async (req, res) => {
         nri: ["yes", "y", "true"].includes(String(row["NRI"] || "").toLowerCase()),
         budgetMin: toImportInt(row["Budget min"]),
         budgetMax: toImportInt(row["Budget max"]),
-        possessionMin: row["Possession min"] || null,
-        possessionMax: row["Possession Max"] || null,
-        area: row["Area"] || null,
+        possessionMin: toNullableString(row["Possession min"]),
+        possessionMax: toNullableString(row["Possession Max"]),
+        area: toNullableString(row["Area"]),
         fundingSource: hasSource ? (rowFundingSource || (rowChannelPartner ? "Channel Partner" : null)) : null,
-        propertyType: row["Property type"] || null,
-        configration: row["Configration"] || null,
+        propertyType: toNullableString(row["Property type"]),
+        configration: toNullableString(row["Configration"]),
         budget: toNullableString(row["Budget"]),
-        bathroomPreferences: row["Bathroom preferences"] || null,
-        furnishing: row["Furnishing"] || null,
-        facing: row["Facing"] || null,
-        locationPreferences: row["Location preferences"] || null,
+        bathroomPreferences: toNullableString(row["Bathroom preferences"]),
+        furnishing: toNullableString(row["Furnishing"]),
+        facing: toNullableString(row["Facing"]),
+        locationPreferences: toNullableString(row["Location preferences"]),
       }
     })
 
@@ -2013,7 +2036,37 @@ exports.importExcel = async (req, res) => {
       }
     }
 
+    // Real-time notifications so neither Sales nor Admin ever needs to refresh
+    const assignedUserIds = [...new Set(result.map((l) => l.teamId).filter(Boolean))]
+
+    assignedUserIds.forEach((uid) => {
+      const userLeads = result.filter((l) => l.teamId === uid)
+      emitToUser(uid, "lead:assigned", {
+        count: userLeads.length,
+        leadIds: userLeads.map((l) => l.id),
+        assignedBy: authUserName,
+      })
+      emitToUser(uid, "leads:imported", {
+        count: userLeads.length,
+        leadIds: userLeads.map((l) => l.id),
+      })
+    })
+
+    emitToAdmin("lead:created", { count: result.length, leadIds: result.map((l) => l.id) })
+    emitToAdmin("leads:imported", { count: result.length, leadIds: result.map((l) => l.id) })
+
+    broadcastCRMEvent(
+      "leads:imported",
+      { count: result.length, leadIds: result.map((l) => l.id) },
+      { userIds: assignedUserIds, includeAdmin: true }
+    )
+    broadcastCRMEvent("lead:created", { count: result.length }, { userIds: assignedUserIds, includeAdmin: true })
     emitReportsUpdate("lead:imported")
+
+    try {
+      const { getIO } = require("../socket")
+      getIO().emit("crm:leads-changed", { count: result.length, userIds: assignedUserIds, timestamp: Date.now() })
+    } catch (e) {}
 
     res.status(201).json({
       message: skippedDuplicates.length

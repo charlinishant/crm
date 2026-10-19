@@ -844,13 +844,13 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
-                    to='/brokrage-invoices'
+                    to='/booking-invoices'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""
                     }
                   >
                     <i className='ri-circle-fill circle-icon text-warning-main w-auto' />{" "}
-                    Brokerage Invoices
+                    Booking Invoices
                   </NavLink>
                 </li>
                 {/* <li>

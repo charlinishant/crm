@@ -1,4 +1,13 @@
-export const SOURCE_OPTIONS = ["Walk-in", "Digital", "Channel Partner", "Meta"];
+export const SOURCE_OPTIONS = [
+  "Channel Partner",
+  "Walk-in",
+  "Website",
+  "Portal",
+  "Reference",
+  "Direct",
+  "Digital",
+  "Meta",
+];
 
 export const normalizeBookingSource = (value) => {
   const str = String(value || "").trim();

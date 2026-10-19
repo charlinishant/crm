@@ -48,6 +48,15 @@ exports.getCallDaily = sendReport(callReportService.getCallDailyDistribution)
 exports.getDidBreakup = sendReport(callReportService.getDidBreakup)
 exports.getAgentCallPerformance = sendReport(callReportService.getAgentCallPerformance)
 exports.getCallLogs = sendReport(callReportService.getCallDetailRecords)
+exports.getDrilldownCalls = async (req, res) => {
+  try {
+    const data = await callReportService.getDrilldownCalls(req.query || {}, req)
+    res.status(200).json({ data })
+  } catch (error) {
+    console.error("Drilldown calls report error:", error)
+    res.status(500).json({ message: error.message || "Unable to load drilldown calls" })
+  }
+}
 
 exports.syncMcubeCdr = async (req, res) => {
   try {
