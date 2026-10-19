@@ -777,7 +777,23 @@ exports.getFloor  = async (req, res)=>{
         const {id}  = req.params
 
         if(id){
-            const result = await prisma.floorPlan.findUnique({where:{id:Number(id)}})
+            const result = await prisma.floorPlan.findUnique({
+                where:{id:Number(id)},
+                include:{
+                    project:{
+                        select:{
+                            id:true,
+                            name:true
+                        }
+                    },
+                    tower:{
+                        select:{
+                            id:true,
+                            name:true
+                        }
+                    }
+                }
+            })
             if(!result)
                 res.status(200).json("Floor plan not found")
             else{
@@ -786,12 +802,21 @@ exports.getFloor  = async (req, res)=>{
         }
         else{
             let conditions = {
-                status: "Active",
+                status: { notIn: ["Trash", "Deleted"] },
                 project: { deletedAt: null },
                 OR: [{ towerId: null }, { tower: { deletedAt: null } }],
             }
+            if (req.query.projectId) {
+                conditions.projectId = Number(req.query.projectId)
+            }
+            if (req.query.towerId) {
+                conditions.towerId = Number(req.query.towerId)
+            }
+            if (req.query.status && req.query.status !== "All") {
+                conditions.status = req.query.status
+            }
             const page = parseInt(req.query.page) || 1
-            const limit = parseInt(req.query.limit) || 10
+            const limit = parseInt(req.query.limit) || 100
             
             const skip = (page-1)*limit
 
@@ -799,6 +824,7 @@ exports.getFloor  = async (req, res)=>{
 
             const result = await prisma.floorPlan.findMany({
                 where:conditions,
+                orderBy: { id: "desc" },
                 skip:skip,
                 take:limit,
                 select:{

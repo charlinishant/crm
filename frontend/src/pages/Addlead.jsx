@@ -317,7 +317,7 @@ const buildLeadPayload = (data, mode = "create") => {
 
 const ADDLEAD = () => {
   const [activeTab, setActiveTab] = useState("basic");
-  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+  const API_URL = (process.env.REACT_APP_API_URL || "http://localhost:5000").replace(/\/+$/, "");
   
   const navigate = useNavigate();
   const location = useLocation();
@@ -349,7 +349,10 @@ const ADDLEAD = () => {
     const fetchProjects = async () => {
       try {
         setLoadingProjects(true);
-        const response = await fetch(`${API_URL}/projects/list`);
+        const token = localStorage.getItem("authToken");
+        const response = await fetch(`${API_URL}/projects/list`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
 
         if (!response.ok) {
           throw new Error("Unable to load projects");
@@ -372,7 +375,10 @@ const ADDLEAD = () => {
     const fetchUsers = async () => {
       try {
         setLoadingUsers(true);
-        const response = await fetch(`${API_URL}/users?limit=1000`);
+        const token = localStorage.getItem("authToken");
+        const response = await fetch(`${API_URL}/users?limit=1000`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
 
         if (!response.ok) {
           throw new Error("Unable to load users");
@@ -432,7 +438,10 @@ const ADDLEAD = () => {
 
     const fetchLeadForEdit = async () => {
       try {
-        const response = await fetch(`${API_URL}/leads/${nextEditLeadId}`);
+        const token = localStorage.getItem("authToken");
+        const response = await fetch(`${API_URL}/leads/${nextEditLeadId}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
         if (!response.ok) return;
         const lead = await response.json();
         setFormData(buildLeadFormData(lead?.data || lead));
@@ -571,11 +580,13 @@ const ADDLEAD = () => {
       const payload = buildLeadPayload(formData, editLeadId ? "update" : "create");
       const requestUrl = editLeadId ? `${API_URL}/leads/${editLeadId}` : `${API_URL}/leads`;
       const requestMethod = editLeadId ? "PATCH" : "POST";
+      const token = localStorage.getItem("authToken");
 
       const response = await fetch(requestUrl, {
         method: requestMethod,
         headers: {
           "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(payload),
       });

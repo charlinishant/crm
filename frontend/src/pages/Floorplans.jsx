@@ -13,7 +13,7 @@ const normalizeConfigurationLabel = (value) => {
 
 const Floorplans = () => {
     const navigate = useNavigate();
-    const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+    const API_URL = (process.env.REACT_APP_API_URL || "http://localhost:5000").replace(/\/+$/, "");
 
     const [floorplans, setFloorplans] = useState([]);
     const [totalItems, setTotalItems] = useState(0);
@@ -29,8 +29,13 @@ const Floorplans = () => {
     const fetchFloorplans = useCallback(async () => {
         try {
             setLoading(true);
-            const res = await fetch(`${API_URL}/floor?limit=100`);
-            const json = await res.json();
+            const token = localStorage.getItem("authToken");
+            const headers = {
+                Accept: "application/json",
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            };
+            const res = await fetch(`${API_URL}/floor?limit=100`, { headers });
+            const json = await res.json().catch(() => null);
 
             const list = Array.isArray(json) ? json : json?.data ?? [];
             const mapped = list.map((plan) => ({
@@ -116,9 +121,15 @@ const Floorplans = () => {
         setModalMode("view");
 
         try {
-            const response = await fetch(`${API_URL}/floor/${plan.id}`);
+            const token = localStorage.getItem("authToken");
+            const headers = {
+                Accept: "application/json",
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            };
+            const response = await fetch(`${API_URL}/floor/${plan.id}`, { headers });
             if (!response.ok) throw new Error("Unable to load floor plan details");
-            const detail = await response.json();
+            const detail = await response.json().catch(() => null);
+            if (!detail) throw new Error("Floor plan details not available");
             setSelectedPlan({
                 ...plan,
                 ...detail,
@@ -143,7 +154,11 @@ const Floorplans = () => {
         if (!confirmDelete) return;
 
         try {
-            const response = await fetch(`${API_URL}/floor/${id}`, { method: "DELETE" });
+            const token = localStorage.getItem("authToken");
+            const response = await fetch(`${API_URL}/floor/${id}`, {
+                method: "DELETE",
+                headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
             if (!response.ok) throw new Error("Delete failed");
 
             alert("Moved to Bin successfully");

@@ -9,7 +9,7 @@ import {
   normalizeList,
 } from "../utils/dashboardResultFilters";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+const API_URL = (process.env.REACT_APP_API_URL || "http://localhost:5000").replace(/\/+$/, "");
 
 const getName = (record) =>
   [record?.firstName, record?.lastName].filter(Boolean).join(" ") ||
@@ -49,7 +49,12 @@ const DashboardResultsPage = () => {
   const [error, setError] = useState("");
 
   const fetchList = useCallback(async (endpoint) => {
-    const response = await fetch(`${API_URL}${endpoint}`);
+    const token = localStorage.getItem("authToken");
+    const headers = {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+    const response = await fetch(`${API_URL}${endpoint}`, { headers });
     const result = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(result?.message || `Unable to load ${endpoint}`);
     return normalizeList(result);

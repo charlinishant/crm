@@ -1,168 +1,380 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import MasterLayout from "../masterLayout/MasterLayout";
 import Breadcrumb from "../components/Breadcrumb";
-import { FaTrashAlt, FaUndo, FaTrash, FaExclamationTriangle, FaFilter } from "react-icons/fa";
+import { FaTrashAlt, FaUndo, FaTrash, FaExclamationTriangle } from "react-icons/fa";
 import { getReportsSocket } from "../services/socketClient";
 
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+// Enhanced API URL handling with fallbacks and logging
+const getApiUrl = () => {
+  const url = process.env.REACT_APP_API_URL;
+  if (!url || url.trim() === "") {
+    console.warn("[BinPage] REACT_APP_API_URL not set, using default: http://localhost:5000");
+    return "http://localhost:5000";
+  }
+  return url.replace(/\/+$/, "");
+};
 
-const CATEGORIES = [
-  { id: "all", label: "All Items" },
-  { id: "leads", label: "Leads" },
-  { id: "projects", label: "Projects" },
-  { id: "towers", label: "Towers" },
-  { id: "calllogs", label: "Call Logs" },
-  { id: "floorplans", label: "Floor Plans" },
-  { id: "units", label: "Units" },
-  { id: "tasks", label: "Tasks" },
-  { id: "users", label: "Users" },
-];
+const API_URL = getApiUrl();
+console.log(`[BinPage] Using API URL: ${API_URL}`);
 
 const ITEMS_PER_PAGE = 15;
 
+const formatSafeDate = (value) => {
+  if (!value) return "-";
+  try {
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return "-";
+    const result = d.toLocaleString("en-IN", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    // Ensure we always return a non-empty string
+    return result || "-";
+  } catch (e) {
+    console.error("[BinPage] Date formatting error:", e, value);
+    return "-";
+  }
+};
+
 const BinPage = () => {
+  console.log("[BinPage] Component mounting");
+
   const [activeCategory, setActiveCategory] = useState("all");
   const [projectFilter, setProjectFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [items, setItems] = useState([]);
-  const [counts, setCounts] = useState({ all: 0, leads: 0, projects: 0, towers: 0, calllogs: 0, floorplans: 0, units: 0, tasks: 0, users: 0 });
+  const [counts, setCounts] = useState({
+    all: 0,
+    leads: 0,
+    projects: 0,
+    towers: 0,
+    calllogs: 0,
+    floorplans: 0,
+    units: 0,
+    tasks: 0,
+    users: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [projectsList, setProjectsList] = useState([]);
-  const [confirmModal, setConfirmModal] = useState(null); // { action: 'permanent' | 'empty' | 'restore', target: ... }
+  const [confirmModal, setConfirmModal] = useState(null);
   const [actionBusy, setActionBusy] = useState(false);
 
   const getAuthHeaders = () => {
-    const token = localStorage.getItem("token") || localStorage.getItem("authToken") || sessionStorage.getItem("token");
-    return {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    };
+    try {
+      const token =
+        localStorage.getItem("token") ||
+        localStorage.getItem("authToken") ||
+        sessionStorage.getItem("token");
+
+      const headers = {
+        "Content-Type": "application/json",
+      };
+
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      return headers;
+    } catch (err) {
+      console.error("[BinPage] Error in getAuthHeaders:", err);
+      return { "Content-Type": "application/json" };
+    }
   };
+
+  // Pagination calculations
+  const totalPages = Math.max(1, Math.ceil((items?.length || 0) / ITEMS_PER_PAGE));
+
+  const paginatedItems = useMemo(() => {
+    if (!Array.isArray(items)) {
+      console.warn("[BinPage] items is not an array:", items);
+      return [];
+    }
+    const start = Math.max(0, (currentPage - 1) * ITEMS_PER_PAGE);
+    return items.slice(start, start + ITEMS_PER_PAGE);
+  }, [items, currentPage]);
+
+  const pageStartIndex = Math.min(
+    items?.length || 0,
+    Math.max(0, (currentPage - 1) * ITEMS_PER_PAGE) + 1
+  );
+  const pageEndIndex = Math.min(
+    items?.length || 0,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  // Selected items objects
+  const selectedItemsList = useMemo(() => {
+    if (!Array.isArray(items)) return [];
+    return items.filter((it) =>
+      it &&
+      it !== null &&
+      it.id != null &&
+      selectedIds.has(`${(it.category || "leads")}:${it.id}`)
+    );
+  }, [items, selectedIds]);
 
   // Fetch available projects for filtering
   useEffect(() => {
-    fetch(`${API_URL}/projects`, { headers: getAuthHeaders() })
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => {
-        if (Array.isArray(data)) setProjectsList(data);
-      })
-      .catch(() => {});
+    const fetchProjects = async () => {
+      try {
+        console.log("[BinPage] Fetching projects for filter");
+        const res = await fetch(`${API_URL}/projects`, {
+          headers: getAuthHeaders(),
+        });
+
+        if (!res.ok) {
+          console.warn("[BinPage] Failed to fetch projects:", res.status);
+          return;
+        }
+
+        const data = await res.json();
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.data)
+            ? data.data
+            : Array.isArray(data?.projects)
+              ? data.projects
+              : [];
+
+        if (Array.isArray(list)) {
+          setProjectsList(list);
+          console.log("[BinPage] Fetched projects:", list.length);
+        } else {
+          console.warn("[BinPage] Projects data is not an array:", list);
+        }
+      } catch (err) {
+        console.error("[BinPage] Error fetching projects:", err);
+      }
+    };
+
+    fetchProjects();
   }, []);
 
   // Fetch Bin Items
   const fetchBinItems = useCallback(async () => {
+    console.log("[BinPage] Fetching bin items with params:", {
+      activeCategory,
+      projectFilter,
+      searchQuery
+    });
+
     setLoading(true);
     setError("");
+
     try {
       const params = new URLSearchParams();
       if (activeCategory !== "all") params.append("category", activeCategory);
       if (projectFilter) params.append("projectId", projectFilter);
       if (searchQuery.trim()) params.append("search", searchQuery.trim());
 
-      const response = await fetch(`${API_URL}/api/bin?${params.toString()}`, {
+      const url = `${API_URL}/api/bin?${params.toString()}`;
+      console.log("[BinPage] Fetching from:", url);
+
+      const response = await fetch(url, {
         headers: getAuthHeaders(),
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result?.message || "Failed to load bin items");
 
-      setItems(Array.isArray(result.data) ? result.data : []);
-      if (result.counts) setCounts(result.counts);
+      // Handle non-JSON responses
+      let result;
+      try {
+        result = await response.json();
+      } catch (jsonErr) {
+        console.error("[BinPage] JSON parse error:", jsonErr);
+        const text = await response.text();
+        throw new Error(`Invalid JSON response: ${text.substring(0, 100)}`);
+      }
+
+      if (!response.ok) {
+        const message = result?.message ||
+                       result?.error ||
+                       `HTTP ${response.status}`;
+        throw new Error(message);
+      }
+
+      const nextItems = Array.isArray(result)
+        ? result
+        : Array.isArray(result.data)
+          ? result.data
+          : Array.isArray(result.items)
+            ? result.items
+            : [];
+
+      console.log("[BinPage] Received items:", nextItems.length);
+
+      setItems(Array.isArray(nextItems) ? nextItems : []);
+
+      if (result.counts && typeof result.counts === "object") {
+        setCounts(result.counts);
+      }
+
       setSelectedIds(new Set());
     } catch (err) {
-      console.error("Error fetching bin items:", err);
+      console.error("[BinPage] Error fetching bin items:", err);
       setError(err.message || "Failed to load items in the Bin");
       setItems([]);
     } finally {
       setLoading(false);
+      console.log("[BinPage] Fetch completed, loading:", false);
     }
-  }, [activeCategory, projectFilter, searchQuery]);
+  }, [activeCategory, projectFilter, searchQuery, API_URL]);
 
+  // Initial fetch
   useEffect(() => {
+    console.log("[BinPage] Initial fetchBinItems call");
     fetchBinItems();
   }, [fetchBinItems]);
 
-  // Real-time socket updates
+  // Real-time socket updates with enhanced null safety
   useEffect(() => {
     let socketRef = null;
-    getReportsSocket()
-      .then((socket) => {
-        socketRef = socket;
-        const handleUpdate = () => fetchBinItems();
-        socket.on("reports:update", handleUpdate);
-      })
-      .catch(() => {});
+    let handleUpdate = null;
 
-    return () => {
-      if (socketRef) {
-        socketRef.off("reports:update");
+    const setupSocket = async () => {
+      try {
+        console.log("[BinPage] Setting up socket connection");
+        const socket = await getReportsSocket();
+
+        if (!socket) {
+          console.warn("[BinPage] Socket connection failed");
+          return;
+        }
+
+        if (typeof socket.on !== "function") {
+          console.warn("[BinPage] Socket does not have 'on' method");
+          return;
+        }
+
+        socketRef = socket;
+        handleUpdate = () => {
+          console.log("[BinPage] Socket update received");
+          fetchBinItems();
+        };
+
+        socket.on("reports:update", handleUpdate);
+        console.log("[BinPage] Socket event listener attached");
+      } catch (err) {
+        console.error("[BinPage] Error setting up socket:", err);
       }
     };
-  }, [fetchBinItems]);
+
+    setupSocket();
+
+    return () => {
+      console.log("[BinPage] Cleaning up socket connection");
+      if (socketRef && handleUpdate && typeof socketRef.off === "function") {
+        try {
+          socketRef.off("reports:update", handleUpdate);
+          console.log("[BinPage] Socket event listener removed");
+        } catch (err) {
+          console.error("[BinPage] Error removing socket listener:", err);
+        }
+      }
+    };
+  }, [fetchBinItems, getReportsSocket]);
 
   // Selection handlers
   const handleToggleSelectAll = () => {
+    console.log("[BinPage] Toggle select all");
     if (selectedIds.size === paginatedItems.length && paginatedItems.length > 0) {
       setSelectedIds(new Set());
     } else {
       const next = new Set(selectedIds);
-      paginatedItems.forEach((item) => next.add(`${item.category}:${item.id}`));
+      paginatedItems.forEach((item) => {
+        if (item && item.id != null) {
+          next.add(`${(item.category || "leads")}:${item.id}`);
+        }
+      });
       setSelectedIds(next);
     }
   };
 
   const handleToggleSelectItem = (category, id) => {
-    const key = `${category}:${id}`;
+    if (id == null) {
+      console.warn("[BinPage] Ignoring select item with null id:", {category, id});
+      return;
+    }
+
+    const key = `${(category || "leads")}:${id}`;
     const next = new Set(selectedIds);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      next.add(key);
+    }
     setSelectedIds(next);
   };
 
   // Restore Action
   const handleRestore = async (itemOrItems) => {
+    console.log("[BinPage] Restore action triggered");
     setActionBusy(true);
     setStatusMessage("");
     setError("");
+
     try {
       if (Array.isArray(itemOrItems)) {
-        // Group by category
+        console.log("[BinPage] Restoring multiple items:", itemOrItems.length);
         const byCategory = {};
+
         itemOrItems.forEach((it) => {
-          if (!byCategory[it.category]) byCategory[it.category] = [];
-          byCategory[it.category].push(it.id);
+          if (!it || it.id == null) {
+            console.warn("[BinPage] Skipping invalid item in batch restore:", it);
+            return;
+          }
+          const cat = it.category || "leads";
+          if (!byCategory[cat]) byCategory[cat] = [];
+          byCategory[cat].push(it.id);
         });
 
         for (const [cat, ids] of Object.entries(byCategory)) {
+          if (ids.length === 0) continue;
+
+          console.log("[BinPage] Restoring category:", cat, "count:", ids.length);
           const res = await fetch(`${API_URL}/api/bin/restore`, {
             method: "POST",
             headers: getAuthHeaders(),
             body: JSON.stringify({ category: cat, ids }),
           });
+
           if (!res.ok) {
-            const r = await res.json();
+            const r = await res.json().catch(() => ({}));
             throw new Error(r?.message || `Failed to restore ${cat}`);
           }
         }
+
         setStatusMessage(`Successfully restored ${itemOrItems.length} selected item(s)!`);
-      } else {
+      } else if (itemOrItems && itemOrItems.id != null) {
+        console.log("[BinPage] Restoring single item:", itemOrItems.id);
         const res = await fetch(`${API_URL}/api/bin/restore`, {
           method: "POST",
           headers: getAuthHeaders(),
-          body: JSON.stringify({ category: itemOrItems.category, id: itemOrItems.id }),
+          body: JSON.stringify({
+            category: itemOrItems.category || "leads",
+            id: itemOrItems.id
+          }),
         });
+
         if (!res.ok) {
-          const r = await res.json();
+          const r = await res.json().catch(() => ({}));
           throw new Error(r?.message || "Failed to restore item");
         }
-        setStatusMessage(`Restored "${itemOrItems.title}" successfully!`);
+
+        setStatusMessage(`Restored "${itemOrItems.title || itemOrItems.name || "item"}" successfully!`);
+      } else {
+        throw new Error("Invalid item(s) provided for restore");
       }
+
       setConfirmModal(null);
       await fetchBinItems();
     } catch (err) {
+      console.error("[BinPage] Error in restore:", err);
       setError(err.message || "Unable to restore item");
     } finally {
       setActionBusy(false);
@@ -171,44 +383,68 @@ const BinPage = () => {
 
   // Permanent Delete Action
   const handlePermanentDelete = async (itemOrItems) => {
+    console.log("[BinPage] Permanent delete action triggered");
     setActionBusy(true);
     setStatusMessage("");
     setError("");
+
     try {
       if (Array.isArray(itemOrItems)) {
+        console.log("[BinPage] Permanently deleting multiple items:", itemOrItems.length);
         const byCategory = {};
+
         itemOrItems.forEach((it) => {
-          if (!byCategory[it.category]) byCategory[it.category] = [];
-          byCategory[it.category].push(it.id);
+          if (!it || it.id == null) {
+            console.warn("[BinPage] Skipping invalid item in batch delete:", it);
+            return;
+          }
+          const cat = it.category || "leads";
+          if (!byCategory[cat]) byCategory[cat] = [];
+          byCategory[cat].push(it.id);
         });
 
         for (const [cat, ids] of Object.entries(byCategory)) {
+          if (ids.length === 0) continue;
+
+          console.log("[BinPage] Permanently deleting category:", cat, "count:", ids.length);
           const res = await fetch(`${API_URL}/api/bin/permanent-delete`, {
             method: "POST",
             headers: getAuthHeaders(),
             body: JSON.stringify({ category: cat, ids }),
           });
+
           if (!res.ok) {
-            const r = await res.json();
+            const r = await res.json().catch(() => ({}));
             throw new Error(r?.message || `Failed to permanently delete ${cat}`);
           }
         }
+
         setStatusMessage(`Permanently deleted ${itemOrItems.length} item(s)!`);
-      } else {
+      } else if (itemOrItems && itemOrItems.id != null) {
+        console.log("[BinPage] Permanently deleting single item:", itemOrItems.id);
         const res = await fetch(`${API_URL}/api/bin/permanent-delete`, {
           method: "POST",
           headers: getAuthHeaders(),
-          body: JSON.stringify({ category: itemOrItems.category, id: itemOrItems.id }),
+          body: JSON.stringify({
+            category: itemOrItems.category || "leads",
+            id: itemOrItems.id
+          }),
         });
+
         if (!res.ok) {
-          const r = await res.json();
+          const r = await res.json().catch(() => ({}));
           throw new Error(r?.message || "Failed to delete item permanently");
         }
-        setStatusMessage(`Permanently deleted "${itemOrItems.title}"!`);
+
+        setStatusMessage(`Permanently deleted "${itemOrItems.title || itemOrItems.name || "item"}"!`);
+      } else {
+        throw new Error("Invalid item(s) provided for delete");
       }
+
       setConfirmModal(null);
       await fetchBinItems();
     } catch (err) {
+      console.error("[BinPage] Error in permanent delete:", err);
       setError(err.message || "Unable to permanently delete item");
     } finally {
       setActionBusy(false);
@@ -217,38 +453,41 @@ const BinPage = () => {
 
   // Empty Bin Action
   const handleEmptyBin = async () => {
+    console.log("[BinPage] Empty bin action triggered");
     setActionBusy(true);
+
     try {
+      console.log("[BinPage] Emptying bin for category:", activeCategory);
       const res = await fetch(`${API_URL}/api/bin/empty`, {
         method: "POST",
         headers: getAuthHeaders(),
         body: JSON.stringify({ category: activeCategory }),
       });
-      if (!res.ok) throw new Error("Failed to empty bin");
+
+      if (!res.ok) {
+        const r = await res.json().catch(() => ({}));
+        throw new Error(r?.message || "Failed to empty bin");
+      }
+
       setStatusMessage("Bin emptied successfully!");
       setConfirmModal(null);
       await fetchBinItems();
     } catch (err) {
+      console.error("[BinPage] Error emptying bin:", err);
       setError(err.message || "Unable to empty bin");
     } finally {
       setActionBusy(false);
     }
   };
 
-  // Selected items objects
-  const selectedItemsList = useMemo(() => {
-    return items.filter((it) => selectedIds.has(`${it.category}:${it.id}`));
-  }, [items, selectedIds]);
-
-  // Pagination calculations
-  const totalPages = Math.ceil(items.length / ITEMS_PER_PAGE) || 1;
-  const paginatedItems = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return items.slice(start, start + ITEMS_PER_PAGE);
-  }, [items, currentPage]);
-
-  const pageStartIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const pageEndIndex = Math.min(items.length, currentPage * ITEMS_PER_PAGE);
+  const totalAllCount = Number(counts?.all || 0);
+  console.log("[BinPage] Rendering with state:", {
+    itemsCount: items.length,
+    loading,
+    error,
+    activeCategory,
+    totalAllCount
+  });
 
   return (
     <MasterLayout>
@@ -272,7 +511,7 @@ const BinPage = () => {
           </div>
 
           <div className="d-flex align-items-center gap-2">
-            {counts.all > 0 && (
+            {totalAllCount > 0 && (
               <button
                 type="button"
                 className="btn btn-outline-danger btn-sm d-flex align-items-center gap-2 px-3 py-2"
@@ -288,7 +527,7 @@ const BinPage = () => {
         {/* Category Filter Pills */}
         <div className="px-24 pt-3 pb-2 border-bottom bg-light" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
           {CATEGORIES.map((cat) => {
-            const count = counts[cat.id] ?? 0;
+            const count = typeof counts === "object" && counts ? (counts[cat.id] ?? 0) : 0;
             const isActive = activeCategory === cat.id;
             return (
               <button
@@ -366,7 +605,7 @@ const BinPage = () => {
               <option value="">All Projects</option>
               {projectsList.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name}
+                  {p.name || `Project #${p.id}`}
                 </option>
               ))}
             </select>
@@ -444,7 +683,10 @@ const BinPage = () => {
               {loading ? (
                 <tr>
                   <td colSpan="6" className="text-center py-5 text-muted">
-                    Loading bin items...
+                    <div className="d-flex align-items-center justify-content-center gap-2">
+                      <div className="spinner-border spinner-border-sm text-primary" role="status"></div>
+                      <span>Loading Bin items...</span>
+                    </div>
                   </td>
                 </tr>
               ) : paginatedItems.length === 0 ? (
@@ -457,17 +699,22 @@ const BinPage = () => {
                 </tr>
               ) : (
                 paginatedItems.map((item, idx) => {
-                  const key = `${item.category}:${item.id}`;
+                  if (!item) {
+                    console.warn("[BinPage] Skipping null item at index:", idx);
+                    return null;
+                  }
+
+                  const itemCat = item.category || "leads";
+                  const itemId = item.id || idx;
+                  const key = `${itemCat}:${itemId}`;
                   const isSelected = selectedIds.has(key);
-                  const formattedDate = item.deletedAt ? new Date(item.deletedAt).toLocaleString("en-IN", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  }) : "-";
+
+                  // Safe date formatting with fallback
+                  const dateValue = item.deletedAt || item.updatedAt || item.createdAt;
+                  const formattedDate = formatSafeDate(dateValue);
 
                   const rowBg = isSelected ? "#eff6ff" : idx % 2 === 1 ? "#f8fafc" : "#ffffff";
+
                   return (
                     <tr
                       key={key}
@@ -480,7 +727,7 @@ const BinPage = () => {
                           type="checkbox"
                           className="form-check-input"
                           checked={isSelected}
-                          onChange={() => handleToggleSelectItem(item.category, item.id)}
+                          onChange={() => handleToggleSelectItem(itemCat, itemId)}
                         />
                       </td>
                       <td style={{ padding: "12px 15px", verticalAlign: "middle" }}>
@@ -493,76 +740,87 @@ const BinPage = () => {
                             fontWeight: 600,
                             letterSpacing: "0.3px",
                             backgroundColor:
-                              item.category === "leads"
+                              itemCat === "leads"
                                 ? "#dbeafe"
-                                : item.category === "projects"
+                                : itemCat === "projects"
                                 ? "#e0e7ff"
-                                : item.category === "floorplans"
+                                : itemCat === "floorplans"
                                 ? "#dcfce7"
-                                : item.category === "units"
+                                : itemCat === "units"
                                 ? "#fef3c7"
-                                : item.category === "tasks"
+                                : itemCat === "tasks"
                                 ? "#f3e8ff"
-                                : item.category === "users"
+                                : itemCat === "users"
                                 ? "#fee2e2"
                                 : "#f1f5f9",
                             color:
-                              item.category === "leads"
+                              itemCat === "leads"
                                 ? "#1e40af"
-                                : item.category === "projects"
+                                : itemCat === "projects"
                                 ? "#3730a3"
-                                : item.category === "floorplans"
+                                : itemCat === "floorplans"
                                 ? "#15803d"
-                                : item.category === "units"
+                                : itemCat === "units"
                                 ? "#92400e"
-                                : item.category === "tasks"
+                                : itemCat === "tasks"
                                 ? "#6b21a8"
-                                : item.category === "users"
+                                : itemCat === "users"
                                 ? "#b91c1c"
                                 : "#334155",
                           }}
                         >
-                          {item.categoryLabel || item.category}
+                          {item.categoryLabel || itemCat}
                         </span>
                       </td>
                       <td style={{ padding: "12px 15px", verticalAlign: "middle", color: "#334155" }}>
                         <div style={{ fontWeight: 600, color: "#1e293b", fontSize: "14px" }}>
-                          {item.title}
+                          {item.title || item.name || "Untitled"}
                         </div>
-                        <div style={{ color: "#64748b", fontSize: "12px" }}>{item.subtitle}</div>
+                        {item.subtitle && <div style={{ color: "#64748b", fontSize: "12px" }}>{item.subtitle}</div>}
                         {item.meta && <div style={{ color: "#94a3b8", fontSize: "12px", marginTop: "2px" }}>{item.meta}</div>}
                       </td>
                       <td style={{ padding: "12px 15px", verticalAlign: "middle" }}>
-                        <span className="badge bg-light text-dark border px-2 py-1">
+                        <span className="bg-light text-dark border px-2 py-1">
                           {item.project || "General"}
                         </span>
                         {item.tower && <span className="badge bg-light text-muted border ms-1">{item.tower}</span>}
                       </td>
-                      <td style={{ padding: "12px 15px", verticalAlign: "middle", color: "#64748b", fontSize: "13px" }}>{formattedDate}</td>
-                      <td style={{ padding: "12px 15px", textAlign: "right", verticalAlign: "middle" }}>
-                        <div className="d-inline-flex align-items-center gap-2">
-                          <button
-                            type="button"
-                            className="btn btn-outline-success btn-sm d-inline-flex align-items-center gap-1"
-                            title="Restore item"
-                            onClick={() => handleRestore(item)}
-                            disabled={actionBusy}
-                            style={{ padding: "5px 10px", fontSize: "12px", fontWeight: "600" }}
-                          >
-                            <FaUndo size={11} /> Restore
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-outline-danger btn-sm d-inline-flex align-items-center gap-1"
-                            title="Delete permanently"
-                            onClick={() => setConfirmModal({ action: "permanent", target: item })}
-                            disabled={actionBusy}
-                            style={{ padding: "5px 10px", fontSize: "12px", fontWeight: "600" }}
-                          >
-                            <FaTrash size={11} /> Delete Forever
-                          </button>
-                        </div>
-                      </td>
+                      <td style={{
+                        padding: "12px 15px",
+                        verticalAlign: "middle",
+                        color: "#64748b",
+                        fontSize: "13px",
+                        fontWeight: 500,
+                        minWidth: "120px"
+                      }}
+                      title={formattedDate}
+                    >
+                      {formattedDate}
+                    </td>
+                    <td style={{ padding: "12px 15px", textAlign: "right", verticalAlign: "middle" }}>
+                      <div className="d-inline-flex align-items-center gap-2">
+                        <button
+                          type="button"
+                          className="btn btn-outline-success btn-sm d-inline-flex align-items-center gap-1"
+                          title="Restore item"
+                          onClick={() => handleRestore(item)}
+                          disabled={actionBusy}
+                          style={{ padding: "5px 10px", fontSize: "12px", fontWeight: "600" }}
+                        >
+                          <FaUndo size={11} /> Restore
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-outline-danger btn-sm d-inline-flex align-items-center gap-1"
+                          title="Delete permanently"
+                          onClick={() => setConfirmModal({ action: "permanent", target: item })}
+                          disabled={actionBusy}
+                          style={{ padding: "5px 10px", fontSize: "12px", fontWeight: "600" }}
+                        >
+                          <FaTrash size={11} /> Delete Forever
+                        </button>
+                      </div>
+                    </td>
                     </tr>
                   );
                 })
@@ -575,7 +833,7 @@ const BinPage = () => {
         {items.length > 0 && (
           <div className="table-pagination">
             <span>
-              Showing <strong>{pageStartIndex + 1}</strong> to <strong>{pageEndIndex}</strong> of{" "}
+              Showing <strong>{pageStartIndex}</strong> to <strong>{pageEndIndex}</strong> of{" "}
               <strong>{items.length}</strong> deleted items
             </span>
             <div className="table-pagination-actions">
@@ -634,7 +892,7 @@ const BinPage = () => {
                 ) : confirmModal.target ? (
                   <p className="text-secondary mb-0">
                     Are you sure you want to permanently erase{" "}
-                    <strong>{confirmModal.target.title}</strong>? This will remove all associated activities and data forever.
+                    <strong>{confirmModal.target.title || confirmModal.target.name || "this item"}</strong>? This will remove all associated activities and data forever.
                   </p>
                 ) : (
                   <p className="text-secondary mb-0">

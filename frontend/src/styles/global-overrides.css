@@ -221,3 +221,27 @@ label.crm-table-search input[type="text"],
   background: transparent !important;
   outline: none !important;
 }
+.crm-loading-spinner {
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.crm-loading-spinner-circle {
+  width: 38px;
+  height: 38px;
+  border: 4px solid #dbeafe;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: crm-spinner-rotate 0.8s linear infinite;
+}
+
+@keyframes crm-spinner-rotate {
+  to { transform: rotate(360deg); }
+}

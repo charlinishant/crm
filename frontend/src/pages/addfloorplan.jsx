@@ -217,7 +217,7 @@ const getGeneratedUnitNumbers = ({ from, to, unitPosition, skippedFloors, isComm
 const AddFloorplan = () => {
   const navigate = useNavigate();
   const { id } = useParams();
-  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+  const API_URL = (process.env.REACT_APP_API_URL || "http://localhost:5000").replace(/\/+$/, "");
   const isEditMode = Boolean(id);
 
   const [formData, setFormData] = useState(initialFormData);
@@ -350,7 +350,12 @@ const AddFloorplan = () => {
         setLoadingOptions(true);
         setError("");
 
-        const projectResponse = await fetch(`${API_URL}/projects/list`);
+        const token = localStorage.getItem("authToken");
+        const headers = {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+        const projectResponse = await fetch(`${API_URL}/projects/list`, { headers });
 
         if (!projectResponse.ok) throw new Error("Unable to load projects");
 
@@ -380,7 +385,12 @@ const AddFloorplan = () => {
 
       try {
         setLoadingTowers(true);
-        const response = await fetch(`${API_URL}/tower/list?projectId=${formData.project}`);
+        const token = localStorage.getItem("authToken");
+        const headers = {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+        const response = await fetch(`${API_URL}/tower/list?projectId=${formData.project}`, { headers });
         if (!response.ok) throw new Error("Unable to load project towers");
 
         const towerData = await response.json();
@@ -407,7 +417,12 @@ const AddFloorplan = () => {
       try {
         setLoadingFloorPlan(true);
         setError("");
-        const response = await fetch(`${API_URL}/floor/${id}`);
+        const token = localStorage.getItem("authToken");
+        const headers = {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+        const response = await fetch(`${API_URL}/floor/${id}`, { headers });
         if (!response.ok) {
           const message = await readApiErrorMessage(response, "Unable to load floor plan");
           throw new Error(message);
@@ -722,8 +737,10 @@ const AddFloorplan = () => {
         .forEach((file) => requestBody.append("floorPlanImages", file));
 
       const shouldCreate = !isEditMode || isCloneMode;
+      const token = localStorage.getItem("authToken");
       const response = await fetch(shouldCreate ? `${API_URL}/floor` : `${API_URL}/floor/${id}`, {
         method: shouldCreate ? "POST" : "PATCH",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: requestBody,
       });
 

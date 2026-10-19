@@ -8,7 +8,7 @@ import {
 } from "../../utils/dashboardResultFilters";
 
 const UnitCountEight = () => {
-  const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
+  const API_URL = (process.env.REACT_APP_API_URL || "http://localhost:5000").replace(/\/+$/, "");
   const [dashboardData, setDashboardData] = useState({
     leads: [],
     tasks: [],
@@ -21,10 +21,15 @@ const UnitCountEight = () => {
 
     const fetchList = async (endpoint) => {
       try {
-        const response = await fetch(`${API_URL}${endpoint}`);
+        const token = localStorage.getItem("authToken");
+        const headers = {
+          Accept: "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+        const response = await fetch(`${API_URL}${endpoint}`, { headers });
         if (!response.ok) return [];
 
-        const result = await response.json();
+        const result = await response.json().catch(() => null);
         return normalizeList(result);
       } catch (error) {
         console.error(`Unable to load ${endpoint}:`, error);
