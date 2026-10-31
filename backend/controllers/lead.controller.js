@@ -4,6 +4,12 @@ const prisma = require("../lib/prisma")
 const {sendNotification} = require("../services/notification.service")
 const { emitReportsUpdate } = require("../socket/socket")
 const { isAdminUser, maskLeadData } = require("../utils/phoneMask")
+const {
+  matchesLeadSearch,
+  matchesPhoneQuery,
+  extractLeadPhone10Digits,
+  normalizeTo10Digits,
+} = require("../utils/leadSearch")
 
 const { create } = require("domain")
 const { getVisitPayloadFromLeadUpdate, upsertScheduleVisit } = require("../services/scheduleVisit.service")
@@ -50,6 +56,16 @@ const importStatusMap = {
   booked: "Booked",
   nurture: "Nurture",
   unqualified: "Unqualified",
+  dead: "Unqualified",
+  lost: "Unqualified",
+  junk: "Unqualified",
+  "not interested": "Unqualified",
+  interested: "Qualified",
+  connected: "In_sourcing",
+  "follow up": "Nurture",
+  followup: "Nurture",
+  "visit": "In_sourcing",
+  "site visit": "In_sourcing",
 }
 
 const leadStatusScoreMap = {
@@ -310,136 +326,60 @@ const normalizePhoneValue = (value) => {
 }
 const toRequiredPhone = (value) => normalizePhoneValue(value)
 
-const getPhoneDigitVariants = (raw) => {
-  if (!raw) return []
-  const digits = String(raw).replace(/\D/g, "")
-  if (!digits) return []
-  const variants = new Set([digits])
-  if (digits.startsWith("91") && digits.length >= 11) {
-    variants.add(digits.slice(2))
-  }
-  if (digits.startsWith("0") && digits.length >= 11) {
-    variants.add(digits.slice(1))
-  }
-  return Array.from(variants)
-}
-
-const extractLeadPhoneStrings = (lead) => {
-  if (!lead) return []
-  const list = []
-  const add = (val) => {
-    if (!val) return
-    if (typeof val === "string" || typeof val === "number") {
-      list.push(String(val))
-    } else if (typeof val === "object") {
-      if (val.value) list.push(String(val.value))
-      if (val.phone) list.push(String(val.phone))
-      if (val.number) list.push(String(val.number))
-    }
-  }
-
-  if (Array.isArray(lead.phones)) {
-    lead.phones.forEach(add)
-  } else if (lead.phones) {
-    add(lead.phones)
-  }
-  if (Array.isArray(lead.phone)) {
-    lead.phone.forEach(add)
-  } else if (lead.phone) {
-    add(lead.phone)
-  }
-  if (lead.secondaryPhone) add(lead.secondaryPhone)
-  if (lead.mobile) add(lead.mobile)
-
-  return list
-}
-
-const matchesPhoneQuery = (lead, rawQuery) => {
-  if (!rawQuery) return false
-  const rawDigits = String(rawQuery).replace(/\D/g, "")
-  if (!rawDigits) return false
-
-  const queryVariants = getPhoneDigitVariants(rawQuery)
-  const phones = extractLeadPhoneStrings(lead)
-
-  for (const phone of phones) {
-    const leadVariants = getPhoneDigitVariants(phone)
-    for (const lVar of leadVariants) {
-      for (const qVar of queryVariants) {
-        if (lVar.includes(qVar) || qVar.includes(lVar)) {
-          return true
-        }
+const findRowValue = (row, candidateKeys) => {
+  if (!row || typeof row !== "object") return null
+  for (const key of Object.keys(row)) {
+    const cleanKey = key.trim().toLowerCase()
+    if (candidateKeys.includes(cleanKey)) {
+      const val = row[key]
+      if (val !== undefined && val !== null && String(val).trim() !== "") {
+        return typeof val === "string" ? val.trim() : val
       }
     }
   }
-  return false
+  return null
 }
 
-const matchesLeadSearch = (lead, rawQuery) => {
-  if (!rawQuery) return true
-  const query = String(rawQuery).trim().toLowerCase()
-  if (!query) return true
-
-  // 1. Phone match (format-agnostic)
-  if (matchesPhoneQuery(lead, rawQuery)) return true
-
-  // 2. Lead ID match
-  const leadId = String(lead?.id || lead?._id || lead?.lead_id || "").toLowerCase()
-  const cleanQueryId = query.replace(/^lead\s*#?|^#/, "").trim()
-  if (leadId) {
-    if (leadId === query || leadId === cleanQueryId || leadId.includes(query) || leadId.includes(cleanQueryId)) {
-      return true
-    }
-    if (`lead #${leadId}`.includes(query) || `lead ${leadId}`.includes(query)) {
-      return true
+const parseImportPhone = (value) => {
+  if (value === null || value === undefined) return ""
+  if (typeof value === "number") {
+    return Math.round(value).toString().slice(-10)
+  }
+  const str = String(value).trim()
+  if (/[eE]\+?/.test(str)) {
+    const num = Number(str)
+    if (!Number.isNaN(num)) {
+      return Math.round(num).toString().slice(-10)
     }
   }
-
-  // 3. Name match
-  const fullName = [lead?.firstName, lead?.lastName].filter(Boolean).join(" ").toLowerCase()
-  const directName = String(lead?.name || lead?.customer_name || "").toLowerCase()
-  if (fullName.includes(query) || directName.includes(query)) return true
-
-  // 4. Emails match
-  const emails = []
-  if (Array.isArray(lead?.emails)) {
-    lead.emails.forEach(e => emails.push(typeof e === "object" ? e?.value : e))
-  } else if (lead?.emails) {
-    emails.push(lead.emails)
-  }
-  if (lead?.email) emails.push(lead.email)
-  if (emails.some(e => String(e || "").toLowerCase().includes(query))) return true
-
-  // 5. Additional attributes
-  const additionalFields = [
-    lead?.owner,
-    lead?.sales,
-    lead?.telecaller,
-    lead?.team?.username,
-    lead?.team?.firstName,
-    lead?.team?.lastName,
-    lead?.source,
-    lead?.channelPartner,
-    lead?.channelPartnerReraId,
-    lead?.fundingSource,
-    lead?.tags,
-    lead?.stage,
-    lead?.status,
-    lead?.lead_status,
-    lead?.requirementComment,
-    lead?.configration,
-    lead?.configuration,
-    lead?.propertyType,
-    lead?.interestedProjects,
-    lead?.companyName,
-    lead?.budget,
-    lead?.city,
-    lead?.remarks,
-    lead?.note,
-  ]
-
-  return additionalFields.some(field => String(field || "").toLowerCase().includes(query))
+  const digits = str.replace(/\D/g, "")
+  return digits.slice(-10)
 }
+
+const parseImportDate = (val) => {
+  if (!val) return null
+  if (val instanceof Date && !Number.isNaN(val.getTime())) return val
+  if (typeof val === "number") {
+    const excelEpoch = new Date(1899, 11, 30)
+    const ms = Math.round(val * 86400000)
+    const d = new Date(excelEpoch.getTime() + ms)
+    if (!Number.isNaN(d.getTime())) return d
+  }
+  const str = String(val).trim()
+  const dmyMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/)
+  if (dmyMatch) {
+    const day = parseInt(dmyMatch[1], 10)
+    const month = parseInt(dmyMatch[2], 10) - 1
+    let year = parseInt(dmyMatch[3], 10)
+    if (year < 100) year += year >= 70 ? 1900 : 2000
+    const d = new Date(Date.UTC(year, month, day, 6, 30, 0))
+    if (!Number.isNaN(d.getTime())) return d
+  }
+  const parsed = new Date(str)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+// Lead search and phone matching functions are imported from ../utils/leadSearch
 
 const extractJsonValues = (items) => {
   if (!Array.isArray(items)) return []
@@ -1387,7 +1327,27 @@ exports.updateLead = async (req, res) => {
       })
     }
 
-    if (source.teamId !== undefined) data.teamId = toNullableInt(source.teamId)
+    if (source.teamId !== undefined) {
+      data.teamId = toNullableInt(source.teamId)
+      if (data.teamId) {
+        const assignedUser = await prisma.user.findUnique({
+          where: { id: data.teamId },
+          select: { id: true, role: true, isActive: true, firstName: true, lastName: true },
+        })
+        if (!assignedUser) {
+          return res.status(400).json({ message: "Selected sales user does not exist." })
+        }
+        if (!assignedUser.isActive) {
+          return res.status(400).json({ message: "Cannot assign lead to an inactive user." })
+        }
+        const userRole = String(assignedUser.role || "").toUpperCase()
+        if (userRole === "CHANNEL_PARTNER") {
+          return res.status(400).json({
+            message: "Cannot assign lead to a Channel Partner. Leads must be assigned to Sales users.",
+          })
+        }
+      }
+    }
     if (source.seats !== undefined) data.seats = toInt(source.seats, 0)
     if (source.tenure !== undefined) data.tenure = toFloat(source.tenure, 0)
     if (source.age !== undefined) data.age = toNullableInt(source.age)
@@ -1815,17 +1775,64 @@ exports.importExcel = async (req, res) => {
     })
 
     const mapData = data.map((row, index) => {
-      const firstName = toRequiredString(row["First name"])
-      const lastName = toRequiredString(row["Last name"])
-      const phone = toRequiredPhone(row["Phone"])
+      const rawPhone = findRowValue(row, ["phone", "contact", "mobile", "mobile no", "phone number", "cell", "contact number"]) || row["Phone"]
+      const phone = parseImportPhone(rawPhone)
 
-      if (!firstName || !lastName || !phone) {
-        throw new Error(`Excel row ${index + 2}: First name, last name, and phone are required`)
+      let firstName = toRequiredString(findRowValue(row, ["first name", "firstname"]) || row["First name"])
+      let lastName = toRequiredString(findRowValue(row, ["last name", "lastname"]) || row["Last name"])
+      const singleName = findRowValue(row, ["name", "client name", "full name", "lead name", "customer name"])
+
+      if (!firstName && singleName) {
+        const parts = String(singleName).trim().split(/\s+/)
+        firstName = parts[0] || "Lead"
+        lastName = parts.slice(1).join(" ") || "-"
+      } else if (!firstName) {
+        firstName = "Lead"
+        lastName = phone ? phone.slice(-4) : `#${index + 1}`
+      }
+      if (!lastName) lastName = "-"
+
+      if (!phone) {
+        throw new Error(`Excel row ${index + 2}: Phone / Contact number is required`)
       }
 
       if (!phoneRegex.test(phone)) {
-        throw new Error(`Excel row ${index + 2}: Phone number must be exactly 10 digits`)
+        throw new Error(`Excel row ${index + 2}: Phone number must be exactly 10 digits (received: "${rawPhone}")`)
       }
+
+      // Remarks / Call History (col 44, 'REMARK', 'Remarks', 'Notes', 'Basi comment')
+      const remarksText = toNullableString(findRowValue(row, [
+        "remarks",
+        "remark",
+        "notes",
+        "note",
+        "description",
+        "basi comment",
+        "basic comment",
+        "comments",
+        "comment",
+        "call history",
+        "call remarks",
+        "history",
+        "prior context",
+        "discussion",
+      ]))
+
+      // Requirement comment (col 60, kept separate)
+      const requirementComment = toNullableString(findRowValue(row, [
+        "requirement comment",
+        "requirement",
+        "requirements",
+        "property requirement",
+      ]))
+
+      // Status (supports DEAD -> Unqualified)
+      const rawStatus = findRowValue(row, ["status", "lead status", "st...", "st"]) || row["Status"]
+      const normalizedStatus = normalizeImportStatus(rawStatus)
+
+      // Date received
+      const rawDate = findRowValue(row, ["date", "received date", "received on", "lead date", "created date"]) || row["Date"]
+      const leadDate = parseImportDate(rawDate)
 
       const projectName = row["Interested projects"]
       const projectId = projectMap[projectName] || null
@@ -1886,13 +1893,16 @@ exports.importExcel = async (req, res) => {
         salutation: row["Salutation"] || null,
         firstName,
         lastName,
+        importedRemarks: remarksText,
+        importedRequirement: requirementComment,
+        importedDate: leadDate,
         emails: [
-          { type: row["Email Type"] || null, value: row["Email"] || null },
+          { type: row["Email Type"] || null, value: findRowValue(row, ["email", "mail id", "mail", "email id", "mailid"]) || row["Email"] || null },
         ],
         phones: [
           { type: row["Phone Type"] || null, value: phone },
         ],
-        status: normalizeImportStatus(row["Status"]),
+        status: normalizedStatus,
         timeZone: toNullableString(row["Timezone"]),
         tags: rowTags,
         interestedProjects: projectId,
@@ -1980,7 +1990,7 @@ exports.importExcel = async (req, res) => {
       }
 
       try {
-        const { hasSource, rowFundingSource, rowChannelPartner, rowRera, ...createData } = row
+        const { hasSource, rowFundingSource, rowChannelPartner, rowRera, importedRemarks, importedRequirement, importedDate, ...createData } = row
         const lead = await prisma.lead.create({
           data: {
             ...createData,
@@ -1997,6 +2007,52 @@ exports.importExcel = async (req, res) => {
         })
         result.push(lead)
         addLeadKeysToSet(existingKeys, row)
+
+        // ── Land Remarks into lead's Notes & Activity Timeline ──
+        if (importedRemarks) {
+          await prisma.leadNote.create({
+            data: {
+              leadId: lead.id,
+              note: importedRemarks,
+              owner: authUserName || "Imported Remarks",
+              pinned: true,
+              createdAt: importedDate || new Date(),
+            },
+          })
+
+          await prisma.leadActivity.create({
+            data: {
+              leadId: lead.id,
+              userId: req.authUser?.id ? Number(req.authUser.id) : null,
+              type: "NOTE_ADDED",
+              message: importedRemarks,
+              createdAt: importedDate || new Date(),
+            },
+          })
+        }
+
+        // ── Keep Requirement comment separate (col 60) ──
+        if (importedRequirement) {
+          await prisma.leadNote.create({
+            data: {
+              leadId: lead.id,
+              note: `Requirement Details: ${importedRequirement}`,
+              owner: authUserName || "Imported Requirements",
+              pinned: false,
+              createdAt: importedDate || new Date(),
+            },
+          })
+
+          await prisma.leadActivity.create({
+            data: {
+              leadId: lead.id,
+              userId: req.authUser?.id ? Number(req.authUser.id) : null,
+              type: "REQUIREMENT_NOTE",
+              message: `Requirement Details: ${importedRequirement}`,
+              createdAt: importedDate || new Date(),
+            },
+          })
+        }
 
         if (hasSource) {
           await prisma.leadActivity.create({
@@ -2090,6 +2146,57 @@ exports.importExcel = async (req, res) => {
 }
 
 exports.sampleExcel = (req, res) => {
+  const isQuick = req.query?.type === "quick" || req.query?.format === "quick"
+
+  if (isQuick) {
+    // Drop-in template matching the team's existing call-history REMARK sheet
+    const quickData = [
+      {
+        CONTACT: "9930937301",
+        "MAIL ID": "powlepallavi@gmail.com",
+        REMARK: "looking for 1 bhk details shared for triratna - 28/07 OUT OF SERVICE - 17/08 OUT OF SERVICE",
+        STATUS: "DEAD",
+        DATE: "28/07/2024",
+        "FIRST NAME": "Pallavi",
+        "LAST NAME": "Powle",
+        "CHANNEL PARTNER": "Oxford School",
+        "INTERESTED PROJECTS": "Triratna",
+      },
+      {
+        CONTACT: "9007650265",
+        "MAIL ID": "pappudada449@gmail.com",
+        REMARK: "looking for 2 bhk shared details shared for triratna and shree ganesh - 17/08 s.off",
+        STATUS: "Follow up",
+        DATE: "17/08/2024",
+        "FIRST NAME": "Pappu",
+        "LAST NAME": "Dada",
+        "CHANNEL PARTNER": "Direct Entry",
+        "INTERESTED PROJECTS": "Shree Ganesh",
+      },
+      {
+        CONTACT: "7039462854",
+        "MAIL ID": "poojagupta221998@gmail.com",
+        REMARK: "Busy another call ( ringing ) - 28/07 BUSY- 03/08 BUSY - 11/08 OUT OF SERVICE - 17/08 s.off",
+        STATUS: "DEAD",
+        DATE: "17/08/2024",
+        "FIRST NAME": "Pooja",
+        "LAST NAME": "Gupta",
+        "CHANNEL PARTNER": "Carpet Area CP",
+        "INTERESTED PROJECTS": "Anantam A",
+      },
+    ]
+
+    const worksheet = XLSX.utils.json_to_sheet(quickData)
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Remarks Drop-In Template")
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" })
+
+    res.setHeader("Content-Disposition", "attachment; filename=lead_remarks_quick_template.xlsx")
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    return res.send(buffer)
+  }
+
+  // Standard 60-Column Smart Import Template with clearly-labelled Remarks column (col 44)
   const data = [
     {
       Salutation: "Mr",
@@ -2140,7 +2247,7 @@ exports.sampleExcel = (req, res) => {
       Education: "B.Tech",
       "Company title": "Manager",
       Income: "1000000",
-      "Basi comment": "Interested",
+      Remarks: "Looking for 1 BHK details shared for triratna - 28/07 OUT OF SERVICE - 17/08 OUT OF SERVICE",
       Purpose: "Investment",
       NRI: "Yes/No",
 
@@ -2157,21 +2264,21 @@ exports.sampleExcel = (req, res) => {
       Furnishing: "Semi",
       Facing: "East",
       "Location preferences": "Baner",
-      "Requirement comment": "Near IT park",
+      "Requirement comment": "Near IT park, higher floor preference",
     },
   ]
 
   const worksheet = XLSX.utils.json_to_sheet(data)
   const workbook = XLSX.utils.book_new()
 
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Sample")
+  XLSX.utils.book_append_sheet(workbook, worksheet, "Standard 60-Col Template")
 
   const buffer = XLSX.write(workbook, {
     type: "buffer",
     bookType: "xlsx",
   })
 
-  res.setHeader("Content-Disposition", "attachment; filename=lead_sample.xlsx")
+  res.setHeader("Content-Disposition", "attachment; filename=lead_sample_with_remarks.xlsx")
   res.setHeader(
     "Content-Type",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

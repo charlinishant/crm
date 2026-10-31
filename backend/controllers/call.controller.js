@@ -5,6 +5,7 @@ const { startProviderCall } = require("../services/callProvider.service")
 const { handleCallbackFollowUpSaved } = require("../services/callbackReminder.service")
 const mcubeVoice = require("../services/mcubeVoice.service")
 const mcubeAgentService = require("../services/mcubeAgent.service")
+const inboundCallService = require("../services/inboundCall.service")
 const { connectedUser, getIO } = require("../socket")
 const { normalizePhoneNumber } = require("../utils/phone")
 const { maskCallLogData, maskPhoneNumber } = require("../utils/phoneMask")
@@ -647,6 +648,12 @@ const buildWhereFromQuery = (query) => {
   if (query.campaign) where.OR = [...(where.OR || []), { campaignName: { contains: String(query.campaign) } }, { queueName: { contains: String(query.campaign) } }]
   if (query.recordingAvailable === "true") where.recordingUrl = { not: null }
   if (query.recordingAvailable === "false") where.recordingUrl = null
+  if (query.isAcknowledged !== undefined && query.isAcknowledged !== "") {
+    where.isAcknowledged = query.isAcknowledged === "true" || query.isAcknowledged === true
+  }
+  if (query.callbackStatus && query.callbackStatus !== "all") {
+    where.callbackStatus = String(query.callbackStatus).toLowerCase()
+  }
   if (query.from || query.to) {
     where.createdAt = {}
     if (query.from) where.createdAt.gte = new Date(query.from)
@@ -3188,5 +3195,182 @@ exports.endInboundCall = async (req, res) => {
   } catch (error) {
     console.error("End inbound call error:", error)
     res.status(500).json({ message: "Unable to end inbound call" })
+  }
+}
+
+/**
+ * Dedicated Missed Calls Workspace Endpoint.
+ * Returns missed records with summary KPIs (total, unacknowledged, callback pending)
+ * and detailed call list filtered by telecaller, direction, ack, callback, date and search.
+ */
+exports.getMissedCalls = async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page) || 1)
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20))
+    const skip = (page - 1) * limit
+    const isAdmin = isAdminUser(req)
+
+    const baseWhere = {
+      deletedAt: null,
+      status: { in: ["missed", "no-answer", "busy", "failed", "canceled", "rejected"] },
+    }
+
+    if (!isAdmin) {
+      const authUserId = toNumberOrNull(req.authUser?.id)
+      if (authUserId) {
+        baseWhere.OR = [
+          { agentId: authUserId },
+          { lead: { is: { teamId: authUserId } } },
+        ]
+      }
+    }
+
+    const where = { ...baseWhere }
+
+    if (req.query.agentId && req.query.agentId !== "all") {
+      const targetAgentId = Number(req.query.agentId)
+      if (targetAgentId) where.agentId = targetAgentId
+    }
+
+    if (req.query.direction && req.query.direction !== "all") {
+      where.direction = String(req.query.direction).toLowerCase()
+    }
+
+    if (req.query.isAcknowledged !== undefined && req.query.isAcknowledged !== "") {
+      where.isAcknowledged = req.query.isAcknowledged === "true" || req.query.isAcknowledged === true
+    }
+
+    if (req.query.callbackStatus && req.query.callbackStatus !== "all") {
+      where.callbackStatus = String(req.query.callbackStatus).toLowerCase()
+    }
+
+    if (req.query.search) {
+      const s = String(req.query.search).trim()
+      where.OR = [
+        { phone: { contains: s } },
+        { callerNumber: { contains: s } },
+        { customerNumber: { contains: s } },
+        { leadPhone: { contains: s } },
+        { lead: { is: { firstName: { contains: s } } } },
+        { lead: { is: { lastName: { contains: s } } } },
+        { agent: { is: { firstName: { contains: s } } } },
+        { agent: { is: { lastName: { contains: s } } } },
+      ]
+    }
+
+    if (req.query.from || req.query.to) {
+      where.createdAt = {}
+      if (req.query.from) {
+        const fromDate = new Date(req.query.from)
+        if (!Number.isNaN(fromDate.getTime())) where.createdAt.gte = fromDate
+      }
+      if (req.query.to) {
+        const toDate = new Date(req.query.to)
+        if (!Number.isNaN(toDate.getTime())) {
+          toDate.setHours(23, 59, 59, 999)
+          where.createdAt.lte = toDate
+        }
+      }
+    }
+
+    const [totalMissed, unacknowledgedCount, callbackPendingCount, totalItems, logs] = await Promise.all([
+      prisma.callLog.count({ where: baseWhere }),
+      prisma.callLog.count({ where: { ...baseWhere, isAcknowledged: false } }),
+      prisma.callLog.count({ where: { ...baseWhere, callbackStatus: "pending" } }),
+      prisma.callLog.count({ where }),
+      prisma.callLog.findMany({
+        where,
+        skip,
+        take: limit,
+        include: {
+          lead: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              companyName: true,
+              teamId: true,
+              phones: true,
+              status: true,
+              tags: true,
+              channelPartner: true,
+            },
+          },
+          agent: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              username: true,
+              email: true,
+              phone: true,
+              role: true,
+            },
+          },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+    ])
+
+    const formattedData = logs.map((callLog) => {
+      const displayNumber = callLog.callerNumber || callLog.customerNumber || callLog.leadPhone || callLog.phone || "-"
+      return {
+        ...callLog,
+        displayNumber: isAdmin ? displayNumber : maskPhoneNumber(displayNumber, false),
+        agentName: [callLog.agent?.firstName, callLog.agent?.lastName].filter(Boolean).join(" ") || callLog.agent?.username || callLog.providerAgentName || "Unassigned",
+        leadName: callLog.lead ? [callLog.lead.firstName, callLog.lead.lastName].filter(Boolean).join(" ") || `Lead #${callLog.lead.id}` : null,
+      }
+    })
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        totalMissed,
+        unacknowledged: unacknowledgedCount,
+        callbackPending: callbackPendingCount,
+      },
+      page,
+      limit,
+      totalItems,
+      data: formattedData,
+    })
+  } catch (error) {
+    console.error("getMissedCalls error:", error)
+    res.status(500).json({ message: "Unable to load missed calls" })
+  }
+}
+
+exports.acknowledgeMissedCall = async (req, res) => {
+  try {
+    const callLogId = toNumberOrNull(req.params.id)
+    if (!callLogId) return res.status(400).json({ message: "Call log id is required" })
+    const result = await inboundCallService.acknowledgeMissedCall(callLogId, req.authUser || { id: 1 })
+    res.status(200).json({ success: true, message: "Missed call acknowledged", data: result })
+  } catch (error) {
+    console.error("acknowledgeMissedCall error:", error)
+    res.status(500).json({ message: error.message || "Failed to acknowledge missed call" })
+  }
+}
+
+exports.acknowledgeAllMissedCalls = async (req, res) => {
+  try {
+    const result = await inboundCallService.acknowledgeAllMissedCallsForUser(req.authUser || { id: 1 })
+    res.status(200).json({ success: true, message: "All missed calls acknowledged", data: result })
+  } catch (error) {
+    console.error("acknowledgeAllMissedCalls error:", error)
+    res.status(500).json({ message: error.message || "Failed to acknowledge all missed calls" })
+  }
+}
+
+exports.completeMissedCallCallback = async (req, res) => {
+  try {
+    const callLogId = toNumberOrNull(req.params.id)
+    if (!callLogId) return res.status(400).json({ message: "Call log id is required" })
+    const notes = req.body.notes || ""
+    const result = await inboundCallService.completeCallback(callLogId, req.authUser || { id: 1 }, notes)
+    res.status(200).json({ success: true, message: "Callback marked as completed", data: result })
+  } catch (error) {
+    console.error("completeMissedCallCallback error:", error)
+    res.status(500).json({ message: error.message || "Failed to complete callback" })
   }
 }

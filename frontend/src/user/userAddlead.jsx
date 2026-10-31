@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import RoleUserDropdown, { useRoleUsers, getUserDisplayName } from "../components/common/RoleUserDropdown";
 
 
 const AddSection = ({ label, renderFields, defaultItem }) => {
@@ -132,8 +133,10 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
   });
   const [projects, setProjects] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
-  const [users, setUsers] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(true);
+  const { users: salesUsers, loading: loadingSales } = useRoleUsers("SALES");
+  const { users: channelPartners, loading: loadingCP } = useRoleUsers("CHANNEL_PARTNER");
+  const loadingUsers = loadingSales || loadingCP;
+  const users = useMemo(() => [...(salesUsers || []), ...(channelPartners || [])], [salesUsers, channelPartners]);
   const [formErrors, setFormErrors] = useState({});
 
   useEffect(() => {
@@ -153,20 +156,7 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
     });
   }, [inboundCallerNumber]);
 
-  const getUserName = (user) =>
-    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
-    user?.username ||
-    user?.email ||
-    `User #${user?.id}`;
-
-  const channelPartners = users.filter(
-    (user) => String(user?.role || "").toUpperCase() === "CHANNEL_PARTNER"
-  );
-
-  const salesUsers = users.filter((user) => {
-    const role = String(user?.role || "").toUpperCase();
-    return role !== "CHANNEL_PARTNER" && role !== "AGENCY_USER";
-  });
+  const getUserName = (user) => getUserDisplayName(user);
 
   useEffect(() => {
     if (!savedUserId) return;
@@ -200,29 +190,6 @@ const ADDLEAD = ({ currentUser = null, onLeadCreated = null }) => {
     fetchProjects();
   }, [API_URL]);
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        setLoadingUsers(true);
-        const response = await fetch(`${API_URL}/users?limit=1000`);
-
-        if (!response.ok) {
-          throw new Error("Unable to load users");
-        }
-
-        const data = await response.json();
-        const userList = Array.isArray(data) ? data : data?.data || data?.users || [];
-        setUsers(Array.isArray(userList) ? userList : []);
-      } catch (err) {
-        console.error(err);
-        setUsers([]);
-      } finally {
-        setLoadingUsers(false);
-      }
-    };
-
-    fetchUsers();
-  }, [API_URL]);
 
   
   const handleChange = (e) => {

@@ -6,6 +6,7 @@ import BulkDeleteConfirmation from "../table/BulkDeleteConfirmation";
 import TableSelectionCheckbox from "../table/TableSelectionCheckbox";
 import { useTableSelection } from "../table/useTableSelection";
 import LeadTableToolbar from "../common/LeadTableToolbar";
+import RoleUserDropdown, { useRoleUsers } from "../common/RoleUserDropdown";
 import { matchesLeadSearch } from "../../utils/leadSearch";
 import { getReportsSocket } from "../../services/socketClient";
 
@@ -20,8 +21,18 @@ const SOURCE_OPTIONS = [
 
 const PaymentHistoryOne = ({ trashMode = false }) => {
   const [leadData, setLeadData] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const { users: telecallers, loading: isLoadingSales } = useRoleUsers("SALES");
+  const { users: channelPartners, loading: isLoadingCP } = useRoleUsers("CHANNEL_PARTNER");
+  const isLoadingUsers = isLoadingSales || isLoadingCP;
+
+  const users = useMemo(() => {
+    const combined = [...(telecallers || []), ...(channelPartners || [])];
+    const map = new Map();
+    combined.forEach((u) => {
+      if (u && u.id) map.set(String(u.id), u);
+    });
+    return Array.from(map.values());
+  }, [telecallers, channelPartners]);
   const [openMenu, setOpenMenu] = useState(null);
   const [menuPosition, setMenuPosition] = useState(null);
   const [teamMenu, setTeamMenu] = useState(null);
@@ -57,15 +68,21 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
     user?.email ||
     (user?.id ? `User #${user.id}` : ""), []);
 
-  const fetchLeadData = useCallback(async () => {
+  const fetchLeadData = useCallback(async (queryParam) => {
     try {
-      const response = await fetch(listUrl);
+      const q = typeof queryParam === "string" ? queryParam : searchQuery;
+      let url = listUrl;
+      if (q && q.trim()) {
+        const separator = url.includes("?") ? "&" : "?";
+        url = `${url}${separator}search=${encodeURIComponent(q.trim())}`;
+      }
+      const response = await fetch(url);
       const result = await response.json();
       setLeadData(Array.isArray(result) ? result : result?.data || []);
     } catch (error) {
       console.error("Error fetching leads:", error);
     }
-  }, [listUrl]);
+  }, [listUrl, searchQuery]);
 
   useEffect(() => {
     fetchLeadData();
@@ -120,25 +137,6 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
     };
   }, [fetchLeadData]);
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        setIsLoadingUsers(true);
-        const response = await fetch(`${API_URL}/users?limit=1000`);
-        if (!response.ok) throw new Error("Unable to load users");
-        const result = await response.json();
-        const userList = Array.isArray(result) ? result : result?.data || result?.users || [];
-        setUsers(userList);
-      } catch (error) {
-        console.error("Error fetching users:", error);
-        setUsers([]);
-      } finally {
-        setIsLoadingUsers(false);
-      }
-    };
-
-    fetchUsers();
-  }, [API_URL]);
 
   const getLeadName = useCallback((lead) => {
     const fullName = `${lead.firstName || ""} ${lead.lastName || ""}`.trim();
@@ -866,72 +864,26 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
     return getUserName(selectedUser) || "Unassigned";
   };
 
-  const getFilteredTeamUsers = () => {
-    const query = teamSearch.trim().toLowerCase();
-    if (!query) return users;
-
-    return users.filter((user) => getUserName(user).toLowerCase().includes(query));
-  };
-
   const renderTeamDropdown = (lead) => {
     const leadId = getLeadKey(lead);
     if (teamMenu?.leadId !== leadId) return null;
 
-    const filteredUsers = getFilteredTeamUsers();
     const selectedTeamId = String(lead.teamId || "");
 
     return (
-      <div
-        className="lead-team-menu"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <input
-          type="search"
-          className="lead-team-search"
-          value={teamSearch}
-          onChange={(event) => setTeamSearch(event.target.value)}
-          placeholder="Search team..."
-          autoFocus
-        />
-        <div className="lead-team-options">
-          <button
-            type="button"
-            className={!selectedTeamId ? "active" : ""}
-            onClick={() => handleTeamSelect(lead, "")}
-          >
-            Unassigned
-          </button>
-          {filteredUsers.length ? (
-            filteredUsers.map((user) => {
-              const userId = String(user.id);
-              return (
-                <button
-                  type="button"
-                  className={selectedTeamId === userId ? "active" : ""}
-                  key={user.id || user.email}
-                  onClick={() => handleTeamSelect(lead, userId)}
-                >
-                  {getUserName(user)}
-                </button>
-              );
-            })
-          ) : (
-            <div className="lead-team-empty">No users found</div>
-          )}
-        </div>
-      </div>
+      <RoleUserDropdown
+        role="SALES"
+        mode="menu"
+        value={selectedTeamId}
+        searchPlaceholder="Search team..."
+        includeUnassigned={true}
+        unassignedLabel="Unassigned"
+        autoFocus={true}
+        onClose={() => setTeamMenu(null)}
+        onChange={(userId) => handleTeamSelect(lead, userId)}
+      />
     );
   };
-
-  const channelPartners = useMemo(
-    () => users.filter((u) => String(u?.role || "").toUpperCase() === "CHANNEL_PARTNER"),
-    [users]
-  );
-
-  const telecallers = useMemo(
-    () => users.filter((u) => ["SALES", "PRE_SALES", "POST_SALES", "AGENT"].includes(String(u?.role || "").toUpperCase())),
-    [users]
-  );
 
   const selectedUntaggedCount = paginatedLeadData
     .filter((lead) => tableSelection.isSelected(getLeadKey(lead)) && getLastSourceInfo(lead).isUntagged)
@@ -1078,8 +1030,9 @@ const PaymentHistoryOne = ({ trashMode = false }) => {
           onSearch={(query) => {
             setSearchQuery(query);
             setCurrentPage(1);
+            fetchLeadData(query);
           }}
-          onRefresh={fetchLeadData}
+          onRefresh={() => fetchLeadData(searchQuery)}
           onImport={() => navigate("/import-leads")}
           onExportAll={() => downloadLeadsCsv(leadData, "all-leads.csv")}
           onAddLead={() => {

@@ -48,6 +48,90 @@ export const reportApi = {
   getAgentCallPerformance: (filters) => request("/api/admin/reports/agent-call-performance", filters),
   getCallLogs: (filters) => request("/api/admin/reports/call-logs", filters),
   getDrilldownCalls: (filters) => request("/api/admin/reports/drilldown-calls", filters),
+  getDprReport: (filters) => request("/api/admin/reports/dpr", filters),
+  getDprDrilldown: (filters) => request("/api/admin/reports/dpr/drilldown", filters),
+  downloadDprExcel: async (filters) => {
+    const query = buildQuery(filters);
+    const response = await fetch(`${API_URL}/api/admin/reports/dpr/export${query ? `?${query}` : ""}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error("Unable to download DPR Excel report");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const contentDisposition = response.headers.get("content-disposition");
+    let filename = "DPR_Report.xlsx";
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?([^"]+)"?/);
+      if (match && match[1]) filename = match[1];
+    }
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  },
+  getLeadSourceReport: (filters) => request("/api/admin/reports/lead-source-performance", filters),
+  getLeadSourceDrilldown: (filters) => request("/api/admin/reports/lead-source-performance/drilldown", filters),
+  downloadLeadSourceExcel: async (filters = {}, sourceName = "") => {
+    const params = { ...filters };
+    if (sourceName) params.sourceName = sourceName;
+    const query = buildQuery(params);
+    const response = await fetch(`${API_URL}/api/admin/reports/lead-source-performance/export${query ? `?${query}` : ""}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!response.ok) {
+      throw new Error("Unable to download Lead Source Excel report");
+    }
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const contentDisposition = response.headers.get("content-disposition");
+    let filename = sourceName ? `Lead_Source_${sourceName.replace(/[^a-zA-Z0-9]/g, "_")}.xlsx` : "Lead_Source_Performance.xlsx";
+    if (contentDisposition) {
+      const match = contentDisposition.match(/filename="?([^"]+)"?/);
+      if (match && match[1]) filename = match[1];
+    }
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  },
+  mergeLeadSources: async ({ fromSource, toSource }) => {
+    const response = await fetch(`${API_URL}/api/admin/reports/lead-source-performance/merge`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ fromSource, toSource }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || "Unable to merge lead sources");
+    }
+    return response.json();
+  },
+  autoCleanLeadSources: async () => {
+    const response = await fetch(`${API_URL}/api/admin/reports/lead-source-performance/clean`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({}),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || "Unable to auto-clean lead sources");
+    }
+    return response.json();
+  },
   getProjects: () => request("/projects/list"),
   getUsers: () => request("/api/admin/reports/sales-users"),
 };
@@ -70,6 +154,8 @@ export const fetchAllReports = async (filters) => {
     didBreakup,
     agentCallPerformance,
     callLogs,
+    dpr,
+    leadSourceReport,
   ] = await Promise.all([
     reportApi.getSummary(filters).catch(() => ({})),
     reportApi.getLeadStatus(filters).catch(() => []),
@@ -87,6 +173,8 @@ export const fetchAllReports = async (filters) => {
     reportApi.getDidBreakup(filters).catch(() => []),
     reportApi.getAgentCallPerformance(filters).catch(() => []),
     reportApi.getCallLogs(filters).catch(() => []),
+    reportApi.getDprReport(filters).catch(() => ({ callers: [], summary: {} })),
+    reportApi.getLeadSourceReport(filters).catch(() => ({ sources: [], summary: {} })),
   ]);
 
   return {
@@ -106,6 +194,8 @@ export const fetchAllReports = async (filters) => {
     didBreakup,
     agentCallPerformance,
     callLogs,
+    dpr,
+    leadSourceReport,
   };
 };
 

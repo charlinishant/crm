@@ -486,6 +486,7 @@ const ProtectedAppRoutes = () => {
         <Route exact path='/NewEnquiries' element={< NewEnquiriesPage />} />
         <Route exact path='/CallLater' element={< CallLaterPage />} />
         <Route exact path='/MissedCall' element={< MissedCallPage/>} />
+        <Route exact path='/missed-calls' element={< MissedCallPage/>} />
         <Route exact path='/ReassignedToMe' element={< ReassignedToMePage/>} />
         <Route exact path='/UnreadEmailS' element={< UnreadEmailPage/>} />
         <Route exact path='/MissedFollowups' element={< MissedFollowupsPage/>} />
@@ -677,6 +678,7 @@ function App() {
         <Route exact path='/NewEnquiries' element={< NewEnquiriesPage />} />
         <Route exact path='/CallLater' element={< CallLaterPage />} />
         <Route exact path='/MissedCall' element={< MissedCallPage/>} />
+        <Route exact path='/missed-calls' element={< MissedCallPage/>} />
         <Route exact path='/ReassignedToMe' element={< ReassignedToMePage/>} />
         <Route exact path='/UnreadEmailS' element={< UnreadEmailPage/>} />
         <Route exact path='/MissedFollowups' element={< MissedFollowupsPage/>} />

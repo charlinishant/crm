@@ -145,7 +145,7 @@ const NEWPROJECT = () => {
     const fetchUsers = async () => {
       try {
         setIsLoadingUsers(true);
-        const response = await fetch(`${API_URL}/users?limit=1000`);
+        const response = await fetch(`${API_URL}/users/by-role?role=SALES`);
         if (!response.ok) throw new Error(`Users API failed: ${response.status}`);
 
         const result = await response.json();

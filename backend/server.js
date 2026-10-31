@@ -164,3 +164,19 @@ server.listen(PORT, () => {
   })
   initializeUnitHoldReleaseJob()
 })
+
+if (Number(PORT) !== 5000) {
+  try {
+    const fallbackServer = http.createServer(app);
+    initSocket(fallbackServer);
+    fallbackServer
+      .listen(5000, () => {
+        console.log("Dual-port listener active on 5000");
+      })
+      .on("error", (err) => {
+        if (err.code !== "EADDRINUSE") {
+          console.warn("Dual-port 5000 listener info:", err.message);
+        }
+      });
+  } catch (e) {}
+}

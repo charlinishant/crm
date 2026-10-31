@@ -604,7 +604,7 @@ const UserBookingForm = ({
         const [projectsResponse, unitsResponse, usersResponse] = await Promise.all([
           fetch(`${API_URL}/projects`, { headers: getAuthHeaders() }),
           fetch(`${API_URL}/unit?limit=1000`, { headers: getAuthHeaders() }),
-          fetch(`${API_URL}/users?limit=1000`, { headers: getAuthHeaders() }),
+          fetch(`${API_URL}/users/by-role?role=CHANNEL_PARTNER`, { headers: getAuthHeaders() }),
         ]);
 
         const projectsResult = projectsResponse.ok ? await projectsResponse.json() : [];
@@ -615,9 +615,7 @@ const UserBookingForm = ({
 
         setBookingProjects(Array.isArray(projectsResult) ? projectsResult : projectsResult?.data || []);
         setDatabaseUnitGroups(Array.isArray(unitsResult) ? unitsResult : unitsResult?.items || unitsResult?.data || []);
-        setChannelPartners((Array.isArray(usersResult) ? usersResult : usersResult?.data || []).filter(
-          (user) => String(user?.role || "").toUpperCase() === "CHANNEL_PARTNER"
-        ));
+        setChannelPartners(Array.isArray(usersResult) ? usersResult : usersResult?.data || []);
       } catch (error) {
         console.error("Unable to load booking project catalog:", error);
         if (isMounted) {

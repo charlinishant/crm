@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import MasterLayout from "../masterLayout/MasterLayout";
+import RoleUserDropdown, { useRoleUsers, getUserDisplayName } from "../components/common/RoleUserDropdown";
 
 // ✅ AddSection defined OUTSIDE ADDLEAD
 const AddSection = ({ label, renderFields, defaultItem }) => {
@@ -326,24 +327,13 @@ const ADDLEAD = () => {
   const [editLeadId, setEditLeadId] = useState("");
   const [projects, setProjects] = useState([]);
   const [loadingProjects, setLoadingProjects] = useState(true);
-  const [users, setUsers] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(true);
+  const { users: salesUsers, loading: loadingSales } = useRoleUsers("SALES");
+  const { users: channelPartners, loading: loadingCP } = useRoleUsers("CHANNEL_PARTNER");
+  const loadingUsers = loadingSales || loadingCP;
+  const users = useMemo(() => [...(salesUsers || []), ...(channelPartners || [])], [salesUsers, channelPartners]);
   const [formErrors, setFormErrors] = useState({});
 
-  const getUserName = (user) =>
-    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
-    user?.username ||
-    user?.email ||
-    `User #${user?.id}`;
-
-  const channelPartners = users.filter(
-    (user) => String(user?.role || "").toUpperCase() === "CHANNEL_PARTNER"
-  );
-
-  const salesUsers = users.filter((user) => {
-    const role = String(user?.role || "").toUpperCase();
-    return role !== "CHANNEL_PARTNER" && role !== "AGENCY_USER";
-  });
+  const getUserName = (user) => getUserDisplayName(user);
 
   useEffect(() => {
     const fetchProjects = async () => {
@@ -371,32 +361,6 @@ const ADDLEAD = () => {
     fetchProjects();
   }, [API_URL]);
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        setLoadingUsers(true);
-        const token = localStorage.getItem("authToken");
-        const response = await fetch(`${API_URL}/users?limit=1000`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-
-        if (!response.ok) {
-          throw new Error("Unable to load users");
-        }
-
-        const data = await response.json();
-        const userList = Array.isArray(data) ? data : data?.data || data?.users || [];
-        setUsers(Array.isArray(userList) ? userList : []);
-      } catch (err) {
-        console.error(err);
-        setUsers([]);
-      } finally {
-        setLoadingUsers(false);
-      }
-    };
-
-    fetchUsers();
-  }, [API_URL]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);

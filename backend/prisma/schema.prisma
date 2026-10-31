@@ -568,6 +568,12 @@ model CallLog {
   visitDateTime        DateTime?
   startedAt            DateTime?
   endedAt              DateTime?
+  isAcknowledged       Boolean   @default(false)
+  acknowledgedAt       DateTime?
+  acknowledgedById     Int?
+  callbackStatus       String?   @default("pending")
+  callbackTaskId       Int?
+  callbackFollowUpId   Int?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
@@ -580,6 +586,8 @@ model CallLog {
   @@index([status])
   @@index([disposition])
   @@index([interestedProjectId])
+  @@index([isAcknowledged])
+  @@index([callbackStatus])
   @@index([startedAt])
   @@index([createdAt])
 }

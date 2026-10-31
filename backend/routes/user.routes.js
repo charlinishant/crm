@@ -5,6 +5,10 @@ const { Router } = require("express")
 const { 
     createUser, 
     getUser, 
+    getTelecallers,
+    getUsersByRole,
+    auditUserRoles,
+    fixUserRoles,
     updateUser, 
     deleteUser, 
     getMe,
@@ -20,6 +24,11 @@ const router = Router()
 
 router.post("/", optionalAuthenticate, createUser)
 router.get("/", optionalAuthenticate, getUser)
+router.get("/telecallers", optionalAuthenticate, getTelecallers)
+router.get("/by-role", optionalAuthenticate, getUsersByRole)
+router.get("/by-role/:role", optionalAuthenticate, getUsersByRole)
+router.get("/audit-roles", optionalAuthenticate, auditUserRoles)
+router.post("/fix-roles", optionalAuthenticate, fixUserRoles)
 router.get("/access-panel", authenticate, getAccessPanel)
 router.get("/me", authenticate, getMe)
 router.patch("/me", authenticate, updateMe)

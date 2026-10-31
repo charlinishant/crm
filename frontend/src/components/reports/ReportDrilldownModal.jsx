@@ -93,14 +93,18 @@ const ReportDrilldownModal = ({
   title,
   leads = [],
   calls = [],
-  mode = "leads", // "leads" | "calls"
+  items = [],
+  mode = "leads", // "leads" | "calls" | "tasks" | "followups" | "visits"
   loading = false,
   filterContext = {},
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const navigate = useNavigate();
 
-  const isCallMode = mode === "calls" || (Array.isArray(calls) && calls.length > 0 && (!leads || leads.length === 0));
+  const isCallMode = mode === "calls" || (Array.isArray(calls) && calls.length > 0 && (!leads || leads.length === 0) && (!items || items.length === 0));
+  const isTaskMode = mode === "tasks";
+  const isFollowupMode = mode === "followups";
+  const isVisitMode = mode === "visits";
 
   const isAdmin = useMemo(() => {
     try {
@@ -112,10 +116,16 @@ const ReportDrilldownModal = ({
     }
   }, []);
 
+  const effectiveLeads = useMemo(() => {
+    if (Array.isArray(leads) && leads.length > 0) return leads;
+    if (mode === 'leads' && Array.isArray(items) && items.length > 0) return items;
+    return [];
+  }, [leads, items, mode]);
+
   const filteredLeads = useMemo(() => {
-    if (!searchTerm.trim()) return leads;
+    if (!searchTerm.trim()) return effectiveLeads;
     const q = searchTerm.toLowerCase().trim();
-    return leads.filter((l) => {
+    return effectiveLeads.filter((l) => {
       const name = getLeadName(l).toLowerCase();
       const phone = String(getLeadPhone(l)).toLowerCase();
       const id = String(l.id || "").toLowerCase();
@@ -133,7 +143,7 @@ const ReportDrilldownModal = ({
         user.includes(q)
       );
     });
-  }, [leads, searchTerm]);
+  }, [effectiveLeads, searchTerm]);
 
   const filteredCalls = useMemo(() => {
     if (!searchTerm.trim()) return calls;
@@ -273,8 +283,8 @@ const ReportDrilldownModal = ({
 
   if (!isOpen) return null;
 
-  const currentCount = isCallMode ? calls.length : leads.length;
-  const currentFilteredCount = isCallMode ? filteredCalls.length : filteredLeads.length;
+  const currentCount = isCallMode ? calls.length : (isTaskMode || isFollowupMode || isVisitMode) ? items.length : leads.length;
+  const currentFilteredCount = isCallMode ? filteredCalls.length : (isTaskMode || isFollowupMode || isVisitMode) ? items.length : filteredLeads.length;
 
   return (
     <div
@@ -292,7 +302,7 @@ const ReportDrilldownModal = ({
                 <h5 className="modal-title fw-bold text-dark mb-1 d-flex align-items-center gap-2">
                   <span>{title || (isCallMode ? "Call Records Drilldown" : "Drilldown Leads")}</span>
                   <span className="badge bg-primary rounded-pill px-3 py-1 fs-6">
-                    {loading ? "..." : `${currentCount} ${isCallMode ? "Calls" : "Leads"}`}
+                    {loading ? "..." : `${currentCount} ${isCallMode ? "Calls" : isTaskMode ? "Tasks" : isFollowupMode ? "Follow-ups" : isVisitMode ? "Visits" : "Leads"}`}
                   </span>
                 </h5>
                 <small className="text-muted">
@@ -471,6 +481,158 @@ const ReportDrilldownModal = ({
                           </tr>
                         );
                       })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            ) : isTaskMode ? (
+              /* ── TASK DRILLDOWN TABLE ── */
+              items.length === 0 ? (
+                <div className="text-center py-5 text-muted">
+                  <p className="fs-5 mb-1">No missed tasks found.</p>
+                  <small>All assigned tasks are completed or on track.</small>
+                </div>
+              ) : (
+                <div className="table-responsive border rounded-3 bg-white">
+                  <table className="table table-hover align-middle mb-0">
+                    <thead className="table-light text-muted small text-uppercase">
+                      <tr>
+                        <th style={{ width: "70px" }}>ID</th>
+                        <th>Task Title</th>
+                        <th>Priority</th>
+                        <th>Due Date</th>
+                        <th>Due Time</th>
+                        <th>Status</th>
+                        <th>Remark / Notes</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((task) => (
+                        <tr key={task.id}>
+                          <td className="fw-bold text-muted">#{task.id}</td>
+                          <td>
+                            <strong className="text-dark">{task.title}</strong>
+                            {task.description && <small className="text-muted d-block">{task.description}</small>}
+                          </td>
+                          <td>
+                            <span className={`badge ${task.priority === "High" ? "bg-danger" : "bg-warning text-dark"}`}>
+                              {task.priority || "Medium"}
+                            </span>
+                          </td>
+                          <td className="text-danger fw-semibold">{formatDate(task.dueDate)}</td>
+                          <td>{task.dueTime || "-"}</td>
+                          <td>
+                            <span className="badge bg-danger-subtle text-danger border border-danger px-2 py-1">
+                              {task.status || "Open (Overdue)"}
+                            </span>
+                          </td>
+                          <td><small className="text-muted">{task.remark || "-"}</small></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            ) : isFollowupMode ? (
+              /* ── FOLLOWUP DRILLDOWN TABLE ── */
+              items.length === 0 ? (
+                <div className="text-center py-5 text-muted">
+                  <p className="fs-5 mb-1">No missed follow-ups found.</p>
+                  <small>All follow-up schedules are completed or on track.</small>
+                </div>
+              ) : (
+                <div className="table-responsive border rounded-3 bg-white">
+                  <table className="table table-hover align-middle mb-0">
+                    <thead className="table-light text-muted small text-uppercase">
+                      <tr>
+                        <th style={{ width: "70px" }}>ID</th>
+                        <th>Lead Details</th>
+                        <th>Type</th>
+                        <th>Follow-up Due</th>
+                        <th>Priority</th>
+                        <th>Status</th>
+                        <th>Notes</th>
+                        <th className="text-end">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((fu) => (
+                        <tr key={fu.id} style={{ cursor: fu.leadId ? "pointer" : "default" }} onClick={() => fu.leadId && openLead(fu.lead || fu.leadId)}>
+                          <td className="fw-bold text-muted">#{fu.id}</td>
+                          <td>
+                            <div className="fw-bold text-primary">{getLeadName(fu.lead) || `Lead #${fu.leadId}`}</div>
+                            <small className="text-muted">{getLeadPhone(fu.lead)}</small>
+                          </td>
+                          <td><span className="badge bg-info-subtle text-info border px-2 py-1">{fu.type || "Call"}</span></td>
+                          <td>
+                            <span className="text-danger fw-bold">{formatDate(fu.followUpDate)} {fu.followUpTime || ""}</span>
+                          </td>
+                          <td>
+                            <span className={`badge ${fu.priority === "High" ? "bg-danger" : "bg-warning text-dark"}`}>
+                              {fu.priority || "Medium"}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="badge bg-danger text-white px-2 py-1">{fu.status || "Overdue"}</span>
+                          </td>
+                          <td><small className="text-muted text-truncate d-inline-block" style={{ maxWidth: "200px" }}>{fu.notes || "-"}</small></td>
+                          <td className="text-end" onClick={(e) => e.stopPropagation()}>
+                            {fu.leadId && (
+                              <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => openLead(fu.lead || fu.leadId)}>
+                                Open Lead
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            ) : isVisitMode ? (
+              /* ── VISIT DRILLDOWN TABLE ── */
+              items.length === 0 ? (
+                <div className="text-center py-5 text-muted">
+                  <p className="fs-5 mb-1">No missed site visits found.</p>
+                  <small>All scheduled site visits have been completed.</small>
+                </div>
+              ) : (
+                <div className="table-responsive border rounded-3 bg-white">
+                  <table className="table table-hover align-middle mb-0">
+                    <thead className="table-light text-muted small text-uppercase">
+                      <tr>
+                        <th style={{ width: "70px" }}>ID</th>
+                        <th>Lead Details</th>
+                        <th>Project</th>
+                        <th>Scheduled Date</th>
+                        <th>Sales Executive</th>
+                        <th>Meeting Point</th>
+                        <th>Status</th>
+                        <th className="text-end">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {items.map((visit) => (
+                        <tr key={visit.id} style={{ cursor: visit.leadId ? "pointer" : "default" }} onClick={() => visit.leadId && openLead(visit.lead || visit.leadId)}>
+                          <td className="fw-bold text-muted">#{visit.id}</td>
+                          <td>
+                            <div className="fw-bold text-primary">{getLeadName(visit.lead) || `Lead #${visit.leadId}`}</div>
+                            <small className="text-muted">{getLeadPhone(visit.lead)}</small>
+                          </td>
+                          <td><strong>{visit.project || "-"}</strong></td>
+                          <td><span className="text-danger fw-bold">{formatDateTime(visit.scheduledOn)}</span></td>
+                          <td>{visit.salesExecutive || "-"}</td>
+                          <td><small className="text-muted">{visit.meetingPoint || "-"}</small></td>
+                          <td><span className="badge bg-danger text-white px-2 py-1">{visit.status || "Missed"}</span></td>
+                          <td className="text-end" onClick={(e) => e.stopPropagation()}>
+                            {visit.leadId && (
+                              <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => openLead(visit.lead || visit.leadId)}>
+                                Open Lead
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>

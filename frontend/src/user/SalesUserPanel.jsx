@@ -18,7 +18,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import UserAddlead from "./UserAddlead";
+import UserAddlead from "./userAddlead";
 import SalesSmartImport from "../pages/SalesSmartImport";
 import UserConversationPanel from "./UserConversationPanel";
 import UserDetails from "./userDetails";
@@ -1485,8 +1485,8 @@ const SalesUserPanel = () => {
       setIsLoadingUsers(true);
 
       try {
-        const response = await fetch(`${API_URL}/users?limit=1000`);
-        if (!response.ok) throw new Error("Unable to load users");
+        const response = await fetch(`${API_URL}/users/by-role?role=SALES`);
+        if (!response.ok) throw new Error("Unable to load sales users");
 
         const result = await response.json();
         const userList = Array.isArray(result)
@@ -1857,18 +1857,16 @@ const SalesUserPanel = () => {
   const isSearchableLeadTable = activeScreen === "leads" || activeScreen === "bookings";
 
   const searchedLeads = useMemo(() => {
-    if (!isSearchableLeadTable) return filteredLeads;
     if (!leadTableSearch.trim()) return filteredLeads;
 
     return filteredLeads.filter((lead) => matchesLeadSearch(lead, leadTableSearch));
-  }, [filteredLeads, isSearchableLeadTable, leadTableSearch]);
+  }, [filteredLeads, leadTableSearch]);
 
   const leadTableTotalPages = Math.max(1, Math.ceil(searchedLeads.length / salesTablePageSize));
-  const tableLeads =
-    isPaginatedLeadTable
-      ? searchedLeads.slice((leadTablePage - 1) * salesTablePageSize, leadTablePage * salesTablePageSize)
-      : filteredLeads;
-  const visibleRecordCount = isPaginatedLeadTable ? searchedLeads.length : filteredLeads.length;
+  const tableLeads = isPaginatedLeadTable
+    ? searchedLeads.slice((leadTablePage - 1) * salesTablePageSize, leadTablePage * salesTablePageSize)
+    : searchedLeads;
+  const visibleRecordCount = searchedLeads.length;
 
   const exportSalesLeadsCsv = (leadsToExport, filename = "sales-leads.csv") => {
     if (!leadsToExport || !leadsToExport.length) {
@@ -4460,7 +4458,7 @@ const SalesUserPanel = () => {
                         ? leadTableSearch.trim()
                           ? "No booked leads match your search."
                           : "No booked leads available for this sales user yet."
-                        : leadTableSearch.trim() && isPaginatedLeadTable
+                        : leadTableSearch.trim()
                           ? "No leads match your search."
                           : "No leads available for this sales user yet."}
                     </div>

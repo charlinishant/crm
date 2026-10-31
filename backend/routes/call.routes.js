@@ -32,6 +32,10 @@ const {
   listMcubeAgentMappingsAdmin,
   saveMcubeAgentMappingAdmin,
   deleteMcubeAgentMappingAdmin,
+  getMissedCalls,
+  acknowledgeMissedCall,
+  acknowledgeAllMissedCalls,
+  completeMissedCallCallback,
 } = require("../controllers/call.controller")
 
 const router = Router()
@@ -59,6 +63,10 @@ router.post("/mcube/reject", authenticate, rejectInboundCall)
 router.post("/mcube/dismiss", authenticate, dismissInboundCall)
 router.post("/mcube/end", authenticate, endInboundCall)
 router.get("/inbound", authenticate, getInboundCalls)
+router.get("/missed", authenticate, getMissedCalls)
+router.post("/acknowledge-all", authenticate, acknowledgeAllMissedCalls)
+router.post("/:id/acknowledge", authenticate, acknowledgeMissedCall)
+router.post("/:id/complete-callback", authenticate, completeMissedCallCallback)
 router.get("/active-inbound", authenticate, getActiveInboundCall)
 router.get("/status/:id", authenticate, getCallStatus)
 router.get("/detail/:id", authenticate, getCallDetail)

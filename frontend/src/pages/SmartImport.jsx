@@ -1,12 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaLock, FaExclamationTriangle, FaShieldAlt } from "react-icons/fa";
+import RoleUserDropdown, { useRoleUsers, getUserDisplayName } from "../components/common/RoleUserDropdown";
 
-const getUserName = (user) =>
-  [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
-  user?.username ||
-  user?.email ||
-  (user?.id ? `User #${user.id}` : "");
+const getUserName = (user) => getUserDisplayName(user);
 
 const SOURCE_OPTIONS = [
   "Use Excel Row Source (Fallback to Untagged Quarantine)",
@@ -27,8 +24,10 @@ const SmartImport = () => {
   const [selectedUserIds, setSelectedUserIds] = useState([]);
   const [isUserPickerOpen, setIsUserPickerOpen] = useState(false);
   const [userSearch, setUserSearch] = useState("");
-  const [users, setUsers] = useState([]);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+  const { users: salesUsers, loading: isLoadingSales } = useRoleUsers("SALES");
+  const { users: channelPartners, loading: isLoadingCP } = useRoleUsers("CHANNEL_PARTNER");
+  const isLoadingUsers = isLoadingSales || isLoadingCP;
+  const users = useMemo(() => [...(salesUsers || []), ...(channelPartners || [])], [salesUsers, channelPartners]);
   const [message, setMessage] = useState("");
   const [importSummary, setImportSummary] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -41,26 +40,6 @@ const SmartImport = () => {
   const [isConfirmedLock, setIsConfirmedLock] = useState(false);
 
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        setIsLoadingUsers(true);
-        const response = await fetch(`${API_URL}/users?limit=1000`);
-        if (!response.ok) throw new Error("Unable to load users");
-        const result = await response.json();
-        const userList = Array.isArray(result) ? result : result?.data || result?.users || [];
-        setUsers(userList.filter((user) => user.isActive !== false));
-      } catch (error) {
-        console.error("Unable to load users:", error);
-        setUsers([]);
-      } finally {
-        setIsLoadingUsers(false);
-      }
-    };
-
-    fetchUsers();
-  }, [API_URL]);
-
-  useEffect(() => {
     const closePicker = (event) => {
       if (!userPickerRef.current?.contains(event.target)) {
         setIsUserPickerOpen(false);
@@ -70,19 +49,6 @@ const SmartImport = () => {
     document.addEventListener("mousedown", closePicker);
     return () => document.removeEventListener("mousedown", closePicker);
   }, []);
-
-  const salesUsers = useMemo(
-    () => users.filter((user) => {
-      const role = String(user?.role || "").toUpperCase();
-      return role !== "CHANNEL_PARTNER" && role !== "AGENCY_USER";
-    }),
-    [users]
-  );
-
-  const channelPartners = useMemo(
-    () => users.filter((user) => String(user?.role || "").toUpperCase() === "CHANNEL_PARTNER"),
-    [users]
-  );
 
   const filteredUsers = useMemo(() => {
     const query = userSearch.trim().toLowerCase();
@@ -431,10 +397,31 @@ const SmartImport = () => {
 
         </div>
 
-        <div className="smart-import-actions">
+        <div className="smart-import-actions d-flex flex-wrap gap-2 align-items-center">
           <button type="button" className="download-btn" onClick={handleDownloadSample}>
-            Download Sample Excel
+            Download Sample Excel (60-Col with Remarks)
           </button>
+          <button
+            type="button"
+            className="btn btn-outline-primary fw-semibold px-3 py-2 rounded-3 shadow-xs"
+            style={{ fontSize: "14px", height: "44px" }}
+            onClick={() => {
+              window.location.href = `${API_URL}/leads/sample-excel?type=quick`;
+            }}
+          >
+            Download Quick Remarks Template (Drop-In)
+          </button>
+        </div>
+
+        <div className="alert alert-info d-flex align-items-start gap-2 rounded-3 mt-3 py-2 px-3 small border-0 bg-info-subtle text-dark">
+          <div>
+            <strong>Flexible Columns &amp; Call History Support:</strong>
+            <ul className="mb-0 ps-3 mt-1" style={{ fontSize: "12.5px" }}>
+              <li><strong>Remarks / Call History:</strong> Automatically lands in the lead&apos;s pinned Notes and Activity Timeline with full multi-line text preserved. Flexible headers accepted: <code>REMARK</code>, <code>Remarks</code>, <code>Notes</code>, <code>Description</code>, <code>Basi comment</code>.</li>
+              <li><strong>Contact / Phone:</strong> Full 10-digit numbers and Excel numbers (including scientific display like <code>9.931E+09</code>) are cleanly parsed without data loss.</li>
+              <li><strong>Status:</strong> Supports <code>DEAD</code>, <code>Lost</code>, <code>Follow up</code>, <code>New</code>, <code>Qualified</code>, etc.</li>
+            </ul>
+          </div>
         </div>
 
         {message && <div className="import-message">{message}</div>}

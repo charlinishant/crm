@@ -346,18 +346,16 @@ const UserPreview = () => {
 
     const fetchRegisteredChannelPartners = async () => {
       try {
-        const response = await fetch(`${API_URL}/users?limit=1000`, {
+        const response = await fetch(`${API_URL}/users/by-role?role=CHANNEL_PARTNER`, {
           headers: { ...getAuthHeaders() },
         });
-        if (!response.ok) throw new Error("Unable to load users");
+        if (!response.ok) throw new Error("Unable to load channel partners");
 
         const result = await response.json();
         const users = Array.isArray(result) ? result : result?.data || [];
         if (!isMounted) return;
 
-        setRegisteredChannelPartners(users.filter(
-          (user) => String(user?.role || "").toUpperCase() === "CHANNEL_PARTNER"
-        ));
+        setRegisteredChannelPartners(users);
       } catch (error) {
         console.error("Unable to load registered channel partners:", error);
         if (isMounted) setRegisteredChannelPartners([]);

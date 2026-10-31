@@ -22,7 +22,6 @@ import {
   FaTrash,
   FaUserTie,
   FaWhatsapp,
-  FaFilePdf,
   FaFileExcel,
   FaPrint,
   FaEye,
@@ -35,9 +34,9 @@ import {
   updateLeadStatus as updateSalesLeadStatus,
 } from "../services/followupApi";
 import {
-  dedupeActivityNotifications,
   getActivityNotificationDedupeKey,
 } from "../utils/activityNotifications";
+import RoleUserDropdown, { getUserDisplayName } from "../components/common/RoleUserDropdown";
 
 const API_URL = process.env.REACT_APP_API_URL || "http://localhost:5000";
 
@@ -497,6 +496,11 @@ const UserDetails = ({
   const [isSavingNote, setIsSavingNote] = useState(false);
   const [isSavingStatus, setIsSavingStatus] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
+  const [reassignTargetUserId, setReassignTargetUserId] = useState("");
+  const [reassignTargetUser, setReassignTargetUser] = useState(null);
+  const [isReassigning, setIsReassigning] = useState(false);
+  const [reassignError, setReassignError] = useState("");
   const [followups, setFollowups] = useState([]);
   const [emails, setEmails] = useState([]);
   const [whatsappMessages, setWhatsappMessages] = useState([]);
@@ -518,6 +522,7 @@ const UserDetails = ({
       setWhatsappMessages([]);
       setSelectedStatus("New");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leadIdFromUrl]);
   const leadName = getLeadName(lead);
   const primaryPhone =
@@ -612,7 +617,7 @@ const UserDetails = ({
     } catch (error) {
       console.error("Unable to load lead details:", error);
     }
-  }, [leadId, leadIdFromUrl]);
+  }, [authHeaders, leadId, leadIdFromUrl]);
 
   const fetchNotes = useCallback(async () => {
     if (!leadId) {
@@ -828,16 +833,27 @@ const UserDetails = ({
     setStatusMessage("");
   };
 
-  const reassignLead = async () => {
+  const handleReassignLead = async () => {
     if (!leadId) return;
-    const nextOwnerId = window.prompt("Enter sales user ID to reassign this lead:");
-    if (!nextOwnerId) return;
-
-    const normalizedOwnerId = Number.parseInt(nextOwnerId, 10);
-    if (!Number.isFinite(normalizedOwnerId)) {
-      alert("Please enter a valid sales user ID.");
+    if (!reassignTargetUserId) {
+      setReassignError("Please select a sales executive to reassign this lead.");
       return;
     }
+
+    const normalizedOwnerId = Number.parseInt(reassignTargetUserId, 10);
+    if (!Number.isFinite(normalizedOwnerId)) {
+      setReassignError("Please select a valid sales executive.");
+      return;
+    }
+
+    // Check if reassigning to the exact same user
+    if (lead?.teamId && Number(lead.teamId) === normalizedOwnerId) {
+      setReassignError("This lead is already assigned to this sales executive.");
+      return;
+    }
+
+    setIsReassigning(true);
+    setReassignError("");
 
     try {
       const response = await fetch(`${API_URL}/leads/${leadId}`, {
@@ -848,13 +864,44 @@ const UserDetails = ({
       const result = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(result?.message || "Unable to reassign lead");
 
-      const updatedLead = { ...lead, ...result };
+      const newOwnerName =
+        getUserDisplayName(reassignTargetUser) ||
+        [result.team?.firstName, result.team?.lastName].filter(Boolean).join(" ") ||
+        result.team?.username ||
+        `Sales User #${normalizedOwnerId}`;
+
+      const updatedLead = {
+        ...lead,
+        ...result,
+        teamId: normalizedOwnerId,
+        team: result.team || (reassignTargetUser ? {
+          id: reassignTargetUser.id,
+          username: reassignTargetUser.username,
+          firstName: reassignTargetUser.firstName,
+          lastName: reassignTargetUser.lastName,
+          email: reassignTargetUser.email,
+        } : lead.team),
+      };
+
       setLead(updatedLead);
       window.sessionStorage.setItem("selectedLeadDetails", JSON.stringify(updatedLead));
-      setStatusMessage("Lead reassigned successfully.");
+      setStatusMessage(`Lead reassigned to ${newOwnerName} successfully.`);
+      setIsReassignModalOpen(false);
+      setReassignTargetUserId("");
+      setReassignTargetUser(null);
     } catch (error) {
-      alert(error.message || "Unable to reassign lead");
+      setReassignError(error.message || "Unable to reassign lead");
+    } finally {
+      setIsReassigning(false);
     }
+  };
+
+  const handleCloseReassignModal = () => {
+    if (isReassigning) return;
+    setIsReassignModalOpen(false);
+    setReassignTargetUserId("");
+    setReassignTargetUser(null);
+    setReassignError("");
   };
 
   const saveNote = async () => {
@@ -2356,7 +2403,10 @@ const UserDetails = ({
                       type="button"
                       onClick={() => {
                         setShowMoreMenu(false);
-                        reassignLead();
+                        setReassignTargetUserId("");
+                        setReassignTargetUser(null);
+                        setReassignError("");
+                        setIsReassignModalOpen(true);
                       }}
                     >
                       <FaExchangeAlt /> Reassign Lead
@@ -2800,6 +2850,23 @@ const UserDetails = ({
                   </div>
                 </div>
               </div>
+
+              {/* 5. Unit Specifications Summary */}
+              {bookingUnitFields && bookingUnitFields.length > 0 && (
+                <div className="crm-booking-card mt-3" style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12, overflow: "hidden", boxShadow: "0 1px 4px rgba(0,0,0,0.05)" }}>
+                  <div className="crm-booking-card-head" style={{ background: "#0ea5e9", color: "#fff", padding: "12px 16px", fontWeight: 700, fontSize: 14 }}>
+                    📋 Unit Specifications Summary
+                  </div>
+                  <div className="crm-applicant-grid" style={{ padding: "16px 20px" }}>
+                    {bookingUnitFields.map(([label, value]) => (
+                      <div className="crm-booking-field" key={label}>
+                        <span>{label}</span>
+                        <strong>{value || "-"}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </section>
           )}
 
@@ -2881,6 +2948,211 @@ const UserDetails = ({
           )}
         </div>
       </div>
+
+      {/* Reassign Lead Modal */}
+      {isReassignModalOpen && (
+        <div
+          className="modal fade show d-block"
+          tabIndex="-1"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15, 23, 42, 0.65)",
+            backdropFilter: "blur(4px)",
+            zIndex: 99999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "16px",
+          }}
+          onClick={handleCloseReassignModal}
+        >
+          <div
+            className="modal-dialog modal-dialog-centered"
+            style={{ width: "100%", maxWidth: "480px", margin: "auto" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className="modal-content border-0 shadow-lg"
+              style={{ borderRadius: "14px", overflow: "hidden", background: "#ffffff" }}
+            >
+              {/* Modal Header */}
+              <div
+                className="modal-header d-flex align-items-center justify-content-between"
+                style={{
+                  background: "#2563eb",
+                  color: "#ffffff",
+                  padding: "16px 20px",
+                  borderBottom: "none",
+                }}
+              >
+                <div className="d-flex align-items-center gap-2">
+                  <FaExchangeAlt style={{ fontSize: "16px" }} />
+                  <h5 className="modal-title mb-0" style={{ fontSize: "16px", fontWeight: 700, color: "#fff" }}>
+                    Reassign Lead
+                  </h5>
+                </div>
+                <button
+                  type="button"
+                  className="btn-close btn-close-white"
+                  onClick={handleCloseReassignModal}
+                  disabled={isReassigning}
+                  style={{
+                    opacity: 0.9,
+                    cursor: "pointer",
+                    background: "none",
+                    border: "none",
+                    color: "#fff",
+                    fontSize: "18px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                  aria-label="Close"
+                >
+                  <FaTimes />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="modal-body p-4">
+                {/* Lead context summary */}
+                <div
+                  style={{
+                    background: "#f8fafc",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "10px",
+                    padding: "12px 16px",
+                    marginBottom: "20px",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      color: "#64748b",
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.5px",
+                    }}
+                  >
+                    Lead Context
+                  </div>
+                  <div style={{ fontSize: "15px", fontWeight: 700, color: "#1e293b", marginTop: "2px" }}>
+                    {leadName} {leadId ? <span style={{ color: "#64748b", fontWeight: 500 }}>(#{leadId})</span> : null}
+                  </div>
+                  <div
+                    className="d-flex align-items-center gap-2 mt-2 pt-2"
+                    style={{ borderTop: "1px dashed #e2e8f0", fontSize: "13px" }}
+                  >
+                    <span style={{ color: "#64748b" }}>Currently assigned to:</span>
+                    <span
+                      style={{
+                        background: "#e0e7ff",
+                        color: "#3730a3",
+                        fontWeight: 600,
+                        padding: "2px 10px",
+                        borderRadius: "12px",
+                        fontSize: "12px",
+                      }}
+                    >
+                      {owner}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Error Banner */}
+                {reassignError && (
+                  <div
+                    className="alert alert-danger py-2 px-3 d-flex align-items-center gap-2 mb-3"
+                    style={{ fontSize: "13px", borderRadius: "8px" }}
+                  >
+                    <span>{reassignError}</span>
+                  </div>
+                )}
+
+                {/* Role-Scoped Sales User Picker */}
+                <div className="mb-3">
+                  <label
+                    htmlFor="reassign-sales-user"
+                    className="form-label d-block mb-1"
+                    style={{ fontSize: "13px", fontWeight: 700, color: "#334155" }}
+                  >
+                    Reassign to Sales Executive <span style={{ color: "#ef4444" }}>*</span>
+                  </label>
+                  <div style={{ fontSize: "12px", color: "#64748b", marginBottom: "8px" }}>
+                    Select an active sales executive from the team. Channel Partners are strictly excluded.
+                  </div>
+
+                  <RoleUserDropdown
+                    role="SALES"
+                    value={reassignTargetUserId}
+                    onChange={(userId, userObj) => {
+                      setReassignTargetUserId(userId);
+                      setReassignTargetUser(userObj);
+                      setReassignError("");
+                    }}
+                    mode="searchable-select"
+                    placeholder="Choose a sales executive..."
+                    searchPlaceholder="Search salesperson by name..."
+                    disabled={isReassigning}
+                  />
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div
+                className="modal-footer d-flex justify-content-end gap-2"
+                style={{
+                  background: "#f8fafc",
+                  borderTop: "1px solid #e2e8f0",
+                  padding: "14px 20px",
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn btn-secondary px-3"
+                  onClick={handleCloseReassignModal}
+                  disabled={isReassigning}
+                  style={{
+                    borderRadius: "8px",
+                    fontWeight: 600,
+                    fontSize: "13px",
+                    padding: "8px 16px",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary px-4 d-flex align-items-center gap-2"
+                  onClick={handleReassignLead}
+                  disabled={isReassigning || !reassignTargetUserId}
+                  style={{
+                    background: "#2563eb",
+                    borderColor: "#2563eb",
+                    borderRadius: "8px",
+                    fontWeight: 600,
+                    fontSize: "13px",
+                    padding: "8px 18px",
+                  }}
+                >
+                  {isReassigning ? (
+                    <>
+                      <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                      <span>Reassigning...</span>
+                    </>
+                  ) : (
+                    <>
+                      <FaExchangeAlt />
+                      <span>Reassign Lead</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Document Preview Modal */}
       {previewDoc && (

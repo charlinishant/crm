@@ -11,6 +11,8 @@ import LeadSourceChart from "../../components/reports/LeadSourceChart";
 import SiteVisitChart from "../../components/reports/SiteVisitChart";
 import BookingReportChart from "../../components/reports/BookingReportChart";
 import SalesPerformanceTable from "../../components/reports/SalesPerformanceTable";
+import DprPerformanceTable from "../../components/reports/DprPerformanceTable";
+import LeadSourcePerformanceTable from "../../components/reports/LeadSourcePerformanceTable";
 import ReportDrilldownModal from "../../components/reports/ReportDrilldownModal";
 
 // Mcube IVR & Telephony Reports
@@ -50,6 +52,8 @@ const emptyReports = {
   didBreakup: [],
   agentCallPerformance: [],
   callLogs: [],
+  dpr: { callers: [], summary: {}, dateRange: {} },
+  leadSourceReport: { sources: [], summary: {}, detectedDuplicates: [] },
 };
 
 const AdminReports = () => {
@@ -69,6 +73,7 @@ const AdminReports = () => {
     title: "",
     leads: [],
     calls: [],
+    items: [],
     mode: "leads",
     filters: {},
     error: "",
@@ -146,6 +151,187 @@ const AdminReports = () => {
   const handleFilterChange = (event) => {
     const { name, value } = event.target;
     setFilters((current) => ({ ...current, [name]: value }));
+  };
+
+  const [dprDownloading, setDprDownloading] = useState(false);
+  const [sourceDownloading, setSourceDownloading] = useState(false);
+
+  const handleDownloadDpr = async () => {
+    try {
+      setDprDownloading(true);
+      await reportApi.downloadDprExcel(filters);
+    } catch (err) {
+      console.error("DPR download error:", err);
+      alert(err.message || "Failed to download DPR Excel report");
+    } finally {
+      setDprDownloading(false);
+    }
+  };
+
+  const handleDownloadLeadSource = async () => {
+    try {
+      setSourceDownloading(true);
+      await reportApi.downloadLeadSourceExcel(filters);
+    } catch (err) {
+      console.error("Lead Source report download error:", err);
+      alert(err.message || "Failed to download Lead Source Excel report");
+    } finally {
+      setSourceDownloading(false);
+    }
+  };
+
+  const handleDprDrilldown = async (segment) => {
+    if (!segment) return;
+    const initialTitle = segment.title || "Daily Performance Drilldown";
+    setDrilldown({
+      isOpen: true,
+      loading: true,
+      title: initialTitle,
+      leads: [],
+      calls: [],
+      items: [],
+      mode: "leads",
+      filters: segment,
+      error: "",
+    });
+
+    try {
+      const queryParams = {
+        fromDate: filters.fromDate || undefined,
+        toDate: filters.toDate || undefined,
+        userId: segment.userId || segment.salesUserId,
+        salesUserId: segment.userId || segment.salesUserId,
+        metric: segment.metric,
+      };
+
+      if (
+        segment.metric === "totalCalls" ||
+        segment.metric === "connectedCalls" ||
+        segment.metric === "outboundCalls" ||
+        segment.metric === "inboundCalls" ||
+        segment.metric === "missedCalls"
+      ) {
+        const callQueryParams = {
+          fromDate: filters.fromDate || undefined,
+          toDate: filters.toDate || undefined,
+          salesUserId: segment.userId || segment.salesUserId,
+          status: segment.metric === "connectedCalls" ? "Answered" : segment.metric === "missedCalls" ? "Missed" : undefined,
+          direction: segment.metric === "inboundCalls" ? "Inbound" : segment.metric === "outboundCalls" ? "Outbound" : undefined,
+          title: initialTitle,
+        };
+        const callRes = await reportApi.getDrilldownCalls(callQueryParams);
+        setDrilldown({
+          isOpen: true,
+          loading: false,
+          title: callRes?.title || initialTitle,
+          leads: [],
+          calls: callRes?.calls || [],
+          items: [],
+          mode: "calls",
+          filters: callQueryParams,
+          error: "",
+        });
+        return;
+      }
+
+      if (
+        segment.metric === "leadsAssigned" ||
+        segment.metric === "leadsAssignedToday" ||
+        segment.metric === "leadsQualified"
+      ) {
+        const leadQueryParams = {
+          fromDate: filters.fromDate || undefined,
+          toDate: filters.toDate || undefined,
+          salesUserId: segment.userId || segment.salesUserId,
+          status: segment.metric === "leadsQualified" ? "Qualified" : undefined,
+          title: initialTitle,
+        };
+        const leadRes = await reportApi.getDrilldownLeads(leadQueryParams);
+        setDrilldown({
+          isOpen: true,
+          loading: false,
+          title: leadRes?.title || initialTitle,
+          leads: leadRes?.leads || [],
+          calls: [],
+          items: [],
+          mode: "leads",
+          filters: leadQueryParams,
+          error: "",
+        });
+        return;
+      }
+
+      const result = await reportApi.getDprDrilldown(queryParams);
+      const drillType = result?.type || "leads";
+      const drillItems = result?.items || [];
+      setDrilldown({
+        isOpen: true,
+        loading: false,
+        title: result?.title || initialTitle,
+        leads: drillType === "leads" ? drillItems : [],
+        calls: drillType === "calls" ? drillItems : [],
+        items: drillItems,
+        mode: drillType,
+        filters: queryParams,
+        error: "",
+      });
+    } catch (err) {
+      console.error("Error fetching DPR drilldown:", err);
+      setDrilldown((prev) => ({
+        ...prev,
+        loading: false,
+        error: err.message || "Failed to load drilldown details",
+      }));
+    }
+  };
+
+  const handleLeadSourceDrilldown = async (segment) => {
+    if (!segment) return;
+    const initialTitle = segment.title || "Lead Source Drilldown";
+    setDrilldown({
+      isOpen: true,
+      loading: true,
+      title: initialTitle,
+      leads: [],
+      calls: [],
+      items: [],
+      mode: "leads",
+      filters: segment,
+      error: "",
+    });
+
+    try {
+      const queryParams = {
+        fromDate: filters.fromDate || undefined,
+        toDate: filters.toDate || undefined,
+        sourceName: segment.sourceName || segment.leadSource,
+        leadSource: segment.sourceName || segment.leadSource,
+        metric: segment.metric,
+      };
+
+      const result = await reportApi.getLeadSourceDrilldown(queryParams);
+      const drillType = result?.type || "leads";
+      const drillItems = result?.items || [];
+
+      setDrilldown({
+        isOpen: true,
+        loading: false,
+        title: result?.title || initialTitle,
+        leads: drillType === "leads" ? drillItems : [],
+        calls: drillType === "calls" ? drillItems : [],
+        items: drillItems,
+        mode: drillType,
+        filters: queryParams,
+        error: "",
+      });
+    } catch (err) {
+      console.error("Error fetching lead source drilldown:", err);
+      setDrilldown((prev) => ({
+        ...prev,
+        loading: false,
+        error: err.message || "Failed to load lead source details",
+      }));
+    }
   };
 
   const handleSegmentClick = async (segment) => {
@@ -257,27 +443,81 @@ const AdminReports = () => {
               <p>{lastUpdatedAt ? `Last updated ${lastUpdatedAt}` : "Live lead conversion, sales pipeline & Mcube IVR analytics"}</p>
             </div>
 
-            <div className="report-tab-switch btn-group" role="group" aria-label="Report View Toggle">
+            <div className="d-flex align-items-center gap-2 flex-wrap">
+              <div className="report-tab-switch btn-group" role="group" aria-label="Report View Toggle">
+                <button
+                  type="button"
+                  className={`btn ${activeTab === "all" ? "active" : ""}`}
+                  onClick={() => setActiveTab("all")}
+                >
+                  📊 Complete Overview
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${activeTab === "dpr" ? "active" : ""}`}
+                  onClick={() => setActiveTab("dpr")}
+                >
+                  📋 Daily Performance (DPR)
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${activeTab === "source" ? "active" : ""}`}
+                  onClick={() => setActiveTab("source")}
+                >
+                  🤝 CP &amp; Lead Source
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${activeTab === "telephony" ? "active" : ""}`}
+                  onClick={() => setActiveTab("telephony")}
+                >
+                  📞 Mcube Telephony &amp; IVR
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${activeTab === "funnel" ? "active" : ""}`}
+                  onClick={() => setActiveTab("funnel")}
+                >
+                  🎯 Lead &amp; Sales Funnel
+                </button>
+              </div>
+
               <button
                 type="button"
-                className={`btn ${activeTab === "all" ? "active" : ""}`}
-                onClick={() => setActiveTab("all")}
+                className="btn btn-success d-flex align-items-center gap-2 fw-semibold px-3 py-2 shadow-sm"
+                onClick={handleDownloadDpr}
+                disabled={dprDownloading}
+                title="Download comprehensive Daily Performance Report (DPR) Excel"
               >
-                📊 Complete Overview
+                {dprDownloading ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                    <span>Exporting DPR...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>📥 Download DPR</span>
+                  </>
+                )}
               </button>
+
               <button
                 type="button"
-                className={`btn ${activeTab === "telephony" ? "active" : ""}`}
-                onClick={() => setActiveTab("telephony")}
+                className="btn btn-outline-success d-flex align-items-center gap-2 fw-semibold px-3 py-2 shadow-sm bg-white"
+                onClick={handleDownloadLeadSource}
+                disabled={sourceDownloading}
+                title="Download Channel Partner &amp; Lead Source Performance Report Excel"
               >
-                📞 Mcube Telephony &amp; IVR
-              </button>
-              <button
-                type="button"
-                className={`btn ${activeTab === "funnel" ? "active" : ""}`}
-                onClick={() => setActiveTab("funnel")}
-              >
-                🎯 Lead &amp; Sales Funnel
+                {sourceDownloading ? (
+                  <>
+                    <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
+                    <span>Exporting Source Report...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>📊 Export CP Report</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -299,6 +539,31 @@ const AdminReports = () => {
         {error && <div className="admin-report-alert mt-3">{error}</div>}
         {loading && <div className="admin-report-loading mt-3">Loading reports data...</div>}
 
+
+        {/* DPR (DAILY PERFORMANCE REPORT) SECTION */}
+        {(activeTab === "all" || activeTab === "dpr") && (
+          <div className="dpr-report-section">
+            <DprPerformanceTable
+              dprData={reports.dpr}
+              filters={filters}
+              onMetricClick={handleDprDrilldown}
+              loading={loading}
+            />
+          </div>
+        )}
+
+        {/* LEAD SOURCE & CHANNEL PARTNER PERFORMANCE REPORT SECTION */}
+        {(activeTab === "all" || activeTab === "source") && (
+          <div className="lead-source-report-section mt-4">
+            <LeadSourcePerformanceTable
+              sourceData={reports.leadSourceReport}
+              filters={filters}
+              onMetricClick={handleLeadSourceDrilldown}
+              onRefresh={loadReports}
+              loading={loading}
+            />
+          </div>
+        )}
 
         {/* 1. MCUBE TELEPHONY & IVR SECTION */}
         {(activeTab === "all" || activeTab === "telephony") && (
@@ -341,13 +606,13 @@ const AdminReports = () => {
               <MonthlyLeadsChart data={reports.monthlyLeads} />
               <SalesPerformanceChart data={reports.salesPerformance} onSegmentClick={handleSegmentClick} />
               <FollowupStatusChart data={reports.followups} onSegmentClick={handleSegmentClick} />
-              <LeadSourceChart data={reports.leadSources} onSegmentClick={handleSegmentClick} />
+              <LeadSourceChart data={reports.leadSources} filters={filters} onSegmentClick={handleSegmentClick} />
               <SiteVisitChart data={reports.siteVisits} onSegmentClick={handleSegmentClick} />
               <BookingReportChart data={reports.bookings} onSegmentClick={handleSegmentClick} />
             </div>
 
             <div className="admin-report-tables mt-4">
-              <SalesPerformanceTable data={reports.salesPerformance} onSegmentClick={handleSegmentClick} />
+              <SalesPerformanceTable data={reports.salesPerformance} filters={filters} onSegmentClick={handleSegmentClick} />
             </div>
           </div>
         )}
@@ -359,6 +624,7 @@ const AdminReports = () => {
           title={drilldown.title}
           leads={drilldown.leads}
           calls={drilldown.calls}
+          items={drilldown.items}
           mode={drilldown.mode}
           loading={drilldown.loading}
           filterContext={drilldown.filters}

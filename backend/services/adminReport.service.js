@@ -1,5 +1,6 @@
 const prisma = require("../lib/prisma")
 const { isAdminUser, maskLeadData } = require("../utils/phoneMask")
+const { normalizeSourceName } = require("../utils/leadSourceNormalizer")
 
 const leadStatuses = ["New", "Qualified", "Nurture", "In_sourcing", "In_closing", "Booked", "Unqualified"]
 const visitStatuses = ["Scheduled", "Confirmed", "Visit Done", "Visit Missed", "Cancelled", "Rescheduled"]
@@ -275,7 +276,10 @@ const getLeadSources = async (filters = {}) => {
     where: await getLeadWhere({ ...filters, leadSource: undefined }),
     select: { channelPartner: true, fundingSource: true },
   })
-  return countBy(leads, (lead) => lead.channelPartner || lead.fundingSource || "Unknown")
+  return countBy(leads, (lead) => {
+    const raw = lead.channelPartner || lead.fundingSource || "Untagged"
+    return normalizeSourceName(raw)
+  })
 }
 
 const getSiteVisits = async (filters = {}) => {
@@ -600,15 +604,16 @@ const getDrilldownLeads = async (filters = {}, req = null) => {
   }
 }
 
-const getSalesUsers = async () => {
+const getSalesUsers = async ({ includeAdmin = false } = {}) => {
+  const allowedRoles = ["SALES", "PRE_SALES"]
+  if (includeAdmin) allowedRoles.push("ADMIN")
   return prisma.user.findMany({
     where: {
       isActive: true,
-      OR: [
-        { role: "SALES" },
-        { department: "SALES" },
-        { role: "PRE_SALES" },
-        { department: "PRE_SALES" },
+      role: { in: allowedRoles },
+      NOT: [
+        { role: "CHANNEL_PARTNER" },
+        ...(!includeAdmin ? [{ role: "ADMIN" }] : []),
       ],
     },
     orderBy: [{ firstName: "asc" }, { username: "asc" }],
@@ -618,6 +623,7 @@ const getSalesUsers = async () => {
       lastName: true,
       username: true,
       email: true,
+      phone: true,
       role: true,
       department: true,
     },

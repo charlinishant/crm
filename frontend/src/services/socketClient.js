@@ -66,6 +66,7 @@ export const getCRMSocket = async () => {
 };
 
 export const getReportsSocket = getCRMSocket;
+export const getSocket = getCRMSocket;
 
 export const subscribeToCRMEvent = async (event, callback) => {
   if (!event || typeof callback !== "function") return () => {};

@@ -28,4 +28,16 @@ router.get("/call-logs", authenticate, controller.getCallLogs)
 router.get("/drilldown-calls", authenticate, controller.getDrilldownCalls)
 router.post("/sync-mcube-cdr", authenticate, controller.syncMcubeCdr)
 
+// DPR (Daily Performance Report)
+router.get("/dpr", authenticate, controller.getDprReport)
+router.get("/dpr/export", authenticate, controller.exportDprExcel)
+router.get("/dpr/drilldown", authenticate, controller.getDprDrilldown)
+
+// Lead Source & Channel Partner Performance Report
+router.get("/lead-source-performance", authenticate, controller.getLeadSourceReport)
+router.get("/lead-source-performance/export", authenticate, controller.exportLeadSourceExcel)
+router.get("/lead-source-performance/drilldown", authenticate, controller.getLeadSourceDrilldown)
+router.post("/lead-source-performance/merge", authenticate, controller.mergeLeadSources)
+router.post("/lead-source-performance/clean", authenticate, controller.autoCleanLeadSources)
+
 module.exports = router

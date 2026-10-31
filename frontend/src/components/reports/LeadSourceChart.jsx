@@ -1,5 +1,6 @@
 import React from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { reportApi } from "../../services/reportApi";
 
 const colors = [
   "#3b82f6",
@@ -48,7 +49,7 @@ const CustomTooltip = ({ active, payload }) => {
   return null;
 };
 
-const LeadSourceChart = ({ data = [], onSegmentClick }) => {
+const LeadSourceChart = ({ data = [], filters = {}, onSegmentClick }) => {
   const rows = data
     .filter((item) => Number(item.value) > 0)
     .sort((a, b) => Number(b.value) - Number(a.value));
@@ -72,11 +73,22 @@ const LeadSourceChart = ({ data = [], onSegmentClick }) => {
     <div className="admin-report-chart-card">
       <div className="d-flex justify-content-between align-items-center mb-2">
         <h6 className="mb-0">Lead Source</h6>
-        {totalLeads > 0 && (
-          <span className="badge bg-light text-dark border px-2 py-1" style={{ fontSize: "11px" }}>
-            Total: <strong>{totalLeads}</strong>
-          </span>
-        )}
+        <div className="d-flex align-items-center gap-2">
+          {totalLeads > 0 && (
+            <span className="badge bg-light text-dark border px-2 py-1" style={{ fontSize: "11px" }}>
+              Total: <strong>{totalLeads}</strong>
+            </span>
+          )}
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-success py-0 px-2 fw-semibold d-flex align-items-center gap-1 shadow-xs"
+            style={{ fontSize: "11px" }}
+            onClick={() => reportApi.downloadLeadSourceExcel(filters)}
+            title="Download Lead Source & Channel Partner Performance Report (Excel)"
+          >
+            <span>📥 Export Sources</span>
+          </button>
+        </div>
       </div>
 
       {rows.length ? (

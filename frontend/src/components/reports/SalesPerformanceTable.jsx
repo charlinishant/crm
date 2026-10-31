@@ -1,9 +1,26 @@
 import React, { useMemo, useState } from "react";
+import { reportApi } from "../../services/reportApi";
 
 const RECORDS_PER_PAGE = 10;
 
-const SalesPerformanceTable = ({ data = [], onSegmentClick }) => {
+const SalesPerformanceTable = ({ data = [], filters = {}, onSegmentClick }) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
+
+  const handleDownloadDpr = async () => {
+    try {
+      setDownloading(true);
+      setDownloadError("");
+      await reportApi.downloadDprExcel(filters);
+    } catch (err) {
+      console.error("DPR download error:", err);
+      setDownloadError(err.message || "Failed to download DPR Excel");
+      alert(err.message || "Failed to download DPR Excel report");
+    } finally {
+      setDownloading(false);
+    }
+  };
   const [currentPage, setCurrentPage] = useState(1);
 
   const filteredData = useMemo(() => {
@@ -70,8 +87,26 @@ const SalesPerformanceTable = ({ data = [], onSegmentClick }) => {
 
   return (
     <div className="admin-report-table-card sales-performance-table-card">
-      <div className="d-flex justify-content-between align-items-center mb-2">
-        <h6 className="mb-0">Sales User Performance</h6>
+      <div className="d-flex flex-wrap justify-content-between align-items-center mb-2 gap-2">
+        <h6 className="mb-0 fw-bold">Sales User Performance</h6>
+        <button
+          type="button"
+          className="btn btn-sm btn-outline-success d-flex align-items-center gap-1 fw-semibold shadow-sm px-2 py-1"
+          onClick={handleDownloadDpr}
+          disabled={downloading}
+          title="Download comprehensive Daily Performance Report (DPR) with effort, outcomes, sources & missed commitments"
+        >
+          {downloading ? (
+            <>
+              <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" style={{ width: 12, height: 12 }} />
+              <span>Exporting DPR...</span>
+            </>
+          ) : (
+            <>
+              <span>📥 Download DPR (Excel)</span>
+            </>
+          )}
+        </button>
       </div>
       <label className="crm-table-search sales-performance-search">
         <input

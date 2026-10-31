@@ -1186,6 +1186,17 @@ const MasterLayout = ({ children }) => {
                 </li>
                 <li>
                   <NavLink
+                    to='/MissedCall'
+                    className={(navData) =>
+                      navData.isActive ? "active-page" : ""
+                    }
+                  >
+                    <i className='ri-circle-fill circle-icon text-danger-main w-auto' />{" "}
+                    Missed Calls
+                  </NavLink>
+                </li>
+                <li>
+                  <NavLink
                     to='/emails'
                     className={(navData) =>
                       navData.isActive ? "active-page" : ""

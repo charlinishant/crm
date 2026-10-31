@@ -90,7 +90,6 @@ const formatTimeOnly = (dateValue) => {
 
 const getLeadInitialMessages = (lead, agentName = "Sales Executive") => {
   const leadName = getLeadName(lead);
-  const firstName = leadName.split(" ")[0] || "Customer";
   const project =
     lead?.interestedProjects ||
     lead?.siteVisitProject ||

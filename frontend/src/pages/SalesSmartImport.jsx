@@ -1,5 +1,6 @@
 import React, { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useRoleUsers } from "../components/common/RoleUserDropdown";
 
 const API_URL = (process.env.REACT_APP_API_URL || "http://localhost:5000").replace(/\/+$/, "");
 
@@ -18,27 +19,11 @@ const SalesSmartImport = ({ onImportComplete }) => {
   const navigate = useNavigate();
   const [fileName, setFileName] = useState("");
   const [source, setSource] = useState(SOURCE_OPTIONS[0]);
-  const [channelPartners, setChannelPartners] = useState([]);
+  const { users: channelPartners } = useRoleUsers("CHANNEL_PARTNER");
   const [selectedChannelPartnerId, setSelectedChannelPartnerId] = useState("");
   const [message, setMessage] = useState("");
   const [summary, setSummary] = useState(null);
   const [uploading, setUploading] = useState(false);
-
-  React.useEffect(() => {
-    const loadChannelPartners = async () => {
-      try {
-        const response = await fetch(`${API_URL}/users?limit=1000`);
-        const result = await response.json().catch(() => ({}));
-        const users = Array.isArray(result) ? result : result?.data || result?.users || [];
-        setChannelPartners(users.filter((user) =>
-          user?.isActive !== false && String(user?.role || "").toUpperCase() === "CHANNEL_PARTNER"
-        ));
-      } catch (error) {
-        setChannelPartners([]);
-      }
-    };
-    loadChannelPartners();
-  }, []);
 
   const importLeads = async () => {
     const file = fileRef.current?.files?.[0];
@@ -166,9 +151,14 @@ const SalesSmartImport = ({ onImportComplete }) => {
           )}
         </div>
 
-        <button type="button" className="sales-primary-btn sales-download-btn" onClick={() => { window.location.href = `${API_URL}/leads/sample-excel`; }}>
-          Download Sample Excel
-        </button>
+        <div className="d-flex flex-wrap gap-2 mt-3 align-items-center">
+          <button type="button" className="sales-primary-btn sales-download-btn m-0" onClick={() => { window.location.href = `${API_URL}/leads/sample-excel`; }}>
+            Download 60-Col Template (with Remarks)
+          </button>
+          <button type="button" className="btn btn-sm btn-outline-primary fw-semibold px-3 py-2 rounded-2" onClick={() => { window.location.href = `${API_URL}/leads/sample-excel?type=quick`; }}>
+            Download Quick Remarks Template (Drop-In)
+          </button>
+        </div>
       </div>
 
       {message && <div className="sales-alert">{message}</div>}

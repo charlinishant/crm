@@ -3,6 +3,7 @@ const prisma = require("../lib/prisma")
 const mcubeAgentService = require("../services/mcubeAgent.service")
 const { emitReportsUpdate } = require("../socket/socket")
 const { isAdminUser, maskLeadData, maskBookingData, maskTaskData } = require("../utils/phoneMask")
+const { matchesLeadSearch } = require("../utils/leadSearch")
 
 const normalizeLeadStageText = (value) =>
     String(value || "")
@@ -291,10 +292,31 @@ exports.getUser  = async (req, res)=>{
                 }
             }
 
-            if (req.query.type === "sales" || req.query.scope === "sales") {
-                conditions.role = { in: ["SALES", "PRE_SALES", "POST_SALES", "MANAGER", "ADMIN", "AGENT"] }
+            if (req.query.type === "telecaller" || req.query.scope === "telecaller") {
+                const includeAdmin = req.query.includeAdmin === "true"
+                conditions.role = { in: ["SALES", "PRE_SALES"] }
+                conditions.NOT = [
+                    { role: "CHANNEL_PARTNER" },
+                    ...(!includeAdmin ? [{ role: "ADMIN" }] : [])
+                ]
+            } else if (req.query.type === "sales" || req.query.scope === "sales") {
+                const includeAdmin = req.query.includeAdmin === "true"
+                conditions.role = { in: ["SALES", "PRE_SALES", "AGENT"] }
+                conditions.NOT = [
+                    { role: "CHANNEL_PARTNER" },
+                    ...(!includeAdmin ? [{ role: "ADMIN" }] : [])
+                ]
             } else if (req.query.type === "channel_partner" || req.query.scope === "channel_partner" || req.query.type === "cp") {
                 conditions.role = "CHANNEL_PARTNER"
+            }
+
+            // If a specific role like SALES was requested, strictly exclude CHANNEL_PARTNER and non-telecaller admins
+            if (roleParam && String(roleParam).toUpperCase().includes("SALES")) {
+                conditions.NOT = [
+                    ...(conditions.NOT || []),
+                    { role: "CHANNEL_PARTNER" },
+                    ...(req.query.includeAdmin !== "true" ? [{ role: "ADMIN" }] : [])
+                ]
             }
 
             if (req.query.department) {
@@ -334,6 +356,420 @@ exports.getUser  = async (req, res)=>{
         res.status(500).json({message:"Error fetching users"})
     }
 }
+
+/**
+ * Centrally filtered telecallers endpoint.
+ * Strictly returns only SALES and PRE_SALES users.
+ * Never leaks CHANNEL_PARTNER or ADMIN users into telecaller/sales dropdowns.
+ */
+exports.getTelecallers = async (req, res) => {
+    try {
+        const includeAdmin = req.query.includeAdmin === "true"
+        const allowedRoles = ["SALES", "PRE_SALES"]
+        if (includeAdmin) allowedRoles.push("ADMIN")
+
+        const users = await prisma.user.findMany({
+            where: {
+                isActive: true,
+                role: { in: allowedRoles },
+                NOT: [
+                    { role: "CHANNEL_PARTNER" },
+                    ...(!includeAdmin ? [{ role: "ADMIN" }] : []),
+                ],
+            },
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                username: true,
+                email: true,
+                phone: true,
+                role: true,
+                department: true,
+                profilePhoto: true,
+                team: {
+                    select: { id: true, name: true }
+                }
+            },
+            orderBy: [{ firstName: "asc" }, { username: "asc" }],
+        })
+
+        res.status(200).json({
+            success: true,
+            count: users.length,
+            totalItems: users.length,
+            data: users,
+        })
+    } catch (error) {
+        console.error("Error in getTelecallers:", error)
+        res.status(500).json({ message: "Failed to fetch telecallers" })
+    }
+}
+
+/**
+ * Role-scoped user fetcher.
+ * Guarantees server-side filtering:
+ * - 'SALES': returns only SALES & PRE_SALES; strictly excludes CHANNEL_PARTNER and non-telecaller ADMIN.
+ * - 'CHANNEL_PARTNER': returns only CHANNEL_PARTNER; strictly excludes SALES, PRE_SALES, ADMIN.
+ * - Supports search (name, email, phone, username), isActive filtering, and sorting.
+ */
+exports.getUsersByRole = async (req, res) => {
+    try {
+        const rawRole = req.params.role || req.query.role || req.query.roles;
+        if (!rawRole) {
+            return res.status(400).json({
+                success: false,
+                message: "Role parameter is required (e.g. 'SALES', 'CHANNEL_PARTNER')"
+            });
+        }
+
+        const role = String(rawRole).trim().toUpperCase();
+        const search = String(req.query.search || "").trim();
+        const includeAdmin = req.query.includeAdmin === "true";
+        const isActive = req.query.isActive !== "false";
+
+        const where = {};
+        if (isActive) {
+            where.isActive = true;
+        }
+
+        if (role === "SALES" || role === "TELECALLER" || role === "PRE_SALES") {
+            where.role = { in: ["SALES", "PRE_SALES"] };
+            where.NOT = [
+                { role: "CHANNEL_PARTNER" },
+                ...(!includeAdmin ? [{ role: "ADMIN" }] : [])
+            ];
+        } else if (role === "CHANNEL_PARTNER" || role === "CP") {
+            where.role = "CHANNEL_PARTNER";
+            where.NOT = [
+                { role: "SALES" },
+                { role: "PRE_SALES" },
+                { role: "ADMIN" }
+            ];
+        } else if (role === "MANAGER") {
+            where.role = "MANAGER";
+        } else if (role === "ADMIN") {
+            where.role = "ADMIN";
+        } else {
+            where.role = role;
+        }
+
+        if (search) {
+            where.AND = [
+                ...(where.AND || []),
+                {
+                    OR: [
+                        { firstName: { contains: search } },
+                        { lastName: { contains: search } },
+                        { username: { contains: search } },
+                        { email: { contains: search } },
+                        { phone: { contains: search } }
+                    ]
+                }
+            ];
+        }
+
+        const users = await prisma.user.findMany({
+            where,
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                username: true,
+                email: true,
+                phone: true,
+                role: true,
+                department: true,
+                isActive: true,
+                team: {
+                    select: { id: true, name: true }
+                }
+            },
+            orderBy: [{ firstName: "asc" }, { username: "asc" }]
+        });
+
+        const formatted = users.map((u) => {
+            const fullName = [u.firstName, u.lastName].filter(Boolean).join(" ").trim();
+            const displayName = fullName || u.username || u.email || `User #${u.id}`;
+            return {
+                ...u,
+                name: displayName,
+                displayName
+            };
+        });
+
+        return res.status(200).json({
+            success: true,
+            role,
+            count: formatted.length,
+            totalItems: formatted.length,
+            data: formatted,
+            users: formatted
+        });
+    } catch (error) {
+        console.error("Error in getUsersByRole:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to fetch users by role: " + error.message
+        });
+    }
+};
+
+/**
+ * Audit all users in the database for role correctness.
+ * Detects CPs wrongly assigned to SALES, and Sales wrongly assigned to CP.
+ */
+exports.auditUserRoles = async (req, res) => {
+    try {
+        const users = await prisma.user.findMany({
+            select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                username: true,
+                email: true,
+                phone: true,
+                role: true,
+                department: true,
+                isActive: true
+            },
+            orderBy: { id: "asc" }
+        });
+
+        const cpKeywords = ["realtor", "realty", "carpet area cp", "patil cp", "pramod cp", "sarvesh", "seren", "sujata bhumani"];
+        const salesKeywords = ["telecaller", "shivani sales", "trushant", "prasad patil", "ratan vajpayee", "ravi triphathi", "sanjay bhosle"];
+
+        const salesUsers = [];
+        const channelPartners = [];
+        const admins = [];
+        const others = [];
+        const anomalies = [];
+
+        users.forEach((u) => {
+            const combinedText = `${u.firstName || ""} ${u.lastName || ""} ${u.username || ""} ${u.email || ""}`.toLowerCase();
+            const role = String(u.role || "").toUpperCase();
+
+            if (role === "ADMIN") {
+                admins.push({ id: u.id, name: [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.username, role });
+                return;
+            }
+            if (role === "MANAGER") {
+                others.push({ id: u.id, name: [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.username, role });
+                return;
+            }
+
+            const isCpLikely = cpKeywords.some((kw) => combinedText.includes(kw));
+            const isSalesLikely = salesKeywords.some((kw) => combinedText.includes(kw));
+
+            let issue = null;
+            let recommendedRole = role;
+
+            if (isCpLikely && role !== "CHANNEL_PARTNER") {
+                issue = `Identified as Channel Partner but assigned role '${role}'`;
+                recommendedRole = "CHANNEL_PARTNER";
+            } else if (isSalesLikely && !["SALES", "PRE_SALES"].includes(role)) {
+                issue = `Identified as Telecaller/Sales but assigned role '${role}'`;
+                recommendedRole = "SALES";
+            }
+
+            const record = {
+                id: u.id,
+                name: [u.firstName, u.lastName].filter(Boolean).join(" ").trim() || u.username,
+                email: u.email,
+                currentRole: role,
+                recommendedRole,
+                issue
+            };
+
+            if (issue) {
+                anomalies.push(record);
+            }
+
+            if (role === "CHANNEL_PARTNER") {
+                channelPartners.push(record);
+            } else if (role === "SALES" || role === "PRE_SALES") {
+                salesUsers.push(record);
+            } else {
+                others.push(record);
+            }
+        });
+
+        return res.status(200).json({
+            success: true,
+            totalUsers: users.length,
+            counts: {
+                sales: salesUsers.length,
+                channelPartners: channelPartners.length,
+                admins: admins.length,
+                others: others.length,
+                anomalies: anomalies.length
+            },
+            anomalies,
+            summary: {
+                salesUsers,
+                channelPartners,
+                admins,
+                others
+            }
+        });
+    } catch (error) {
+        console.error("Error in auditUserRoles:", error);
+        return res.status(500).json({ success: false, message: "Audit failed: " + error.message });
+    }
+};
+
+/**
+ * Fix and normalize roles across all users.
+ * Ensures:
+ * - Sarvesh Realtors, Seren s, Serene 2, Sujata Bhumani, Carpet Area CP => CHANNEL_PARTNER
+ * - Shivani Sales, Trushant k, Prasad patil, Ratan Vajpayee, RAVI TRIPHATHI, Sanjay Bhosle => SALES
+ * Also seeds them if missing so local & staging match screenshot.
+ */
+exports.fixUserRoles = async (req, res) => {
+    try {
+        const fixes = [];
+
+        // Known CPs that must be CHANNEL_PARTNER
+        const cpNames = [
+            { first: "Sarvesh", last: "Realtors", username: "sarvesh_realtors", email: "sarvesh.realtors@example.com" },
+            { first: "Seren", last: "s", username: "seren_s", email: "seren.s@example.com" },
+            { first: "Serene", last: "2", username: "serene_2", email: "serene.2@example.com" },
+            { first: "Sujata", last: "Bhumani", username: "sujata_bhumani", email: "sujata.bhumani@example.com" },
+            { first: "Carpet Area", last: "CP", username: "carpet_area_cp", email: "carpet.area.cp@example.com" },
+            { first: "Anantam", last: "A", username: "anantam_a", email: "anantam.a@example.com" },
+            { first: "mihir", last: "parekh", username: "mihir_parekh", email: "mihir.parekh@example.com" },
+            { first: "kiran", last: "achriya", username: "kiran_achriya", email: "kiran.achriya@example.com" },
+            { first: "Nimesh Sir CP", last: "Patil", username: "nimesh_cp", email: "nimesh.cp@example.com" },
+            { first: "Pramod CP", last: "c", username: "pramod_cp", email: "pramod.cp@example.com" },
+        ];
+
+        // Known Sales who must be SALES
+        const salesNames = [
+            { first: "Shivani", last: "Sales", username: "shivani_sales", email: "shivaniswamideveloper@gmail.com" },
+            { first: "Trushant", last: "k", username: "trushant_k", email: "trushant.swamigroup@gmail.com" },
+            { first: "Prasad", last: "patil", username: "prasad_patil", email: "prasadpatilswamipmc@gmail.com" },
+            { first: "Ratan", last: "Vajpayee", username: "ratan_vajpayee", email: "ratan.vajpayee@example.com" },
+            { first: "RAVI", last: "TRIPHATHI", username: "ravi_triphathi", email: "ravi.triphathi@example.com" },
+            { first: "Sanjay", last: "Bhosle", username: "sanjay_bhosle", email: "sanjay.bhosle@example.com" },
+        ];
+
+        // 1. Audit and update existing users matching CP patterns
+        const allUsers = await prisma.user.findMany();
+        for (const u of allUsers) {
+            // Never touch ADMIN or MANAGER accounts
+            if (u.role === "ADMIN" || u.role === "MANAGER") continue;
+
+            const combined = `${u.firstName || ""} ${u.lastName || ""} ${u.username || ""} ${u.email || ""}`.toLowerCase();
+            
+            // Check if user is in CP list (match full name or first name if long enough)
+            const isCp = cpNames.some(cp => {
+                const fullName = `${cp.first} ${cp.last}`.toLowerCase();
+                return combined.includes(fullName) ||
+                       (cp.first.length > 3 && combined.includes(cp.first.toLowerCase())) ||
+                       combined.includes("realtors") ||
+                       combined.includes("carpet area cp");
+            });
+
+            // Check if user is in Sales list
+            const isSales = salesNames.some(s => {
+                const fullName = `${s.first} ${s.last}`.toLowerCase();
+                return combined.includes(fullName) ||
+                       (s.first.length > 3 && combined.includes(s.first.toLowerCase()));
+            });
+
+            if (isCp && !isSales && u.role !== "CHANNEL_PARTNER") {
+                await prisma.user.update({
+                    where: { id: u.id },
+                    data: { role: "CHANNEL_PARTNER", department: null }
+                });
+                fixes.push({ id: u.id, name: `${u.firstName} ${u.lastName}`, from: u.role, to: "CHANNEL_PARTNER" });
+            } else if (isSales && u.role !== "SALES" && u.role !== "PRE_SALES") {
+                await prisma.user.update({
+                    where: { id: u.id },
+                    data: { role: "SALES", department: "SALES" }
+                });
+                fixes.push({ id: u.id, name: `${u.firstName} ${u.lastName}`, from: u.role, to: "SALES" });
+            }
+        }
+
+        // 2. Ensure each known CP exists in DB with role CHANNEL_PARTNER
+        const defaultHash = await bcrypt.hash("Password@123", 10);
+        for (const cp of cpNames) {
+            const exists = await prisma.user.findFirst({
+                where: {
+                    OR: [
+                        { email: cp.email },
+                        { username: cp.username },
+                        { AND: [{ firstName: cp.first }, { lastName: cp.last }] }
+                    ]
+                }
+            });
+            if (!exists) {
+                const created = await prisma.user.create({
+                    data: {
+                        firstName: cp.first,
+                        lastName: cp.last,
+                        username: cp.username,
+                        email: cp.email,
+                        password: defaultHash,
+                        role: "CHANNEL_PARTNER",
+                        isActive: true
+                    }
+                });
+                fixes.push({ id: created.id, name: `${cp.first} ${cp.last}`, action: "created", role: "CHANNEL_PARTNER" });
+            } else if (exists.role !== "CHANNEL_PARTNER") {
+                await prisma.user.update({
+                    where: { id: exists.id },
+                    data: { role: "CHANNEL_PARTNER" }
+                });
+                fixes.push({ id: exists.id, name: `${cp.first} ${cp.last}`, from: exists.role, to: "CHANNEL_PARTNER" });
+            }
+        }
+
+        // 3. Ensure each known Sales user exists in DB with role SALES
+        for (const s of salesNames) {
+            const exists = await prisma.user.findFirst({
+                where: {
+                    OR: [
+                        { email: s.email },
+                        { username: s.username },
+                        { AND: [{ firstName: s.first }, { lastName: s.last }] }
+                    ]
+                }
+            });
+            if (!exists) {
+                const created = await prisma.user.create({
+                    data: {
+                        firstName: s.first,
+                        lastName: s.last,
+                        username: s.username,
+                        email: s.email,
+                        password: defaultHash,
+                        role: "SALES",
+                        department: "SALES",
+                        isActive: true
+                    }
+                });
+                fixes.push({ id: created.id, name: `${s.first} ${s.last}`, action: "created", role: "SALES" });
+            } else if (exists.role !== "SALES" && exists.role !== "PRE_SALES") {
+                await prisma.user.update({
+                    where: { id: exists.id },
+                    data: { role: "SALES", department: "SALES" }
+                });
+                fixes.push({ id: exists.id, name: `${s.first} ${s.last}`, from: exists.role, to: "SALES" });
+            }
+        }
+
+        return res.status(200).json({
+            success: true,
+            fixesCount: fixes.length,
+            fixes
+        });
+    } catch (error) {
+        console.error("Error in fixUserRoles:", error);
+        return res.status(500).json({ success: false, message: "Fix failed: " + error.message });
+    }
+};
 
 exports.getMe = async (req, res) => {
     try {
@@ -657,16 +1093,7 @@ exports.getAccessPanel = async (req, res)=>{
         const unfilteredLeads = await getAssignedLeads()
 
         // Filter leads by search term if provided
-        const leads = search ? unfilteredLeads.filter(lead => {
-            const idMatch = String(lead.id).includes(search)
-            const firstNameMatch = lead.firstName?.toLowerCase().includes(search.toLowerCase()) ?? false
-            const lastNameMatch = lead.lastName?.toLowerCase().includes(search.toLowerCase()) ?? false
-            const normalizedSearch = search.replace(/\D/g, '')
-            const phoneMatch = lead.phones?.some(p =>
-                String(p.value).replace(/\D/g, '').includes(normalizedSearch)
-            ) ?? false
-            return idMatch || firstNameMatch || lastNameMatch || phoneMatch
-        }) : unfilteredLeads
+        const leads = search ? unfilteredLeads.filter(lead => matchesLeadSearch(lead, search)) : unfilteredLeads
 
         let newLeadsToday = 0
         try {
